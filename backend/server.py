@@ -1,15 +1,19 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from pydantic import BaseModel, Field, EmailStr
+from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime, timezone
-
+from datetime import datetime, timezone, timedelta
+import httpx
+import bcrypt
+import csv
+import io
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -19,54 +23,953 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
+# Create the main app
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+# ============== MODELS ==============
+
+class User(BaseModel):
+    user_id: str
+    email: EmailStr
+    name: str
+    role: str  # admin, bde
+    picture: Optional[str] = None
+    password_hash: Optional[str] = None
+    google_id: Optional[str] = None
+    is_active: bool = True
+    created_at: datetime
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
+    role: str = "bde"
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class Service(BaseModel):
+    service_id: str
+    name: str
+    category: str
+    billing_type: str  # one-time, recurring
+    amount: float
+    is_active: bool = True
+    created_at: datetime
+    created_by: str
+
+class ServiceCreate(BaseModel):
+    name: str
+    category: str
+    billing_type: str
+    amount: float
+
+class LeadSource(BaseModel):
+    source_id: str
+    name: str
+    is_active: bool = True
+    created_at: datetime
+    created_by: str
+
+class LeadSourceCreate(BaseModel):
+    name: str
+
+class Status(BaseModel):
+    status_id: str
+    name: str
+    color: str
+    order: int
+    is_active: bool = True
+    created_at: datetime
+    created_by: str
+
+class StatusCreate(BaseModel):
+    name: str
+    color: str
+    order: Optional[int] = None
+
+class Lead(BaseModel):
+    lead_id: str
+    name: str
+    phone: str
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    business_name: Optional[str] = None
+    website: Optional[str] = None
+    service_id: Optional[str] = None
+    service_name: Optional[str] = None
+    source_id: Optional[str] = None
+    source_name: Optional[str] = None
+    status_id: str
+    status_name: str
+    status_color: str
+    discussion_notes: Optional[str] = None
+    proposal_url: Optional[str] = None
+    service_cost: Optional[float] = None
+    expected_closing_date: Optional[datetime] = None
+    date_of_lead: datetime
+    assigned_to: str
+    assigned_to_name: str
+    is_deleted: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+class LeadCreate(BaseModel):
+    name: str
+    phone: str
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    business_name: Optional[str] = None
+    website: Optional[str] = None
+    service_id: Optional[str] = None
+    source_id: Optional[str] = None
+    status_id: str
+    discussion_notes: Optional[str] = None
+    proposal_url: Optional[str] = None
+    service_cost: Optional[float] = None
+    expected_closing_date: Optional[datetime] = None
+    date_of_lead: Optional[datetime] = None
+
+class LeadUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    address: Optional[str] = None
+    business_name: Optional[str] = None
+    website: Optional[str] = None
+    service_id: Optional[str] = None
+    source_id: Optional[str] = None
+    status_id: Optional[str] = None
+    discussion_notes: Optional[str] = None
+    proposal_url: Optional[str] = None
+    service_cost: Optional[float] = None
+    expected_closing_date: Optional[datetime] = None
+    date_of_lead: Optional[datetime] = None
+
+class FinanceSale(BaseModel):
+    sale_id: str
+    lead_id: str
     client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    service_id: str
+    service_name: str
+    amount: float
+    deal_date: datetime
+    has_gst: bool = False
+    invoice_status: str = "pending"  # pending, paid, overdue
+    created_at: datetime
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+# ============== AUTH HELPERS ==============
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+async def get_current_user(request: Request) -> User:
+    # REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+    session_token = None
     
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
+    # Check cookie first
+    if "session_token" in request.cookies:
+        session_token = request.cookies.get("session_token")
     
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+    # Fallback to Authorization header
+    if not session_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_token = auth_header.split(" ")[1]
+    
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Verify session
+    session_doc = await db.user_sessions.find_one(
+        {"session_token": session_token},
+        {"_id": 0}
+    )
+    
+    if not session_doc:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    # Check expiry
+    expires_at = session_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    # Get user
+    user_doc = await db.users.find_one(
+        {"user_id": session_doc["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    # Convert datetime strings to datetime objects
+    if isinstance(user_doc['created_at'], str):
+        user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
+    
+    return User(**user_doc)
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+# ============== AUTH ROUTES ==============
 
-# Include the router in the main app
+@api_router.post("/auth/register")
+async def register(user_data: UserCreate):
+    # Check if user exists
+    existing = await db.users.find_one({"email": user_data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    user_doc = {
+        "user_id": user_id,
+        "email": user_data.email,
+        "name": user_data.name,
+        "role": user_data.role,
+        "password_hash": hash_password(user_data.password),
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Create session
+    session_token = f"session_{uuid.uuid4().hex}"
+    session_doc = {
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.user_sessions.insert_one(session_doc)
+    
+    user_response = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    
+    return {"user": user_response, "session_token": session_token}
+
+@api_router.post("/auth/login")
+async def login(credentials: UserLogin):
+    # Find user
+    user_doc = await db.users.find_one({"email": credentials.email}, {"_id": 0})
+    
+    if not user_doc or not user_doc.get("password_hash"):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Verify password
+    if not verify_password(credentials.password, user_doc["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Create session
+    session_token = f"session_{uuid.uuid4().hex}"
+    session_doc = {
+        "user_id": user_doc["user_id"],
+        "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.user_sessions.insert_one(session_doc)
+    
+    del user_doc["password_hash"]
+    
+    return {"user": user_doc, "session_token": session_token}
+
+@api_router.post("/auth/google-session")
+async def google_session(session_id: str, response: Response):
+    # Exchange session_id for user data
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                EMERGENT_AUTH_URL,
+                headers={"X-Session-ID": session_id},
+                timeout=10.0
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to verify session: {str(e)}")
+    
+    # Check if user exists
+    user_doc = await db.users.find_one({"email": data["email"]}, {"_id": 0})
+    
+    if user_doc:
+        user_id = user_doc["user_id"]
+        # Update user data
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "name": data["name"],
+                "picture": data.get("picture"),
+                "google_id": data["id"]
+            }}
+        )
+    else:
+        # Create new user
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        user_doc = {
+            "user_id": user_id,
+            "email": data["email"],
+            "name": data["name"],
+            "role": "bde",  # Default role
+            "picture": data.get("picture"),
+            "google_id": data["id"],
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc)
+        }
+        await db.users.insert_one(user_doc)
+    
+    # Create session
+    session_token = data["session_token"]
+    session_doc = {
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.user_sessions.insert_one(session_doc)
+    
+    # Set httpOnly cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    user_response = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    
+    return {"user": user_response, "session_token": session_token}
+
+@api_router.get("/auth/me")
+async def get_me(user: User = Depends(get_current_user)):
+    return user.model_dump(exclude={"password_hash"})
+
+@api_router.post("/auth/logout")
+async def logout(request: Request, response: Response):
+    session_token = request.cookies.get("session_token")
+    if session_token:
+        await db.user_sessions.delete_one({"session_token": session_token})
+    response.delete_cookie(key="session_token", path="/")
+    return {"message": "Logged out"}
+
+# ============== USER ROUTES ==============
+
+@api_router.get("/users")
+async def get_users(user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    users = await db.users.find({"is_active": True}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    return users
+
+# ============== SERVICE ROUTES ==============
+
+@api_router.post("/services")
+async def create_service(service_data: ServiceCreate, user: User = Depends(get_current_user)):
+    service_id = f"service_{uuid.uuid4().hex[:12]}"
+    service_doc = {
+        "service_id": service_id,
+        "name": service_data.name,
+        "category": service_data.category,
+        "billing_type": service_data.billing_type,
+        "amount": service_data.amount,
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user.user_id
+    }
+    
+    await db.services.insert_one(service_doc)
+    result = await db.services.find_one({"service_id": service_id}, {"_id": 0})
+    return result
+
+@api_router.get("/services")
+async def get_services(user: User = Depends(get_current_user)):
+    services = await db.services.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(1000)
+    return services
+
+@api_router.put("/services/{service_id}")
+async def update_service(service_id: str, service_data: ServiceCreate, user: User = Depends(get_current_user)):
+    await db.services.update_one(
+        {"service_id": service_id},
+        {"$set": service_data.model_dump()}
+    )
+    result = await db.services.find_one({"service_id": service_id}, {"_id": 0})
+    return result
+
+@api_router.delete("/services/{service_id}")
+async def delete_service(service_id: str, user: User = Depends(get_current_user)):
+    await db.services.update_one(
+        {"service_id": service_id},
+        {"$set": {"is_active": False}}
+    )
+    return {"message": "Service deleted"}
+
+# ============== SOURCE ROUTES ==============
+
+@api_router.post("/sources")
+async def create_source(source_data: LeadSourceCreate, user: User = Depends(get_current_user)):
+    source_id = f"source_{uuid.uuid4().hex[:12]}"
+    source_doc = {
+        "source_id": source_id,
+        "name": source_data.name,
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user.user_id
+    }
+    
+    await db.lead_sources.insert_one(source_doc)
+    result = await db.lead_sources.find_one({"source_id": source_id}, {"_id": 0})
+    return result
+
+@api_router.get("/sources")
+async def get_sources(user: User = Depends(get_current_user)):
+    sources = await db.lead_sources.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(1000)
+    return sources
+
+# ============== STATUS ROUTES ==============
+
+@api_router.post("/statuses")
+async def create_status(status_data: StatusCreate, user: User = Depends(get_current_user)):
+    # Get max order
+    if status_data.order is None:
+        max_status = await db.statuses.find_one({}, {"_id": 0, "order": 1}, sort=[("order", -1)])
+        order = (max_status["order"] + 1) if max_status else 0
+    else:
+        order = status_data.order
+    
+    status_id = f"status_{uuid.uuid4().hex[:12]}"
+    status_doc = {
+        "status_id": status_id,
+        "name": status_data.name,
+        "color": status_data.color,
+        "order": order,
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user.user_id
+    }
+    
+    await db.statuses.insert_one(status_doc)
+    result = await db.statuses.find_one({"status_id": status_id}, {"_id": 0})
+    return result
+
+@api_router.get("/statuses")
+async def get_statuses(user: User = Depends(get_current_user)):
+    statuses = await db.statuses.find({"is_active": True}, {"_id": 0}).sort("order", 1).to_list(1000)
+    return statuses
+
+# ============== LEAD ROUTES ==============
+
+async def enrich_lead(lead_doc: Dict[str, Any]) -> Dict[str, Any]:
+    # Get service details
+    if lead_doc.get("service_id"):
+        service = await db.services.find_one({"service_id": lead_doc["service_id"]}, {"_id": 0})
+        if service:
+            lead_doc["service_name"] = service["name"]
+    
+    # Get source details
+    if lead_doc.get("source_id"):
+        source = await db.lead_sources.find_one({"source_id": lead_doc["source_id"]}, {"_id": 0})
+        if source:
+            lead_doc["source_name"] = source["name"]
+    
+    # Get status details
+    if lead_doc.get("status_id"):
+        status = await db.statuses.find_one({"status_id": lead_doc["status_id"]}, {"_id": 0})
+        if status:
+            lead_doc["status_name"] = status["name"]
+            lead_doc["status_color"] = status["color"]
+    
+    # Get assigned user details
+    if lead_doc.get("assigned_to"):
+        user = await db.users.find_one({"user_id": lead_doc["assigned_to"]}, {"_id": 0})
+        if user:
+            lead_doc["assigned_to_name"] = user["name"]
+    
+    return lead_doc
+
+@api_router.post("/leads")
+async def create_lead(lead_data: LeadCreate, user: User = Depends(get_current_user)):
+    lead_id = f"lead_{uuid.uuid4().hex[:12]}"
+    
+    lead_doc = {
+        "lead_id": lead_id,
+        **lead_data.model_dump(exclude_unset=True),
+        "date_of_lead": lead_data.date_of_lead or datetime.now(timezone.utc),
+        "assigned_to": user.user_id,
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    await db.leads.insert_one(lead_doc)
+    result = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    result = await enrich_lead(result)
+    
+    return result
+
+@api_router.get("/leads")
+async def get_leads(
+    user: User = Depends(get_current_user),
+    status_id: Optional[str] = None,
+    service_id: Optional[str] = None,
+    source_id: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    search: Optional[str] = None
+):
+    query = {"is_deleted": False}
+    
+    # BDE can only see their own leads
+    if user.role == "bde":
+        query["assigned_to"] = user.user_id
+    elif assigned_to:
+        query["assigned_to"] = assigned_to
+    
+    if status_id:
+        query["status_id"] = status_id
+    if service_id:
+        query["service_id"] = service_id
+    if source_id:
+        query["source_id"] = source_id
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"business_name": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}}
+        ]
+    
+    leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    
+    # Enrich each lead
+    enriched_leads = []
+    for lead in leads:
+        enriched_lead = await enrich_lead(lead)
+        enriched_leads.append(enriched_lead)
+    
+    return enriched_leads
+
+@api_router.get("/leads/{lead_id}")
+async def get_lead(lead_id: str, user: User = Depends(get_current_user)):
+    lead = await db.leads.find_one({"lead_id": lead_id, "is_deleted": False}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # BDE can only see their own leads
+    if user.role == "bde" and lead["assigned_to"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    lead = await enrich_lead(lead)
+    return lead
+
+@api_router.put("/leads/{lead_id}")
+async def update_lead(lead_id: str, lead_data: LeadUpdate, user: User = Depends(get_current_user)):
+    lead = await db.leads.find_one({"lead_id": lead_id, "is_deleted": False}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # BDE can only update their own leads
+    if user.role == "bde" and lead["assigned_to"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check if status changed to Closed Won
+    old_status = lead.get("status_id")
+    new_status = lead_data.status_id
+    
+    update_data = lead_data.model_dump(exclude_unset=True)
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {"$set": update_data}
+    )
+    
+    # AUTOMATION: Create Finance Sale if status changed to Closed Won
+    if new_status and new_status != old_status:
+        new_status_doc = await db.statuses.find_one({"status_id": new_status}, {"_id": 0})
+        if new_status_doc and new_status_doc["name"].lower() == "closed won":
+            # Create finance sale
+            enriched_lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+            enriched_lead = await enrich_lead(enriched_lead)
+            
+            sale_id = f"sale_{uuid.uuid4().hex[:12]}"
+            sale_doc = {
+                "sale_id": sale_id,
+                "lead_id": lead_id,
+                "client_name": enriched_lead["name"],
+                "service_id": enriched_lead.get("service_id", ""),
+                "service_name": enriched_lead.get("service_name", "N/A"),
+                "amount": enriched_lead.get("service_cost", 0.0),
+                "deal_date": datetime.now(timezone.utc),
+                "has_gst": False,
+                "invoice_status": "pending",
+                "created_at": datetime.now(timezone.utc)
+            }
+            
+            await db.finance_sales.insert_one(sale_doc)
+    
+    result = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    result = await enrich_lead(result)
+    
+    return result
+
+@api_router.delete("/leads/{lead_id}")
+async def delete_lead(lead_id: str, user: User = Depends(get_current_user)):
+    lead = await db.leads.find_one({"lead_id": lead_id, "is_deleted": False}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # BDE cannot delete leads
+    if user.role == "bde":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {"$set": {"is_deleted": True}}
+    )
+    
+    return {"message": "Lead deleted"}
+
+@api_router.get("/leads/kanban/view")
+async def get_kanban_view(user: User = Depends(get_current_user)):
+    # Get all statuses
+    statuses = await db.statuses.find({"is_active": True}, {"_id": 0}).sort("order", 1).to_list(1000)
+    
+    # Get leads grouped by status
+    query = {"is_deleted": False}
+    if user.role == "bde":
+        query["assigned_to"] = user.user_id
+    
+    leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
+    
+    # Enrich and group by status
+    kanban_data = {}
+    for status in statuses:
+        kanban_data[status["status_id"]] = {
+            "status": status,
+            "leads": []
+        }
+    
+    for lead in leads:
+        enriched_lead = await enrich_lead(lead)
+        if enriched_lead["status_id"] in kanban_data:
+            kanban_data[enriched_lead["status_id"]]["leads"].append(enriched_lead)
+    
+    return list(kanban_data.values())
+
+# ============== IMPORT/EXPORT ROUTES ==============
+
+@api_router.post("/leads/import")
+async def import_leads(file_data: Dict[str, Any], user: User = Depends(get_current_user)):
+    # file_data should contain: {"csv_data": "...", "mapping": {...}}
+    csv_content = file_data.get("csv_data", "")
+    field_mapping = file_data.get("mapping", {})
+    
+    # Parse CSV
+    csv_file = io.StringIO(csv_content)
+    reader = csv.DictReader(csv_file)
+    
+    imported_count = 0
+    errors = []
+    
+    for row in reader:
+        try:
+            lead_data = {}
+            for our_field, csv_field in field_mapping.items():
+                if csv_field in row:
+                    lead_data[our_field] = row[csv_field]
+            
+            # Create lead
+            lead_create = LeadCreate(**lead_data)
+            await create_lead(lead_create, user)
+            imported_count += 1
+        except Exception as e:
+            errors.append(f"Row {imported_count + len(errors) + 1}: {str(e)}")
+    
+    return {
+        "imported": imported_count,
+        "errors": errors
+    }
+
+@api_router.get("/leads/export")
+async def export_leads(user: User = Depends(get_current_user)):
+    query = {"is_deleted": False}
+    if user.role == "bde":
+        query["assigned_to"] = user.user_id
+    
+    leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
+    
+    # Enrich leads
+    enriched_leads = []
+    for lead in leads:
+        enriched_lead = await enrich_lead(lead)
+        enriched_leads.append(enriched_lead)
+    
+    return enriched_leads
+
+# ============== FINANCE ROUTES ==============
+
+@api_router.get("/finance/sales")
+async def get_finance_sales(user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    sales = await db.finance_sales.find({}, {"_id": 0}).sort("deal_date", -1).to_list(1000)
+    return sales
+
+@api_router.put("/finance/sales/{sale_id}")
+async def update_finance_sale(sale_id: str, update_data: Dict[str, Any], user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    await db.finance_sales.update_one(
+        {"sale_id": sale_id},
+        {"$set": update_data}
+    )
+    
+    result = await db.finance_sales.find_one({"sale_id": sale_id}, {"_id": 0})
+    return result
+
+# ============== REPORTS ==============
+
+@api_router.get("/reports/stats")
+async def get_stats(user: User = Depends(get_current_user)):
+    query = {"is_deleted": False}
+    if user.role == "bde":
+        query["assigned_to"] = user.user_id
+    
+    # Total leads
+    total_leads = await db.leads.count_documents(query)
+    
+    # Leads by status
+    statuses = await db.statuses.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    status_stats = []
+    for status in statuses:
+        count = await db.leads.count_documents({**query, "status_id": status["status_id"]})
+        status_stats.append({
+            "status_id": status["status_id"],
+            "status_name": status["name"],
+            "count": count
+        })
+    
+    # Leads by service
+    services = await db.services.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    service_stats = []
+    for service in services:
+        count = await db.leads.count_documents({**query, "service_id": service["service_id"]})
+        service_stats.append({
+            "service_id": service["service_id"],
+            "service_name": service["name"],
+            "count": count
+        })
+    
+    # Leads by source
+    sources = await db.lead_sources.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    source_stats = []
+    for source in sources:
+        count = await db.leads.count_documents({**query, "source_id": source["source_id"]})
+        source_stats.append({
+            "source_id": source["source_id"],
+            "source_name": source["name"],
+            "count": count
+        })
+    
+    return {
+        "total_leads": total_leads,
+        "by_status": status_stats,
+        "by_service": service_stats,
+        "by_source": source_stats
+    }
+
+# ============== SEED DATA ==============
+
+@api_router.post("/seed-data")
+async def seed_data():
+    # Check if already seeded
+    existing_user = await db.users.find_one({})
+    if existing_user:
+        return {"message": "Data already seeded"}
+    
+    # Create admin user
+    admin_id = f"user_{uuid.uuid4().hex[:12]}"
+    admin_doc = {
+        "user_id": admin_id,
+        "email": "admin@drawlead.com",
+        "name": "Admin User",
+        "role": "admin",
+        "password_hash": hash_password("admin123"),
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.users.insert_one(admin_doc)
+    
+    # Create BDE user
+    bde_id = f"user_{uuid.uuid4().hex[:12]}"
+    bde_doc = {
+        "user_id": bde_id,
+        "email": "bde@drawlead.com",
+        "name": "Sales Executive",
+        "role": "bde",
+        "password_hash": hash_password("bde123"),
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.users.insert_one(bde_doc)
+    
+    # Create services
+    services_data = [
+        {"name": "Website Development", "category": "Development", "billing_type": "one-time", "amount": 50000},
+        {"name": "SEO Services", "category": "Marketing", "billing_type": "recurring", "amount": 15000},
+        {"name": "Social Media Marketing", "category": "Marketing", "billing_type": "recurring", "amount": 20000},
+        {"name": "Mobile App Development", "category": "Development", "billing_type": "one-time", "amount": 75000},
+        {"name": "Brand Strategy", "category": "Consulting", "billing_type": "one-time", "amount": 30000}
+    ]
+    
+    service_ids = []
+    for service in services_data:
+        service_id = f"service_{uuid.uuid4().hex[:12]}"
+        service_doc = {
+            "service_id": service_id,
+            **service,
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc),
+            "created_by": admin_id
+        }
+        await db.services.insert_one(service_doc)
+        service_ids.append(service_id)
+    
+    # Create sources
+    sources_data = [
+        "Meta Ads",
+        "Google Ads",
+        "Referral",
+        "WhatsApp",
+        "Cold Call",
+        "LinkedIn",
+        "Website"
+    ]
+    
+    source_ids = []
+    for source_name in sources_data:
+        source_id = f"source_{uuid.uuid4().hex[:12]}"
+        source_doc = {
+            "source_id": source_id,
+            "name": source_name,
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc),
+            "created_by": admin_id
+        }
+        await db.lead_sources.insert_one(source_doc)
+        source_ids.append(source_id)
+    
+    # Create statuses
+    statuses_data = [
+        {"name": "New Lead", "color": "#3b82f6", "order": 0},
+        {"name": "Contacted", "color": "#8b5cf6", "order": 1},
+        {"name": "Qualified", "color": "#f59e0b", "order": 2},
+        {"name": "Proposal Sent", "color": "#10b981", "order": 3},
+        {"name": "Negotiation", "color": "#f97316", "order": 4},
+        {"name": "Closed Won", "color": "#22c55e", "order": 5},
+        {"name": "Closed Lost", "color": "#ef4444", "order": 6}
+    ]
+    
+    status_ids = []
+    for status_data in statuses_data:
+        status_id = f"status_{uuid.uuid4().hex[:12]}"
+        status_doc = {
+            "status_id": status_id,
+            **status_data,
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc),
+            "created_by": admin_id
+        }
+        await db.statuses.insert_one(status_doc)
+        status_ids.append(status_id)
+    
+    # Create sample leads
+    sample_leads = [
+        {
+            "name": "Tech Innovations Ltd",
+            "phone": "+91-9876543210",
+            "email": "info@techinnovations.com",
+            "business_name": "Tech Innovations Ltd",
+            "website": "www.techinnovations.com",
+            "service_id": service_ids[0],
+            "source_id": source_ids[0],
+            "status_id": status_ids[0],
+            "service_cost": 50000
+        },
+        {
+            "name": "Green Earth Org",
+            "phone": "+91-9876543211",
+            "email": "contact@greenearth.org",
+            "business_name": "Green Earth Org",
+            "website": "www.greenearth.org",
+            "service_id": service_ids[1],
+            "source_id": source_ids[2],
+            "status_id": status_ids[1],
+            "service_cost": 15000
+        },
+        {
+            "name": "Fashion Hub",
+            "phone": "+91-9876543212",
+            "email": "hello@fashionhub.com",
+            "business_name": "Fashion Hub",
+            "website": "www.fashionhub.com",
+            "service_id": service_ids[2],
+            "source_id": source_ids[1],
+            "status_id": status_ids[3],
+            "service_cost": 20000
+        },
+        {
+            "name": "Startup Connect",
+            "phone": "+91-9876543213",
+            "email": "team@startupconnect.io",
+            "business_name": "Startup Connect",
+            "service_id": service_ids[3],
+            "source_id": source_ids[4],
+            "status_id": status_ids[2],
+            "service_cost": 75000
+        }
+    ]
+    
+    for lead_data in sample_leads:
+        lead_id = f"lead_{uuid.uuid4().hex[:12]}"
+        lead_doc = {
+            "lead_id": lead_id,
+            **lead_data,
+            "date_of_lead": datetime.now(timezone.utc),
+            "assigned_to": bde_id,
+            "is_deleted": False,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }
+        await db.leads.insert_one(lead_doc)
+    
+    return {
+        "message": "Sample data seeded successfully",
+        "admin": {"email": "admin@drawlead.com", "password": "admin123"},
+        "bde": {"email": "bde@drawlead.com", "password": "bde123"}
+    }
+
+# Include router
 app.include_router(api_router)
 
 app.add_middleware(
@@ -77,7 +980,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
