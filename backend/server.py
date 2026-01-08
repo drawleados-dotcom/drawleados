@@ -525,7 +525,10 @@ async def create_lead(lead_data: LeadCreate, user: User = Depends(get_current_us
     
     await db.leads.insert_one(lead_doc)
     result = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
-    result = await enrich_lead(result)
+    
+    # Get reference data maps for enrichment
+    services_map, sources_map, statuses_map, users_map = await get_reference_data_maps()
+    result = enrich_lead_fast(result, services_map, sources_map, statuses_map, users_map)
     
     return result
 
