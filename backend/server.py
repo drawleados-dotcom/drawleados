@@ -621,7 +621,10 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, user: User = Depends(
         if new_status_doc and new_status_doc["name"].lower() == "closed won":
             # Create finance sale
             enriched_lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
-            enriched_lead = await enrich_lead(enriched_lead)
+            
+            # Get reference data maps for enrichment
+            services_map, sources_map, statuses_map, users_map = await get_reference_data_maps()
+            enriched_lead = enrich_lead_fast(enriched_lead, services_map, sources_map, statuses_map, users_map)
             
             sale_id = f"sale_{uuid.uuid4().hex[:12]}"
             sale_doc = {
@@ -640,7 +643,10 @@ async def update_lead(lead_id: str, lead_data: LeadUpdate, user: User = Depends(
             await db.finance_sales.insert_one(sale_doc)
     
     result = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
-    result = await enrich_lead(result)
+    
+    # Get reference data maps for enrichment
+    services_map, sources_map, statuses_map, users_map = await get_reference_data_maps()
+    result = enrich_lead_fast(result, services_map, sources_map, statuses_map, users_map)
     
     return result
 
