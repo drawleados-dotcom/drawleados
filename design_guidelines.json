@@ -1,0 +1,172 @@
+{
+  "identity": {
+    "name": "Drawlead OS",
+    "persona": "E1 - The Anti-AI Designer",
+    "tone": "Professional, Distinctive, Bold, High-Utility",
+    "theme_preference": "dark",
+    "design_principles": [
+      "Fusion over Imitation",
+      "Emotion First",
+      "Content is King",
+      "Zoom In",
+      "Negative Space",
+      "Contrast"
+    ]
+  },
+  "typography": {
+    "primary_font": "Plus Jakarta Sans",
+    "secondary_font": "Manrope",
+    "mono_font": "JetBrains Mono",
+    "weights": {
+      "light": 300,
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "usage": {
+      "headings": "Plus Jakarta Sans",
+      "body": "Manrope",
+      "code": "JetBrains Mono",
+      "ui_labels": "Manrope (Uppercase, tracking-wide for tiny labels)"
+    },
+    "scale": {
+      "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl font-semibold tracking-tight",
+      "h4": "text-xl font-medium",
+      "body_lg": "text-lg leading-relaxed",
+      "body_base": "text-base leading-relaxed",
+      "body_sm": "text-sm leading-normal",
+      "caption": "text-xs text-muted-foreground"
+    }
+  },
+  "colors": {
+    "palette_name": "Electric Zinc",
+    "mode": "dark",
+    "backgrounds": {
+      "app_bg": "#09090b",
+      "sidebar_bg": "#0c0a09",
+      "card_bg": "#18181b",
+      "card_hover": "#27272a",
+      "modal_bg": "#18181b"
+    },
+    "primary": {
+      "DEFAULT": "#6366f1",
+      "foreground": "#ffffff",
+      "hover": "#4f46e5",
+      "active": "#4338ca"
+    },
+    "secondary": {
+      "DEFAULT": "#27272a",
+      "foreground": "#fafafa"
+    },
+    "accent": {
+      "DEFAULT": "#8b5cf6",
+      "foreground": "#ffffff"
+    },
+    "semantic": {
+      "success": "#10b981",
+      "warning": "#f59e0b",
+      "error": "#ef4444",
+      "info": "#3b82f6"
+    },
+    "text": {
+      "primary": "#fafafa",
+      "secondary": "#a1a1aa",
+      "muted": "#52525b",
+      "inverse": "#09090b"
+    },
+    "border": {
+      "DEFAULT": "#27272a",
+      "subtle": "#18181b",
+      "strong": "#3f3f46"
+    }
+  },
+  "layout": {
+    "spacing_scale": "Generous (2x standard)",
+    "container_padding": "p-6 md:p-8 lg:p-12",
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-4 gap-6",
+      "form": "grid grid-cols-1 md:grid-cols-2 gap-8",
+      "card_grid": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+    },
+    "radius": {
+      "default": "rounded-xl",
+      "sm": "rounded-lg",
+      "lg": "rounded-2xl",
+      "full": "rounded-full"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_15px_rgba(99,102,241,0.3)] transition-all duration-300",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/50",
+      "ghost": "hover:bg-accent hover:text-accent-foreground",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground"
+    },
+    "cards": {
+      "base": "bg-card text-card-foreground rounded-xl border border-border/40 shadow-sm hover:shadow-md transition-all duration-300 hover:border-primary/20",
+      "glass": "bg-black/40 backdrop-blur-xl border border-white/10 shadow-xl"
+    },
+    "inputs": {
+      "base": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    },
+    "sidebar": {
+      "container": "h-screen w-64 bg-sidebar_bg border-r border-border/40 flex flex-col",
+      "item": "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors hover:bg-primary/10 hover:text-primary data-[active=true]:bg-primary/15 data-[active=true]:text-primary"
+    }
+  },
+  "visual_enhancers": {
+    "gradients": {
+      "subtle_glow": "bg-gradient-to-tr from-primary/20 via-transparent to-transparent",
+      "card_highlight": "bg-gradient-to-b from-white/5 to-transparent"
+    },
+    "shadows": {
+      "glow": "shadow-[0_0_20px_rgba(99,102,241,0.15)]",
+      "float": "shadow-2xl shadow-black/50"
+    },
+    "borders": {
+      "tracing_beam": "relative after:absolute after:inset-0 after:rounded-xl after:p-[1px] after:bg-gradient-to-r after:from-transparent after:via-primary/50 after:to-transparent after:opacity-0 hover:after:opacity-100 after:transition-opacity"
+    }
+  },
+  "assets": {
+    "images": {
+      "avatars": [
+        "https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2Mzl8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2Nzg4OTQ1NXww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1655249493799-9cee4fe983bb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2Mzl8MHwxfHNlYXJjaHwyfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2Nzg4OTQ1NXww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1655249481446-25d575f1c054?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2Mzl8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2Nzg4OTQ1NXww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1576558656222-ba66febe3dec?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2Mzl8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc2Nzg4OTQ1NXww&ixlib=rb-4.1.0&q=85"
+      ],
+      "placeholders": {
+        "logo": "https://via.placeholder.com/150x50?text=Drawlead+OS",
+        "cover": "https://via.placeholder.com/800x400?text=Cover+Image"
+      }
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width={1.5}"
+    }
+  },
+  "universal_guidelines": {
+    "general": [
+      "Do not use generic centered layouts.",
+      "Create depth through layered design elements with z-index hierarchy.",
+      "Use glass-morphism effects with backdrop filters (12-24px blur) for overlays.",
+      "NEVER use AI assistant Emoji characters.",
+      "Every interaction needs micro-animations.",
+      "Use 2-3x more spacing than feels comfortable.",
+      "All interactive elements MUST include data-testid attribute."
+    ],
+    "component_reuse": [
+      "Prioritize using pre-existing components from src/components/ui.",
+      "Customize Shadcn components via className props, do not rewrite logic unless necessary."
+    ],
+    "export_conventions": [
+      "Components MUST use named exports.",
+      "Pages MUST use default exports."
+    ],
+    "toasts": "Use sonner for toasts."
+  },
+  "instructions_to_main_agent": "You are building the Sales Module MVP for Drawlead OS. Focus on the Dashboard, Leads List, Kanban Board, and Lead Details. Use the provided color palette and typography. Ensure the app is responsive and uses the dark theme by default. Implement the sidebar navigation and the top header. Use the 'lucide-react' library for icons. Follow the 'Bento' grid layout for the dashboard."
+}
