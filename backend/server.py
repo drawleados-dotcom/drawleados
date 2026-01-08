@@ -740,10 +740,13 @@ async def export_leads(user: User = Depends(get_current_user)):
     
     leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
     
-    # Enrich leads
+    # Get reference data maps once for all leads
+    services_map, sources_map, statuses_map, users_map = await get_reference_data_maps()
+    
+    # Enrich leads using fast method
     enriched_leads = []
     for lead in leads:
-        enriched_lead = await enrich_lead(lead)
+        enriched_lead = enrich_lead_fast(lead, services_map, sources_map, statuses_map, users_map)
         enriched_leads.append(enriched_lead)
     
     return enriched_leads
