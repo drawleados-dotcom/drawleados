@@ -565,10 +565,13 @@ async def get_leads(
     
     leads = await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
-    # Enrich each lead
+    # Get reference data maps once for all leads
+    services_map, sources_map, statuses_map, users_map = await get_reference_data_maps()
+    
+    # Enrich each lead using fast method
     enriched_leads = []
     for lead in leads:
-        enriched_lead = await enrich_lead(lead)
+        enriched_lead = enrich_lead_fast(lead, services_map, sources_map, statuses_map, users_map)
         enriched_leads.append(enriched_lead)
     
     return enriched_leads
