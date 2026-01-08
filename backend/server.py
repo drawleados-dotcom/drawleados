@@ -587,7 +587,9 @@ async def get_lead(lead_id: str, user: User = Depends(get_current_user)):
     if user.role == "bde" and lead["assigned_to"] != user.user_id:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    lead = await enrich_lead(lead)
+    # Get reference data maps for enrichment
+    services_map, sources_map, statuses_map, users_map = await get_reference_data_maps()
+    lead = enrich_lead_fast(lead, services_map, sources_map, statuses_map, users_map)
     return lead
 
 @api_router.put("/leads/{lead_id}")
