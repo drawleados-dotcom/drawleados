@@ -474,33 +474,40 @@ async def get_statuses(user: User = Depends(get_current_user)):
 
 # ============== LEAD ROUTES ==============
 
-async def enrich_lead(lead_doc: Dict[str, Any]) -> Dict[str, Any]:
-    # Get service details
-    if lead_doc.get("service_id"):
-        service = await db.services.find_one({"service_id": lead_doc["service_id"]}, {"_id": 0})
-        if service:
-            lead_doc["service_name"] = service["name"]
+def enrich_lead_fast(lead_doc: Dict[str, Any], services_map: Dict, sources_map: Dict, statuses_map: Dict, users_map: Dict) -> Dict[str, Any]:
+    # Get service details from in-memory map
+    if lead_doc.get("service_id") and lead_doc["service_id"] in services_map:
+        lead_doc["service_name"] = services_map[lead_doc["service_id"]]["name"]
     
-    # Get source details
-    if lead_doc.get("source_id"):
-        source = await db.lead_sources.find_one({"source_id": lead_doc["source_id"]}, {"_id": 0})
-        if source:
-            lead_doc["source_name"] = source["name"]
+    # Get source details from in-memory map
+    if lead_doc.get("source_id") and lead_doc["source_id"] in sources_map:
+        lead_doc["source_name"] = sources_map[lead_doc["source_id"]]["name"]
     
-    # Get status details
-    if lead_doc.get("status_id"):
-        status = await db.statuses.find_one({"status_id": lead_doc["status_id"]}, {"_id": 0})
-        if status:
-            lead_doc["status_name"] = status["name"]
-            lead_doc["status_color"] = status["color"]
+    # Get status details from in-memory map
+    if lead_doc.get("status_id") and lead_doc["status_id"] in statuses_map:
+        lead_doc["status_name"] = statuses_map[lead_doc["status_id"]]["name"]
+        lead_doc["status_color"] = statuses_map[lead_doc["status_id"]]["color"]
     
-    # Get assigned user details
-    if lead_doc.get("assigned_to"):
-        user = await db.users.find_one({"user_id": lead_doc["assigned_to"]}, {"_id": 0})
-        if user:
-            lead_doc["assigned_to_name"] = user["name"]
+    # Get assigned user details from in-memory map
+    if lead_doc.get("assigned_to") and lead_doc["assigned_to"] in users_map:
+        lead_doc["assigned_to_name"] = users_map[lead_doc["assigned_to"]]["name"]
     
     return lead_doc
+
+async def get_reference_data_maps():
+    # Batch fetch all reference data once
+    services = await db.services.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    sources = await db.lead_sources.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    statuses = await db.statuses.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    users = await db.users.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    
+    # Create lookup maps
+    services_map = {s["service_id"]: s for s in services}
+    sources_map = {s["source_id"]: s for s in sources}
+    statuses_map = {s["status_id"]: s for s in statuses}
+    users_map = {u["user_id"]: u for u in users}
+    
+    return services_map, sources_map, statuses_map, users_map
 
 @api_router.post("/leads")
 async def create_lead(lead_data: LeadCreate, user: User = Depends(get_current_user)):
