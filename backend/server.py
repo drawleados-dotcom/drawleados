@@ -785,38 +785,48 @@ async def get_stats(user: User = Depends(get_current_user)):
     # Total leads
     total_leads = await db.leads.count_documents(query)
     
+    # Use aggregation pipeline for efficient counting
     # Leads by status
+    status_pipeline = [
+        {"$match": query},
+        {"$group": {"_id": "$status_id", "count": {"$sum": 1}}}
+    ]
+    status_counts = {doc["_id"]: doc["count"] for doc in await db.leads.aggregate(status_pipeline).to_list(1000)}
+    
     statuses = await db.statuses.find({"is_active": True}, {"_id": 0}).to_list(1000)
-    status_stats = []
-    for status in statuses:
-        count = await db.leads.count_documents({**query, "status_id": status["status_id"]})
-        status_stats.append({
-            "status_id": status["status_id"],
-            "status_name": status["name"],
-            "count": count
-        })
+    status_stats = [{
+        "status_id": status["status_id"],
+        "status_name": status["name"],
+        "count": status_counts.get(status["status_id"], 0)
+    } for status in statuses]
     
     # Leads by service
+    service_pipeline = [
+        {"$match": query},
+        {"$group": {"_id": "$service_id", "count": {"$sum": 1}}}
+    ]
+    service_counts = {doc["_id"]: doc["count"] for doc in await db.leads.aggregate(service_pipeline).to_list(1000)}
+    
     services = await db.services.find({"is_active": True}, {"_id": 0}).to_list(1000)
-    service_stats = []
-    for service in services:
-        count = await db.leads.count_documents({**query, "service_id": service["service_id"]})
-        service_stats.append({
-            "service_id": service["service_id"],
-            "service_name": service["name"],
-            "count": count
-        })
+    service_stats = [{
+        "service_id": service["service_id"],
+        "service_name": service["name"],
+        "count": service_counts.get(service["service_id"], 0)
+    } for service in services]
     
     # Leads by source
+    source_pipeline = [
+        {"$match": query},
+        {"$group": {"_id": "$source_id", "count": {"$sum": 1}}}
+    ]
+    source_counts = {doc["_id"]: doc["count"] for doc in await db.leads.aggregate(source_pipeline).to_list(1000)}
+    
     sources = await db.lead_sources.find({"is_active": True}, {"_id": 0}).to_list(1000)
-    source_stats = []
-    for source in sources:
-        count = await db.leads.count_documents({**query, "source_id": source["source_id"]})
-        source_stats.append({
-            "source_id": source["source_id"],
-            "source_name": source["name"],
-            "count": count
-        })
+    source_stats = [{
+        "source_id": source["source_id"],
+        "source_name": source["name"],
+        "count": source_counts.get(source["source_id"], 0)
+    } for source in sources]
     
     return {
         "total_leads": total_leads,
