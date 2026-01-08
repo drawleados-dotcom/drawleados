@@ -680,6 +680,9 @@ async def get_kanban_view(user: User = Depends(get_current_user)):
     
     leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
     
+    # Get reference data maps once for all leads
+    services_map, sources_map, statuses_map, users_map = await get_reference_data_maps()
+    
     # Enrich and group by status
     kanban_data = {}
     for status in statuses:
@@ -689,7 +692,7 @@ async def get_kanban_view(user: User = Depends(get_current_user)):
         }
     
     for lead in leads:
-        enriched_lead = await enrich_lead(lead)
+        enriched_lead = enrich_lead_fast(lead, services_map, sources_map, statuses_map, users_map)
         if enriched_lead["status_id"] in kanban_data:
             kanban_data[enriched_lead["status_id"]]["leads"].append(enriched_lead)
     
