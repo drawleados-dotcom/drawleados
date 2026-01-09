@@ -538,7 +538,6 @@ async def get_gst_report(month: int, year: int):
     }
 
 # ============== EMPLOYEE ROUTES ==============
-    user_id = "admin"  # TODO: Get from auth context
 
 @finance_router.post("/employees")
 async def create_employee(employee_data: EmployeeCreate):
@@ -583,12 +582,14 @@ async def get_employee(employee_id: str):
     
     return employee
 
-    user_id = "admin"  # TODO: Get from auth context
 # ============== ATTENDANCE ROUTES ==============
 
 @finance_router.post("/attendance")
-async def create_attendance(attendance_data: AttendanceCreate):
+async def create_attendance(attendance_data: AttendanceCreate, request: Request):
     """Create/Update attendance record"""
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
+    
     # Check if attendance already exists
     existing = await db.attendance.find_one({
         "employee_id": attendance_data.employee_id,
