@@ -370,6 +370,9 @@ async def clock_out(clock_data: ClockOutRequest, request: Request):
     if clock_in_time:
         if isinstance(clock_in_time, str):
             clock_in_time = datetime.fromisoformat(clock_in_time.replace('Z', '+00:00'))
+        # Ensure clock_in_time is timezone-aware
+        if clock_in_time.tzinfo is None:
+            clock_in_time = clock_in_time.replace(tzinfo=timezone.utc)
         total_hours = (now - clock_in_time).total_seconds() / 3600
     else:
         total_hours = 0
