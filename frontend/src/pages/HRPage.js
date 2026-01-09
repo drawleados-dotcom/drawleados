@@ -34,8 +34,10 @@ const ProfileField = ({ label, value }) => (
 );
 
 export default function HRPage() {
-  const { token } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
+  
+  // Get token from localStorage
+  const token = localStorage.getItem('session_token');
   
   // Attendance state
   const [todayAttendance, setTodayAttendance] = useState(null);
