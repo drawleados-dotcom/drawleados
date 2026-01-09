@@ -52,7 +52,7 @@ function AppRouter() {
         path="/finance"
         element={
           <ProtectedRoute>
-            <FinancePage />
+            <FinanceModule />
           </ProtectedRoute>
         }
       />
