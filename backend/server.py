@@ -679,6 +679,184 @@ async def get_statuses(user: User = Depends(get_current_user)):
     statuses = await db.statuses.find({"is_active": True}, {"_id": 0}).sort("order", 1).to_list(1000)
     return statuses
 
+@api_router.put("/statuses/{status_id}")
+async def update_status(status_id: str, status_data: StatusUpdate, user: User = Depends(get_current_user)):
+    """Update a status"""
+    status = await db.statuses.find_one({"status_id": status_id})
+    if not status:
+        raise HTTPException(status_code=404, detail="Status not found")
+    
+    update_dict = status_data.model_dump(exclude_unset=True)
+    if update_dict:
+        await db.statuses.update_one(
+            {"status_id": status_id},
+            {"$set": update_dict}
+        )
+    
+    return await db.statuses.find_one({"status_id": status_id}, {"_id": 0})
+
+@api_router.delete("/statuses/{status_id}")
+async def delete_status(status_id: str, user: User = Depends(get_current_user)):
+    """Soft delete a status"""
+    await db.statuses.update_one(
+        {"status_id": status_id},
+        {"$set": {"is_active": False}}
+    )
+    return {"message": "Status deleted"}
+
+@api_router.put("/statuses/reorder")
+async def reorder_statuses(status_orders: List[Dict[str, Any]], user: User = Depends(get_current_user)):
+    """Reorder statuses - expects list of {status_id, order}"""
+    for item in status_orders:
+        await db.statuses.update_one(
+            {"status_id": item["status_id"]},
+            {"$set": {"order": item["order"]}}
+        )
+    return {"message": "Statuses reordered"}
+
+# ============== COMPANY PROFILE ROUTES ==============
+
+@api_router.get("/company-profile")
+async def get_company_profile(user: User = Depends(get_current_user)):
+    """Get company profile"""
+    profile = await db.company_profile.find_one({}, {"_id": 0})
+    if not profile:
+        # Return default profile
+        return {
+            "company_name": "Drawlead",
+            "logo_url": None,
+            "address": "",
+            "city": "",
+            "state": "",
+            "pincode": "",
+            "phone": "",
+            "email": "",
+            "website": "",
+            "gst_number": "",
+            "pan_number": "",
+            "invoice_prefix": "INV",
+            "terms_conditions": "",
+            "bank_details": {
+                "account_name": "",
+                "account_number": "",
+                "ifsc_code": "",
+                "bank_name": "",
+                "branch": ""
+            },
+            "upi_ids": []
+        }
+    return profile
+
+@api_router.put("/company-profile")
+async def update_company_profile(profile_data: CompanyProfileUpdate, user: User = Depends(get_current_user)):
+    """Update company profile"""
+    update_dict = profile_data.model_dump(exclude_unset=True)
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    update_dict["updated_by"] = user.user_id
+    
+    # Convert bank_details to dict if present
+    if "bank_details" in update_dict and update_dict["bank_details"]:
+        update_dict["bank_details"] = update_dict["bank_details"].model_dump() if hasattr(update_dict["bank_details"], "model_dump") else update_dict["bank_details"]
+    
+    existing = await db.company_profile.find_one({})
+    if existing:
+        await db.company_profile.update_one({}, {"$set": update_dict})
+    else:
+        await db.company_profile.insert_one(update_dict)
+    
+    return await db.company_profile.find_one({}, {"_id": 0})
+
+# ============== WORKSPACE ROUTES ==============
+
+@api_router.get("/workspaces")
+async def get_workspaces(user: User = Depends(get_current_user)):
+    """Get all workspaces"""
+    workspaces = await db.workspaces.find({"is_active": True}, {"_id": 0}).to_list(100)
+    
+    # If no workspaces exist, create default ones
+    if not workspaces:
+        default_workspaces = [
+            {"name": "Sales", "description": "Sales and lead management", "icon": "TrendingUp", "color": "#3b82f6"},
+            {"name": "Operations", "description": "Project and task management", "icon": "Settings", "color": "#10b981"},
+            {"name": "Finance", "description": "Invoicing and payments", "icon": "DollarSign", "color": "#f59e0b"},
+            {"name": "Marketing", "description": "Marketing campaigns", "icon": "Megaphone", "color": "#8b5cf6"},
+            {"name": "HR", "description": "Human resources", "icon": "Users", "color": "#ef4444"},
+        ]
+        
+        for ws in default_workspaces:
+            workspace_id = f"ws_{uuid.uuid4().hex[:12]}"
+            workspace_doc = {
+                "workspace_id": workspace_id,
+                **ws,
+                "is_active": True,
+                "members": [],
+                "created_at": datetime.now(timezone.utc),
+                "created_by": user.user_id
+            }
+            await db.workspaces.insert_one(workspace_doc)
+        
+        workspaces = await db.workspaces.find({"is_active": True}, {"_id": 0}).to_list(100)
+    
+    return workspaces
+
+@api_router.post("/workspaces")
+async def create_workspace(workspace_data: WorkspaceCreate, user: User = Depends(get_current_user)):
+    """Create a new workspace"""
+    workspace_id = f"ws_{uuid.uuid4().hex[:12]}"
+    workspace_doc = {
+        "workspace_id": workspace_id,
+        **workspace_data.model_dump(),
+        "is_active": True,
+        "members": [],
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user.user_id
+    }
+    await db.workspaces.insert_one(workspace_doc)
+    return await db.workspaces.find_one({"workspace_id": workspace_id}, {"_id": 0})
+
+@api_router.put("/workspaces/{workspace_id}")
+async def update_workspace(workspace_id: str, workspace_data: WorkspaceUpdate, user: User = Depends(get_current_user)):
+    """Update workspace"""
+    workspace = await db.workspaces.find_one({"workspace_id": workspace_id})
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    update_dict = workspace_data.model_dump(exclude_unset=True)
+    if update_dict:
+        await db.workspaces.update_one(
+            {"workspace_id": workspace_id},
+            {"$set": update_dict}
+        )
+    
+    return await db.workspaces.find_one({"workspace_id": workspace_id}, {"_id": 0})
+
+@api_router.delete("/workspaces/{workspace_id}")
+async def delete_workspace(workspace_id: str, user: User = Depends(get_current_user)):
+    """Soft delete workspace"""
+    await db.workspaces.update_one(
+        {"workspace_id": workspace_id},
+        {"$set": {"is_active": False}}
+    )
+    return {"message": "Workspace deleted"}
+
+@api_router.post("/workspaces/{workspace_id}/members")
+async def add_workspace_member(workspace_id: str, user_id: str, user: User = Depends(get_current_user)):
+    """Add member to workspace"""
+    await db.workspaces.update_one(
+        {"workspace_id": workspace_id},
+        {"$addToSet": {"members": user_id}}
+    )
+    return {"message": "Member added"}
+
+@api_router.delete("/workspaces/{workspace_id}/members/{member_id}")
+async def remove_workspace_member(workspace_id: str, member_id: str, user: User = Depends(get_current_user)):
+    """Remove member from workspace"""
+    await db.workspaces.update_one(
+        {"workspace_id": workspace_id},
+        {"$pull": {"members": member_id}}
+    )
+    return {"message": "Member removed"}
+
 # ============== LEAD ROUTES ==============
 
 def enrich_lead_fast(lead_doc: Dict[str, Any], services_map: Dict, sources_map: Dict, statuses_map: Dict, users_map: Dict) -> Dict[str, Any]:
