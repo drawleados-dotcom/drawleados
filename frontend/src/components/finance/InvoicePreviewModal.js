@@ -236,6 +236,13 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
     return afterDiscount + gstAmount;
   };
 
+  const fullAddress = companyProfile ? [
+    companyProfile.address,
+    companyProfile.city,
+    companyProfile.state,
+    companyProfile.pincode
+  ].filter(Boolean).join(', ') : '';
+
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -269,15 +276,29 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
           {/* Header */}
           <div className="flex justify-between items-start mb-8">
             <div>
-              <h1 className="text-2xl font-bold text-[#6366f1]">
-                {companySettings?.company_name || 'Your Company'}
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">{companySettings?.company_address}</p>
-              {companySettings?.gst_number && (
-                <p className="text-sm text-gray-600">GSTIN: {companySettings.gst_number}</p>
+              {companyProfile?.logo_url && (
+                <img
+                  src={companyProfile.logo_url}
+                  alt="Company Logo"
+                  className="h-12 mb-2"
+                  onError={(e) => (e.target.style.display = 'none')}
+                />
               )}
-              {companySettings?.company_phone && (
-                <p className="text-sm text-gray-600">Phone: {companySettings.company_phone}</p>
+              <h1 className="text-2xl font-bold text-[#6366f1]">
+                {companyProfile?.company_name || 'Your Company'}
+              </h1>
+              {fullAddress && <p className="text-sm text-gray-600 mt-1">{fullAddress}</p>}
+              {companyProfile?.gst_number && (
+                <p className="text-sm text-gray-600">GSTIN: {companyProfile.gst_number}</p>
+              )}
+              {companyProfile?.pan_number && (
+                <p className="text-sm text-gray-600">PAN: {companyProfile.pan_number}</p>
+              )}
+              {companyProfile?.phone && (
+                <p className="text-sm text-gray-600">Phone: {companyProfile.phone}</p>
+              )}
+              {companyProfile?.email && (
+                <p className="text-sm text-gray-600">Email: {companyProfile.email}</p>
               )}
             </div>
             <div className="text-right">
