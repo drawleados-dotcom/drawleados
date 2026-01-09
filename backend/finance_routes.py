@@ -751,7 +751,6 @@ async def get_company_settings():
             "company_email": "",
             "company_phone": "",
             "invoice_terms": "Payment due within 30 days"
-    user_id = "admin"  # TODO: Get from auth context
         }
     
     return settings
@@ -759,6 +758,8 @@ async def get_company_settings():
 @finance_router.put("/settings")
 async def update_company_settings(settings_data: CompanySettingsUpdate):
     """Update company settings"""
+    user_id = "admin"  # TODO: Get from auth context
+    
     existing = await db.company_settings.find_one({})
     
     if existing:
