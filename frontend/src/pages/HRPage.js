@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { 
   User, Clock, Calendar, FileText, Award, Download, 
-  MapPin, Home, Building, Play, Square, Send,
+  Home, Building, Square, Send,
   CheckCircle, XCircle, AlertCircle, ChevronRight
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,10 +16,26 @@ import axios from 'axios';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+// Helper components defined outside
+const ProfileSection = ({ title, children }) => (
+  <Card className="bg-[#18181b] border-[#27272a] mb-4">
+    <CardHeader className="pb-2">
+      <CardTitle className="text-lg text-[#fafafa]">{title}</CardTitle>
+    </CardHeader>
+    <CardContent>{children}</CardContent>
+  </Card>
+);
+
+const ProfileField = ({ label, value }) => (
+  <div className="py-2">
+    <p className="text-xs text-[#a1a1aa] mb-1">{label}</p>
+    <p className="text-[#fafafa]">{value || '-'}</p>
+  </div>
+);
+
 export default function HRPage() {
-  const { user, token } = useAuth();
+  const { token } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
-  const [loading, setLoading] = useState(false);
   
   // Attendance state
   const [todayAttendance, setTodayAttendance] = useState(null);
@@ -48,40 +64,16 @@ export default function HRPage() {
 
   const headers = { Authorization: `Bearer ${token}` };
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      if (activeTab === 'attendance') {
-        await Promise.all([loadTodayAttendance(), loadAttendanceHistory()]);
-      } else if (activeTab === 'profile') {
-        await loadProfile();
-      } else if (activeTab === 'leave') {
-        await Promise.all([loadLeaveRequests(), loadLeaveBalance()]);
-      } else if (activeTab === 'payslips') {
-        await loadPayslips();
-      } else if (activeTab === 'reviews') {
-        await loadReviews();
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
-    setLoading(false);
-  };
-
-  const loadTodayAttendance = async () => {
+  const loadTodayAttendance = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/attendance/today`, { headers });
       setTodayAttendance(res.data);
     } catch (error) {
       console.error('Error loading today attendance:', error);
     }
-  };
+  }, [token]);
 
-  const loadAttendanceHistory = async () => {
+  const loadAttendanceHistory = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/attendance/history`, { headers });
       setAttendanceHistory(res.data.records || []);
@@ -89,52 +81,68 @@ export default function HRPage() {
     } catch (error) {
       console.error('Error loading attendance history:', error);
     }
-  };
+  }, [token]);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/profile`, { headers });
       setProfile(res.data);
     } catch (error) {
       console.error('Error loading profile:', error);
     }
-  };
+  }, [token]);
 
-  const loadLeaveRequests = async () => {
+  const loadLeaveRequests = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/leave/my-requests`, { headers });
       setLeaveRequests(res.data);
     } catch (error) {
       console.error('Error loading leave requests:', error);
     }
-  };
+  }, [token]);
 
-  const loadLeaveBalance = async () => {
+  const loadLeaveBalance = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/leave/balance`, { headers });
       setLeaveBalance(res.data);
     } catch (error) {
       console.error('Error loading leave balance:', error);
     }
-  };
+  }, [token]);
 
-  const loadPayslips = async () => {
+  const loadPayslips = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/payslips`, { headers });
       setPayslips(res.data);
     } catch (error) {
       console.error('Error loading payslips:', error);
     }
-  };
+  }, [token]);
 
-  const loadReviews = async () => {
+  const loadReviews = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/reviews`, { headers });
       setReviews(res.data);
     } catch (error) {
       console.error('Error loading reviews:', error);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (activeTab === 'attendance') {
+      loadTodayAttendance();
+      loadAttendanceHistory();
+    } else if (activeTab === 'profile') {
+      loadProfile();
+    } else if (activeTab === 'leave') {
+      loadLeaveRequests();
+      loadLeaveBalance();
+    } else if (activeTab === 'payslips') {
+      loadPayslips();
+    } else if (activeTab === 'reviews') {
+      loadReviews();
+    }
+  }, [activeTab, loadTodayAttendance, loadAttendanceHistory, loadProfile, loadLeaveRequests, loadLeaveBalance, loadPayslips, loadReviews]);
 
   const handleClockIn = async (location) => {
     try {
@@ -199,7 +207,6 @@ export default function HRPage() {
   return (
     <Layout>
       <div className="p-6" data-testid="hr-page">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-2">
             <span className="bg-gradient-to-r from-[#10b981] to-[#059669] bg-clip-text text-transparent">
@@ -209,7 +216,6 @@ export default function HRPage() {
           <p className="text-[#a1a1aa]">Manage your attendance, leaves, payslips and more</p>
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -231,7 +237,6 @@ export default function HRPage() {
           })}
         </div>
 
-        {/* Tab Content */}
         {activeTab === 'attendance' && (
           <AttendanceTab
             todayAttendance={todayAttendance}
@@ -273,7 +278,6 @@ export default function HRPage() {
   );
 }
 
-// ============== ATTENDANCE TAB ==============
 function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, onClockIn, onClockOut, formatTime, formatDate }) {
   const isClockedIn = todayAttendance?.clock_in && !todayAttendance?.clock_out;
   const isClockedOut = todayAttendance?.clock_out;
@@ -281,12 +285,11 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
 
   return (
     <div className="space-y-6">
-      {/* Today's Status Card */}
       <Card className="bg-[#18181b] border-[#27272a]">
         <CardHeader>
           <CardTitle className="text-[#fafafa] flex items-center gap-2">
             <Clock className="h-5 w-5 text-[#10b981]" />
-            Today's Attendance
+            Today&apos;s Attendance
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -327,7 +330,6 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
             </div>
           </div>
 
-          {/* Clock In/Out Actions */}
           {notClockedIn && (
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
@@ -363,7 +365,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
           {isClockedOut && (
             <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/20">
               <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
-              <p className="text-green-400 font-medium">You've completed your day!</p>
+              <p className="text-green-400 font-medium">You&apos;ve completed your day!</p>
               <p className="text-sm text-[#a1a1aa]">
                 Total hours: {todayAttendance?.total_hours?.toFixed(2) || 0} hrs
               </p>
@@ -372,10 +374,9 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
         </CardContent>
       </Card>
 
-      {/* Monthly Summary */}
       <Card className="bg-[#18181b] border-[#27272a]">
         <CardHeader>
-          <CardTitle className="text-[#fafafa]">This Month's Summary</CardTitle>
+          <CardTitle className="text-[#fafafa]">This Month&apos;s Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -403,7 +404,6 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
         </CardContent>
       </Card>
 
-      {/* Attendance History */}
       <Card className="bg-[#18181b] border-[#27272a]">
         <CardHeader>
           <CardTitle className="text-[#fafafa]">Attendance History</CardTitle>
@@ -450,32 +450,14 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   );
 }
 
-// ============== PROFILE TAB ==============
 function ProfileTab({ profile }) {
   if (!profile) {
     return <div className="text-center py-8 text-[#a1a1aa]">Loading profile...</div>;
   }
 
-  const Section = ({ title, children }) => (
-    <Card className="bg-[#18181b] border-[#27272a] mb-4">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg text-[#fafafa]">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
-
-  const Field = ({ label, value }) => (
-    <div className="py-2">
-      <p className="text-xs text-[#a1a1aa] mb-1">{label}</p>
-      <p className="text-[#fafafa]">{value || '-'}</p>
-    </div>
-  );
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Personal Info */}
-      <Section title="Personal Information">
+      <ProfileSection title="Personal Information">
         <div className="flex items-center gap-4 mb-4 pb-4 border-b border-[#27272a]">
           <div className="h-20 w-20 rounded-full bg-gradient-to-br from-[#10b981] to-[#059669] flex items-center justify-center text-white text-2xl font-bold">
             {profile.full_name?.charAt(0).toUpperCase()}
@@ -487,65 +469,59 @@ function ProfileTab({ profile }) {
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Email" value={profile.email} />
-          <Field label="Phone" value={profile.phone} />
-          <Field label="Date of Birth" value={profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString() : '-'} />
-          <Field label="Gender" value={profile.gender} />
-          <Field label="Blood Group" value={profile.blood_group} />
+          <ProfileField label="Email" value={profile.email} />
+          <ProfileField label="Phone" value={profile.phone} />
+          <ProfileField label="Date of Birth" value={profile.date_of_birth ? new Date(profile.date_of_birth).toLocaleDateString() : '-'} />
+          <ProfileField label="Gender" value={profile.gender} />
+          <ProfileField label="Blood Group" value={profile.blood_group} />
         </div>
-      </Section>
+      </ProfileSection>
 
-      {/* Employment Info */}
-      <Section title="Employment Details">
+      <ProfileSection title="Employment Details">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Employee ID" value={profile.employee_id} />
-          <Field label="Designation" value={profile.designation} />
-          <Field label="Department" value={profile.department} />
-          <Field label="Employment Type" value={profile.employment_type} />
-          <Field label="Joining Date" value={profile.joining_date ? new Date(profile.joining_date).toLocaleDateString() : '-'} />
-          <Field label="Reporting Manager" value={profile.reporting_manager} />
+          <ProfileField label="Employee ID" value={profile.employee_id} />
+          <ProfileField label="Designation" value={profile.designation} />
+          <ProfileField label="Department" value={profile.department} />
+          <ProfileField label="Employment Type" value={profile.employment_type} />
+          <ProfileField label="Joining Date" value={profile.joining_date ? new Date(profile.joining_date).toLocaleDateString() : '-'} />
+          <ProfileField label="Reporting Manager" value={profile.reporting_manager} />
         </div>
-      </Section>
+      </ProfileSection>
 
-      {/* Address */}
-      <Section title="Address">
+      <ProfileSection title="Address">
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
-            <Field label="Address" value={profile.address} />
+            <ProfileField label="Address" value={profile.address} />
           </div>
-          <Field label="City" value={profile.city} />
-          <Field label="State" value={profile.state} />
-          <Field label="Pincode" value={profile.pincode} />
+          <ProfileField label="City" value={profile.city} />
+          <ProfileField label="State" value={profile.state} />
+          <ProfileField label="Pincode" value={profile.pincode} />
         </div>
-      </Section>
+      </ProfileSection>
 
-      {/* Emergency Contact */}
-      <Section title="Emergency Contact">
+      <ProfileSection title="Emergency Contact">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Contact Name" value={profile.emergency_contact_name} />
-          <Field label="Contact Phone" value={profile.emergency_contact_phone} />
-          <Field label="Relationship" value={profile.emergency_contact_relation} />
+          <ProfileField label="Contact Name" value={profile.emergency_contact_name} />
+          <ProfileField label="Contact Phone" value={profile.emergency_contact_phone} />
+          <ProfileField label="Relationship" value={profile.emergency_contact_relation} />
         </div>
-      </Section>
+      </ProfileSection>
 
-      {/* Bank Details */}
-      <Section title="Bank Details">
+      <ProfileSection title="Bank Details">
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Bank Name" value={profile.bank_name} />
-          <Field label="Account Number" value={profile.account_number ? '****' + profile.account_number.slice(-4) : '-'} />
-          <Field label="IFSC Code" value={profile.ifsc_code} />
-          <Field label="PAN Number" value={profile.pan_number ? '****' + profile.pan_number.slice(-4) : '-'} />
+          <ProfileField label="Bank Name" value={profile.bank_name} />
+          <ProfileField label="Account Number" value={profile.account_number ? '****' + profile.account_number.slice(-4) : '-'} />
+          <ProfileField label="IFSC Code" value={profile.ifsc_code} />
+          <ProfileField label="PAN Number" value={profile.pan_number ? '****' + profile.pan_number.slice(-4) : '-'} />
         </div>
-      </Section>
+      </ProfileSection>
     </div>
   );
 }
 
-// ============== LEAVE TAB ==============
 function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveForm, setLeaveForm, onSubmit, formatDate }) {
   return (
     <div className="space-y-6">
-      {/* Leave Balance */}
       <Card className="bg-[#18181b] border-[#27272a]">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-[#fafafa]">Leave Balance ({new Date().getFullYear()})</CardTitle>
@@ -589,7 +565,6 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
         </CardContent>
       </Card>
 
-      {/* Leave Requests */}
       <Card className="bg-[#18181b] border-[#27272a]">
         <CardHeader>
           <CardTitle className="text-[#fafafa]">My Leave Requests</CardTitle>
@@ -633,7 +608,6 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
         </CardContent>
       </Card>
 
-      {/* Leave Request Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="bg-[#18181b] border-[#27272a] w-full max-w-md mx-4">
@@ -712,7 +686,6 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
   );
 }
 
-// ============== PAYSLIPS TAB ==============
 function PayslipsTab({ payslips }) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -772,7 +745,6 @@ function PayslipsTab({ payslips }) {
   );
 }
 
-// ============== REVIEWS TAB ==============
 function ReviewsTab({ reviews }) {
   const quarters = {
     'Q1': 'Jan - Mar',
