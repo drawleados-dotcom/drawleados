@@ -132,13 +132,45 @@ async def create_invoice(invoice_data: InvoiceCreate, user_id: str = Depends(lam
         year = invoice_data.invoice_date.year
         invoice_number = await generate_invoice_number(year)
         
-        # Calculate totals
-        subtotal = sum(item["quantity"] * item["rate"] for item in invoice_data.items)
+        # Calculate totals with per-item GST and discounts
+        subtotal = 0.0
+        total_gst = 0.0
+        total_discount = 0.0
         
-        # Calculate GST if applicable
+        processed_items = []
+        for item in invoice_data.items:
+            # Calculate item amount
+            item_subtotal = item["quantity"] * item["rate"]
+            
+            # Apply discount
+            discount_percent = item.get("discount_percent", 0.0)
+            discount_amount = (item_subtotal * discount_percent) / 100
+            amount_after_discount = item_subtotal - discount_amount
+            
+            # Apply GST
+            gst_rate = item.get("gst_rate", 0.0)
+            gst_amount = (amount_after_discount * gst_rate) / 100
+            final_amount = amount_after_discount + gst_amount
+            
+            processed_items.append({
+                **item,
+                "discount_percent": discount_percent,
+                "discount_amount": round(discount_amount, 2),
+                "amount_before_tax": round(amount_after_discount, 2),
+                "gst_rate": gst_rate,
+                "gst_amount": round(gst_amount, 2),
+                "amount": round(final_amount, 2)
+            })
+            
+            subtotal += item_subtotal
+            total_discount += discount_amount
+            total_gst += gst_amount
+        
+        # Calculate invoice-level GST if gst_type is 'gst'
         if invoice_data.gst_type == "gst":
-            # Check if inter-state (simplified - you can enhance this)
-            is_inter_state = False  # Can be determined by client GST state code
+            # Use invoice-level GST if items don't have individual GST
+            invoice_gst_amount = (subtotal * invoice_data.gst_rate) / 100
+            is_inter_state = False  # Can be determined by GST state codes
             gst_calc = calculate_gst(subtotal, invoice_data.gst_rate, is_inter_state)
             cgst = gst_calc["cgst"]
             sgst = gst_calc["sgst"]
@@ -146,7 +178,8 @@ async def create_invoice(invoice_data: InvoiceCreate, user_id: str = Depends(lam
             total = subtotal + cgst + sgst + igst
         else:
             cgst = sgst = igst = 0.0
-            total = subtotal
+            # Use item-level GST totals
+            total = subtotal - total_discount + total_gst
         
         # Create invoice
         invoice_id = f"inv_{uuid.uuid4().hex[:12]}"
@@ -156,6 +189,7 @@ async def create_invoice(invoice_data: InvoiceCreate, user_id: str = Depends(lam
             **invoice_data.model_dump(exclude={"items"}),
             "status": "draft",
             "subtotal": round(subtotal, 2),
+            "total_discount": round(total_discount, 2),
             "cgst": cgst,
             "sgst": sgst,
             "igst": igst,
@@ -169,16 +203,21 @@ async def create_invoice(invoice_data: InvoiceCreate, user_id: str = Depends(lam
         await db.invoices.insert_one(invoice_doc)
         
         # Create invoice items
-        for item in invoice_data.items:
+        for item in processed_items:
             item_id = f"item_{uuid.uuid4().hex[:12]}"
             item_doc = {
                 "item_id": item_id,
                 "invoice_id": invoice_id,
                 "service_name": item["service_name"],
-                "description": item.get("description"),
+                "description": item.get("description", ""),
                 "quantity": item["quantity"],
                 "rate": item["rate"],
-                "amount": round(item["quantity"] * item["rate"], 2)
+                "discount_percent": item["discount_percent"],
+                "discount_amount": item["discount_amount"],
+                "amount_before_tax": item["amount_before_tax"],
+                "gst_rate": item["gst_rate"],
+                "gst_amount": item["gst_amount"],
+                "amount": item["amount"]
             }
             await db.invoice_items.insert_one(item_doc)
         
