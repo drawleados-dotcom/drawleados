@@ -1016,9 +1016,50 @@ async def seed_data():
         "role": "bde",
         "password_hash": hash_password("bde123"),
         "is_active": True,
+        "module_access": ["leads"],
+        "project_access": [],
+        "can_create_projects": False,
+        "can_delete_tasks": False,
+        "can_manage_users": False,
         "created_at": datetime.now(timezone.utc)
     }
     await db.users.insert_one(bde_doc)
+    
+    # Create Project Manager user
+    pm_id = f"user_{uuid.uuid4().hex[:12]}"
+    pm_doc = {
+        "user_id": pm_id,
+        "email": "pm@drawlead.com",
+        "name": "Project Manager",
+        "role": "project_manager",
+        "password_hash": hash_password("pm123"),
+        "is_active": True,
+        "module_access": ["operations", "reports"],
+        "project_access": [],
+        "can_create_projects": True,
+        "can_delete_tasks": False,
+        "can_manage_users": False,
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.users.insert_one(pm_doc)
+    
+    # Create Employee user
+    emp_id = f"user_{uuid.uuid4().hex[:12]}"
+    emp_doc = {
+        "user_id": emp_id,
+        "email": "employee@drawlead.com",
+        "name": "Team Member",
+        "role": "employee",
+        "password_hash": hash_password("emp123"),
+        "is_active": True,
+        "module_access": ["operations"],
+        "project_access": [],
+        "can_create_projects": False,
+        "can_delete_tasks": False,
+        "can_manage_users": False,
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.users.insert_one(emp_doc)
     
     # Create services
     services_data = [
