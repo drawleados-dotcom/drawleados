@@ -635,12 +635,14 @@ async def get_attendance(employee_id: Optional[str] = None, month: Optional[int]
     records = await db.attendance.find(query, {"_id": 0}).to_list(1000)
     return records
 
-    user_id = "admin"  # TODO: Get from auth context
 # ============== PAYSLIP ROUTES ==============
 
 @finance_router.post("/payslips/generate")
-async def generate_payslip(payslip_data: PayslipGenerate):
+async def generate_payslip(payslip_data: PayslipGenerate, request: Request):
     """Generate payslip for an employee"""
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
+    
     # Get employee
     employee = await db.employees.find_one({"employee_id": payslip_data.employee_id}, {"_id": 0})
     if not employee:
