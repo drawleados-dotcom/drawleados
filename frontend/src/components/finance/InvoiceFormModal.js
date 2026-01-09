@@ -386,27 +386,28 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
           <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-6">
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[#fafafa]">
-                <span>Subtotal:</span>
+                <span>Subtotal (before discount):</span>
+                <span className="font-semibold">₹{items.reduce((sum, item) => sum + (item.quantity * item.rate), 0).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-[#a1a1aa] text-sm">
+                <span>Total Discount:</span>
+                <span>- ₹{items.reduce((sum, item) => {
+                  const discount = ((item.quantity * item.rate) * (item.discount_percent || 0)) / 100;
+                  return sum + discount;
+                }, 0).toLocaleString()}</span>
+              </div>
+              <div className="border-t border-[#27272a] pt-2 flex items-center justify-between text-[#fafafa]">
+                <span>Amount after discount:</span>
                 <span className="font-semibold">₹{calculateSubtotal().toLocaleString()}</span>
               </div>
-              {formData.gst_type === 'gst' && (
-                <>
-                  <div className="flex items-center justify-between text-[#a1a1aa] text-sm">
-                    <span>GST ({formData.gst_rate}%):</span>
-                    <span>₹{((calculateSubtotal() * formData.gst_rate) / 100).toLocaleString()}</span>
-                  </div>
-                  <div className="border-t border-[#27272a] pt-3 flex items-center justify-between text-[#fafafa] font-bold text-lg">
-                    <span>Total Amount:</span>
-                    <span className="text-[#6366f1]">₹{calculateTotal().toLocaleString()}</span>
-                  </div>
-                </>
-              )}
-              {formData.gst_type === 'non-gst' && (
-                <div className="border-t border-[#27272a] pt-3 flex items-center justify-between text-[#fafafa] font-bold text-lg">
-                  <span>Total Amount:</span>
-                  <span className="text-[#6366f1]">₹{calculateTotal().toLocaleString()}</span>
-                </div>
-              )}
+              <div className="flex items-center justify-between text-[#a1a1aa] text-sm">
+                <span>Total GST:</span>
+                <span>+ ₹{calculateTotalGST().toLocaleString()}</span>
+              </div>
+              <div className="border-t border-[#27272a] pt-3 flex items-center justify-between text-[#fafafa] font-bold text-lg">
+                <span>Total Amount:</span>
+                <span className="text-[#6366f1]">₹{calculateTotal().toLocaleString()}</span>
+              </div>
             </div>
           </div>
 
