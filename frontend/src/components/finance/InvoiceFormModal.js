@@ -50,7 +50,14 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
         notes: invoice.notes || '',
         template_type: invoice.template_type || 'minimal',
       });
-      setItems(invoice.items || [{ service_name: '', description: '', quantity: 1, rate: 0 }]);
+      setItems(invoice.items.map(item => ({
+        service_name: item.service_name || '',
+        description: item.description || '',
+        quantity: item.quantity || 1,
+        rate: item.rate || 0,
+        discount_percent: item.discount_percent || 0,
+        gst_rate: item.gst_rate || 18
+      })) || [{ service_name: '', description: '', quantity: 1, rate: 0, discount_percent: 0, gst_rate: 18 }]);
     }
   }, [invoice]);
 
