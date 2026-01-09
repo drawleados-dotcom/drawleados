@@ -118,7 +118,9 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
           service_name: item.service_name,
           description: item.description || '',
           quantity: item.quantity,
-          rate: item.rate
+          rate: item.rate,
+          discount_percent: item.discount_percent || 0,
+          gst_rate: item.gst_rate || 0
         }))
       };
 
