@@ -498,9 +498,10 @@ async def create_user(user_data: Dict[str, Any], current_user: User = Depends(ge
         user_data["can_delete_tasks"] = True
         user_data["can_manage_users"] = True
     elif role == "admin":
-        module_access = ["leads", "operations", "finance", "reports"]
+        module_access = ["leads", "operations", "finance", "reports", "settings"]
         user_data["can_create_projects"] = True
         user_data["can_delete_tasks"] = True
+        user_data["can_manage_users"] = True
     elif role == "project_manager":
         module_access = ["operations", "reports"]
         user_data["can_create_projects"] = True
@@ -1256,11 +1257,11 @@ async def seed_data():
         "role": "admin",
         "password_hash": hash_password("admin123"),
         "is_active": True,
-        "module_access": ["leads", "operations", "finance", "reports"],
+        "module_access": ["leads", "operations", "finance", "reports", "settings"],
         "project_access": [],
         "can_create_projects": True,
         "can_delete_tasks": True,
-        "can_manage_users": False,
+        "can_manage_users": True,
         "created_at": datetime.now(timezone.utc)
     }
     await db.users.insert_one(admin_doc)
