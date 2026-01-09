@@ -277,7 +277,7 @@ async def get_invoice(invoice_id: str):
     return invoice
 
 @finance_router.put("/invoices/{invoice_id}")
-async def update_invoice(invoice_id: str, invoice_data: InvoiceUpdate, user_id: str = Depends(lambda: "admin")):
+async def update_invoice(invoice_id: str, invoice_data: InvoiceUpdate):
     """Update invoice"""
     invoice = await db.invoices.find_one({"invoice_id": invoice_id, "is_deleted": False})
     
@@ -350,7 +350,7 @@ async def delete_invoice(invoice_id: str):
     return {"message": "Invoice deleted"}
 
 @finance_router.post("/invoices/{invoice_id}/duplicate")
-async def duplicate_invoice(invoice_id: str, user_id: str = Depends(lambda: "admin")):
+async def duplicate_invoice(invoice_id: str):
     """Duplicate an existing invoice"""
     original = await db.invoices.find_one({"invoice_id": invoice_id}, {"_id": 0})
     
@@ -487,7 +487,7 @@ async def get_gst_report(month: int, year: int):
 # ============== EMPLOYEE ROUTES ==============
 
 @finance_router.post("/employees")
-async def create_employee(employee_data: EmployeeCreate, user_id: str = Depends(lambda: "admin")):
+async def create_employee(employee_data: EmployeeCreate):
     """Create new employee"""
     employee_code = await generate_employee_code()
     employee_id = f"emp_{uuid.uuid4().hex[:12]}"
@@ -532,7 +532,7 @@ async def get_employee(employee_id: str):
 # ============== ATTENDANCE ROUTES ==============
 
 @finance_router.post("/attendance")
-async def create_attendance(attendance_data: AttendanceCreate, user_id: str = Depends(lambda: "admin")):
+async def create_attendance(attendance_data: AttendanceCreate):
     """Create/Update attendance record"""
     # Check if attendance already exists
     existing = await db.attendance.find_one({
@@ -582,7 +582,7 @@ async def get_attendance(employee_id: Optional[str] = None, month: Optional[int]
 # ============== PAYSLIP ROUTES ==============
 
 @finance_router.post("/payslips/generate")
-async def generate_payslip(payslip_data: PayslipGenerate, user_id: str = Depends(lambda: "admin")):
+async def generate_payslip(payslip_data: PayslipGenerate):
     """Generate payslip for an employee"""
     # Get employee
     employee = await db.employees.find_one({"employee_id": payslip_data.employee_id}, {"_id": 0})
@@ -676,7 +676,7 @@ async def update_payslip_status(payslip_id: str, status: str):
 # ============== BUDGET ROUTES ==============
 
 @finance_router.post("/budgets")
-async def create_budget(budget_data: BudgetCreate, user_id: str = Depends(lambda: "admin")):
+async def create_budget(budget_data: BudgetCreate):
     """Create budget"""
     budget_id = f"bud_{uuid.uuid4().hex[:12]}"
     budget_doc = {
@@ -748,7 +748,7 @@ async def get_company_settings():
     return settings
 
 @finance_router.put("/settings")
-async def update_company_settings(settings_data: CompanySettingsUpdate, user_id: str = Depends(lambda: "admin")):
+async def update_company_settings(settings_data: CompanySettingsUpdate):
     """Update company settings"""
     existing = await db.company_settings.find_one({})
     
