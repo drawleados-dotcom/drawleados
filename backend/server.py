@@ -1016,8 +1016,9 @@ async def seed_data():
         "bde": {"email": "bde@drawlead.com", "password": "bde123"}
     }
 
-# Include finance router in api_router BEFORE including api_router in app
+# Include finance and operations routers in api_router BEFORE including api_router in app
 api_router.include_router(finance_router)
+api_router.include_router(operations_router)
 
 # Include router in main app
 app.include_router(api_router)
