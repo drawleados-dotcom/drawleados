@@ -125,9 +125,11 @@ def calculate_payslip(employee: Dict, attendance: Dict, other_deductions: float 
 # ============== INVOICE ROUTES ==============
 
 @finance_router.post("/invoices")
-async def create_invoice(invoice_data: InvoiceCreate, user_id: str = Depends(lambda: "admin")):
+async def create_invoice(invoice_data: InvoiceCreate):
     """Create a new invoice"""
     try:
+        user_id = "admin"  # TODO: Get from auth context
+        
         # Generate invoice number
         year = invoice_data.invoice_date.year
         invoice_number = await generate_invoice_number(year)
