@@ -550,9 +550,10 @@ async def stop_timer(time_data: TimeEntryStop):
     return await db.time_entries.find_one({"entry_id": time_data.entry_id}, {"_id": 0})
 
 @operations_router.get("/time/running")
-async def get_running_timer():
+async def get_running_timer(request: Request):
     """Get current running timer for user"""
-    user_id = "admin"  # TODO: Get from auth
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
     
     running = await db.time_entries.find_one({"user_id": user_id, "is_running": True}, {"_id": 0})
     
