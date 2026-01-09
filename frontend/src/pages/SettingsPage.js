@@ -11,16 +11,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { 
-  Users, Shield, Settings as SettingsIcon, Plus, Search, Edit, Trash2, 
-  UserCog, Key, Building 
+  Users, Shield, Building2, Plus, Search, Edit, Trash2, 
+  Layers, Tag, Layout as LayoutIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
+import CompanyProfileTab from '../components/settings/CompanyProfileTab';
+import WorkspacesTab from '../components/settings/WorkspacesTab';
+import StatusManagementTab from '../components/settings/StatusManagementTab';
 
 const SettingsPage = () => {
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('company');
   const [searchTerm, setSearchTerm] = useState('');
   const [showUserModal, setShowUserModal] = useState(false);
   const [showServiceModal, setShowServiceModal] = useState(false);
@@ -186,14 +189,30 @@ const SettingsPage = () => {
               </span>
             </h1>
             <p className="text-[#a1a1aa] text-base">
-              Manage users, roles, permissions, and services
+              Manage company profile, users, workspaces, and system settings
             </p>
           </div>
         </div>
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="bg-[#18181b] border border-[#27272a] p-1">
+          <TabsList className="bg-[#18181b] border border-[#27272a] p-1 flex-wrap h-auto">
+            <TabsTrigger
+              value="company"
+              data-testid="company-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              Company
+            </TabsTrigger>
+            <TabsTrigger
+              value="workspaces"
+              data-testid="workspaces-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              <LayoutIcon className="h-4 w-4 mr-2" />
+              Workspaces
+            </TabsTrigger>
             <TabsTrigger
               value="users"
               data-testid="users-tab"
@@ -207,8 +226,16 @@ const SettingsPage = () => {
               data-testid="services-settings-tab"
               className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
             >
-              <Building className="h-4 w-4 mr-2" />
+              <Layers className="h-4 w-4 mr-2" />
               Services
+            </TabsTrigger>
+            <TabsTrigger
+              value="statuses"
+              data-testid="statuses-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              <Tag className="h-4 w-4 mr-2" />
+              Statuses
             </TabsTrigger>
             <TabsTrigger
               value="roles"
@@ -216,9 +243,19 @@ const SettingsPage = () => {
               className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
             >
               <Shield className="h-4 w-4 mr-2" />
-              Roles & Permissions
+              Roles
             </TabsTrigger>
           </TabsList>
+
+          {/* Company Profile Tab */}
+          <TabsContent value="company" className="mt-6">
+            <CompanyProfileTab />
+          </TabsContent>
+
+          {/* Workspaces Tab */}
+          <TabsContent value="workspaces" className="mt-6">
+            <WorkspacesTab users={users} />
+          </TabsContent>
 
           {/* Users Tab */}
           <TabsContent value="users" className="mt-6">
@@ -410,6 +447,11 @@ const SettingsPage = () => {
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          {/* Statuses Tab */}
+          <TabsContent value="statuses" className="mt-6">
+            <StatusManagementTab />
           </TabsContent>
 
           {/* Roles Tab */}
