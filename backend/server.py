@@ -20,6 +20,7 @@ import sys
 sys.path.append(str(Path(__file__).parent))
 from finance_routes import finance_router, init_finance_db
 from operations_routes import operations_router, init_operations_db
+from hr_routes import hr_router, init_hr_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -32,6 +33,7 @@ db = client[os.environ['DB_NAME']]
 # Initialize finance and operations modules with database
 init_finance_db(db)
 init_operations_db(db)
+init_hr_db(db)
 
 # Create the main app
 app = FastAPI()
