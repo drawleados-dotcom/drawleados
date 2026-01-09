@@ -6,6 +6,23 @@ from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 import uuid
+import os
+import asyncio
+import logging
+
+# Email setup
+try:
+    import resend
+    resend.api_key = os.environ.get("RESEND_API_KEY", "")
+    SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@drawlead.com")
+    EMAIL_ENABLED = bool(resend.api_key and resend.api_key != "re_your_api_key_here")
+except ImportError:
+    EMAIL_ENABLED = False
+    SENDER_EMAIL = ""
+    ADMIN_EMAIL = ""
+
+logger = logging.getLogger(__name__)
 
 hr_router = APIRouter(prefix="/hr", tags=["HR"])
 
@@ -15,6 +32,28 @@ db = None
 def init_hr_db(database):
     global db
     db = database
+
+# ============== EMAIL HELPER ==============
+
+async def send_email_notification(to_email: str, subject: str, html_content: str):
+    """Send email notification asynchronously"""
+    if not EMAIL_ENABLED:
+        logger.info(f"Email disabled - would send to {to_email}: {subject}")
+        return {"status": "mocked", "message": "Email service not configured"}
+    
+    try:
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content
+        }
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Email sent to {to_email}: {subject}")
+        return {"status": "success", "email_id": result.get("id")}
+    except Exception as e:
+        logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
 # ============== MODELS ==============
 
