@@ -389,11 +389,120 @@ async def logout(request: Request, response: Response):
 
 @api_router.get("/users")
 async def get_users(user: User = Depends(get_current_user)):
-    if user.role != "admin":
+    if user.role != "admin" and user.role != "super_admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     
     users = await db.users.find({"is_active": True}, {"_id": 0, "password_hash": 0}).to_list(1000)
     return users
+
+@api_router.post("/users")
+async def create_user(user_data: Dict[str, Any], current_user: User = Depends(get_current_user)):
+    """Create new user with permissions"""
+    if not current_user.can_manage_users:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Check if email exists
+    existing = await db.users.find_one({"email": user_data["email"]})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    
+    # Set default permissions based on role
+    role = user_data.get("role", "employee")
+    module_access = []
+    
+    if role == "super_admin":
+        module_access = ["leads", "operations", "finance", "reports", "settings"]
+        user_data["can_create_projects"] = True
+        user_data["can_delete_tasks"] = True
+        user_data["can_manage_users"] = True
+    elif role == "admin":
+        module_access = ["leads", "operations", "finance", "reports"]
+        user_data["can_create_projects"] = True
+        user_data["can_delete_tasks"] = True
+    elif role == "project_manager":
+        module_access = ["operations", "reports"]
+        user_data["can_create_projects"] = True
+    elif role == "bde":
+        module_access = ["leads"]
+    elif role == "employee":
+        module_access = ["operations"]
+    
+    user_doc = {
+        "user_id": user_id,
+        "email": user_data["email"],
+        "name": user_data["name"],
+        "role": role,
+        "password_hash": hash_password(user_data["password"]) if "password" in user_data else None,
+        "is_active": True,
+        "module_access": user_data.get("module_access", module_access),
+        "project_access": user_data.get("project_access", []),
+        "can_create_projects": user_data.get("can_create_projects", False),
+        "can_delete_tasks": user_data.get("can_delete_tasks", False),
+        "can_manage_users": user_data.get("can_manage_users", False),
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    return await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+
+@api_router.put("/users/{user_id}")
+async def update_user(user_id: str, update_data: Dict[str, Any], current_user: User = Depends(get_current_user)):
+    """Update user permissions"""
+    if not current_user.can_manage_users:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Don't allow changing super_admin role
+    if user.get("role") == "super_admin" and current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot modify super admin")
+    
+    # Update password if provided
+    if "password" in update_data:
+        update_data["password_hash"] = hash_password(update_data.pop("password"))
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": update_data}
+    )
+    
+    return await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+
+@api_router.delete("/users/{user_id}")
+async def deactivate_user(user_id: str, current_user: User = Depends(get_current_user)):
+    """Deactivate user"""
+    if not current_user.can_manage_users:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"is_active": False}}
+    )
+    
+    return {"message": "User deactivated"}
+
+@api_router.get("/users/{user_id}/permissions")
+async def get_user_permissions(user_id: str, current_user: User = Depends(get_current_user)):
+    """Get user permissions"""
+    if current_user.user_id != user_id and not current_user.can_manage_users:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "module_access": user.get("module_access", []),
+        "project_access": user.get("project_access", []),
+        "can_create_projects": user.get("can_create_projects", False),
+        "can_delete_tasks": user.get("can_delete_tasks", False),
+        "can_manage_users": user.get("can_manage_users", False)
+    }
 
 # ============== SERVICE ROUTES ==============
 
