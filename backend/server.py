@@ -1014,11 +1014,11 @@ async def seed_data():
         "bde": {"email": "bde@drawlead.com", "password": "bde123"}
     }
 
-# Include router
-app.include_router(api_router)
-
-# Include finance router
+# Include finance router in api_router BEFORE including api_router in app
 api_router.include_router(finance_router)
+
+# Include router in main app
+app.include_router(api_router)
 
 app.add_middleware(
     CORSMiddleware,
