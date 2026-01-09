@@ -1466,6 +1466,7 @@ async def seed_data():
 # Include finance and operations routers in api_router BEFORE including api_router in app
 api_router.include_router(finance_router)
 api_router.include_router(operations_router)
+api_router.include_router(hr_router)
 
 # Include router in main app
 app.include_router(api_router)
