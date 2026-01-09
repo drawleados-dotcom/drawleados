@@ -461,17 +461,17 @@ async def update_subtask(subtask_id: str, status: str):
 # ============== COMMENT ROUTES ==============
 
 @operations_router.post("/comments")
-async def create_comment(comment_data: TaskCommentCreate):
+async def create_comment(comment_data: TaskCommentCreate, request: Request):
     """Add comment to task"""
-    user_id = "admin"  # TODO: Get from auth
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
     
     comment_id = f"comment_{uuid.uuid4().hex[:12]}"
     comment_doc = {
         "comment_id": comment_id,
         **comment_data.model_dump(),
         "user_id": user_id,
-        "user_name": user.get("name", "Unknown") if user else "Unknown",
+        "user_name": current_user.get("name", "Unknown"),
         "created_at": datetime.now(timezone.utc)
     }
     
@@ -482,7 +482,7 @@ async def create_comment(comment_data: TaskCommentCreate):
         "history_id": f"hist_{uuid.uuid4().hex[:12]}",
         "task_id": comment_data.task_id,
         "user_id": user_id,
-        "user_name": user.get("name", "Unknown") if user else "Unknown",
+        "user_name": current_user.get("name", "Unknown"),
         "action": "commented",
         "timestamp": datetime.now(timezone.utc)
     }
@@ -493,10 +493,10 @@ async def create_comment(comment_data: TaskCommentCreate):
 # ============== TIME TRACKING ROUTES ==============
 
 @operations_router.post("/time/start")
-async def start_timer(time_data: TimeEntryStart):
+async def start_timer(time_data: TimeEntryStart, request: Request):
     """Start time tracking for a task"""
-    user_id = "admin"  # TODO: Get from auth
-    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
     
     # Check if there's already a running timer for this user
     running = await db.time_entries.find_one({"user_id": user_id, "is_running": True}, {"_id": 0})
@@ -508,7 +508,7 @@ async def start_timer(time_data: TimeEntryStart):
         "entry_id": entry_id,
         **time_data.model_dump(),
         "user_id": user_id,
-        "user_name": user.get("name", "Unknown") if user else "Unknown",
+        "user_name": current_user.get("name", "Unknown"),
         "start_time": datetime.now(timezone.utc),
         "end_time": None,
         "duration_hours": 0.0,
