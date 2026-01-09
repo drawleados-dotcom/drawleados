@@ -110,7 +110,7 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
       ];
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: 100,
       head: [tableColumns],
       body: tableData,
@@ -140,7 +140,7 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
       margin: { left: 14, right: 14 },
     });
 
-    const finalY = doc.lastAutoTable.finalY + 10;
+    const finalY = (doc.lastAutoTable?.finalY || 100) + 10;
 
     // Totals Section
     const totalsX = pageWidth - 80;
