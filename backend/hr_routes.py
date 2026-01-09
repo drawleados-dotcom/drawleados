@@ -958,3 +958,143 @@ async def get_team_attendance_overview(request: Request):
         })
     
     return overview
+
+
+# ============== ADMIN HR ROUTES ==============
+
+@hr_router.get("/admin/all-requests")
+async def get_all_leave_requests(request: Request, status: Optional[str] = None):
+    """Get all leave requests (Admin only)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    
+    requests = await db.leave_requests.find(
+        query,
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    
+    return requests
+
+@hr_router.get("/admin/employees")
+async def get_all_employee_details(request: Request):
+    """Get all employees with full details (Admin only)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    employees = await db.users.find(
+        {},
+        {"_id": 0, "password_hash": 0}
+    ).to_list(500)
+    
+    # Enrich with profiles and attendance
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    for emp in employees:
+        # Get profile
+        profile = await db.employee_profiles.find_one(
+            {"user_id": emp["user_id"]},
+            {"_id": 0}
+        )
+        emp["profile"] = profile or {}
+        
+        # Get today's attendance
+        attendance = await db.attendance.find_one({
+            "user_id": emp["user_id"],
+            "date": {"$gte": today, "$lt": today + timedelta(days=1)}
+        }, {"_id": 0})
+        emp["today_attendance"] = attendance
+        
+        # Get pending leaves count
+        pending_leaves = await db.leave_requests.count_documents({
+            "user_id": emp["user_id"],
+            "status": "pending"
+        })
+        emp["pending_leaves"] = pending_leaves
+    
+    return employees
+
+@hr_router.put("/admin/employee/{user_id}/profile")
+async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, Any], request: Request):
+    """Admin update employee profile with all fields"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get user info
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update or create profile
+    profile_data["user_id"] = user_id
+    profile_data["updated_at"] = datetime.now(timezone.utc)
+    
+    # Set defaults from user if not in profile
+    if "full_name" not in profile_data:
+        profile_data["full_name"] = user.get("name", "")
+    if "email" not in profile_data:
+        profile_data["email"] = user.get("email", "")
+    
+    existing = await db.employee_profiles.find_one({"user_id": user_id})
+    
+    if existing:
+        await db.employee_profiles.update_one(
+            {"user_id": user_id},
+            {"$set": profile_data}
+        )
+    else:
+        profile_data["created_at"] = datetime.now(timezone.utc)
+        await db.employee_profiles.insert_one(profile_data)
+    
+    return await db.employee_profiles.find_one({"user_id": user_id}, {"_id": 0})
+
+@hr_router.get("/admin/dashboard-stats")
+async def get_hr_dashboard_stats(request: Request):
+    """Get HR dashboard statistics (Admin only)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Total employees
+    total_employees = await db.users.count_documents({"is_active": True})
+    
+    # Today's attendance
+    present_today = await db.attendance.count_documents({
+        "date": {"$gte": today, "$lt": today + timedelta(days=1)},
+        "clock_in": {"$ne": None}
+    })
+    
+    # WFH today
+    wfh_today = await db.attendance.count_documents({
+        "date": {"$gte": today, "$lt": today + timedelta(days=1)},
+        "work_location": "home"
+    })
+    
+    # Pending leave requests
+    pending_leaves = await db.leave_requests.count_documents({"status": "pending"})
+    
+    return {
+        "total_employees": total_employees,
+        "present_today": present_today,
+        "absent_today": total_employees - present_today,
+        "wfh_today": wfh_today,
+        "wfo_today": present_today - wfh_today,
+        "pending_leaves": pending_leaves
+    }
+
