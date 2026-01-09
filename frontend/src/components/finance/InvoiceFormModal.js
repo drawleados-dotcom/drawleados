@@ -293,8 +293,8 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
             </div>
             <div className="space-y-3">
               {items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 bg-[#09090b] border border-[#27272a] rounded-lg">
-                  <div className="col-span-4">
+                <div key={index} className="grid grid-cols-12 gap-2 items-end p-4 bg-[#09090b] border border-[#27272a] rounded-lg">
+                  <div className="col-span-3">
                     <Label className="text-[#fafafa] mb-2 block text-xs">Service/Item *</Label>
                     <Input
                       value={item.service_name}
@@ -304,16 +304,16 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
                       className="bg-[#18181b] border-[#27272a] text-[#fafafa]"
                     />
                   </div>
-                  <div className="col-span-3">
+                  <div className="col-span-2">
                     <Label className="text-[#fafafa] mb-2 block text-xs">Description</Label>
                     <Input
                       value={item.description}
                       onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                      placeholder="Project details"
+                      placeholder="Details"
                       className="bg-[#18181b] border-[#27272a] text-[#fafafa]"
                     />
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-1">
                     <Label className="text-[#fafafa] mb-2 block text-xs">Qty *</Label>
                     <Input
                       type="number"
@@ -336,6 +336,36 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
                       step="0.01"
                       className="bg-[#18181b] border-[#27272a] text-[#fafafa]"
                     />
+                  </div>
+                  <div className="col-span-1">
+                    <Label className="text-[#fafafa] mb-2 block text-xs">Disc %</Label>
+                    <Input
+                      type="number"
+                      value={item.discount_percent}
+                      onChange={(e) => handleItemChange(index, 'discount_percent', e.target.value)}
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      className="bg-[#18181b] border-[#27272a] text-[#fafafa]"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-[#fafafa] mb-2 block text-xs">GST %</Label>
+                    <Select 
+                      value={item.gst_rate.toString()} 
+                      onValueChange={(value) => handleItemChange(index, 'gst_rate', parseFloat(value))}
+                    >
+                      <SelectTrigger className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                        <SelectItem value="0">0%</SelectItem>
+                        <SelectItem value="5">5%</SelectItem>
+                        <SelectItem value="12">12%</SelectItem>
+                        <SelectItem value="18">18%</SelectItem>
+                        <SelectItem value="28">28%</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="col-span-1 flex items-center justify-end">
                     <Button
