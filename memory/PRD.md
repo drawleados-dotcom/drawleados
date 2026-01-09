@@ -9,6 +9,13 @@
   - Root cause: `can_manage_users` permission was `false` for admin role
   - Fixed in database and seed data
 - **CORS Fix:** Updated backend CORS config to support localhost testing
+- **HR Module Implementation:** Built comprehensive HR portal for employees
+  - Attendance system with WFH/Office clock-in
+  - Employee profile (view-only)
+  - Leave management with balance tracking
+  - Payslips download
+  - Performance reviews (Q1-Q4)
+  - Access control: Employees restricted to Dashboard, Operations, HR only
 
 ## Overview
 Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a SaaS - fully owned by one company with no public signup, no subscriptions, no credits.
