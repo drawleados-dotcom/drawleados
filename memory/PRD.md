@@ -1,5 +1,15 @@
 # Drawlead OS - Product Requirements Document
 
+## Last Updated: January 9, 2026
+
+---
+
+## Recent Changes (January 9, 2026)
+- **Bug Fix:** Resolved "Access denied" error when admin users tried to create new users
+  - Root cause: `can_manage_users` permission was `false` for admin role
+  - Fixed in database and seed data
+- **CORS Fix:** Updated backend CORS config to support localhost testing
+
 ## Overview
 Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a SaaS - fully owned by one company with no public signup, no subscriptions, no credits.
 
