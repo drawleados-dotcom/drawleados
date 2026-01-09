@@ -459,6 +459,43 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
             </div>
           )}
 
+          {/* Bank Details & UPI */}
+          {(companyProfile?.bank_details?.account_number || companyProfile?.upi_ids?.length > 0) && (
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              {companyProfile?.bank_details?.account_number && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500 uppercase mb-2">Bank Details</p>
+                  {companyProfile.bank_details.bank_name && (
+                    <p className="text-sm"><span className="text-gray-500">Bank:</span> {companyProfile.bank_details.bank_name}</p>
+                  )}
+                  {companyProfile.bank_details.account_name && (
+                    <p className="text-sm"><span className="text-gray-500">Name:</span> {companyProfile.bank_details.account_name}</p>
+                  )}
+                  <p className="text-sm"><span className="text-gray-500">A/C:</span> {companyProfile.bank_details.account_number}</p>
+                  {companyProfile.bank_details.ifsc_code && (
+                    <p className="text-sm"><span className="text-gray-500">IFSC:</span> {companyProfile.bank_details.ifsc_code}</p>
+                  )}
+                </div>
+              )}
+              {companyProfile?.upi_ids?.length > 0 && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-500 uppercase mb-2">UPI Payment</p>
+                  {companyProfile.upi_ids.map((upi, i) => (
+                    <p key={i} className="text-sm font-medium text-[#6366f1]">{upi}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Terms & Conditions */}
+          {companyProfile?.terms_conditions && (
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <p className="text-xs text-gray-500 uppercase mb-1">Terms & Conditions</p>
+              <p className="text-xs text-gray-500 whitespace-pre-line">{companyProfile.terms_conditions}</p>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="mt-8 pt-4 text-center text-sm text-gray-500">
             Thank you for your business!
