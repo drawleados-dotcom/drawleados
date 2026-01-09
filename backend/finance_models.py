@@ -39,6 +39,11 @@ class InvoiceItem(BaseModel):
     description: Optional[str] = None
     quantity: float = 1.0
     rate: float
+    discount_percent: float = 0.0
+    discount_amount: float = 0.0
+    amount_before_tax: float
+    gst_rate: float = 0.0
+    gst_amount: float = 0.0
     amount: float
 
 class InvoiceCreate(BaseModel):
