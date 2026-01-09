@@ -354,6 +354,8 @@ async def delete_invoice(invoice_id: str):
 @finance_router.post("/invoices/{invoice_id}/duplicate")
 async def duplicate_invoice(invoice_id: str):
     """Duplicate an existing invoice"""
+    user_id = "admin"  # TODO: Get from auth context
+    
     original = await db.invoices.find_one({"invoice_id": invoice_id}, {"_id": 0})
     
     if not original:
