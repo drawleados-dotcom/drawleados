@@ -21,6 +21,7 @@ const Sidebar = () => {
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: Users, label: 'Leads', path: '/leads' },
+    { icon: Package, label: 'Operations', path: '/operations' },
     { icon: TrendingUp, label: 'Reports', path: '/reports' },
     ...(isAdmin ? [{ icon: DollarSign, label: 'Finance', path: '/finance' }] : []),
     { icon: Package, label: 'Services', path: '/services' },
