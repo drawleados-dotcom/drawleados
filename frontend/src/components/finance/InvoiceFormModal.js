@@ -65,7 +65,14 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
   };
 
   const addItem = () => {
-    setItems([...items, { service_name: '', description: '', quantity: 1, rate: 0 }]);
+    setItems([...items, { 
+      service_name: '', 
+      description: '', 
+      quantity: 1, 
+      rate: 0,
+      discount_percent: 0,
+      gst_rate: 18
+    }]);
   };
 
   const removeItem = (index) => {
