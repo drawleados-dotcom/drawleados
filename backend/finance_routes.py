@@ -324,9 +324,10 @@ async def get_invoice(invoice_id: str):
     return invoice
 
 @finance_router.put("/invoices/{invoice_id}")
-async def update_invoice(invoice_id: str, invoice_data: InvoiceUpdate):
+async def update_invoice(invoice_id: str, invoice_data: InvoiceUpdate, request: Request):
     """Update invoice"""
-    user_id = "admin"  # TODO: Get from auth context
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
     
     invoice = await db.invoices.find_one({"invoice_id": invoice_id, "is_deleted": False})
     
