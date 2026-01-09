@@ -377,9 +377,10 @@ async def get_task(task_id: str):
     return task
 
 @operations_router.put("/tasks/{task_id}")
-async def update_task(task_id: str, update_data: TaskUpdate):
+async def update_task(task_id: str, update_data: TaskUpdate, request: Request):
     """Update task"""
-    user_id = "admin"  # TODO: Get from auth
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
     
     task = await db.tasks.find_one({"task_id": task_id, "is_deleted": False})
     
@@ -396,12 +397,11 @@ async def update_task(task_id: str, update_data: TaskUpdate):
             update_dict["completion_date"] = datetime.now(timezone.utc)
         
         # Create history entry
-        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
         history_doc = {
             "history_id": f"hist_{uuid.uuid4().hex[:12]}",
             "task_id": task_id,
             "user_id": user_id,
-            "user_name": user.get("name", "Unknown") if user else "Unknown",
+            "user_name": current_user.get("name", "Unknown"),
             "action": "status_changed",
             "old_value": task.get("status"),
             "new_value": update_dict["status"],
