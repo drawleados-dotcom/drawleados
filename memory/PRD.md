@@ -15,22 +15,21 @@ Drawlead OS is a comprehensive internal operating system for a digital marketing
 └── frontend/
     └── src/
         ├── pages/
-        │   ├── OperationsPage.js   # Operations main page
-        │   ├── SettingsPage.js     # Settings main page
-        │   ├── FinanceModule.js    # Finance main page
+        │   ├── OperationsPage.js   # Operations with Projects, Tasks, Clients tabs
+        │   ├── SettingsPage.js     # Settings page with user/service/roles
+        │   ├── FinanceModule.js    # Finance with invoicing, reports
         │   ├── LeadsPage.js        # Sales/Leads page
         │   └── Dashboard.js        # Dashboard
         └── components/
-            ├── operations/         # Operations UI components
+            ├── operations/
             │   ├── ProjectsKanbanView.js
-            │   ├── ProjectsListView.js
             │   ├── TasksKanbanView.js
-            │   ├── TasksListView.js
             │   ├── ProductivityDashboard.js
-            │   ├── ProjectFormModal.js
-            │   └── TaskFormModal.js
-            ├── finance/            # Finance UI components
-            └── leads/              # Leads UI components
+            │   ├── ClientFormModal.js    # NEW - Client creation
+            │   └── NotionFilters.js      # NEW - Advanced filters
+            └── finance/
+                ├── InvoicesTab.js        # Enhanced with month-wise reports
+                └── InvoicePreviewModal.js # Enhanced with PDF download
 ```
 
 ## Modules Status
@@ -41,20 +40,22 @@ Drawlead OS is a comprehensive internal operating system for a digital marketing
 - Advanced filtering, search
 - Role-based access for Admin and BDE
 
-### 2. Finance Module ✅ COMPLETE
+### 2. Finance Module ✅ COMPLETE (Jan 9, 2026)
 - Invoice management with GST/Non-GST support
 - Per-item GST and discount calculations
-- Invoice preview and PDF download
-- Status tracking (Draft, Paid, Overdue)
+- **Invoice Preview & PDF Download** ✅
+- **Month-wise Report with Charts** ✅
+- **Month/Year Filters** ✅
+- Summary cards (Total, Paid, Overdue)
 - Payroll, GST, and Budget tabs (UI placeholders)
 
 ### 3. Operations Module ✅ COMPLETE (Jan 9, 2026)
 - Project management with Kanban and List views
 - Task management with Kanban and List views
-- Dynamic service types filtering
+- **New Client Module** ✅ - Add/edit clients directly from Operations
+- **Clients Tab** ✅ - View all clients with quick project creation
+- **Notion-style Filters** ✅ - Advanced filtering by status, priority, date, assignee
 - Productivity dashboard with stats and charts
-- Project → Task hierarchy
-- Time tracking API endpoints
 - Status: Not Started, In Progress, Waiting Client, Review, Completed, On Hold
 
 ### 4. Settings Module ✅ COMPLETE (Jan 9, 2026)
@@ -63,6 +64,14 @@ Drawlead OS is a comprehensive internal operating system for a digital marketing
 - Service management (add, edit, delete)
 - Roles & Permissions visualization
 - Roles: Super Admin, Admin, Project Manager, BDE, Employee
+
+## Recent Features Added (Jan 9, 2026)
+1. **New Client Module** - Add clients directly from Operations page
+2. **Clients Tab** - Dedicated tab showing all clients with quick actions
+3. **Notion-style Filters** - Advanced filtering with operators (is, before, after, this week, etc.)
+4. **Month-wise Invoice Report** - Bar charts and summary table for monthly revenue
+5. **Invoice PDF Download** - Professional PDF generation with company details, GST breakdown
+6. **Month/Year Filters** - Filter invoices by specific month and year
 
 ## User Roles & Permissions
 
@@ -75,11 +84,8 @@ Drawlead OS is a comprehensive internal operating system for a digital marketing
 | Employee | ❌ | ✅ | ❌ | ❌ | ❌ |
 
 ## Test Credentials
-- **Super Admin**: superadmin@drawlead.com / super123
 - **Admin**: admin@drawlead.com / admin123
-- **BDE**: bde@drawlead.com / bde123
-- **Project Manager**: pm@drawlead.com / pm123
-- **Employee**: employee@drawlead.com / emp123
+- **Super Admin**: superadmin@drawlead.com / super123
 
 ## API Endpoints
 
@@ -89,18 +95,19 @@ Drawlead OS is a comprehensive internal operating system for a digital marketing
 - `GET/POST /api/operations/tasks` - List/Create tasks
 - `GET/PUT/DELETE /api/operations/tasks/{id}` - Task CRUD
 - `GET /api/operations/productivity/overview` - Stats
-- `GET /api/operations/productivity/stats` - User productivity
 
-### Settings
-- `GET/POST /api/users` - List/Create users
-- `PUT/DELETE /api/users/{id}` - User CRUD
-- `GET /api/users/{id}/permissions` - User permissions
-- `GET/POST /api/services` - List/Create services
-- `PUT/DELETE /api/services/{id}` - Service CRUD
+### Finance
+- `GET/POST /api/finance/invoices` - List/Create invoices
+- `GET/PUT/DELETE /api/finance/invoices/{id}` - Invoice CRUD
+- `GET /api/finance/settings` - Company settings
 
-## Known Issues - RESOLVED
-1. ~~Hardcoded user_id = "admin" in operations_routes.py~~ ✅ Fixed
-2. ~~Hardcoded user_id = "admin" in finance_routes.py~~ ✅ Fixed
+### Clients (Leads)
+- `GET/POST /api/leads` - List/Create clients
+- `PUT/DELETE /api/leads/{id}` - Client CRUD
+
+## Known Issues - ALL RESOLVED ✅
+1. ~~Hardcoded user_id = "admin"~~ ✅ Fixed with proper JWT auth
+2. ~~PDF download not working~~ ✅ Fixed jsPDF import issue
 
 ## Future Tasks (P1/P2)
 - Finance: Complete Payroll, GST, Budgeting UI
@@ -111,7 +118,7 @@ Drawlead OS is a comprehensive internal operating system for a digital marketing
 
 ## Tech Stack
 - **Backend**: FastAPI, MongoDB (motor async), Pydantic, JWT Auth
-- **Frontend**: React, Tailwind CSS, shadcn/ui, recharts, react-beautiful-dnd
+- **Frontend**: React, Tailwind CSS, shadcn/ui, recharts, react-beautiful-dnd, jsPDF
 - **Database**: MongoDB
 
 ## Last Updated
