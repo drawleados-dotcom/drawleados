@@ -971,6 +971,24 @@ async def seed_data():
     if existing_user:
         return {"message": "Data already seeded"}
     
+    # Create super admin user
+    super_admin_id = f"user_{uuid.uuid4().hex[:12]}"
+    super_admin_doc = {
+        "user_id": super_admin_id,
+        "email": "superadmin@drawlead.com",
+        "name": "Super Admin",
+        "role": "super_admin",
+        "password_hash": hash_password("super123"),
+        "is_active": True,
+        "module_access": ["leads", "operations", "finance", "reports", "settings"],
+        "project_access": [],
+        "can_create_projects": True,
+        "can_delete_tasks": True,
+        "can_manage_users": True,
+        "created_at": datetime.now(timezone.utc)
+    }
+    await db.users.insert_one(super_admin_doc)
+    
     # Create admin user
     admin_id = f"user_{uuid.uuid4().hex[:12]}"
     admin_doc = {
@@ -980,6 +998,11 @@ async def seed_data():
         "role": "admin",
         "password_hash": hash_password("admin123"),
         "is_active": True,
+        "module_access": ["leads", "operations", "finance", "reports"],
+        "project_access": [],
+        "can_create_projects": True,
+        "can_delete_tasks": True,
+        "can_manage_users": False,
         "created_at": datetime.now(timezone.utc)
     }
     await db.users.insert_one(admin_doc)
