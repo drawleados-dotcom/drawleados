@@ -60,7 +60,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
 
   const handleItemChange = (index, field, value) => {
     const newItems = [...items];
-    newItems[index][field] = field === 'quantity' || field === 'rate' ? parseFloat(value) || 0 : value;
+    newItems[index][field] = field === 'quantity' || field === 'rate' || field === 'discount_percent' || field === 'gst_rate' ? parseFloat(value) || 0 : value;
     setItems(newItems);
   };
 
