@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import LeadsPage from './pages/LeadsPage';
 import ReportsPage from './pages/ReportsPage';
 import FinancePage from './pages/FinancePage';
+import FinanceModule from './pages/FinanceModule';
 import ServicesPage from './pages/ServicesPage';
 import './App.css';
 
