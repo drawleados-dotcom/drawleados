@@ -45,11 +45,19 @@ class User(BaseModel):
     user_id: str
     email: EmailStr
     name: str
-    role: str  # admin, bde
+    role: str  # super_admin, admin, project_manager, bde, employee
     picture: Optional[str] = None
     password_hash: Optional[str] = None
     google_id: Optional[str] = None
     is_active: bool = True
+    
+    # Permissions
+    module_access: List[str] = []  # ['leads', 'operations', 'finance', 'reports', 'settings']
+    project_access: List[str] = []  # List of project_ids user can access
+    can_create_projects: bool = False
+    can_delete_tasks: bool = False
+    can_manage_users: bool = False
+    
     created_at: datetime
 
 class UserCreate(BaseModel):
