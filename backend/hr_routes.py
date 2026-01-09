@@ -645,7 +645,7 @@ async def approve_leave_request(leave_id: str, request: Request):
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 
 @hr_router.put("/leave/{leave_id}/reject")
-async def reject_leave_request(leave_id: str, reason: str, request: Request):
+async def reject_leave_request(leave_id: str, request: Request, reason: str = ""):
     """Reject a leave request"""
     from server import get_current_user
     user = await get_current_user(request)
@@ -653,15 +653,55 @@ async def reject_leave_request(leave_id: str, reason: str, request: Request):
     if user.role not in ["admin", "super_admin", "project_manager"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
+    leave = await db.leave_requests.find_one({"leave_id": leave_id})
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    
     await db.leave_requests.update_one(
         {"leave_id": leave_id},
         {"$set": {
             "status": "rejected",
             "rejection_reason": reason,
             "approved_by": user.user_id,
+            "approved_by_name": user.name,
             "approved_at": datetime.now(timezone.utc)
         }}
     )
+    
+    # Send rejection email to employee
+    start = leave["start_date"]
+    end = leave["end_date"]
+    if isinstance(start, str):
+        start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+    if isinstance(end, str):
+        end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+    
+    start_str = start.strftime("%d %b %Y")
+    end_str = end.strftime("%d %b %Y")
+    leave_type = leave.get("leave_type", "leave")
+    
+    email_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #ef4444;">Leave Request Not Approved</h2>
+        <p>Hi {leave.get('user_name', 'Employee')},</p>
+        <p>Your leave request has been <strong style="color: #ef4444;">not approved</strong>.</p>
+        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Leave Type:</strong> {leave_type.upper()}</p>
+            <p><strong>Duration:</strong> {start_str} to {end_str}</p>
+            <p><strong>Reviewed by:</strong> {user.name}</p>
+            {f'<p><strong>Reason:</strong> {reason}</p>' if reason else ''}
+        </div>
+        <p>Please contact your manager for more details.</p>
+    </div>
+    """
+    
+    employee_email = leave.get("user_email", "")
+    if employee_email:
+        await send_email_notification(
+            employee_email,
+            f"Leave Request Update - {leave_type.upper()}",
+            email_html
+        )
     
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 
