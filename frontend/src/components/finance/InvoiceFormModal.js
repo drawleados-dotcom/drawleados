@@ -24,7 +24,14 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
     notes: '',
     template_type: 'minimal',
   });
-  const [items, setItems] = useState([{ service_name: '', description: '', quantity: 1, rate: 0 }]);
+  const [items, setItems] = useState([{ 
+    service_name: '', 
+    description: '', 
+    quantity: 1, 
+    rate: 0,
+    discount_percent: 0,
+    gst_rate: 18
+  }]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
