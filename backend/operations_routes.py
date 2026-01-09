@@ -257,10 +257,11 @@ async def delete_project(project_id: str):
 # ============== TASK ROUTES ==============
 
 @operations_router.post("/tasks")
-async def create_task(task_data: TaskCreate):
+async def create_task(task_data: TaskCreate, request: Request):
     """Create a new task"""
     try:
-        user_id = "admin"  # TODO: Get from auth
+        current_user = await get_current_user_from_request(request)
+        user_id = current_user["user_id"]
         
         # Get project details
         project = await db.projects.find_one({"project_id": task_data.project_id}, {"_id": 0})
@@ -272,17 +273,14 @@ async def create_task(task_data: TaskCreate):
         if not assigned_user:
             raise HTTPException(status_code=404, detail="Assigned user not found")
         
-        # Get current user
-        current_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-        
         task_id = f"task_{uuid.uuid4().hex[:12]}"
         task_doc = {
             "task_id": task_id,
             **task_data.model_dump(),
             "project_name": project["project_name"],
             "client_id": project["client_id"],
-            "client_name": project["client_name"],
-            "service_type": project["service_type"],
+            "client_name": project.get("client_name", "Unknown"),
+            "service_type": project.get("service_type", "other"),
             "assigned_to_name": assigned_user["name"],
             "assigned_by": user_id,
             "assigned_by_name": current_user.get("name", "Unknown"),
@@ -309,6 +307,8 @@ async def create_task(task_data: TaskCreate):
         
         result = await db.tasks.find_one({"task_id": task_id}, {"_id": 0})
         return await enrich_task(result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
