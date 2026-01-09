@@ -731,13 +731,15 @@ async def update_payslip_status(payslip_id: str, status: str):
     )
     
     return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
-    user_id = "admin"  # TODO: Get from auth context
 
 # ============== BUDGET ROUTES ==============
 
 @finance_router.post("/budgets")
-async def create_budget(budget_data: BudgetCreate):
+async def create_budget(budget_data: BudgetCreate, request: Request):
     """Create budget"""
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
+    
     budget_id = f"bud_{uuid.uuid4().hex[:12]}"
     budget_doc = {
         "budget_id": budget_id,
