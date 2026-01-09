@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from operations_models import *
 from datetime import datetime, timezone, timedelta
 import uuid
@@ -10,6 +10,52 @@ db = None
 def init_operations_db(database):
     global db
     db = database
+
+async def get_current_user_from_request(request: Request) -> dict:
+    """Get current user from session token in request"""
+    session_token = None
+    
+    # Check cookie first
+    if "session_token" in request.cookies:
+        session_token = request.cookies.get("session_token")
+    
+    # Fallback to Authorization header
+    if not session_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_token = auth_header.split(" ")[1]
+    
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Verify session
+    session_doc = await db.user_sessions.find_one(
+        {"session_token": session_token},
+        {"_id": 0}
+    )
+    
+    if not session_doc:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    # Check expiry
+    expires_at = session_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    # Get user
+    user_doc = await db.users.find_one(
+        {"user_id": session_doc["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return user_doc
 
 # ============== HELPER FUNCTIONS ==============
 
@@ -86,10 +132,11 @@ async def enrich_task(task_doc: Dict) -> Dict:
 # ============== PROJECT ROUTES ==============
 
 @operations_router.post("/projects")
-async def create_project(project_data: ProjectCreate):
+async def create_project(project_data: ProjectCreate, request: Request):
     """Create a new project"""
     try:
-        user_id = "admin"  # TODO: Get from auth
+        current_user = await get_current_user_from_request(request)
+        user_id = current_user["user_id"]
         
         # Get client details
         client = await db.leads.find_one({"lead_id": project_data.client_id}, {"_id": 0})
