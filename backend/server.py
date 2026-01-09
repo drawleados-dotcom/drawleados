@@ -1017,6 +1017,9 @@ async def seed_data():
 # Include router
 app.include_router(api_router)
 
+# Include finance router
+api_router.include_router(finance_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
