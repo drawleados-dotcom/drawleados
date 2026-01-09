@@ -180,6 +180,86 @@ class FinanceSale(BaseModel):
     invoice_status: str = "pending"  # pending, paid, overdue
     created_at: datetime
 
+# ============== COMPANY PROFILE MODELS ==============
+
+class BankDetails(BaseModel):
+    account_name: str = ""
+    account_number: str = ""
+    ifsc_code: str = ""
+    bank_name: str = ""
+    branch: str = ""
+
+class CompanyProfile(BaseModel):
+    company_name: str
+    logo_url: Optional[str] = None
+    address: str = ""
+    city: str = ""
+    state: str = ""
+    pincode: str = ""
+    phone: str = ""
+    email: str = ""
+    website: str = ""
+    gst_number: str = ""
+    pan_number: str = ""
+    invoice_prefix: str = "INV"
+    terms_conditions: str = ""
+    bank_details: BankDetails = BankDetails()
+    upi_ids: List[str] = []
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
+
+class CompanyProfileUpdate(BaseModel):
+    company_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    gst_number: Optional[str] = None
+    pan_number: Optional[str] = None
+    invoice_prefix: Optional[str] = None
+    terms_conditions: Optional[str] = None
+    bank_details: Optional[BankDetails] = None
+    upi_ids: Optional[List[str]] = None
+
+# ============== WORKSPACE MODELS ==============
+
+class Workspace(BaseModel):
+    workspace_id: str
+    name: str  # Sales, Operations, Finance, Marketing, HR
+    description: str = ""
+    icon: str = ""
+    color: str = "#6366f1"
+    is_active: bool = True
+    members: List[str] = []  # List of user_ids
+    created_at: datetime
+    created_by: str
+
+class WorkspaceCreate(BaseModel):
+    name: str
+    description: str = ""
+    icon: str = ""
+    color: str = "#6366f1"
+
+class WorkspaceUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    is_active: Optional[bool] = None
+    members: Optional[List[str]] = None
+
+# ============== STATUS UPDATE MODEL ==============
+
+class StatusUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+    order: Optional[int] = None
+    is_active: Optional[bool] = None
+
 # ============== AUTH HELPERS ==============
 
 def hash_password(password: str) -> str:
