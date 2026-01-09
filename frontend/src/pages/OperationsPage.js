@@ -4,8 +4,7 @@ import api from '../utils/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Plus, Search, FolderKanban, List, Clock, BarChart3, Filter } from 'lucide-react';
+import { Plus, Search, FolderKanban, List, BarChart3, Users, Filter } from 'lucide-react';
 import ProjectsListView from '../components/operations/ProjectsListView';
 import ProjectsKanbanView from '../components/operations/ProjectsKanbanView';
 import TasksListView from '../components/operations/TasksListView';
@@ -13,6 +12,8 @@ import TasksKanbanView from '../components/operations/TasksKanbanView';
 import ProductivityDashboard from '../components/operations/ProductivityDashboard';
 import ProjectFormModal from '../components/operations/ProjectFormModal';
 import TaskFormModal from '../components/operations/TaskFormModal';
+import ClientFormModal from '../components/operations/ClientFormModal';
+import NotionFilters, { applyFilters } from '../components/operations/NotionFilters';
 import { toast } from 'sonner';
 
 const OperationsPage = () => {
@@ -21,20 +22,27 @@ const OperationsPage = () => {
   const [services, setServices] = useState([]);
   const [users, setUsers] = useState([]);
   const [clients, setClients] = useState([]);
+  const [sources, setSources] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('projects');
   const [activeView, setActiveView] = useState('kanban');
-  const [selectedServiceType, setSelectedServiceType] = useState('all');
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [productivityStats, setProductivityStats] = useState(null);
+  
+  // Notion-style filters
+  const [projectFilters, setProjectFilters] = useState([]);
+  const [taskFilters, setTaskFilters] = useState([]);
+  const [showFilters, setShowFilters] = useState(false);
 
   // Service types for filtering
   const serviceTypes = [
-    { value: 'all', label: 'All Services' },
     { value: 'website', label: 'Website Development' },
     { value: 'shopify', label: 'Shopify Stores' },
     { value: 'performance_marketing', label: 'Performance Marketing' },
@@ -49,13 +57,15 @@ const OperationsPage = () => {
 
   const fetchData = async () => {
     try {
-      const [projectsRes, tasksRes, servicesRes, usersRes, clientsRes, statsRes] = await Promise.all([
+      const [projectsRes, tasksRes, servicesRes, usersRes, clientsRes, statsRes, sourcesRes, statusesRes] = await Promise.all([
         api.get('/operations/projects'),
         api.get('/operations/tasks'),
         api.get('/services'),
         api.get('/users').catch(() => ({ data: [] })),
         api.get('/leads').catch(() => ({ data: [] })),
         api.get('/operations/productivity/overview').catch(() => ({ data: null })),
+        api.get('/sources').catch(() => ({ data: [] })),
+        api.get('/statuses').catch(() => ({ data: [] })),
       ]);
       setProjects(projectsRes.data);
       setTasks(tasksRes.data);
@@ -63,6 +73,8 @@ const OperationsPage = () => {
       setUsers(usersRes.data || []);
       setClients(clientsRes.data || []);
       setProductivityStats(statsRes.data);
+      setSources(sourcesRes.data || []);
+      setStatuses(statusesRes.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load operations data');
@@ -127,22 +139,60 @@ const OperationsPage = () => {
     }
   };
 
-  // Filter data based on search and service type
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch = searchTerm === '' || 
-      project.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      project.client_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesService = selectedServiceType === 'all' || project.service_type === selectedServiceType;
-    return matchesSearch && matchesService;
-  });
+  // Client handlers
+  const handleCreateClient = () => {
+    setSelectedClient(null);
+    setShowClientModal(true);
+  };
 
-  const filteredTasks = tasks.filter((task) => {
-    const matchesSearch = searchTerm === '' ||
-      task.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      task.project_name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesService = selectedServiceType === 'all' || task.service_type === selectedServiceType;
-    return matchesSearch && matchesService;
-  });
+  const handleEditClient = (client) => {
+    setSelectedClient(client);
+    setShowClientModal(true);
+  };
+
+  const handleSaveClient = async () => {
+    await fetchData();
+    setShowClientModal(false);
+    setSelectedClient(null);
+  };
+
+  // Filter data based on search and Notion filters
+  const getFilteredProjects = () => {
+    let filtered = projects;
+    
+    // Apply search
+    if (searchTerm) {
+      filtered = filtered.filter((project) =>
+        project.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        project.client_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Apply Notion filters
+    filtered = applyFilters(filtered, projectFilters);
+    
+    return filtered;
+  };
+
+  const getFilteredTasks = () => {
+    let filtered = tasks;
+    
+    // Apply search
+    if (searchTerm) {
+      filtered = filtered.filter((task) =>
+        task.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.project_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Apply Notion filters
+    filtered = applyFilters(filtered, taskFilters);
+    
+    return filtered;
+  };
+
+  const filteredProjects = getFilteredProjects();
+  const filteredTasks = getFilteredTasks();
 
   if (loading) {
     return (
@@ -169,10 +219,18 @@ const OperationsPage = () => {
               </span>
             </h1>
             <p className="text-[#a1a1aa] text-base">
-              Manage projects, tasks, and team productivity
+              Manage projects, tasks, clients and team productivity
             </p>
           </div>
           <div className="flex gap-3">
+            <Button
+              onClick={handleCreateClient}
+              data-testid="create-client-button"
+              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] border border-[#3f3f46]"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              New Client
+            </Button>
             <Button
               onClick={() => handleCreateTask()}
               data-testid="create-task-button"
@@ -194,7 +252,7 @@ const OperationsPage = () => {
 
         {/* Stats Cards */}
         {productivityStats && (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-5 gap-4">
             <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
               <p className="text-xs text-[#a1a1aa] mb-1">Active Projects</p>
               <p className="text-2xl font-bold text-[#fafafa]">{productivityStats.active_projects}</p>
@@ -211,10 +269,14 @@ const OperationsPage = () => {
               <p className="text-xs text-[#a1a1aa] mb-1">Overdue</p>
               <p className="text-2xl font-bold text-[#ef4444]">{productivityStats.overdue_tasks}</p>
             </div>
+            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+              <p className="text-xs text-[#a1a1aa] mb-1">Total Clients</p>
+              <p className="text-2xl font-bold text-[#8b5cf6]">{clients.length}</p>
+            </div>
           </div>
         )}
 
-        {/* Search and Filters */}
+        {/* Search and Filter Toggle */}
         <div className="flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#a1a1aa]" />
@@ -226,20 +288,33 @@ const OperationsPage = () => {
               className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
             />
           </div>
-          <Select value={selectedServiceType} onValueChange={setSelectedServiceType}>
-            <SelectTrigger className="w-[200px] bg-[#18181b] border-[#27272a] text-[#fafafa]" data-testid="service-filter">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Filter by service" />
-            </SelectTrigger>
-            <SelectContent className="bg-[#18181b] border-[#27272a]">
-              {serviceTypes.map((type) => (
-                <SelectItem key={type.value} value={type.value} className="text-[#fafafa] focus:bg-[#27272a]">
-                  {type.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`bg-[#18181b] border-[#27272a] ${showFilters ? 'text-[#6366f1] border-[#6366f1]' : 'text-[#a1a1aa]'}`}
+            data-testid="toggle-filters"
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filters
+            {(projectFilters.length > 0 || taskFilters.length > 0) && (
+              <span className="ml-2 bg-[#6366f1] text-white text-xs px-1.5 py-0.5 rounded-full">
+                {activeTab === 'projects' ? projectFilters.length : taskFilters.length}
+              </span>
+            )}
+          </Button>
         </div>
+
+        {/* Notion-style Filters */}
+        {showFilters && (
+          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+            <NotionFilters
+              filters={activeTab === 'projects' ? projectFilters : taskFilters}
+              onFiltersChange={activeTab === 'projects' ? setProjectFilters : setTaskFilters}
+              users={users}
+              serviceTypes={serviceTypes}
+            />
+          </div>
+        )}
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -250,7 +325,7 @@ const OperationsPage = () => {
               className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
             >
               <FolderKanban className="h-4 w-4 mr-2" />
-              Projects
+              Projects ({filteredProjects.length})
             </TabsTrigger>
             <TabsTrigger
               value="tasks"
@@ -258,7 +333,15 @@ const OperationsPage = () => {
               className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
             >
               <List className="h-4 w-4 mr-2" />
-              Tasks
+              Tasks ({filteredTasks.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="clients"
+              data-testid="clients-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Clients ({clients.length})
             </TabsTrigger>
             <TabsTrigger
               value="productivity"
@@ -348,6 +431,15 @@ const OperationsPage = () => {
             </Tabs>
           </TabsContent>
 
+          {/* Clients Tab */}
+          <TabsContent value="clients" className="mt-6">
+            <ClientsListView
+              clients={clients}
+              onEditClient={handleEditClient}
+              onCreateProject={handleCreateProject}
+            />
+          </TabsContent>
+
           {/* Productivity Tab */}
           <TabsContent value="productivity" className="mt-6">
             <ProductivityDashboard stats={productivityStats} />
@@ -378,7 +470,106 @@ const OperationsPage = () => {
           onSave={handleSaveTask}
         />
       )}
+
+      {/* Client Modal */}
+      {showClientModal && (
+        <ClientFormModal
+          client={selectedClient}
+          services={services}
+          sources={sources}
+          statuses={statuses}
+          onClose={() => setShowClientModal(false)}
+          onSave={handleSaveClient}
+        />
+      )}
     </Layout>
+  );
+};
+
+// Clients List View Component
+const ClientsListView = ({ clients, onEditClient, onCreateProject }) => {
+  return (
+    <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid="clients-list">
+      <table className="w-full">
+        <thead className="bg-[#09090b]">
+          <tr>
+            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Client</th>
+            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Contact</th>
+            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Service</th>
+            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Status</th>
+            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Value</th>
+            <th className="text-right p-4 text-xs font-medium text-[#a1a1aa] uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clients.map((client) => (
+            <tr
+              key={client.lead_id}
+              className="border-t border-[#27272a] hover:bg-[#27272a]/30 transition-colors"
+              data-testid={`client-row-${client.lead_id}`}
+            >
+              <td className="p-4">
+                <div>
+                  <p className="text-sm font-medium text-[#fafafa]">{client.name}</p>
+                  {client.business_name && (
+                    <p className="text-xs text-[#a1a1aa]">{client.business_name}</p>
+                  )}
+                </div>
+              </td>
+              <td className="p-4">
+                <div className="text-sm">
+                  <p className="text-[#fafafa]">{client.phone}</p>
+                  {client.email && <p className="text-xs text-[#a1a1aa]">{client.email}</p>}
+                </div>
+              </td>
+              <td className="p-4">
+                <span className="text-sm text-[#a1a1aa]">{client.service_name || '-'}</span>
+              </td>
+              <td className="p-4">
+                {client.status_name && (
+                  <span
+                    className="px-2 py-1 text-xs rounded-full"
+                    style={{
+                      backgroundColor: `${client.status_color}20`,
+                      color: client.status_color,
+                    }}
+                  >
+                    {client.status_name}
+                  </span>
+                )}
+              </td>
+              <td className="p-4">
+                <span className="text-sm text-[#fafafa]">
+                  {client.service_cost ? `₹${client.service_cost.toLocaleString()}` : '-'}
+                </span>
+              </td>
+              <td className="p-4 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => onCreateProject(client)}
+                    title="Create Project"
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 text-xs"
+                  >
+                    + Project
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => onEditClient(client)}
+                    className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8 text-xs"
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {clients.length === 0 && (
+        <div className="p-8 text-center text-[#a1a1aa]">No clients found. Add your first client!</div>
+      )}
+    </div>
   );
 };
 
