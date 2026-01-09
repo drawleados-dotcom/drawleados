@@ -10,6 +10,7 @@ import {
   TrendingUp,
   FileText,
   DollarSign,
+  UserCircle,
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -18,13 +19,26 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuth();
 
+  // Check if user is employee or BDE (restricted access)
+  const isEmployee = user?.role === 'employee' || user?.role === 'bde';
+  const isProjectManager = user?.role === 'project_manager';
+
+  // Build menu items based on role
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    { icon: Users, label: 'Leads', path: '/leads' },
+    // Leads - NOT for employees
+    ...(!isEmployee ? [{ icon: Users, label: 'Leads', path: '/leads' }] : []),
+    // Operations - for everyone
     { icon: Package, label: 'Operations', path: '/operations' },
-    { icon: TrendingUp, label: 'Reports', path: '/reports' },
+    // HR - for everyone
+    { icon: UserCircle, label: 'HR', path: '/hr' },
+    // Reports - NOT for employees
+    ...(!isEmployee ? [{ icon: TrendingUp, label: 'Reports', path: '/reports' }] : []),
+    // Finance - Admin only
     ...(isAdmin ? [{ icon: DollarSign, label: 'Finance', path: '/finance' }] : []),
-    { icon: Package, label: 'Services', path: '/services' },
+    // Services - NOT for employees
+    ...(!isEmployee ? [{ icon: Package, label: 'Services', path: '/services' }] : []),
+    // Settings - Admin only
     ...(isAdmin ? [{ icon: Settings, label: 'Settings', path: '/settings' }] : []),
   ];
 
