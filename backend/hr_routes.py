@@ -593,12 +593,12 @@ async def approve_leave_request(leave_id: str, request: Request):
         {"$set": {
             "status": "approved",
             "approved_by": user.user_id,
+            "approved_by_name": user.name,
             "approved_at": datetime.now(timezone.utc)
         }}
     )
     
     # Update leave balance
-    # Calculate days
     start = leave["start_date"]
     end = leave["end_date"]
     if isinstance(start, str):
@@ -615,6 +615,32 @@ async def approve_leave_request(leave_id: str, request: Request):
         {"$inc": {f"{leave_type}_used": days}},
         upsert=True
     )
+    
+    # Send approval email to employee
+    start_str = start.strftime("%d %b %Y")
+    end_str = end.strftime("%d %b %Y")
+    
+    email_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #10b981;">Leave Request Approved ✓</h2>
+        <p>Hi {leave.get('user_name', 'Employee')},</p>
+        <p>Your leave request has been <strong style="color: #10b981;">approved</strong>.</p>
+        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Leave Type:</strong> {leave_type.upper()}</p>
+            <p><strong>Duration:</strong> {start_str} to {end_str}</p>
+            <p><strong>Approved by:</strong> {user.name}</p>
+        </div>
+        <p>Enjoy your time off!</p>
+    </div>
+    """
+    
+    employee_email = leave.get("user_email", "")
+    if employee_email:
+        await send_email_notification(
+            employee_email,
+            f"Leave Request Approved - {leave_type.upper()}",
+            email_html
+        )
     
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 
