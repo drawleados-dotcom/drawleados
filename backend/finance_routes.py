@@ -489,6 +489,7 @@ async def get_gst_report(month: int, year: int):
     }
 
 # ============== EMPLOYEE ROUTES ==============
+    user_id = "admin"  # TODO: Get from auth context
 
 @finance_router.post("/employees")
 async def create_employee(employee_data: EmployeeCreate):
@@ -533,6 +534,7 @@ async def get_employee(employee_id: str):
     
     return employee
 
+    user_id = "admin"  # TODO: Get from auth context
 # ============== ATTENDANCE ROUTES ==============
 
 @finance_router.post("/attendance")
@@ -583,6 +585,7 @@ async def get_attendance(employee_id: Optional[str] = None, month: Optional[int]
     records = await db.attendance.find(query, {"_id": 0}).to_list(1000)
     return records
 
+    user_id = "admin"  # TODO: Get from auth context
 # ============== PAYSLIP ROUTES ==============
 
 @finance_router.post("/payslips/generate")
@@ -676,6 +679,7 @@ async def update_payslip_status(payslip_id: str, status: str):
     )
     
     return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
+    user_id = "admin"  # TODO: Get from auth context
 
 # ============== BUDGET ROUTES ==============
 
@@ -747,6 +751,7 @@ async def get_company_settings():
             "company_email": "",
             "company_phone": "",
             "invoice_terms": "Payment due within 30 days"
+    user_id = "admin"  # TODO: Get from auth context
         }
     
     return settings
