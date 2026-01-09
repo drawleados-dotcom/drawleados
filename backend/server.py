@@ -15,6 +15,11 @@ import bcrypt
 import csv
 import io
 
+# Import finance routes
+import sys
+sys.path.append(str(Path(__file__).parent))
+from finance_routes import finance_router, init_finance_db
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
