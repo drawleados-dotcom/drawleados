@@ -13,6 +13,7 @@ import FinanceModule from './pages/FinanceModule';
 import ServicesPage from './pages/ServicesPage';
 import OperationsPage from './pages/OperationsPage';
 import SettingsPage from './pages/SettingsPage';
+import HRPage from './pages/HRPage';
 import './App.css';
 
 function AppRouter() {
