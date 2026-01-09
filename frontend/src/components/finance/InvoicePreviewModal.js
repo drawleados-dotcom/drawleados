@@ -8,18 +8,18 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'sonner';
 
 const InvoicePreviewModal = ({ invoice, onClose }) => {
-  const [companySettings, setCompanySettings] = useState(null);
+  const [companyProfile, setCompanyProfile] = useState(null);
 
   useEffect(() => {
-    fetchCompanySettings();
+    fetchCompanyProfile();
   }, []);
 
-  const fetchCompanySettings = async () => {
+  const fetchCompanyProfile = async () => {
     try {
-      const response = await api.get('/finance/settings');
-      setCompanySettings(response.data);
+      const response = await api.get('/company-profile');
+      setCompanyProfile(response.data);
     } catch (error) {
-      console.error('Error fetching company settings:', error);
+      console.error('Error fetching company profile:', error);
     }
   };
 
@@ -30,19 +30,37 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
     // Header - Company Name
     doc.setFontSize(22);
     doc.setTextColor(99, 102, 241);
-    doc.text(companySettings?.company_name || 'Your Company', 14, 25);
+    doc.text(companyProfile?.company_name || 'Your Company', 14, 25);
 
     // Company Details
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
-    if (companySettings?.company_address) {
-      doc.text(companySettings.company_address, 14, 32);
+    let yPos = 32;
+    
+    if (companyProfile?.address) {
+      const fullAddress = [
+        companyProfile.address,
+        companyProfile.city,
+        companyProfile.state,
+        companyProfile.pincode
+      ].filter(Boolean).join(', ');
+      doc.text(fullAddress, 14, yPos);
+      yPos += 6;
     }
-    if (companySettings?.gst_number) {
-      doc.text(`GSTIN: ${companySettings.gst_number}`, 14, 38);
+    if (companyProfile?.gst_number) {
+      doc.text(`GSTIN: ${companyProfile.gst_number}`, 14, yPos);
+      yPos += 6;
     }
-    if (companySettings?.company_phone) {
-      doc.text(`Phone: ${companySettings.company_phone}`, 14, 44);
+    if (companyProfile?.pan_number) {
+      doc.text(`PAN: ${companyProfile.pan_number}`, 14, yPos);
+      yPos += 6;
+    }
+    if (companyProfile?.phone) {
+      doc.text(`Phone: ${companyProfile.phone}`, 14, yPos);
+      yPos += 6;
+    }
+    if (companyProfile?.email) {
+      doc.text(`Email: ${companyProfile.email}`, 14, yPos);
     }
 
     // Invoice Title
