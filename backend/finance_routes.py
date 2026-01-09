@@ -810,9 +810,10 @@ async def get_company_settings():
     return settings
 
 @finance_router.put("/settings")
-async def update_company_settings(settings_data: CompanySettingsUpdate):
+async def update_company_settings(settings_data: CompanySettingsUpdate, request: Request):
     """Update company settings"""
-    user_id = "admin"  # TODO: Get from auth context
+    current_user = await get_current_user_from_request(request)
+    user_id = current_user["user_id"]
     
     existing = await db.company_settings.find_one({})
     
