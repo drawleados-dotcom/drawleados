@@ -500,10 +500,16 @@ async def create_leave_request(leave_data: LeaveRequestCreate, request: Request)
     user = await get_current_user(request)
     
     leave_id = f"leave_{uuid.uuid4().hex[:12]}"
+    
+    # Get user email
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "email": 1})
+    user_email = user_doc.get("email", "") if user_doc else ""
+    
     leave_doc = {
         "leave_id": leave_id,
         "user_id": user.user_id,
         "user_name": user.name,
+        "user_email": user_email,
         "leave_type": leave_data.leave_type,
         "start_date": leave_data.start_date,
         "end_date": leave_data.end_date,
@@ -515,6 +521,29 @@ async def create_leave_request(leave_data: LeaveRequestCreate, request: Request)
     }
     
     await db.leave_requests.insert_one(leave_doc)
+    
+    # Send email notification to admin
+    start_str = leave_data.start_date.strftime("%d %b %Y") if hasattr(leave_data.start_date, 'strftime') else str(leave_data.start_date)[:10]
+    end_str = leave_data.end_date.strftime("%d %b %Y") if hasattr(leave_data.end_date, 'strftime') else str(leave_data.end_date)[:10]
+    
+    email_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #10b981;">New Leave Request</h2>
+        <p><strong>Employee:</strong> {user.name}</p>
+        <p><strong>Leave Type:</strong> {leave_data.leave_type.upper()}</p>
+        <p><strong>Duration:</strong> {start_str} to {end_str}</p>
+        <p><strong>Reason:</strong> {leave_data.reason}</p>
+        <p style="margin-top: 20px;">Please login to Drawlead OS to approve or reject this request.</p>
+    </div>
+    """
+    
+    # Send to admin email
+    await send_email_notification(
+        ADMIN_EMAIL,
+        f"Leave Request from {user.name} - {leave_data.leave_type.upper()}",
+        email_html
+    )
+    
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 
 @hr_router.get("/leave/my-requests")
