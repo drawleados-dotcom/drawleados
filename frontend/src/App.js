@@ -83,6 +83,14 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/hr"
+        element={
+          <ProtectedRoute>
+            <HRPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
