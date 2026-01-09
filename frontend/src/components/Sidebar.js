@@ -11,6 +11,7 @@ import {
   FileText,
   DollarSign,
   UserCircle,
+  Shield,
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -22,6 +23,7 @@ const Sidebar = () => {
   // Check if user is employee or BDE (restricted access)
   const isEmployee = user?.role === 'employee' || user?.role === 'bde';
   const isProjectManager = user?.role === 'project_manager';
+  const canManageHR = isAdmin || isProjectManager;
 
   // Build menu items based on role
   const menuItems = [
@@ -32,6 +34,8 @@ const Sidebar = () => {
     { icon: Package, label: 'Operations', path: '/operations' },
     // HR - for everyone
     { icon: UserCircle, label: 'HR', path: '/hr' },
+    // HR Admin - Admin/Manager only
+    ...(canManageHR ? [{ icon: Shield, label: 'HR Admin', path: '/hr-admin' }] : []),
     // Reports - NOT for employees
     ...(!isEmployee ? [{ icon: TrendingUp, label: 'Reports', path: '/reports' }] : []),
     // Finance - Admin only
