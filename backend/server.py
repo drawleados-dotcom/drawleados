@@ -1193,8 +1193,13 @@ async def seed_data():
     
     return {
         "message": "Sample data seeded successfully",
-        "admin": {"email": "admin@drawlead.com", "password": "admin123"},
-        "bde": {"email": "bde@drawlead.com", "password": "bde123"}
+        "users": {
+            "super_admin": {"email": "superadmin@drawlead.com", "password": "super123"},
+            "admin": {"email": "admin@drawlead.com", "password": "admin123"},
+            "bde": {"email": "bde@drawlead.com", "password": "bde123"},
+            "project_manager": {"email": "pm@drawlead.com", "password": "pm123"},
+            "employee": {"email": "employee@drawlead.com", "password": "emp123"}
+        }
     }
 
 # Include finance and operations routers in api_router BEFORE including api_router in app
