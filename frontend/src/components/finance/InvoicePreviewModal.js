@@ -210,6 +210,55 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
       doc.setTextColor(50, 50, 50);
       const notesLines = doc.splitTextToSize(invoice.notes, pageWidth - 28);
       doc.text(notesLines, 14, currentY + 6);
+      currentY += notesLines.length * 5 + 10;
+    }
+
+    // Bank Details Section
+    if (companyProfile?.bank_details?.account_number) {
+      currentY += 15;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Bank Details:', 14, currentY);
+      doc.setFontSize(9);
+      doc.setTextColor(50, 50, 50);
+      currentY += 6;
+      if (companyProfile.bank_details.bank_name) {
+        doc.text(`Bank: ${companyProfile.bank_details.bank_name}`, 14, currentY);
+        currentY += 5;
+      }
+      if (companyProfile.bank_details.account_name) {
+        doc.text(`Account Name: ${companyProfile.bank_details.account_name}`, 14, currentY);
+        currentY += 5;
+      }
+      doc.text(`Account No: ${companyProfile.bank_details.account_number}`, 14, currentY);
+      currentY += 5;
+      if (companyProfile.bank_details.ifsc_code) {
+        doc.text(`IFSC: ${companyProfile.bank_details.ifsc_code}`, 14, currentY);
+        currentY += 5;
+      }
+    }
+
+    // UPI Section
+    if (companyProfile?.upi_ids?.length > 0) {
+      currentY += 10;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text('UPI:', 14, currentY);
+      doc.setFontSize(9);
+      doc.setTextColor(50, 50, 50);
+      doc.text(companyProfile.upi_ids[0], 30, currentY);
+    }
+
+    // Terms Section
+    if (companyProfile?.terms_conditions) {
+      currentY += 15;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Terms & Conditions:', 14, currentY);
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      const termsLines = doc.splitTextToSize(companyProfile.terms_conditions, pageWidth - 28);
+      doc.text(termsLines.slice(0, 5), 14, currentY + 5); // Limit to 5 lines
     }
 
     // Footer
