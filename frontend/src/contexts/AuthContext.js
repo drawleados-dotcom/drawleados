@@ -69,7 +69,9 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     checkAuth,
-    isAdmin: user?.role === 'admin',
+    isAdmin: ['admin', 'super_admin'].includes(user?.role),
+    isSuperAdmin: user?.role === 'super_admin',
+    isProjectManager: ['project_manager', 'admin', 'super_admin'].includes(user?.role),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -11,6 +11,8 @@ import ReportsPage from './pages/ReportsPage';
 import FinancePage from './pages/FinancePage';
 import FinanceModule from './pages/FinanceModule';
 import ServicesPage from './pages/ServicesPage';
+import OperationsPage from './pages/OperationsPage';
+import SettingsPage from './pages/SettingsPage';
 import './App.css';
 
 function AppRouter() {
@@ -61,6 +63,22 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ServicesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/operations"
+        element={
+          <ProtectedRoute>
+            <OperationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />
