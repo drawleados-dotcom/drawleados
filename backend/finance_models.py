@@ -18,6 +18,7 @@ class Invoice(BaseModel):
     client_phone: Optional[str] = None
     status: str  # draft, sent, paid, overdue, cancelled
     subtotal: float
+    total_discount: float = 0.0
     gst_type: str  # gst, non-gst
     gst_rate: float = 0.0  # 18, 12, 5, 28
     cgst: float = 0.0
