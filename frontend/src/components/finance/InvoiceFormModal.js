@@ -82,16 +82,27 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
   };
 
   const calculateSubtotal = () => {
-    return items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
+    return items.reduce((sum, item) => {
+      const itemSubtotal = item.quantity * item.rate;
+      const discount = (itemSubtotal * (item.discount_percent || 0)) / 100;
+      return sum + (itemSubtotal - discount);
+    }, 0);
+  };
+
+  const calculateTotalGST = () => {
+    return items.reduce((sum, item) => {
+      const itemSubtotal = item.quantity * item.rate;
+      const discount = (itemSubtotal * (item.discount_percent || 0)) / 100;
+      const afterDiscount = itemSubtotal - discount;
+      const gst = (afterDiscount * (item.gst_rate || 0)) / 100;
+      return sum + gst;
+    }, 0);
   };
 
   const calculateTotal = () => {
     const subtotal = calculateSubtotal();
-    if (formData.gst_type === 'gst') {
-      const gstAmount = (subtotal * formData.gst_rate) / 100;
-      return subtotal + gstAmount;
-    }
-    return subtotal;
+    const gst = calculateTotalGST();
+    return subtotal + gst;
   };
 
   const handleSubmit = async (e) => {
