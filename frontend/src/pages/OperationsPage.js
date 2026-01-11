@@ -325,48 +325,79 @@ export default function OperationsPage() {
 
         {selectedDb ? (
           <>
-            {/* Toolbar */}
-            <div className="px-6 py-3 border-b border-[#27272a] bg-[#0c0a09]">
-              <div className="flex items-center justify-between gap-4">
-                {/* Left side - Database info & Add Task */}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{selectedDb.icon}</span>
-                    <h2 className="text-lg font-semibold text-[#fafafa]">{selectedDb.name}</h2>
-                    <Badge className="bg-[#27272a] text-[#a1a1aa]">{filteredRows.length} tasks</Badge>
-                  </div>
-                  <Button
-                    onClick={handleAddRow}
-                    className="bg-[#10b981] hover:bg-[#059669] text-white"
-                    data-testid="add-task-btn"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Task
-                  </Button>
-                </div>
-
-                {/* Right side - Search & Filters */}
+            {/* Main Toolbar */}
+            <div className="px-6 py-4 bg-[#09090b]">
+              {/* Top row - Title and Add Task */}
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71717a]" />
-                    <Input
-                      placeholder="Search tasks..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 w-64 bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
-                    />
-                  </div>
-                  <Button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={`${showFilters || hasActiveFilters ? 'bg-[#6366f1] text-white' : 'bg-[#27272a] text-[#a1a1aa]'} hover:bg-[#3f3f46]`}
-                  >
-                    <SlidersHorizontal className="h-4 w-4 mr-2" />
-                    Filters
-                    {hasActiveFilters && (
-                      <Badge className="ml-2 bg-white/20 text-white text-xs">Active</Badge>
-                    )}
-                  </Button>
+                  <span className="text-2xl">{selectedDb.icon}</span>
+                  <h1 className="text-xl font-semibold text-[#fafafa]">{selectedDb.name}</h1>
+                  <Badge className="bg-[#27272a] text-[#71717a] text-xs">{filteredRows.length} {filteredRows.length === 1 ? 'task' : 'tasks'}</Badge>
                 </div>
+                <Button
+                  onClick={handleAddRow}
+                  data-testid="add-task-btn"
+                  className="bg-[#10b981] hover:bg-[#059669] text-white font-medium px-6"
+                  size="lg"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  Add Task
+                </Button>
+              </div>
+              
+              {/* Search and Filters Row */}
+              <div className="flex items-center gap-3">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#52525b]" />
+                  <Input
+                    placeholder="Search tasks..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    data-testid="search-input"
+                    className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] placeholder:text-[#52525b] focus:border-[#6366f1]"
+                  />
+                </div>
+                
+                {/* Quick Status Filters */}
+                {statusColumn && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setFilters({ ...filters, status: '' })}
+                      className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                        !filters.status ? 'bg-[#6366f1] text-white' : 'bg-[#18181b] text-[#71717a] hover:text-[#a1a1aa]'
+                      }`}
+                    >
+                      All
+                    </button>
+                    {statusColumn.options?.slice(0, 4).map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={() => setFilters({ ...filters, status: filters.status === opt.id ? '' : opt.id })}
+                        className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
+                          filters.status === opt.id 
+                            ? 'text-white' 
+                            : 'bg-[#18181b] text-[#71717a] hover:text-[#a1a1aa]'
+                        }`}
+                        style={filters.status === opt.id ? { backgroundColor: opt.color } : {}}
+                      >
+                        {opt.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                
+                <Button
+                  onClick={() => setShowFilters(!showFilters)}
+                  data-testid="filters-btn"
+                  variant="outline"
+                  className={`border-[#27272a] ${showFilters || hasActiveFilters ? 'bg-[#6366f1]/10 text-[#6366f1] border-[#6366f1]' : 'bg-[#18181b] text-[#71717a]'}`}
+                >
+                  <SlidersHorizontal className="h-4 w-4 mr-2" />
+                  More Filters
+                  {hasActiveFilters && (
+                    <span className="ml-2 w-2 h-2 rounded-full bg-[#6366f1]" />
+                  )}
+                </Button>
               </div>
 
               {/* Expanded Filters */}
