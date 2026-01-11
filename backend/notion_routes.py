@@ -322,13 +322,93 @@ async def toggle_pin_database(database_id: str, request: Request):
 
 @notion_router.delete("/databases/{database_id}")
 async def delete_database(database_id: str, request: Request):
-    """Delete a database and all its rows"""
+    """Delete a database and all its rows and projects"""
     await get_current_user(request)
     
     await db.notion_databases.delete_one({"database_id": database_id})
     await db.notion_rows.delete_many({"database_id": database_id})
+    await db.notion_projects.delete_many({"database_id": database_id})
     
     return {"message": "Database deleted"}
+
+# ============== PROJECT ROUTES (Groups within databases) ==============
+
+@notion_router.get("/databases/{database_id}/projects")
+async def get_projects(database_id: str, request: Request):
+    """Get all projects in a database"""
+    await get_current_user(request)
+    
+    projects = await db.notion_projects.find(
+        {"database_id": database_id},
+        {"_id": 0}
+    ).sort("order", 1).to_list(100)
+    
+    return projects
+
+@notion_router.post("/databases/{database_id}/projects")
+async def create_project(database_id: str, data: ProjectCreate, request: Request):
+    """Create a new project/group within a database"""
+    user = await get_current_user(request)
+    
+    # Verify database exists
+    database = await db.notion_databases.find_one({"database_id": database_id})
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    project_id = f"proj_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Get max order
+    max_order = 0
+    existing = await db.notion_projects.find({"database_id": database_id}).sort("order", -1).limit(1).to_list(1)
+    if existing:
+        max_order = existing[0].get("order", 0)
+    
+    project_doc = {
+        "project_id": project_id,
+        "database_id": database_id,
+        "name": data.name,
+        "icon": data.icon,
+        "order": max_order + 1,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.notion_projects.insert_one(project_doc)
+    return await db.notion_projects.find_one({"project_id": project_id}, {"_id": 0})
+
+@notion_router.put("/databases/{database_id}/projects/{project_id}")
+async def update_project(database_id: str, project_id: str, data: Dict[str, Any], request: Request):
+    """Update a project"""
+    await get_current_user(request)
+    
+    allowed_fields = ["name", "icon", "order"]
+    update_data = {k: v for k, v in data.items() if k in allowed_fields}
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.notion_projects.update_one(
+        {"project_id": project_id, "database_id": database_id},
+        {"$set": update_data}
+    )
+    
+    return await db.notion_projects.find_one({"project_id": project_id}, {"_id": 0})
+
+@notion_router.delete("/databases/{database_id}/projects/{project_id}")
+async def delete_project(database_id: str, project_id: str, request: Request):
+    """Delete a project and optionally its tasks"""
+    await get_current_user(request)
+    
+    # Delete the project
+    await db.notion_projects.delete_one({"project_id": project_id, "database_id": database_id})
+    
+    # Update tasks to have no project (move to ungrouped)
+    await db.notion_rows.update_many(
+        {"database_id": database_id, "project_id": project_id},
+        {"$set": {"project_id": None}}
+    )
+    
+    return {"message": "Project deleted"}
 
 # ============== COLUMN ROUTES ==============
 
