@@ -4,7 +4,17 @@
 
 ---
 
-## Recent Changes (January 11, 2026)
+## Recent Changes (January 11, 2026 - Session 2)
+- **Operations Page UI Refactor:** Completely redesigned the Operations page for a cleaner, more intuitive interface
+  - Removed redundant inner sidebar (databases now shown in main sidebar only)
+  - All databases displayed as tabs at the top for quick switching
+  - Quick status filter chips (All, Planning, In Progress, Review, Completed)
+  - Prominent "Add Task" button in green
+  - Collapsible "More Filters" panel with Priority, Assignee, and Date Range filters
+  - Improved empty state design
+  - Cleaner table layout
+
+## Previous Changes (January 11, 2026 - Session 1)
 - **Notion-like Operations Module:** Replaced old Operations page with full Notion-style database system
   - Custom databases with templates (Project Tracker, Task List, etc.)
   - 10 column types: Text, Number, Select, Multi-select, Date, URL, Email, Phone, Checkbox, Person
@@ -12,6 +22,7 @@
   - Add/delete columns and rows
   - Search functionality
   - Color-coded select dropdowns
+  - Pinned databases feature
 
 ## Previous Changes (January 9, 2026)
 - **Bug Fix:** Resolved "Access denied" error when admin users tried to create new users
@@ -19,6 +30,7 @@
 - **HR Module Implementation:** Built comprehensive HR portal for employees
 - **HR Admin Module:** Built admin dashboard for HR management
 - **Deployment Fix:** Added `/health` endpoint for Kubernetes health checks
+- **Email Integration:** Integrated Resend for HR notifications (requires API key)
 
 ## Overview
 Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a SaaS - fully owned by one company with no public signup, no subscriptions, no credits.
@@ -27,27 +39,29 @@ Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a Saa
 ```
 /app/
 ├── backend/
-│   ├── server.py             # Main FastAPI app with all core routes
+│   ├── server.py             # Main FastAPI app with auth, users, settings routes
 │   ├── finance_routes.py     # Finance module API
-│   ├── operations_routes.py  # Operations module API
+│   ├── operations_routes.py  # Legacy operations routes
+│   ├── hr_routes.py          # HR module API (employee + admin)
+│   └── notion_routes.py      # Notion-like database system API
 └── frontend/
     └── src/
         ├── pages/
-        │   ├── SettingsPage.js     # Company, Workspaces, Users, Services, Statuses
-        │   ├── OperationsPage.js   # Projects, Tasks, Clients with Notion filters
+        │   ├── OperationsPage.js   # Notion-like database UI (refactored)
+        │   ├── HRPage.js           # Employee HR portal
+        │   ├── HRAdminPage.js      # Admin HR management
         │   ├── FinanceModule.js    # Invoicing with month-wise reports
+        │   ├── SettingsPage.js     # Company, Workspaces, Users, Services
         │   └── ...
         └── components/
-            ├── settings/
-            │   ├── CompanyProfileTab.js   # Company info, bank, UPI, terms
-            │   ├── WorkspacesTab.js       # Department workspaces
-            │   └── StatusManagementTab.js # Status CRUD with reorder
-            └── ...
+            ├── Sidebar.js          # Navigation with nested database links
+            ├── settings/           # Settings tab components
+            └── ui/                 # shadcn/ui components
 ```
 
 ## Modules Status
 
-### 1. Company Profile ✅ COMPLETE (Jan 9, 2026)
+### 1. Company Profile ✅ COMPLETE
 - Company Name, Logo URL, Address (full)
 - Phone, Email, Website
 - GST Number, PAN Number
@@ -55,19 +69,16 @@ Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a Saa
 - Bank Details (Account, IFSC, Bank Name, Branch)
 - Multiple UPI IDs
 - Terms & Conditions
-- **Auto-fills**: Invoices, PDFs, Payslips
 
-### 2. Workspaces ✅ COMPLETE (Jan 9, 2026)
+### 2. Workspaces ✅ COMPLETE
 - 5 default workspaces: Sales, Operations, Finance, Marketing, HR
 - Create custom workspaces
 - Assign members to workspaces
-- Each workspace has own dashboard
 
-### 3. Status Management ✅ COMPLETE (Jan 9, 2026)
+### 3. Status Management ✅ COMPLETE
 - Full CRUD on statuses
 - Drag & drop reordering
 - Custom colors
-- No locked statuses
 
 ### 4. Services Management ✅ COMPLETE
 - Full CRUD on services
@@ -79,22 +90,30 @@ Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a Saa
 - Add/edit/deactivate users
 - Customizable roles
 - Module access control
-- Granular permissions
 
-### 6. Operations Module ✅ COMPLETE
-- Projects with Kanban/List views
-- Tasks with Kanban/List views
-- **Clients tab** with quick project creation
-- **Notion-style filters** (status, priority, date, assignee)
-- Productivity dashboard
+### 6. Operations Module ✅ COMPLETE (Refactored Jan 11)
+- **Notion-like Database System:**
+  - Create databases from templates or blank
+  - 10+ column types with inline editing
+  - Custom columns and rows
+- **Clean UI:**
+  - Database tabs at top
+  - Quick status filter chips
+  - Advanced filters panel
+  - Prominent Add Task button
+  - Databases nested in sidebar
 
-### 7. Finance Module ✅ COMPLETE
+### 7. HR Module ✅ COMPLETE
+- **Employee Portal:** Attendance, profile, leave requests, payslips view
+- **Admin Portal:** Team dashboard, leave approvals, employee management
+- **Email Notifications:** Via Resend (MOCKED - requires API key)
+
+### 8. Finance Module ✅ COMPLETE
 - Invoice creation with GST
 - Company profile auto-fill
 - Bank details & UPI on invoices
-- Terms & conditions on invoices
-- **Month-wise reports** with charts
-- PDF download with full company details
+- Month-wise reports with charts
+- PDF download
 
 ## User Roles
 
@@ -102,42 +121,60 @@ Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a Saa
 |------|--------|
 | Super Admin | Full access to everything |
 | Admin | All except Settings |
-| Project Manager | Operations, Reports |
+| Project Manager | Operations, Reports, HR Admin |
 | BDE | Leads only |
-| Employee | Operations only |
+| Employee | HR (self), Operations only |
 
 ## Test Credentials
 - **Admin**: admin@drawlead.com / admin123
+- **Employee**: employee@drawlead.com / emp123
 
 ## API Endpoints
 
-### Company Profile
-- `GET /api/company-profile` - Get profile
-- `PUT /api/company-profile` - Update profile
+### Notion Database System
+- `GET /api/notion/databases` - List all databases
+- `POST /api/notion/databases` - Create database
+- `GET /api/notion/databases/{id}` - Get database with columns
+- `PUT /api/notion/databases/{id}/pin` - Toggle pin status
+- `POST /api/notion/databases/{id}/columns` - Add column
+- `DELETE /api/notion/databases/{id}/columns/{col_id}` - Delete column
+- `GET /api/notion/databases/{id}/rows` - Get all rows
+- `POST /api/notion/databases/{id}/rows` - Create row
+- `PUT /api/notion/databases/{id}/rows/{row_id}/cell` - Update cell
+- `DELETE /api/notion/databases/{id}/rows/{row_id}` - Delete row
+- `GET /api/notion/templates` - Get templates
+- `POST /api/notion/databases/from-template/{template_id}` - Create from template
 
-### Workspaces
-- `GET/POST /api/workspaces` - List/Create
-- `PUT/DELETE /api/workspaces/{id}` - Update/Delete
-- `POST/DELETE /api/workspaces/{id}/members` - Manage members
+### HR Module
+- `GET/POST /api/hr/attendance` - Employee attendance
+- `GET/PUT /api/hr/profile` - Employee profile
+- `GET/POST /api/hr/leave` - Leave requests
+- `GET /api/hr/admin/employees` - Admin: all employees
+- `PUT /api/hr/admin/leave/{id}` - Admin: approve/reject leave
 
-### Statuses
-- `GET /api/statuses` - List statuses
-- `PUT /api/statuses/{id}` - Update status
-- `DELETE /api/statuses/{id}` - Delete status
-- `PUT /api/statuses/reorder` - Reorder statuses
+## Pending Tasks
 
-## Future Tasks (P1/P2)
+### P1 (High Priority)
+- **Resend API Configuration:** User needs to provide RESEND_API_KEY and SENDER_EMAIL in backend/.env for email notifications to work
+- **Kanban/Board View:** Add alternative view for Notion databases
+
+### P2 (Medium Priority)
+- **Finance Module:** Build Payroll, GST, Budgeting tabs UI
+- **Sales Module:** CSV Import/Export for leads
+- **Code Refactor:** Split OperationsPage.js components (919 lines)
+
+### P3 (Backlog)
 - Calendar view in Operations
 - Timeline view in Operations
 - Partial payments support in Finance
-- Invoice email sending (currently mocked)
 - Audit logs for changes
-- Service workflows
 
 ## Tech Stack
 - **Backend**: FastAPI, MongoDB, Pydantic, JWT Auth
-- **Frontend**: React, Tailwind CSS, shadcn/ui, recharts, react-beautiful-dnd, jsPDF
+- **Frontend**: React, Tailwind CSS, shadcn/ui, lucide-react
+- **Email**: Resend (MOCKED)
+- **PDF**: jsPDF, jspdf-autotable
 - **Database**: MongoDB
 
-## Last Updated
-January 9, 2026
+## Known Mocked Integrations
+- **Resend Email:** Implemented but requires user's API key (RESEND_API_KEY, SENDER_EMAIL in backend/.env)
