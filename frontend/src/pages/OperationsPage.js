@@ -1,576 +1,968 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Layout from '../components/Layout';
-import api from '../utils/api';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, FolderKanban, List, BarChart3, Users, Filter } from 'lucide-react';
-import ProjectsListView from '../components/operations/ProjectsListView';
-import ProjectsKanbanView from '../components/operations/ProjectsKanbanView';
-import TasksListView from '../components/operations/TasksListView';
-import TasksKanbanView from '../components/operations/TasksKanbanView';
-import ProductivityDashboard from '../components/operations/ProductivityDashboard';
-import ProjectFormModal from '../components/operations/ProjectFormModal';
-import TaskFormModal from '../components/operations/TaskFormModal';
-import ClientFormModal from '../components/operations/ClientFormModal';
-import NotionFilters, { applyFilters } from '../components/operations/NotionFilters';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { 
+  Plus, Database, ChevronDown, ChevronRight, MoreHorizontal,
+  Link2, Calendar, Hash, Mail, Phone, Check, User, X,
+  Trash2, Edit2, Copy, GripVertical, Search, Filter,
+  LayoutGrid, List, Table2
+} from 'lucide-react';
 import { toast } from 'sonner';
+import axios from 'axios';
 
-const OperationsPage = () => {
-  const [projects, setProjects] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [services, setServices] = useState([]);
+const API = process.env.REACT_APP_BACKEND_URL;
+
+// Column type icons
+const COLUMN_ICONS = {
+  text: <span className="text-[#a1a1aa]">Aa</span>,
+  number: <Hash className="h-4 w-4 text-[#a1a1aa]" />,
+  select: <ChevronDown className="h-4 w-4 text-[#a1a1aa]" />,
+  multi_select: <span className="text-[#a1a1aa]">⊞</span>,
+  date: <Calendar className="h-4 w-4 text-[#a1a1aa]" />,
+  url: <Link2 className="h-4 w-4 text-[#a1a1aa]" />,
+  email: <Mail className="h-4 w-4 text-[#a1a1aa]" />,
+  phone: <Phone className="h-4 w-4 text-[#a1a1aa]" />,
+  checkbox: <Check className="h-4 w-4 text-[#a1a1aa]" />,
+  person: <User className="h-4 w-4 text-[#a1a1aa]" />
+};
+
+const COLUMN_TYPES = [
+  { type: 'text', name: 'Text', icon: 'Aa' },
+  { type: 'number', name: 'Number', icon: '#' },
+  { type: 'select', name: 'Select', icon: '▼' },
+  { type: 'multi_select', name: 'Multi-select', icon: '⊞' },
+  { type: 'date', name: 'Date', icon: '📅' },
+  { type: 'url', name: 'URL', icon: '🔗' },
+  { type: 'email', name: 'Email', icon: '✉️' },
+  { type: 'phone', name: 'Phone', icon: '📞' },
+  { type: 'checkbox', name: 'Checkbox', icon: '☑️' },
+  { type: 'person', name: 'Person', icon: '👤' }
+];
+
+export default function OperationsPage() {
+  const [databases, setDatabases] = useState([]);
+  const [selectedDb, setSelectedDb] = useState(null);
+  const [rows, setRows] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [showNewDbModal, setShowNewDbModal] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [users, setUsers] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [sources, setSources] = useState([]);
-  const [statuses, setStatuses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('projects');
-  const [activeView, setActiveView] = useState('kanban');
-  const [showProjectModal, setShowProjectModal] = useState(false);
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [showClientModal, setShowClientModal] = useState(false);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [selectedClient, setSelectedClient] = useState(null);
-  const [productivityStats, setProductivityStats] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewType, setViewType] = useState('table');
   
-  // Notion-style filters
-  const [projectFilters, setProjectFilters] = useState([]);
-  const [taskFilters, setTaskFilters] = useState([]);
-  const [showFilters, setShowFilters] = useState(false);
+  const token = localStorage.getItem('session_token');
+  const headers = { Authorization: `Bearer ${token}` };
 
-  // Service types for filtering
-  const serviceTypes = [
-    { value: 'website', label: 'Website Development' },
-    { value: 'shopify', label: 'Shopify Stores' },
-    { value: 'performance_marketing', label: 'Performance Marketing' },
-    { value: 'social_media', label: 'Social Media Marketing' },
-    { value: 'whatsapp', label: 'WhatsApp Marketing' },
-    { value: 'other', label: 'Other Services' },
-  ];
+  const loadDatabases = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/notion/databases`, { headers });
+      setDatabases(res.data);
+      if (res.data.length > 0 && !selectedDb) {
+        setSelectedDb(res.data[0]);
+      }
+    } catch (error) {
+      console.error('Error loading databases:', error);
+    }
+  }, [token]);
+
+  const loadRows = useCallback(async () => {
+    if (!selectedDb) return;
+    try {
+      const res = await axios.get(`${API}/api/notion/databases/${selectedDb.database_id}/rows`, { headers });
+      setRows(res.data.rows || []);
+    } catch (error) {
+      console.error('Error loading rows:', error);
+    }
+  }, [selectedDb, token]);
+
+  const loadTemplates = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/notion/templates`, { headers });
+      setTemplates(res.data);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  }, [token]);
+
+  const loadUsers = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/notion/users`, { headers });
+      setUsers(res.data);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    }
+  }, [token]);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    loadDatabases();
+    loadTemplates();
+    loadUsers();
+  }, [loadDatabases, loadTemplates, loadUsers]);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    if (selectedDb) {
+      loadRows();
+    }
+  }, [selectedDb, loadRows]);
+
+  const handleCreateDatabase = async (name) => {
     try {
-      const [projectsRes, tasksRes, servicesRes, usersRes, clientsRes, statsRes, sourcesRes, statusesRes] = await Promise.all([
-        api.get('/operations/projects'),
-        api.get('/operations/tasks'),
-        api.get('/services'),
-        api.get('/users').catch(() => ({ data: [] })),
-        api.get('/leads').catch(() => ({ data: [] })),
-        api.get('/operations/productivity/overview').catch(() => ({ data: null })),
-        api.get('/sources').catch(() => ({ data: [] })),
-        api.get('/statuses').catch(() => ({ data: [] })),
-      ]);
-      setProjects(projectsRes.data);
-      setTasks(tasksRes.data);
-      setServices(servicesRes.data);
-      setUsers(usersRes.data || []);
-      setClients(clientsRes.data || []);
-      setProductivityStats(statsRes.data);
-      setSources(sourcesRes.data || []);
-      setStatuses(statusesRes.data || []);
+      const res = await axios.post(`${API}/api/notion/databases`, { name, icon: '📋' }, { headers });
+      setDatabases([res.data, ...databases]);
+      setSelectedDb(res.data);
+      setShowNewDbModal(false);
+      toast.success('Database created');
     } catch (error) {
-      console.error('Error fetching data:', error);
-      toast.error('Failed to load operations data');
-    } finally {
-      setLoading(false);
+      toast.error('Failed to create database');
     }
   };
 
-  const handleCreateProject = () => {
-    setSelectedProject(null);
-    setShowProjectModal(true);
-  };
-
-  const handleEditProject = (project) => {
-    setSelectedProject(project);
-    setShowProjectModal(true);
-  };
-
-  const handleSaveProject = async () => {
-    await fetchData();
-    setShowProjectModal(false);
-    setSelectedProject(null);
-  };
-
-  const handleDeleteProject = async (projectId) => {
-    if (!window.confirm('Are you sure you want to delete this project?')) return;
+  const handleCreateFromTemplate = async (templateId, name) => {
     try {
-      await api.delete(`/operations/projects/${projectId}`);
-      toast.success('Project deleted');
-      fetchData();
+      const res = await axios.post(`${API}/api/notion/databases/from-template/${templateId}`, { name }, { headers });
+      setDatabases([res.data, ...databases]);
+      setSelectedDb(res.data);
+      setShowTemplateModal(false);
+      toast.success('Database created from template');
     } catch (error) {
-      toast.error('Failed to delete project');
+      toast.error('Failed to create database');
     }
   };
 
-  const handleCreateTask = (project = null) => {
-    setSelectedTask(null);
-    setSelectedProject(project);
-    setShowTaskModal(true);
-  };
-
-  const handleEditTask = (task) => {
-    setSelectedTask(task);
-    setShowTaskModal(true);
-  };
-
-  const handleSaveTask = async () => {
-    await fetchData();
-    setShowTaskModal(false);
-    setSelectedTask(null);
-    setSelectedProject(null);
-  };
-
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
+  const handleDeleteDatabase = async (dbId) => {
+    if (!window.confirm('Delete this database and all its data?')) return;
     try {
-      await api.delete(`/operations/tasks/${taskId}`);
-      toast.success('Task deleted');
-      fetchData();
+      await axios.delete(`${API}/api/notion/databases/${dbId}`, { headers });
+      const newDbs = databases.filter(d => d.database_id !== dbId);
+      setDatabases(newDbs);
+      if (selectedDb?.database_id === dbId) {
+        setSelectedDb(newDbs[0] || null);
+      }
+      toast.success('Database deleted');
     } catch (error) {
-      toast.error('Failed to delete task');
+      toast.error('Failed to delete database');
     }
   };
 
-  // Client handlers
-  const handleCreateClient = () => {
-    setSelectedClient(null);
-    setShowClientModal(true);
+  const handleAddRow = async () => {
+    if (!selectedDb) return;
+    try {
+      const res = await axios.post(`${API}/api/notion/databases/${selectedDb.database_id}/rows`, { values: {} }, { headers });
+      setRows([...rows, res.data]);
+    } catch (error) {
+      toast.error('Failed to add row');
+    }
   };
 
-  const handleEditClient = (client) => {
-    setSelectedClient(client);
-    setShowClientModal(true);
-  };
-
-  const handleSaveClient = async () => {
-    await fetchData();
-    setShowClientModal(false);
-    setSelectedClient(null);
-  };
-
-  // Filter data based on search and Notion filters
-  const getFilteredProjects = () => {
-    let filtered = projects;
-    
-    // Apply search
-    if (searchTerm) {
-      filtered = filtered.filter((project) =>
-        project.project_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.client_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleUpdateCell = async (rowId, columnId, value) => {
+    try {
+      await axios.put(`${API}/api/notion/databases/${selectedDb.database_id}/rows/${rowId}/cell`, 
+        { column_id: columnId, value }, 
+        { headers }
       );
+      setRows(rows.map(r => r.row_id === rowId ? { ...r, values: { ...r.values, [columnId]: value } } : r));
+    } catch (error) {
+      toast.error('Failed to update cell');
     }
-    
-    // Apply Notion filters
-    filtered = applyFilters(filtered, projectFilters);
-    
-    return filtered;
   };
 
-  const getFilteredTasks = () => {
-    let filtered = tasks;
-    
-    // Apply search
-    if (searchTerm) {
-      filtered = filtered.filter((task) =>
-        task.task_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        task.project_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  const handleDeleteRow = async (rowId) => {
+    try {
+      await axios.delete(`${API}/api/notion/databases/${selectedDb.database_id}/rows/${rowId}`, { headers });
+      setRows(rows.filter(r => r.row_id !== rowId));
+    } catch (error) {
+      toast.error('Failed to delete row');
+    }
+  };
+
+  const handleAddColumn = async (name, type, options = []) => {
+    try {
+      const res = await axios.post(`${API}/api/notion/databases/${selectedDb.database_id}/columns`, 
+        { name, type, options }, 
+        { headers }
       );
+      setSelectedDb({
+        ...selectedDb,
+        columns: [...selectedDb.columns, res.data]
+      });
+      toast.success('Column added');
+    } catch (error) {
+      toast.error('Failed to add column');
     }
-    
-    // Apply Notion filters
-    filtered = applyFilters(filtered, taskFilters);
-    
-    return filtered;
   };
 
-  const filteredProjects = getFilteredProjects();
-  const filteredTasks = getFilteredTasks();
+  const handleDeleteColumn = async (columnId) => {
+    if (!window.confirm('Delete this column?')) return;
+    try {
+      await axios.delete(`${API}/api/notion/databases/${selectedDb.database_id}/columns/${columnId}`, { headers });
+      setSelectedDb({
+        ...selectedDb,
+        columns: selectedDb.columns.filter(c => c.column_id !== columnId)
+      });
+      toast.success('Column deleted');
+    } catch (error) {
+      toast.error('Failed to delete column');
+    }
+  };
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center h-full">
-          <p className="text-[#a1a1aa]">Loading operations...</p>
-        </div>
-      </Layout>
+  const filteredRows = rows.filter(row => {
+    if (!searchQuery) return true;
+    return Object.values(row.values || {}).some(val => 
+      String(val).toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }
+  });
 
   return (
     <Layout>
-      <div className="space-y-6" data-testid="operations-page">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1
-              className="text-4xl font-bold tracking-tight mb-2"
-              style={{ fontFamily: 'Plus Jakarta Sans' }}
-            >
-              <span className="bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
-                Operations
-              </span>
-            </h1>
-            <p className="text-[#a1a1aa] text-base">
-              Manage projects, tasks, clients and team productivity
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <Button
-              onClick={handleCreateClient}
-              data-testid="create-client-button"
-              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] border border-[#3f3f46]"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              New Client
-            </Button>
-            <Button
-              onClick={() => handleCreateTask()}
-              data-testid="create-task-button"
-              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] border border-[#3f3f46]"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Task
-            </Button>
-            <Button
-              onClick={handleCreateProject}
-              data-testid="create-project-button"
-              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white glow-primary"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Project
-            </Button>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        {productivityStats && (
-          <div className="grid grid-cols-5 gap-4">
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-              <p className="text-xs text-[#a1a1aa] mb-1">Active Projects</p>
-              <p className="text-2xl font-bold text-[#fafafa]">{productivityStats.active_projects}</p>
-            </div>
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-              <p className="text-xs text-[#a1a1aa] mb-1">Total Tasks</p>
-              <p className="text-2xl font-bold text-[#fafafa]">{productivityStats.total_tasks}</p>
-            </div>
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-              <p className="text-xs text-[#a1a1aa] mb-1">In Progress</p>
-              <p className="text-2xl font-bold text-[#10b981]">{productivityStats.in_progress_tasks}</p>
-            </div>
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-              <p className="text-xs text-[#a1a1aa] mb-1">Overdue</p>
-              <p className="text-2xl font-bold text-[#ef4444]">{productivityStats.overdue_tasks}</p>
-            </div>
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-              <p className="text-xs text-[#a1a1aa] mb-1">Total Clients</p>
-              <p className="text-2xl font-bold text-[#8b5cf6]">{clients.length}</p>
+      <div className="h-full flex" data-testid="operations-page">
+        {/* Sidebar - Database List */}
+        <div className="w-64 bg-[#18181b] border-r border-[#27272a] flex flex-col">
+          <div className="p-4 border-b border-[#27272a]">
+            <h2 className="text-lg font-semibold text-[#fafafa] mb-3">Databases</h2>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => setShowTemplateModal(true)}
+                className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white text-sm"
+                data-testid="new-database-btn"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                New
+              </Button>
             </div>
           </div>
-        )}
-
-        {/* Search and Filter Toggle */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#a1a1aa]" />
-            <Input
-              placeholder="Search projects or tasks..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              data-testid="search-operations-input"
-              className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
-            />
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => setShowFilters(!showFilters)}
-            className={`bg-[#18181b] border-[#27272a] ${showFilters ? 'text-[#6366f1] border-[#6366f1]' : 'text-[#a1a1aa]'}`}
-            data-testid="toggle-filters"
-          >
-            <Filter className="h-4 w-4 mr-2" />
-            Filters
-            {(projectFilters.length > 0 || taskFilters.length > 0) && (
-              <span className="ml-2 bg-[#6366f1] text-white text-xs px-1.5 py-0.5 rounded-full">
-                {activeTab === 'projects' ? projectFilters.length : taskFilters.length}
-              </span>
+          
+          <div className="flex-1 overflow-y-auto p-2">
+            {databases.map(db => (
+              <div
+                key={db.database_id}
+                onClick={() => setSelectedDb(db)}
+                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer group ${
+                  selectedDb?.database_id === db.database_id
+                    ? 'bg-[#27272a] text-[#fafafa]'
+                    : 'text-[#a1a1aa] hover:bg-[#27272a]/50'
+                }`}
+              >
+                <span className="text-lg">{db.icon}</span>
+                <span className="flex-1 truncate text-sm">{db.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteDatabase(db.database_id); }}
+                  className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-[#71717a] hover:text-red-400"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+            
+            {databases.length === 0 && (
+              <p className="text-center text-[#71717a] text-sm py-4">No databases yet</p>
             )}
-          </Button>
+          </div>
         </div>
 
-        {/* Notion-style Filters */}
-        {showFilters && (
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-            <NotionFilters
-              filters={activeTab === 'projects' ? projectFilters : taskFilters}
-              onFiltersChange={activeTab === 'projects' ? setProjectFilters : setTaskFilters}
-              users={users}
-              serviceTypes={serviceTypes}
-            />
-          </div>
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col bg-[#09090b]">
+          {selectedDb ? (
+            <>
+              {/* Database Header */}
+              <div className="p-4 border-b border-[#27272a]">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{selectedDb.icon}</span>
+                    <h1 className="text-2xl font-bold text-[#fafafa]">{selectedDb.name}</h1>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71717a]" />
+                      <Input
+                        placeholder="Search..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 w-64 bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                      />
+                    </div>
+                    <Button
+                      onClick={handleAddRow}
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      data-testid="add-row-btn"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      New
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Table View */}
+              <div className="flex-1 overflow-auto p-4">
+                <NotionTable
+                  columns={selectedDb.columns}
+                  rows={filteredRows}
+                  users={users}
+                  onUpdateCell={handleUpdateCell}
+                  onDeleteRow={handleDeleteRow}
+                  onAddColumn={handleAddColumn}
+                  onDeleteColumn={handleDeleteColumn}
+                  onAddRow={handleAddRow}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <Database className="h-16 w-16 text-[#3f3f46] mx-auto mb-4" />
+                <h2 className="text-xl font-semibold text-[#fafafa] mb-2">No database selected</h2>
+                <p className="text-[#a1a1aa] mb-4">Create a new database or select one from the sidebar</p>
+                <Button
+                  onClick={() => setShowTemplateModal(true)}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Database
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Template Selection Modal */}
+        {showTemplateModal && (
+          <TemplateModal
+            templates={templates}
+            onSelect={handleCreateFromTemplate}
+            onCreateBlank={handleCreateDatabase}
+            onClose={() => setShowTemplateModal(false)}
+          />
         )}
-
-        {/* Main Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="bg-[#18181b] border border-[#27272a] p-1">
-            <TabsTrigger
-              value="projects"
-              data-testid="projects-tab"
-              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
-            >
-              <FolderKanban className="h-4 w-4 mr-2" />
-              Projects ({filteredProjects.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="tasks"
-              data-testid="tasks-tab"
-              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
-            >
-              <List className="h-4 w-4 mr-2" />
-              Tasks ({filteredTasks.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="clients"
-              data-testid="clients-tab"
-              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Clients ({clients.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="productivity"
-              data-testid="productivity-tab"
-              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              Productivity
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Projects Tab */}
-          <TabsContent value="projects" className="mt-6">
-            <Tabs value={activeView} onValueChange={setActiveView} className="w-full">
-              <TabsList className="bg-[#09090b] border border-[#27272a] p-1 mb-4">
-                <TabsTrigger
-                  value="kanban"
-                  data-testid="projects-kanban-view"
-                  className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs"
-                >
-                  Kanban
-                </TabsTrigger>
-                <TabsTrigger
-                  value="list"
-                  data-testid="projects-list-view"
-                  className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs"
-                >
-                  List
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="kanban">
-                <ProjectsKanbanView
-                  projects={filteredProjects}
-                  onEditProject={handleEditProject}
-                  onCreateTask={handleCreateTask}
-                  onRefresh={fetchData}
-                />
-              </TabsContent>
-
-              <TabsContent value="list">
-                <ProjectsListView
-                  projects={filteredProjects}
-                  onEditProject={handleEditProject}
-                  onDeleteProject={handleDeleteProject}
-                  onCreateTask={handleCreateTask}
-                />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-
-          {/* Tasks Tab */}
-          <TabsContent value="tasks" className="mt-6">
-            <Tabs value={activeView} onValueChange={setActiveView} className="w-full">
-              <TabsList className="bg-[#09090b] border border-[#27272a] p-1 mb-4">
-                <TabsTrigger
-                  value="kanban"
-                  data-testid="tasks-kanban-view"
-                  className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs"
-                >
-                  Kanban
-                </TabsTrigger>
-                <TabsTrigger
-                  value="list"
-                  data-testid="tasks-list-view"
-                  className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs"
-                >
-                  List
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="kanban">
-                <TasksKanbanView
-                  tasks={filteredTasks}
-                  onEditTask={handleEditTask}
-                  onRefresh={fetchData}
-                />
-              </TabsContent>
-
-              <TabsContent value="list">
-                <TasksListView
-                  tasks={filteredTasks}
-                  onEditTask={handleEditTask}
-                  onDeleteTask={handleDeleteTask}
-                />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-
-          {/* Clients Tab */}
-          <TabsContent value="clients" className="mt-6">
-            <ClientsListView
-              clients={clients}
-              onEditClient={handleEditClient}
-              onCreateProject={handleCreateProject}
-            />
-          </TabsContent>
-
-          {/* Productivity Tab */}
-          <TabsContent value="productivity" className="mt-6">
-            <ProductivityDashboard stats={productivityStats} />
-          </TabsContent>
-        </Tabs>
       </div>
-
-      {/* Project Modal */}
-      {showProjectModal && (
-        <ProjectFormModal
-          project={selectedProject}
-          services={services}
-          users={users}
-          clients={clients}
-          onClose={() => setShowProjectModal(false)}
-          onSave={handleSaveProject}
-        />
-      )}
-
-      {/* Task Modal */}
-      {showTaskModal && (
-        <TaskFormModal
-          task={selectedTask}
-          projects={projects}
-          users={users}
-          defaultProject={selectedProject}
-          onClose={() => setShowTaskModal(false)}
-          onSave={handleSaveTask}
-        />
-      )}
-
-      {/* Client Modal */}
-      {showClientModal && (
-        <ClientFormModal
-          client={selectedClient}
-          services={services}
-          sources={sources}
-          statuses={statuses}
-          onClose={() => setShowClientModal(false)}
-          onSave={handleSaveClient}
-        />
-      )}
     </Layout>
   );
-};
+}
 
-// Clients List View Component
-const ClientsListView = ({ clients, onEditClient, onCreateProject }) => {
+// ============== NOTION TABLE COMPONENT ==============
+function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddColumn, onDeleteColumn, onAddRow }) {
+  const [editingCell, setEditingCell] = useState(null);
+  const [showAddColumn, setShowAddColumn] = useState(false);
+  const [newColumnName, setNewColumnName] = useState('');
+  const [newColumnType, setNewColumnType] = useState('text');
+
+  const sortedColumns = [...columns].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  const handleAddColumn = () => {
+    if (!newColumnName.trim()) return;
+    
+    let options = [];
+    if (newColumnType === 'select' || newColumnType === 'multi_select') {
+      options = [
+        { id: 'opt_1', name: 'Option 1', color: '#71717a' },
+        { id: 'opt_2', name: 'Option 2', color: '#3b82f6' },
+        { id: 'opt_3', name: 'Option 3', color: '#10b981' }
+      ];
+    }
+    
+    onAddColumn(newColumnName, newColumnType, options);
+    setNewColumnName('');
+    setNewColumnType('text');
+    setShowAddColumn(false);
+  };
+
   return (
-    <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid="clients-list">
-      <table className="w-full">
-        <thead className="bg-[#09090b]">
-          <tr>
-            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Client</th>
-            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Contact</th>
-            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Service</th>
-            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Status</th>
-            <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Value</th>
-            <th className="text-right p-4 text-xs font-medium text-[#a1a1aa] uppercase">Actions</th>
+    <div className="min-w-full">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="border-b border-[#27272a]">
+            <th className="w-8 p-2 text-left"></th>
+            {sortedColumns.map(col => (
+              <th 
+                key={col.column_id} 
+                className="p-2 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider group"
+                style={{ minWidth: col.width || 200 }}
+              >
+                <div className="flex items-center gap-2">
+                  {COLUMN_ICONS[col.type]}
+                  <span>{col.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onDeleteColumn(col.column_id)}
+                    className="opacity-0 group-hover:opacity-100 h-5 w-5 p-0 text-[#71717a] hover:text-red-400"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </th>
+            ))}
+            <th className="w-32 p-2">
+              {showAddColumn ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={newColumnName}
+                    onChange={(e) => setNewColumnName(e.target.value)}
+                    placeholder="Name"
+                    className="h-7 text-xs bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
+                  />
+                  <select
+                    value={newColumnType}
+                    onChange={(e) => setNewColumnType(e.target.value)}
+                    className="h-7 text-xs bg-[#27272a] border border-[#3f3f46] rounded text-[#fafafa]"
+                  >
+                    {COLUMN_TYPES.map(t => (
+                      <option key={t.type} value={t.type}>{t.name}</option>
+                    ))}
+                  </select>
+                  <Button size="sm" onClick={handleAddColumn} className="h-7 bg-[#10b981] hover:bg-[#059669]">
+                    <Check className="h-3 w-3" />
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddColumn(false)} className="h-7">
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAddColumn(true)}
+                  className="text-[#71717a] hover:text-[#fafafa] text-xs"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Column
+                </Button>
+              )}
+            </th>
           </tr>
         </thead>
         <tbody>
-          {clients.map((client) => (
-            <tr
-              key={client.lead_id}
-              className="border-t border-[#27272a] hover:bg-[#27272a]/30 transition-colors"
-              data-testid={`client-row-${client.lead_id}`}
-            >
-              <td className="p-4">
-                <div>
-                  <p className="text-sm font-medium text-[#fafafa]">{client.name}</p>
-                  {client.business_name && (
-                    <p className="text-xs text-[#a1a1aa]">{client.business_name}</p>
-                  )}
-                </div>
-              </td>
-              <td className="p-4">
-                <div className="text-sm">
-                  <p className="text-[#fafafa]">{client.phone}</p>
-                  {client.email && <p className="text-xs text-[#a1a1aa]">{client.email}</p>}
-                </div>
-              </td>
-              <td className="p-4">
-                <span className="text-sm text-[#a1a1aa]">{client.service_name || '-'}</span>
-              </td>
-              <td className="p-4">
-                {client.status_name && (
-                  <span
-                    className="px-2 py-1 text-xs rounded-full"
-                    style={{
-                      backgroundColor: `${client.status_color}20`,
-                      color: client.status_color,
-                    }}
-                  >
-                    {client.status_name}
-                  </span>
-                )}
-              </td>
-              <td className="p-4">
-                <span className="text-sm text-[#fafafa]">
-                  {client.service_cost ? `₹${client.service_cost.toLocaleString()}` : '-'}
-                </span>
-              </td>
-              <td className="p-4 text-right">
-                <div className="flex items-center justify-end gap-2">
+          {rows.map((row, rowIndex) => (
+            <tr key={row.row_id} className="border-b border-[#27272a]/50 hover:bg-[#27272a]/30 group">
+              <td className="p-2">
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                   <Button
+                    variant="ghost"
                     size="sm"
-                    onClick={() => onCreateProject(client)}
-                    title="Create Project"
-                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 text-xs"
+                    onClick={() => onDeleteRow(row.row_id)}
+                    className="h-6 w-6 p-0 text-[#71717a] hover:text-red-400"
                   >
-                    + Project
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => onEditClient(client)}
-                    className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8 text-xs"
-                  >
-                    Edit
+                    <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
               </td>
+              {sortedColumns.map(col => (
+                <td key={col.column_id} className="p-1">
+                  <CellEditor
+                    column={col}
+                    value={row.values?.[col.column_id]}
+                    users={users}
+                    isEditing={editingCell === `${row.row_id}-${col.column_id}`}
+                    onStartEdit={() => setEditingCell(`${row.row_id}-${col.column_id}`)}
+                    onEndEdit={() => setEditingCell(null)}
+                    onChange={(value) => onUpdateCell(row.row_id, col.column_id, value)}
+                  />
+                </td>
+              ))}
+              <td></td>
             </tr>
           ))}
+          
+          {/* Add New Row */}
+          <tr className="border-b border-[#27272a]/30">
+            <td colSpan={sortedColumns.length + 2} className="p-2">
+              <Button
+                variant="ghost"
+                onClick={onAddRow}
+                className="text-[#71717a] hover:text-[#fafafa] text-sm w-full justify-start"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New row
+              </Button>
+            </td>
+          </tr>
         </tbody>
       </table>
-      {clients.length === 0 && (
-        <div className="p-8 text-center text-[#a1a1aa]">No clients found. Add your first client!</div>
+    </div>
+  );
+}
+
+// ============== CELL EDITOR COMPONENT ==============
+function CellEditor({ column, value, users, isEditing, onStartEdit, onEndEdit, onChange }) {
+  const [localValue, setLocalValue] = useState(value);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isEditing]);
+
+  const handleSave = () => {
+    onChange(localValue);
+    onEndEdit();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && column.type !== 'text') {
+      handleSave();
+    }
+    if (e.key === 'Escape') {
+      setLocalValue(value);
+      onEndEdit();
+    }
+  };
+
+  // Render based on column type
+  switch (column.type) {
+    case 'text':
+      return isEditing ? (
+        <Input
+          ref={inputRef}
+          value={localValue || ''}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
+        />
+      ) : (
+        <div
+          onClick={onStartEdit}
+          className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded"
+        >
+          {value || <span className="text-[#71717a]">Empty</span>}
+        </div>
+      );
+
+    case 'number':
+      return isEditing ? (
+        <Input
+          ref={inputRef}
+          type="number"
+          value={localValue || ''}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
+        />
+      ) : (
+        <div
+          onClick={onStartEdit}
+          className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded"
+        >
+          {value || <span className="text-[#71717a]">-</span>}
+        </div>
+      );
+
+    case 'select':
+      return (
+        <SelectCell
+          column={column}
+          value={value}
+          onChange={onChange}
+        />
+      );
+
+    case 'multi_select':
+      return (
+        <MultiSelectCell
+          column={column}
+          value={value}
+          onChange={onChange}
+        />
+      );
+
+    case 'date':
+      return isEditing ? (
+        <Input
+          ref={inputRef}
+          type="date"
+          value={localValue || ''}
+          onChange={(e) => { setLocalValue(e.target.value); onChange(e.target.value); }}
+          onBlur={onEndEdit}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
+        />
+      ) : (
+        <div
+          onClick={onStartEdit}
+          className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2"
+        >
+          {value ? (
+            <>
+              <Calendar className="h-3 w-3 text-[#71717a]" />
+              {new Date(value).toLocaleDateString()}
+            </>
+          ) : (
+            <span className="text-[#71717a]">No date</span>
+          )}
+        </div>
+      );
+
+    case 'url':
+      return isEditing ? (
+        <Input
+          ref={inputRef}
+          type="url"
+          value={localValue || ''}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          placeholder="https://"
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
+        />
+      ) : (
+        <div
+          onClick={onStartEdit}
+          className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded flex items-center gap-2"
+        >
+          {value ? (
+            <a href={value} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <Link2 className="h-3 w-3" />
+              {value.replace(/^https?:\/\//, '').substring(0, 30)}...
+            </a>
+          ) : (
+            <span className="text-[#71717a]">Add URL</span>
+          )}
+        </div>
+      );
+
+    case 'email':
+      return isEditing ? (
+        <Input
+          ref={inputRef}
+          type="email"
+          value={localValue || ''}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
+        />
+      ) : (
+        <div
+          onClick={onStartEdit}
+          className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded"
+        >
+          {value ? (
+            <a href={`mailto:${value}`} className="text-[#6366f1] hover:underline" onClick={(e) => e.stopPropagation()}>
+              {value}
+            </a>
+          ) : (
+            <span className="text-[#71717a]">Add email</span>
+          )}
+        </div>
+      );
+
+    case 'phone':
+      return isEditing ? (
+        <Input
+          ref={inputRef}
+          type="tel"
+          value={localValue || ''}
+          onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
+        />
+      ) : (
+        <div
+          onClick={onStartEdit}
+          className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded"
+        >
+          {value ? (
+            <a href={`tel:${value}`} className="text-[#fafafa]" onClick={(e) => e.stopPropagation()}>
+              {value}
+            </a>
+          ) : (
+            <span className="text-[#71717a]">Add phone</span>
+          )}
+        </div>
+      );
+
+    case 'checkbox':
+      return (
+        <div className="flex items-center justify-center">
+          <input
+            type="checkbox"
+            checked={!!value}
+            onChange={(e) => onChange(e.target.checked)}
+            className="h-4 w-4 rounded border-[#3f3f46] bg-[#27272a] text-[#6366f1] focus:ring-[#6366f1]"
+          />
+        </div>
+      );
+
+    case 'person':
+      return (
+        <PersonCell
+          value={value}
+          users={users}
+          onChange={onChange}
+        />
+      );
+
+    default:
+      return <div className="px-2 py-1 text-[#fafafa]">{String(value || '')}</div>;
+  }
+}
+
+// ============== SELECT CELL ==============
+function SelectCell({ column, value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const options = column.options || [];
+  
+  const selectedOption = options.find(o => o.id === value || o.name === value);
+
+  return (
+    <div className="relative">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex items-center"
+      >
+        {selectedOption ? (
+          <Badge style={{ backgroundColor: `${selectedOption.color}20`, color: selectedOption.color }}>
+            {selectedOption.name}
+          </Badge>
+        ) : (
+          <span className="text-[#71717a]">Select...</span>
+        )}
+      </div>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[150px] py-1">
+            <div
+              onClick={() => { onChange(null); setIsOpen(false); }}
+              className="px-3 py-2 text-sm text-[#71717a] hover:bg-[#3f3f46] cursor-pointer"
+            >
+              Clear
+            </div>
+            {options.map(opt => (
+              <div
+                key={opt.id}
+                onClick={() => { onChange(opt.id); setIsOpen(false); }}
+                className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2"
+              >
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: opt.color }} />
+                <span className="text-[#fafafa] text-sm">{opt.name}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
-};
+}
 
-export default OperationsPage;
+// ============== MULTI-SELECT CELL ==============
+function MultiSelectCell({ column, value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const options = column.options || [];
+  const selectedIds = Array.isArray(value) ? value : [];
+  
+  const selectedOptions = options.filter(o => selectedIds.includes(o.id));
+
+  const toggleOption = (optId) => {
+    const newValue = selectedIds.includes(optId)
+      ? selectedIds.filter(id => id !== optId)
+      : [...selectedIds, optId];
+    onChange(newValue);
+  };
+
+  return (
+    <div className="relative">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex flex-wrap gap-1"
+      >
+        {selectedOptions.length > 0 ? (
+          selectedOptions.map(opt => (
+            <Badge key={opt.id} style={{ backgroundColor: `${opt.color}20`, color: opt.color }} className="text-xs">
+              {opt.name}
+            </Badge>
+          ))
+        ) : (
+          <span className="text-[#71717a]">Select...</span>
+        )}
+      </div>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[150px] py-1">
+            {options.map(opt => (
+              <div
+                key={opt.id}
+                onClick={() => toggleOption(opt.id)}
+                className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2"
+              >
+                <div className={`w-4 h-4 rounded border ${selectedIds.includes(opt.id) ? 'bg-[#6366f1] border-[#6366f1]' : 'border-[#3f3f46]'} flex items-center justify-center`}>
+                  {selectedIds.includes(opt.id) && <Check className="h-3 w-3 text-white" />}
+                </div>
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: opt.color }} />
+                <span className="text-[#fafafa] text-sm">{opt.name}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============== PERSON CELL ==============
+function PersonCell({ value, users, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedUser = users.find(u => u.user_id === value);
+
+  return (
+    <div className="relative">
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex items-center gap-2"
+      >
+        {selectedUser ? (
+          <>
+            <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">
+              {selectedUser.name?.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-[#fafafa] text-sm">{selectedUser.name}</span>
+          </>
+        ) : (
+          <span className="text-[#71717a]">Assign...</span>
+        )}
+      </div>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
+          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[180px] py-1 max-h-[200px] overflow-y-auto">
+            <div
+              onClick={() => { onChange(null); setIsOpen(false); }}
+              className="px-3 py-2 text-sm text-[#71717a] hover:bg-[#3f3f46] cursor-pointer"
+            >
+              Unassign
+            </div>
+            {users.map(user => (
+              <div
+                key={user.user_id}
+                onClick={() => { onChange(user.user_id); setIsOpen(false); }}
+                className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2"
+              >
+                <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">
+                  {user.name?.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-[#fafafa] text-sm">{user.name}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============== TEMPLATE MODAL ==============
+function TemplateModal({ templates, onSelect, onCreateBlank, onClose }) {
+  const [dbName, setDbName] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+
+  const handleCreate = () => {
+    if (!dbName.trim()) {
+      toast.error('Please enter a name');
+      return;
+    }
+    if (selectedTemplate) {
+      onSelect(selectedTemplate, dbName);
+    } else {
+      onCreateBlank(dbName);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <Card className="bg-[#18181b] border-[#27272a] w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <CardHeader className="flex flex-row items-center justify-between border-b border-[#27272a]">
+          <CardTitle className="text-[#fafafa]">Create New Database</CardTitle>
+          <Button variant="ghost" onClick={onClose} className="text-[#a1a1aa]">
+            <X className="h-5 w-5" />
+          </Button>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto p-4">
+          {/* Name Input */}
+          <div className="mb-6">
+            <label className="block text-sm text-[#a1a1aa] mb-2">Database Name</label>
+            <Input
+              value={dbName}
+              onChange={(e) => setDbName(e.target.value)}
+              placeholder="Enter database name..."
+              className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+              autoFocus
+            />
+          </div>
+
+          {/* Templates */}
+          <div className="mb-4">
+            <label className="block text-sm text-[#a1a1aa] mb-3">Choose a Template (optional)</label>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Blank option */}
+              <div
+                onClick={() => setSelectedTemplate(null)}
+                className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                  selectedTemplate === null
+                    ? 'border-[#6366f1] bg-[#6366f1]/10'
+                    : 'border-[#27272a] hover:border-[#3f3f46]'
+                }`}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">📄</span>
+                  <span className="font-medium text-[#fafafa]">Blank</span>
+                </div>
+                <p className="text-xs text-[#71717a]">Start from scratch with default columns</p>
+              </div>
+
+              {/* Templates */}
+              {templates.map(template => (
+                <div
+                  key={template.id}
+                  onClick={() => setSelectedTemplate(template.id)}
+                  className={`p-4 rounded-lg border cursor-pointer transition-all ${
+                    selectedTemplate === template.id
+                      ? 'border-[#6366f1] bg-[#6366f1]/10'
+                      : 'border-[#27272a] hover:border-[#3f3f46]'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-2xl">{template.icon}</span>
+                    <span className="font-medium text-[#fafafa]">{template.name}</span>
+                  </div>
+                  <p className="text-xs text-[#71717a]">{template.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4 border-t border-[#27272a]">
+            <Button
+              onClick={onClose}
+              className="flex-1 bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreate}
+              className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+            >
+              Create Database
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
