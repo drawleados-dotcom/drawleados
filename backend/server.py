@@ -35,6 +35,7 @@ db = client[os.environ['DB_NAME']]
 init_finance_db(db)
 init_operations_db(db)
 init_hr_db(db)
+init_notion_db(db)
 
 # Create the main app
 app = FastAPI()
