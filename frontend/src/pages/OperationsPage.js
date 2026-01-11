@@ -1004,7 +1004,7 @@ function ByProjectView({ columns, projects, rows, users, expandedProjects, setEx
       {projects.length === 0 && rowsByProject.ungrouped?.length === 0 && (
         <div className="text-center py-8 text-[#71717a]">
           <FolderPlus className="h-12 w-12 mx-auto mb-3 text-[#3f3f46]" />
-          <p>No projects yet. Click "New Group" to create one.</p>
+          <p>No projects yet. Click &quot;New Group&quot; to create one.</p>
         </div>
       )}
     </div>
