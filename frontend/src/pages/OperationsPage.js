@@ -738,6 +738,7 @@ export default function OperationsPage() {
                   setExpandedProjects={setExpandedProjects}
                   onUpdateCell={handleUpdateCell}
                   onDeleteRow={handleDeleteRow}
+                  onDeleteProject={handleDeleteProject}
                   onAddRow={handleAddRow}
                   getRowsByProject={getRowsByProject}
                 />
