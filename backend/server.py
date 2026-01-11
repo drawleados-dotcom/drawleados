@@ -469,10 +469,15 @@ async def google_session(session_id: str, response: Response):
             "user_id": user_id,
             "email": data["email"],
             "name": data["name"],
-            "role": "bde",  # Default role
+            "role": "employee",  # Default role for Google OAuth users
             "picture": data.get("picture"),
             "google_id": data["id"],
             "is_active": True,
+            "module_access": ["operations", "hr"],  # Default module access
+            "project_access": [],
+            "can_create_projects": False,
+            "can_delete_tasks": False,
+            "can_manage_users": False,
             "created_at": datetime.now(timezone.utc)
         }
         await db.users.insert_one(user_doc)
