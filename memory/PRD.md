@@ -4,146 +4,58 @@
 
 ---
 
-## Recent Changes (January 11, 2026 - Session 2)
+## Recent Changes (January 11, 2026 - Latest)
 
-### New Features Implemented
-1. **Right-Click Context Menu on Database Tabs**
-   - Add to Favorites (star indicator on tab)
-   - Copy link (copies shareable URL)
-   - Duplicate (creates full copy with projects and rows)
-   - Rename (modal with input field)
-   - Open in new tab
-   - Move to Trash (with confirmation)
+### Safe Delete Confirmation Modal
+Implemented GitHub-style delete confirmation that requires typing the item name:
+- **Database Delete:** Right-click → Move to Trash → Type database name
+- **Task Delete:** Hover row → Click trash → Type task name  
+- **Project Delete:** In "By Project" view → Hover project → Click trash → Type project name
+- Features:
+  - Red warning icon and clear messaging
+  - Shows item name to be deleted
+  - Input field with exact match requirement
+  - Green "Name matches" indicator when confirmed
+  - Delete button disabled until name matches
 
-2. **Three View Modes**
-   - **Table View:** Default spreadsheet-style view with inline editing
-   - **Kanban View:** Tasks grouped by Status columns (Planning, In Progress, Review, Completed)
-   - **By Project View:** Tasks organized under collapsible project/group sections
-
-3. **Hierarchical Project Structure**
-   - "New Group" button creates projects within databases
-   - Tasks can be assigned to specific projects
-   - Projects are collapsible/expandable
-   - Tasks show under their project or "Ungrouped Tasks"
-
-4. **Operations Page UI Refactor**
-   - Clean header with database tabs
-   - View mode toggle buttons
-   - Quick status filter chips
-   - Advanced filters panel
-
-## Previous Changes (January 11, 2026 - Session 1)
-- Notion-like database system with 10 column types
-- Inline cell editing, templates, pinned tabs
-- Sidebar database navigation
-
-## Previous Changes (January 9, 2026)
-- Bug fixes for user creation
-- HR Module (Employee + Admin portals)
-- Email integration via Resend (MOCKED)
-- Deployment health endpoints
+### Previous (Same Session)
+- Right-click context menu on database tabs
+- Three view modes: Table, Kanban, By Project
+- Hierarchical project structure within databases
 
 ## Architecture
 ```
 /app/
 ├── backend/
-│   ├── server.py             # Main FastAPI app
-│   ├── notion_routes.py      # Notion-like database API (UPDATED)
-│   │   ├── /databases CRUD
-│   │   ├── /databases/{id}/duplicate (NEW)
-│   │   ├── /databases/{id}/projects CRUD (NEW)
-│   │   └── /rows with project_id support (UPDATED)
+│   ├── server.py
+│   ├── notion_routes.py      # Database, Project, Row APIs
 │   ├── hr_routes.py
 │   └── finance_routes.py
 └── frontend/
     └── src/
         ├── pages/
-        │   └── OperationsPage.js   # (REWRITTEN) Context menu + 3 views
+        │   └── OperationsPage.js   # Includes DeleteConfirmationModal
         └── components/
-            └── Sidebar.js
 ```
 
-## Key Features Summary
+## Key Features
 
 ### Operations Module ✅ COMPLETE
-- **Databases:** Create from templates or blank, full CRUD
-- **Context Menu:** Right-click on tabs for quick actions
-- **View Modes:**
-  - Table: Spreadsheet with column management
-  - Kanban: Status-based board
-  - By Project: Hierarchical grouping
-- **Projects/Groups:** Organize tasks under projects
-- **Filters:** Quick status chips + advanced filters
+- **Databases:** CRUD, templates, favorites, duplicate
+- **Context Menu:** Right-click with 6 options
+- **Views:** Table, Kanban, By Project
+- **Projects:** Create groups within databases
+- **Safe Delete:** Type-to-confirm for all deletions
 
 ### HR Module ✅ COMPLETE
 - Employee Portal: Attendance, leave, profile
-- Admin Portal: Team management, approvals
-- Email notifications (MOCKED - needs Resend API key)
+- Admin Portal: Team management
+- Email notifications (MOCKED)
 
 ### Finance Module ✅ COMPLETE
-- Invoice creation with GST
+- Invoices with GST
 - Month-wise reports
 - PDF export
-
-## API Endpoints (Updated)
-
-### Notion Database System
-```
-GET    /api/notion/databases                    - List all databases
-POST   /api/notion/databases                    - Create database
-GET    /api/notion/databases/{id}               - Get database
-PUT    /api/notion/databases/{id}               - Update (name, icon, favorite)
-DELETE /api/notion/databases/{id}               - Delete database
-POST   /api/notion/databases/{id}/duplicate     - Duplicate with all data (NEW)
-
-GET    /api/notion/databases/{id}/projects      - List projects (NEW)
-POST   /api/notion/databases/{id}/projects      - Create project (NEW)
-PUT    /api/notion/databases/{id}/projects/{p}  - Update project (NEW)
-DELETE /api/notion/databases/{id}/projects/{p}  - Delete project (NEW)
-
-GET    /api/notion/databases/{id}/rows          - Get rows
-POST   /api/notion/databases/{id}/rows          - Create row (with project_id)
-PUT    /api/notion/databases/{id}/rows/{r}/project - Move row to project (NEW)
-```
-
-## Database Schema (Updated)
-
-### notion_databases
-```json
-{
-  "database_id": "db_xxxx",
-  "name": "string",
-  "icon": "emoji",
-  "category": "string",
-  "columns": [...],
-  "is_favorite": false,
-  "is_pinned": false,
-  "created_at": "datetime"
-}
-```
-
-### notion_projects (NEW)
-```json
-{
-  "project_id": "proj_xxxx",
-  "database_id": "db_xxxx",
-  "name": "string",
-  "icon": "emoji",
-  "order": 0,
-  "created_at": "datetime"
-}
-```
-
-### notion_rows (Updated)
-```json
-{
-  "row_id": "row_xxxx",
-  "database_id": "db_xxxx",
-  "project_id": "proj_xxxx | null",  // NEW
-  "values": {...},
-  "created_at": "datetime"
-}
-```
 
 ## Test Credentials
 - **Admin:** admin@drawlead.com / admin123
@@ -152,23 +64,17 @@ PUT    /api/notion/databases/{id}/rows/{r}/project - Move row to project (NEW)
 ## Pending Tasks
 
 ### P1 (High Priority)
-- **Resend Email Config:** User must provide RESEND_API_KEY for HR notifications
-- **Code Refactoring:** Split OperationsPage.js (1539 lines) into components
+- Resend Email Config (user must provide API key)
+- Code Refactoring (split OperationsPage.js)
 
-### P2 (Medium Priority)
-- Finance Module: Payroll, GST, Budgeting tabs
-- Sales Module: CSV Import/Export
-- Replace browser prompt() with modal for New Group
+### P2 (Medium Priority)  
+- Finance: Payroll, GST, Budgeting tabs
+- Sales: CSV Import/Export
 
 ### P3 (Backlog)
 - Calendar/Timeline views
-- Partial payments
+- Drag-and-drop in Kanban
 - Audit logs
 
-## Tech Stack
-- **Backend:** FastAPI, MongoDB, Pydantic, JWT
-- **Frontend:** React, Tailwind CSS, shadcn/ui, lucide-react
-- **Testing:** Pytest (backend), Playwright (frontend)
-
 ## Known Mocked Integrations
-- **Resend Email:** Requires user's API key in backend/.env
+- **Resend Email:** Requires user's RESEND_API_KEY in backend/.env
