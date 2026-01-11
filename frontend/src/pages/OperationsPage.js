@@ -400,45 +400,29 @@ export default function OperationsPage() {
                 </Button>
               </div>
 
-              {/* Expanded Filters */}
+              {/* Expanded Advanced Filters */}
               {showFilters && (
                 <div className="mt-4 p-4 bg-[#18181b] rounded-lg border border-[#27272a]">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-medium text-[#fafafa]">Filters</h3>
+                    <h3 className="text-sm font-medium text-[#fafafa]">Advanced Filters</h3>
                     {hasActiveFilters && (
-                      <Button variant="ghost" size="sm" onClick={clearFilters} className="text-[#71717a] hover:text-[#fafafa]">
+                      <Button variant="ghost" size="sm" onClick={clearFilters} className="text-[#71717a] hover:text-[#fafafa] text-xs">
+                        <X className="h-3 w-3 mr-1" />
                         Clear all
                       </Button>
                     )}
                   </div>
-                  <div className="grid grid-cols-5 gap-4">
-                    {/* Status Filter */}
-                    {statusColumn && (
-                      <div>
-                        <label className="block text-xs text-[#71717a] mb-1">Status</label>
-                        <select
-                          value={filters.status}
-                          onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                          className="w-full p-2 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-[#fafafa]"
-                        >
-                          <option value="">All</option>
-                          {statusColumn.options?.map(opt => (
-                            <option key={opt.id} value={opt.id}>{opt.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
+                  <div className="grid grid-cols-4 gap-4">
                     {/* Priority Filter */}
                     {priorityColumn && (
                       <div>
-                        <label className="block text-xs text-[#71717a] mb-1">Priority</label>
+                        <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Priority</label>
                         <select
                           value={filters.priority}
                           onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                          className="w-full p-2 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-[#fafafa]"
+                          className="w-full p-2.5 bg-[#09090b] border border-[#27272a] rounded-lg text-sm text-[#fafafa] focus:border-[#6366f1] focus:outline-none"
                         >
-                          <option value="">All</option>
+                          <option value="">All Priorities</option>
                           {priorityColumn.options?.map(opt => (
                             <option key={opt.id} value={opt.id}>{opt.name}</option>
                           ))}
@@ -448,13 +432,13 @@ export default function OperationsPage() {
 
                     {/* Assignee Filter */}
                     <div>
-                      <label className="block text-xs text-[#71717a] mb-1">Assignee</label>
+                      <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Assignee</label>
                       <select
                         value={filters.assignee}
                         onChange={(e) => setFilters({ ...filters, assignee: e.target.value })}
-                        className="w-full p-2 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-[#fafafa]"
+                        className="w-full p-2.5 bg-[#09090b] border border-[#27272a] rounded-lg text-sm text-[#fafafa] focus:border-[#6366f1] focus:outline-none"
                       >
-                        <option value="">All</option>
+                        <option value="">All Team</option>
                         {users.map(u => (
                           <option key={u.user_id} value={u.user_id}>{u.name}</option>
                         ))}
@@ -463,23 +447,23 @@ export default function OperationsPage() {
 
                     {/* Date From */}
                     <div>
-                      <label className="block text-xs text-[#71717a] mb-1">Date From</label>
+                      <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Due After</label>
                       <Input
                         type="date"
                         value={filters.dateFrom}
                         onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                        className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                        className="bg-[#09090b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
                       />
                     </div>
 
                     {/* Date To */}
                     <div>
-                      <label className="block text-xs text-[#71717a] mb-1">Date To</label>
+                      <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Due Before</label>
                       <Input
                         type="date"
                         value={filters.dateTo}
                         onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                        className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                        className="bg-[#09090b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
                       />
                     </div>
                   </div>
