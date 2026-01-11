@@ -580,6 +580,7 @@ async def create_row(database_id: str, data: RowCreate, request: Request):
     row_doc = {
         "row_id": row_id,
         "database_id": database_id,
+        "project_id": data.project_id,  # Link to project/group
         "values": data.values,
         "created_by": user["user_id"],
         "created_at": now,
@@ -587,6 +588,20 @@ async def create_row(database_id: str, data: RowCreate, request: Request):
     }
     
     await db.notion_rows.insert_one(row_doc)
+    return await db.notion_rows.find_one({"row_id": row_id}, {"_id": 0})
+
+@notion_router.put("/databases/{database_id}/rows/{row_id}/project")
+async def update_row_project(database_id: str, row_id: str, data: Dict[str, Any], request: Request):
+    """Move a row to a different project"""
+    await get_current_user(request)
+    
+    project_id = data.get("project_id")  # Can be null to move to ungrouped
+    
+    await db.notion_rows.update_one(
+        {"row_id": row_id, "database_id": database_id},
+        {"$set": {"project_id": project_id, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
     return await db.notion_rows.find_one({"row_id": row_id}, {"_id": 0})
 
 @notion_router.put("/databases/{database_id}/rows/{row_id}")
