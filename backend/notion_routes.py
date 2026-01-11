@@ -177,6 +177,7 @@ async def create_database(data: DatabaseCreate, request: Request):
         "name": data.name,
         "icon": data.icon,
         "description": data.description,
+        "category": data.category,
         "columns": default_columns,
         "created_by": user["user_id"],
         "created_at": now,
