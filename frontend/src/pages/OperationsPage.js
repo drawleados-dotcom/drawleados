@@ -8,7 +8,7 @@ import {
   Plus, Database, ChevronDown, ChevronRight, MoreHorizontal,
   Link2, Calendar, Hash, Mail, Phone, Check, User, X,
   Trash2, Edit2, Copy, GripVertical, Search, Filter,
-  LayoutGrid, List, Table2
+  LayoutGrid, List, Table2, Pin, PinOff
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -47,21 +47,28 @@ export default function OperationsPage() {
   const [selectedDb, setSelectedDb] = useState(null);
   const [rows, setRows] = useState([]);
   const [templates, setTemplates] = useState([]);
-  const [showNewDbModal, setShowNewDbModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewType, setViewType] = useState('table');
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
+
+  // Separate pinned and unpinned databases
+  const pinnedDatabases = databases
+    .filter(db => db.is_pinned)
+    .sort((a, b) => (a.pin_order || 0) - (b.pin_order || 0));
+  
+  const unpinnedDatabases = databases.filter(db => !db.is_pinned);
 
   const loadDatabases = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/notion/databases`, { headers });
       setDatabases(res.data);
       if (res.data.length > 0 && !selectedDb) {
-        setSelectedDb(res.data[0]);
+        // Select first pinned or first database
+        const firstPinned = res.data.find(d => d.is_pinned);
+        setSelectedDb(firstPinned || res.data[0]);
       }
     } catch (error) {
       console.error('Error loading databases:', error);
@@ -113,7 +120,7 @@ export default function OperationsPage() {
       const res = await axios.post(`${API}/api/notion/databases`, { name, icon: '📋' }, { headers });
       setDatabases([res.data, ...databases]);
       setSelectedDb(res.data);
-      setShowNewDbModal(false);
+      setShowTemplateModal(false);
       toast.success('Database created');
     } catch (error) {
       toast.error('Failed to create database');
@@ -144,6 +151,16 @@ export default function OperationsPage() {
       toast.success('Database deleted');
     } catch (error) {
       toast.error('Failed to delete database');
+    }
+  };
+
+  const handleTogglePin = async (dbId) => {
+    try {
+      const res = await axios.put(`${API}/api/notion/databases/${dbId}/pin`, {}, { headers });
+      setDatabases(databases.map(d => d.database_id === dbId ? res.data : d));
+      toast.success(res.data.is_pinned ? 'Database pinned' : 'Database unpinned');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to toggle pin');
     }
   };
 
@@ -217,116 +234,173 @@ export default function OperationsPage() {
 
   return (
     <Layout>
-      <div className="h-full flex" data-testid="operations-page">
-        {/* Sidebar - Database List */}
-        <div className="w-64 bg-[#18181b] border-r border-[#27272a] flex flex-col">
-          <div className="p-4 border-b border-[#27272a]">
-            <h2 className="text-lg font-semibold text-[#fafafa] mb-3">Databases</h2>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => setShowTemplateModal(true)}
-                className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white text-sm"
-                data-testid="new-database-btn"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                New
-              </Button>
-            </div>
+      <div className="h-full flex flex-col" data-testid="operations-page">
+        {/* Top Header with Pinned Database Tabs */}
+        <div className="bg-[#18181b] border-b border-[#27272a]">
+          {/* Page Title */}
+          <div className="px-6 pt-4 pb-2">
+            <h1 className="text-2xl font-bold text-[#fafafa]">Operations</h1>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-2">
-            {databases.map(db => (
-              <div
+          {/* Pinned Database Tabs */}
+          <div className="px-4 flex items-center gap-1 overflow-x-auto">
+            {pinnedDatabases.map(db => (
+              <button
                 key={db.database_id}
                 onClick={() => setSelectedDb(db)}
-                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer group ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-all whitespace-nowrap ${
                   selectedDb?.database_id === db.database_id
-                    ? 'bg-[#27272a] text-[#fafafa]'
-                    : 'text-[#a1a1aa] hover:bg-[#27272a]/50'
+                    ? 'bg-[#09090b] text-[#fafafa] border-t border-x border-[#27272a]'
+                    : 'text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#27272a]/50'
                 }`}
               >
-                <span className="text-lg">{db.icon}</span>
-                <span className="flex-1 truncate text-sm">{db.name}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => { e.stopPropagation(); handleDeleteDatabase(db.database_id); }}
-                  className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-[#71717a] hover:text-red-400"
+                <span>{db.icon}</span>
+                <span>{db.name}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleTogglePin(db.database_id); }}
+                  className="ml-1 p-0.5 rounded hover:bg-[#3f3f46]"
+                  title="Unpin"
                 >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
-              </div>
+                  <PinOff className="h-3 w-3" />
+                </button>
+              </button>
             ))}
             
-            {databases.length === 0 && (
-              <p className="text-center text-[#71717a] text-sm py-4">No databases yet</p>
+            {pinnedDatabases.length === 0 && (
+              <div className="px-4 py-2 text-sm text-[#71717a]">
+                Pin databases to show them as tabs (max 5)
+              </div>
             )}
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col bg-[#09090b]">
-          {selectedDb ? (
-            <>
-              {/* Database Header */}
-              <div className="p-4 border-b border-[#27272a]">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl">{selectedDb.icon}</span>
-                    <h1 className="text-2xl font-bold text-[#fafafa]">{selectedDb.name}</h1>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71717a]" />
-                      <Input
-                        placeholder="Search..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9 w-64 bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
-                      />
-                    </div>
+        {/* Main Content Area */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar - All Databases */}
+          <div className="w-64 bg-[#18181b] border-r border-[#27272a] flex flex-col">
+            <div className="p-4 border-b border-[#27272a]">
+              <h2 className="text-sm font-semibold text-[#a1a1aa] uppercase tracking-wider mb-3">All Databases</h2>
+              <Button
+                onClick={() => setShowTemplateModal(true)}
+                className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white text-sm"
+                data-testid="new-database-btn"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                New Database
+              </Button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-2">
+              {databases.map(db => (
+                <div
+                  key={db.database_id}
+                  onClick={() => setSelectedDb(db)}
+                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer group mb-1 ${
+                    selectedDb?.database_id === db.database_id
+                      ? 'bg-[#27272a] text-[#fafafa]'
+                      : 'text-[#a1a1aa] hover:bg-[#27272a]/50'
+                  }`}
+                >
+                  <span className="text-lg">{db.icon}</span>
+                  <span className="flex-1 truncate text-sm">{db.name}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                     <Button
-                      onClick={handleAddRow}
-                      className="bg-[#10b981] hover:bg-[#059669] text-white"
-                      data-testid="add-row-btn"
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleTogglePin(db.database_id); }}
+                      className={`h-6 w-6 p-0 ${db.is_pinned ? 'text-[#6366f1]' : 'text-[#71717a] hover:text-[#fafafa]'}`}
+                      title={db.is_pinned ? 'Unpin' : 'Pin to tabs'}
                     >
-                      <Plus className="h-4 w-4 mr-1" />
-                      New
+                      {db.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteDatabase(db.database_id); }}
+                      className="h-6 w-6 p-0 text-[#71717a] hover:text-red-400"
+                    >
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
-              </div>
-
-              {/* Table View */}
-              <div className="flex-1 overflow-auto p-4">
-                <NotionTable
-                  columns={selectedDb.columns}
-                  rows={filteredRows}
-                  users={users}
-                  onUpdateCell={handleUpdateCell}
-                  onDeleteRow={handleDeleteRow}
-                  onAddColumn={handleAddColumn}
-                  onDeleteColumn={handleDeleteColumn}
-                  onAddRow={handleAddRow}
-                />
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <Database className="h-16 w-16 text-[#3f3f46] mx-auto mb-4" />
-                <h2 className="text-xl font-semibold text-[#fafafa] mb-2">No database selected</h2>
-                <p className="text-[#a1a1aa] mb-4">Create a new database or select one from the sidebar</p>
-                <Button
-                  onClick={() => setShowTemplateModal(true)}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Database
-                </Button>
-              </div>
+              ))}
+              
+              {databases.length === 0 && (
+                <p className="text-center text-[#71717a] text-sm py-4">No databases yet</p>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Main Content - Table View */}
+          <div className="flex-1 flex flex-col bg-[#09090b] overflow-hidden">
+            {selectedDb ? (
+              <>
+                {/* Database Header */}
+                <div className="p-4 border-b border-[#27272a] flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{selectedDb.icon}</span>
+                      <h2 className="text-xl font-bold text-[#fafafa]">{selectedDb.name}</h2>
+                      {selectedDb.is_pinned && (
+                        <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">
+                          <Pin className="h-3 w-3 mr-1" />
+                          Pinned
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71717a]" />
+                        <Input
+                          placeholder="Search..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9 w-64 bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                        />
+                      </div>
+                      <Button
+                        onClick={handleAddRow}
+                        className="bg-[#10b981] hover:bg-[#059669] text-white"
+                        data-testid="add-row-btn"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        New Row
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table View */}
+                <div className="flex-1 overflow-auto p-4">
+                  <NotionTable
+                    columns={selectedDb.columns}
+                    rows={filteredRows}
+                    users={users}
+                    onUpdateCell={handleUpdateCell}
+                    onDeleteRow={handleDeleteRow}
+                    onAddColumn={handleAddColumn}
+                    onDeleteColumn={handleDeleteColumn}
+                    onAddRow={handleAddRow}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <Database className="h-16 w-16 text-[#3f3f46] mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold text-[#fafafa] mb-2">No database selected</h2>
+                  <p className="text-[#a1a1aa] mb-4">Create a new database or select one from the sidebar</p>
+                  <Button
+                    onClick={() => setShowTemplateModal(true)}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Database
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Template Selection Modal */}
@@ -396,30 +470,30 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                 </div>
               </th>
             ))}
-            <th className="w-32 p-2">
+            <th className="w-40 p-2">
               {showAddColumn ? (
                 <div className="flex items-center gap-1">
                   <Input
                     value={newColumnName}
                     onChange={(e) => setNewColumnName(e.target.value)}
                     placeholder="Name"
-                    className="h-7 text-xs bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="h-7 text-xs bg-[#27272a] border-[#3f3f46] text-[#fafafa] w-24"
                     autoFocus
                     onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
                   />
                   <select
                     value={newColumnType}
                     onChange={(e) => setNewColumnType(e.target.value)}
-                    className="h-7 text-xs bg-[#27272a] border border-[#3f3f46] rounded text-[#fafafa]"
+                    className="h-7 text-xs bg-[#27272a] border border-[#3f3f46] rounded text-[#fafafa] px-1"
                   >
                     {COLUMN_TYPES.map(t => (
                       <option key={t.type} value={t.type}>{t.name}</option>
                     ))}
                   </select>
-                  <Button size="sm" onClick={handleAddColumn} className="h-7 bg-[#10b981] hover:bg-[#059669]">
+                  <Button size="sm" onClick={handleAddColumn} className="h-7 px-2 bg-[#10b981] hover:bg-[#059669]">
                     <Check className="h-3 w-3" />
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowAddColumn(false)} className="h-7">
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddColumn(false)} className="h-7 px-2">
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
