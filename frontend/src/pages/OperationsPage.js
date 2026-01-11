@@ -472,7 +472,7 @@ export default function OperationsPage() {
             </div>
 
             {/* Table */}
-            <div className="flex-1 overflow-auto p-6">
+            <div className="flex-1 overflow-auto px-6 pb-6">
               <NotionTable
                 columns={selectedDb.columns}
                 rows={filteredRows}
