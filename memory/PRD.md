@@ -16,6 +16,12 @@
   - Payslips download
   - Performance reviews (Q1-Q4)
   - Access control: Employees restricted to Dashboard, Operations, HR only
+- **HR Admin Module:** Built admin dashboard for HR management
+  - Dashboard with employee stats (total, present, absent, WFH, pending leaves)
+  - Employee management with profile editing
+  - Leave request approval/rejection with email notifications
+  - Team attendance overview
+- **Deployment Fix:** Added `/health` endpoint for Kubernetes health checks
 
 ## Overview
 Drawlead OS is a **private internal ERP** for Drawlead digital agency. NOT a SaaS - fully owned by one company with no public signup, no subscriptions, no credits.
