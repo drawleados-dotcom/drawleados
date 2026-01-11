@@ -207,7 +207,7 @@ async def update_database(database_id: str, data: Dict[str, Any], request: Reque
     """Update database properties"""
     await get_current_user(request)
     
-    allowed_fields = ["name", "icon", "description", "is_pinned", "pin_order"]
+    allowed_fields = ["name", "icon", "description", "is_pinned", "pin_order", "category", "is_favorite"]
     update_data = {k: v for k, v in data.items() if k in allowed_fields}
     update_data["updated_at"] = datetime.now(timezone.utc)
     
@@ -217,6 +217,73 @@ async def update_database(database_id: str, data: Dict[str, Any], request: Reque
     )
     
     return await db.notion_databases.find_one({"database_id": database_id}, {"_id": 0})
+
+@notion_router.post("/databases/{database_id}/duplicate")
+async def duplicate_database(database_id: str, request: Request):
+    """Duplicate a database with all its projects and rows"""
+    user = await get_current_user(request)
+    
+    # Get original database
+    original = await db.notion_databases.find_one({"database_id": database_id})
+    if not original:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    # Create new database
+    new_database_id = f"db_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    new_database = {
+        "database_id": new_database_id,
+        "name": f"{original['name']} (Copy)",
+        "icon": original.get("icon", "📋"),
+        "description": original.get("description", ""),
+        "category": original.get("category", ""),
+        "columns": original.get("columns", []),
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.notion_databases.insert_one(new_database)
+    
+    # Duplicate projects
+    projects = await db.notion_projects.find({"database_id": database_id}).to_list(100)
+    project_id_map = {}
+    
+    for project in projects:
+        new_project_id = f"proj_{uuid.uuid4().hex[:12]}"
+        project_id_map[project["project_id"]] = new_project_id
+        
+        new_project = {
+            "project_id": new_project_id,
+            "database_id": new_database_id,
+            "name": project["name"],
+            "icon": project.get("icon", "📁"),
+            "order": project.get("order", 0),
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.notion_projects.insert_one(new_project)
+    
+    # Duplicate rows
+    rows = await db.notion_rows.find({"database_id": database_id}).to_list(1000)
+    for row in rows:
+        new_row_id = f"row_{uuid.uuid4().hex[:12]}"
+        old_project_id = row.get("project_id")
+        new_project_id = project_id_map.get(old_project_id) if old_project_id else None
+        
+        new_row = {
+            "row_id": new_row_id,
+            "database_id": new_database_id,
+            "project_id": new_project_id,
+            "values": row.get("values", {}),
+            "created_by": user["user_id"],
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.notion_rows.insert_one(new_row)
+    
+    return await db.notion_databases.find_one({"database_id": new_database_id}, {"_id": 0})
 
 @notion_router.put("/databases/{database_id}/pin")
 async def toggle_pin_database(database_id: str, request: Request):
