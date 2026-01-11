@@ -21,6 +21,7 @@ sys.path.append(str(Path(__file__).parent))
 from finance_routes import finance_router, init_finance_db
 from operations_routes import operations_router, init_operations_db
 from hr_routes import hr_router, init_hr_db
+from notion_routes import notion_router, init_notion_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
