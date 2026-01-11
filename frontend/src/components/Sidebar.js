@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -8,48 +8,63 @@ import {
   LogOut,
   Package,
   TrendingUp,
-  FileText,
   DollarSign,
   UserCircle,
   Shield,
+  ChevronRight,
+  ChevronDown,
+  Plus,
+  Database,
 } from 'lucide-react';
 import { Button } from './ui/button';
+import axios from 'axios';
+
+const API = process.env.REACT_APP_BACKEND_URL;
 
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuth();
+  const [databases, setDatabases] = useState([]);
+  const [operationsExpanded, setOperationsExpanded] = useState(true);
+
+  const token = localStorage.getItem('session_token');
 
   // Check if user is employee or BDE (restricted access)
   const isEmployee = user?.role === 'employee' || user?.role === 'bde';
   const isProjectManager = user?.role === 'project_manager';
   const canManageHR = isAdmin || isProjectManager;
 
-  // Build menu items based on role
-  const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    // Leads - NOT for employees
-    ...(!isEmployee ? [{ icon: Users, label: 'Leads', path: '/leads' }] : []),
-    // Operations - for everyone
-    { icon: Package, label: 'Operations', path: '/operations' },
-    // HR - for everyone
-    { icon: UserCircle, label: 'HR', path: '/hr' },
-    // HR Admin - Admin/Manager only
-    ...(canManageHR ? [{ icon: Shield, label: 'HR Admin', path: '/hr-admin' }] : []),
-    // Reports - NOT for employees
-    ...(!isEmployee ? [{ icon: TrendingUp, label: 'Reports', path: '/reports' }] : []),
-    // Finance - Admin only
-    ...(isAdmin ? [{ icon: DollarSign, label: 'Finance', path: '/finance' }] : []),
-    // Services - NOT for employees
-    ...(!isEmployee ? [{ icon: Package, label: 'Services', path: '/services' }] : []),
-    // Settings - Admin only
-    ...(isAdmin ? [{ icon: Settings, label: 'Settings', path: '/settings' }] : []),
-  ];
+  // Load databases for operations submenu
+  const loadDatabases = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API}/api/notion/databases`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDatabases(res.data || []);
+    } catch (error) {
+      console.error('Error loading databases:', error);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadDatabases();
+  }, [loadDatabases]);
+
+  // Expand Operations if we're on that page
+  useEffect(() => {
+    if (location.pathname.startsWith('/operations')) {
+      setOperationsExpanded(true);
+    }
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
+
+  const isOperationsActive = location.pathname.startsWith('/operations');
 
   return (
     <div
@@ -67,26 +82,186 @@ const Sidebar = () => {
         </h1>
       </div>
 
-      <nav className="flex-1 px-4 space-y-2">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path;
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              data-testid={`nav-${item.label.toLowerCase()}`}
-              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-300 ${
-                isActive
-                  ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                  : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-              }`}
-            >
-              <Icon className="h-5 w-5" strokeWidth={1.5} />
-              {item.label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+        {/* Dashboard */}
+        <Link
+          to="/dashboard"
+          data-testid="nav-dashboard"
+          className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+            location.pathname === '/dashboard'
+              ? 'bg-[#6366f1]/15 text-[#6366f1]'
+              : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+          }`}
+        >
+          <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />
+          Dashboard
+        </Link>
+
+        {/* Leads - NOT for employees */}
+        {!isEmployee && (
+          <Link
+            to="/leads"
+            data-testid="nav-leads"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              location.pathname === '/leads'
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            <Users className="h-5 w-5" strokeWidth={1.5} />
+            Leads
+          </Link>
+        )}
+
+        {/* Operations with nested databases */}
+        <div>
+          <button
+            onClick={() => setOperationsExpanded(!operationsExpanded)}
+            data-testid="nav-operations"
+            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              isOperationsActive
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            {operationsExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            <Package className="h-5 w-5" strokeWidth={1.5} />
+            <span className="flex-1 text-left">Operations</span>
+          </button>
+
+          {/* Nested Databases */}
+          {operationsExpanded && (
+            <div className="ml-4 mt-1 space-y-0.5 border-l border-[#27272a] pl-3">
+              {databases.map((db) => (
+                <Link
+                  key={db.database_id}
+                  to={`/operations?db=${db.database_id}`}
+                  className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-all ${
+                    location.search.includes(db.database_id)
+                      ? 'bg-[#27272a] text-[#fafafa]'
+                      : 'text-[#71717a] hover:bg-[#27272a]/50 hover:text-[#a1a1aa]'
+                  }`}
+                >
+                  <span className="text-base">{db.icon || '📋'}</span>
+                  <span className="truncate">{db.name}</span>
+                </Link>
+              ))}
+
+              {databases.length === 0 && (
+                <div className="px-3 py-2 text-xs text-[#52525b]">
+                  No databases yet
+                </div>
+              )}
+
+              {/* Add New Database Link */}
+              <Link
+                to="/operations"
+                className="flex items-center gap-2 px-3 py-2 text-sm text-[#52525b] hover:text-[#a1a1aa] rounded-lg transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Database</span>
+              </Link>
+            </div>
+          )}
+        </div>
+
+        {/* HR - for everyone */}
+        <Link
+          to="/hr"
+          data-testid="nav-hr"
+          className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+            location.pathname === '/hr'
+              ? 'bg-[#6366f1]/15 text-[#6366f1]'
+              : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+          }`}
+        >
+          <UserCircle className="h-5 w-5" strokeWidth={1.5} />
+          HR
+        </Link>
+
+        {/* HR Admin - Admin/Manager only */}
+        {canManageHR && (
+          <Link
+            to="/hr-admin"
+            data-testid="nav-hr-admin"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              location.pathname === '/hr-admin'
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            <Shield className="h-5 w-5" strokeWidth={1.5} />
+            HR Admin
+          </Link>
+        )}
+
+        {/* Reports - NOT for employees */}
+        {!isEmployee && (
+          <Link
+            to="/reports"
+            data-testid="nav-reports"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              location.pathname === '/reports'
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            <TrendingUp className="h-5 w-5" strokeWidth={1.5} />
+            Reports
+          </Link>
+        )}
+
+        {/* Finance - Admin only */}
+        {isAdmin && (
+          <Link
+            to="/finance"
+            data-testid="nav-finance"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              location.pathname === '/finance'
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            <DollarSign className="h-5 w-5" strokeWidth={1.5} />
+            Finance
+          </Link>
+        )}
+
+        {/* Services - NOT for employees */}
+        {!isEmployee && (
+          <Link
+            to="/services"
+            data-testid="nav-services"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              location.pathname === '/services'
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            <Package className="h-5 w-5" strokeWidth={1.5} />
+            Services
+          </Link>
+        )}
+
+        {/* Settings - Admin only */}
+        {isAdmin && (
+          <Link
+            to="/settings"
+            data-testid="nav-settings"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              location.pathname === '/settings'
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            <Settings className="h-5 w-5" strokeWidth={1.5} />
+            Settings
+          </Link>
+        )}
       </nav>
 
       <div className="p-4 border-t border-[#27272a]">
