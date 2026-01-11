@@ -2,13 +2,10 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { 
-  Plus, Database, ChevronDown, ChevronRight, MoreHorizontal,
-  Link2, Calendar, Hash, Mail, Phone, Check, User, X,
-  Trash2, Edit2, Copy, GripVertical, Search, Filter,
-  LayoutGrid, List, Table2, Pin, PinOff
+  Plus, ChevronDown, Link2, Calendar, Hash, Mail, Phone, Check, User, X,
+  Trash2, Search, Filter, SlidersHorizontal, Database
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -30,16 +27,16 @@ const COLUMN_ICONS = {
 };
 
 const COLUMN_TYPES = [
-  { type: 'text', name: 'Text', icon: 'Aa' },
-  { type: 'number', name: 'Number', icon: '#' },
-  { type: 'select', name: 'Select', icon: '▼' },
-  { type: 'multi_select', name: 'Multi-select', icon: '⊞' },
-  { type: 'date', name: 'Date', icon: '📅' },
-  { type: 'url', name: 'URL', icon: '🔗' },
-  { type: 'email', name: 'Email', icon: '✉️' },
-  { type: 'phone', name: 'Phone', icon: '📞' },
-  { type: 'checkbox', name: 'Checkbox', icon: '☑️' },
-  { type: 'person', name: 'Person', icon: '👤' }
+  { type: 'text', name: 'Text' },
+  { type: 'number', name: 'Number' },
+  { type: 'select', name: 'Select' },
+  { type: 'multi_select', name: 'Multi-select' },
+  { type: 'date', name: 'Date' },
+  { type: 'url', name: 'URL' },
+  { type: 'email', name: 'Email' },
+  { type: 'phone', name: 'Phone' },
+  { type: 'checkbox', name: 'Checkbox' },
+  { type: 'person', name: 'Person' }
 ];
 
 export default function OperationsPage() {
@@ -49,24 +46,44 @@ export default function OperationsPage() {
   const [templates, setTemplates] = useState([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [users, setUsers] = useState([]);
+  
+  // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    status: '',
+    priority: '',
+    assignee: '',
+    dateFrom: '',
+    dateTo: ''
+  });
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
-  // Separate pinned and unpinned databases
+  // Get pinned databases for tabs
   const pinnedDatabases = databases
     .filter(db => db.is_pinned)
     .sort((a, b) => (a.pin_order || 0) - (b.pin_order || 0));
-  
-  const unpinnedDatabases = databases.filter(db => !db.is_pinned);
 
   const loadDatabases = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/notion/databases`, { headers });
       setDatabases(res.data);
+      
+      // Select from URL param or first pinned or first database
+      const params = new URLSearchParams(window.location.search);
+      const dbId = params.get('db');
+      
+      if (dbId) {
+        const found = res.data.find(d => d.database_id === dbId);
+        if (found) {
+          setSelectedDb(found);
+          return;
+        }
+      }
+      
       if (res.data.length > 0 && !selectedDb) {
-        // Select first pinned or first database
         const firstPinned = res.data.find(d => d.is_pinned);
         setSelectedDb(firstPinned || res.data[0]);
       }
@@ -133,34 +150,9 @@ export default function OperationsPage() {
       setDatabases([res.data, ...databases]);
       setSelectedDb(res.data);
       setShowTemplateModal(false);
-      toast.success('Database created from template');
+      toast.success('Database created');
     } catch (error) {
       toast.error('Failed to create database');
-    }
-  };
-
-  const handleDeleteDatabase = async (dbId) => {
-    if (!window.confirm('Delete this database and all its data?')) return;
-    try {
-      await axios.delete(`${API}/api/notion/databases/${dbId}`, { headers });
-      const newDbs = databases.filter(d => d.database_id !== dbId);
-      setDatabases(newDbs);
-      if (selectedDb?.database_id === dbId) {
-        setSelectedDb(newDbs[0] || null);
-      }
-      toast.success('Database deleted');
-    } catch (error) {
-      toast.error('Failed to delete database');
-    }
-  };
-
-  const handleTogglePin = async (dbId) => {
-    try {
-      const res = await axios.put(`${API}/api/notion/databases/${dbId}/pin`, {}, { headers });
-      setDatabases(databases.map(d => d.database_id === dbId ? res.data : d));
-      toast.success(res.data.is_pinned ? 'Database pinned' : 'Database unpinned');
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to toggle pin');
     }
   };
 
@@ -169,8 +161,9 @@ export default function OperationsPage() {
     try {
       const res = await axios.post(`${API}/api/notion/databases/${selectedDb.database_id}/rows`, { values: {} }, { headers });
       setRows([...rows, res.data]);
+      toast.success('Task added');
     } catch (error) {
-      toast.error('Failed to add row');
+      toast.error('Failed to add task');
     }
   };
 
@@ -182,7 +175,7 @@ export default function OperationsPage() {
       );
       setRows(rows.map(r => r.row_id === rowId ? { ...r, values: { ...r.values, [columnId]: value } } : r));
     } catch (error) {
-      toast.error('Failed to update cell');
+      toast.error('Failed to update');
     }
   };
 
@@ -190,8 +183,9 @@ export default function OperationsPage() {
     try {
       await axios.delete(`${API}/api/notion/databases/${selectedDb.database_id}/rows/${rowId}`, { headers });
       setRows(rows.filter(r => r.row_id !== rowId));
+      toast.success('Task deleted');
     } catch (error) {
-      toast.error('Failed to delete row');
+      toast.error('Failed to delete');
     }
   };
 
@@ -219,191 +213,279 @@ export default function OperationsPage() {
         ...selectedDb,
         columns: selectedDb.columns.filter(c => c.column_id !== columnId)
       });
-      toast.success('Column deleted');
     } catch (error) {
       toast.error('Failed to delete column');
     }
   };
 
+  // Apply filters
   const filteredRows = rows.filter(row => {
-    if (!searchQuery) return true;
-    return Object.values(row.values || {}).some(val => 
-      String(val).toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Search filter
+    if (searchQuery) {
+      const matches = Object.values(row.values || {}).some(val => 
+        String(val).toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      if (!matches) return false;
+    }
+
+    // Status filter
+    if (filters.status) {
+      const statusCol = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'status');
+      if (statusCol) {
+        const rowStatus = row.values?.[statusCol.column_id];
+        if (rowStatus !== filters.status) return false;
+      }
+    }
+
+    // Priority filter
+    if (filters.priority) {
+      const priorityCol = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'priority');
+      if (priorityCol) {
+        const rowPriority = row.values?.[priorityCol.column_id];
+        if (rowPriority !== filters.priority) return false;
+      }
+    }
+
+    // Assignee filter
+    if (filters.assignee) {
+      const personCol = selectedDb?.columns?.find(c => c.type === 'person');
+      if (personCol) {
+        const rowAssignee = row.values?.[personCol.column_id];
+        if (rowAssignee !== filters.assignee) return false;
+      }
+    }
+
+    // Date range filter
+    if (filters.dateFrom || filters.dateTo) {
+      const dateCol = selectedDb?.columns?.find(c => c.type === 'date');
+      if (dateCol) {
+        const rowDate = row.values?.[dateCol.column_id];
+        if (rowDate) {
+          const date = new Date(rowDate);
+          if (filters.dateFrom && date < new Date(filters.dateFrom)) return false;
+          if (filters.dateTo && date > new Date(filters.dateTo)) return false;
+        }
+      }
+    }
+
+    return true;
   });
+
+  // Get filter options
+  const statusColumn = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'status');
+  const priorityColumn = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'priority');
+
+  const clearFilters = () => {
+    setFilters({ status: '', priority: '', assignee: '', dateFrom: '', dateTo: '' });
+    setSearchQuery('');
+  };
+
+  const hasActiveFilters = Object.values(filters).some(v => v) || searchQuery;
 
   return (
     <Layout>
-      <div className="h-full flex flex-col" data-testid="operations-page">
-        {/* Top Header with Pinned Database Tabs */}
-        <div className="bg-[#18181b] border-b border-[#27272a]">
-          {/* Page Title */}
-          <div className="px-6 pt-4 pb-2">
+      <div className="h-full flex flex-col bg-[#09090b]" data-testid="operations-page">
+        {/* Header with Pinned Tabs */}
+        <div className="bg-[#18181b] border-b border-[#27272a] px-6 py-4">
+          <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold text-[#fafafa]">Operations</h1>
+            <Button
+              onClick={() => setShowTemplateModal(true)}
+              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Project
+            </Button>
           </div>
-          
+
           {/* Pinned Database Tabs */}
-          <div className="px-4 flex items-center gap-1 overflow-x-auto">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {pinnedDatabases.map(db => (
               <button
                 key={db.database_id}
                 onClick={() => setSelectedDb(db)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                   selectedDb?.database_id === db.database_id
-                    ? 'bg-[#09090b] text-[#fafafa] border-t border-x border-[#27272a]'
-                    : 'text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#27272a]/50'
+                    ? 'bg-[#6366f1] text-white'
+                    : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46] hover:text-white'
                 }`}
               >
                 <span>{db.icon}</span>
                 <span>{db.name}</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleTogglePin(db.database_id); }}
-                  className="ml-1 p-0.5 rounded hover:bg-[#3f3f46]"
-                  title="Unpin"
-                >
-                  <PinOff className="h-3 w-3" />
-                </button>
               </button>
             ))}
             
-            {pinnedDatabases.length === 0 && (
-              <div className="px-4 py-2 text-sm text-[#71717a]">
-                Pin databases to show them as tabs (max 5)
-              </div>
+            {pinnedDatabases.length === 0 && databases.length > 0 && (
+              <p className="text-sm text-[#71717a]">Pin databases from sidebar to show as tabs</p>
             )}
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Sidebar - All Databases */}
-          <div className="w-64 bg-[#18181b] border-r border-[#27272a] flex flex-col">
-            <div className="p-4 border-b border-[#27272a]">
-              <h2 className="text-sm font-semibold text-[#a1a1aa] uppercase tracking-wider mb-3">All Databases</h2>
-              <Button
-                onClick={() => setShowTemplateModal(true)}
-                className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white text-sm"
-                data-testid="new-database-btn"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                New Database
-              </Button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-2">
-              {databases.map(db => (
-                <div
-                  key={db.database_id}
-                  onClick={() => setSelectedDb(db)}
-                  className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer group mb-1 ${
-                    selectedDb?.database_id === db.database_id
-                      ? 'bg-[#27272a] text-[#fafafa]'
-                      : 'text-[#a1a1aa] hover:bg-[#27272a]/50'
-                  }`}
-                >
-                  <span className="text-lg">{db.icon}</span>
-                  <span className="flex-1 truncate text-sm">{db.name}</span>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => { e.stopPropagation(); handleTogglePin(db.database_id); }}
-                      className={`h-6 w-6 p-0 ${db.is_pinned ? 'text-[#6366f1]' : 'text-[#71717a] hover:text-[#fafafa]'}`}
-                      title={db.is_pinned ? 'Unpin' : 'Pin to tabs'}
-                    >
-                      {db.is_pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => { e.stopPropagation(); handleDeleteDatabase(db.database_id); }}
-                      className="h-6 w-6 p-0 text-[#71717a] hover:text-red-400"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+        {selectedDb ? (
+          <>
+            {/* Toolbar */}
+            <div className="px-6 py-3 border-b border-[#27272a] bg-[#0c0a09]">
+              <div className="flex items-center justify-between gap-4">
+                {/* Left side - Database info & Add Task */}
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{selectedDb.icon}</span>
+                    <h2 className="text-lg font-semibold text-[#fafafa]">{selectedDb.name}</h2>
+                    <Badge className="bg-[#27272a] text-[#a1a1aa]">{filteredRows.length} tasks</Badge>
                   </div>
-                </div>
-              ))}
-              
-              {databases.length === 0 && (
-                <p className="text-center text-[#71717a] text-sm py-4">No databases yet</p>
-              )}
-            </div>
-          </div>
-
-          {/* Main Content - Table View */}
-          <div className="flex-1 flex flex-col bg-[#09090b] overflow-hidden">
-            {selectedDb ? (
-              <>
-                {/* Database Header */}
-                <div className="p-4 border-b border-[#27272a] flex-shrink-0">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">{selectedDb.icon}</span>
-                      <h2 className="text-xl font-bold text-[#fafafa]">{selectedDb.name}</h2>
-                      {selectedDb.is_pinned && (
-                        <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">
-                          <Pin className="h-3 w-3 mr-1" />
-                          Pinned
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71717a]" />
-                        <Input
-                          placeholder="Search..."
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-9 w-64 bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
-                        />
-                      </div>
-                      <Button
-                        onClick={handleAddRow}
-                        className="bg-[#10b981] hover:bg-[#059669] text-white"
-                        data-testid="add-row-btn"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        New Row
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Table View */}
-                <div className="flex-1 overflow-auto p-4">
-                  <NotionTable
-                    columns={selectedDb.columns}
-                    rows={filteredRows}
-                    users={users}
-                    onUpdateCell={handleUpdateCell}
-                    onDeleteRow={handleDeleteRow}
-                    onAddColumn={handleAddColumn}
-                    onDeleteColumn={handleDeleteColumn}
-                    onAddRow={handleAddRow}
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <Database className="h-16 w-16 text-[#3f3f46] mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold text-[#fafafa] mb-2">No database selected</h2>
-                  <p className="text-[#a1a1aa] mb-4">Create a new database or select one from the sidebar</p>
                   <Button
-                    onClick={() => setShowTemplateModal(true)}
-                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    onClick={handleAddRow}
+                    className="bg-[#10b981] hover:bg-[#059669] text-white"
+                    data-testid="add-task-btn"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Database
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Task
+                  </Button>
+                </div>
+
+                {/* Right side - Search & Filters */}
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71717a]" />
+                    <Input
+                      placeholder="Search tasks..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 w-64 bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`${showFilters || hasActiveFilters ? 'bg-[#6366f1] text-white' : 'bg-[#27272a] text-[#a1a1aa]'} hover:bg-[#3f3f46]`}
+                  >
+                    <SlidersHorizontal className="h-4 w-4 mr-2" />
+                    Filters
+                    {hasActiveFilters && (
+                      <Badge className="ml-2 bg-white/20 text-white text-xs">Active</Badge>
+                    )}
                   </Button>
                 </div>
               </div>
-            )}
-          </div>
-        </div>
 
-        {/* Template Selection Modal */}
+              {/* Expanded Filters */}
+              {showFilters && (
+                <div className="mt-4 p-4 bg-[#18181b] rounded-lg border border-[#27272a]">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-[#fafafa]">Filters</h3>
+                    {hasActiveFilters && (
+                      <Button variant="ghost" size="sm" onClick={clearFilters} className="text-[#71717a] hover:text-[#fafafa]">
+                        Clear all
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-5 gap-4">
+                    {/* Status Filter */}
+                    {statusColumn && (
+                      <div>
+                        <label className="block text-xs text-[#71717a] mb-1">Status</label>
+                        <select
+                          value={filters.status}
+                          onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                          className="w-full p-2 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-[#fafafa]"
+                        >
+                          <option value="">All</option>
+                          {statusColumn.options?.map(opt => (
+                            <option key={opt.id} value={opt.id}>{opt.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Priority Filter */}
+                    {priorityColumn && (
+                      <div>
+                        <label className="block text-xs text-[#71717a] mb-1">Priority</label>
+                        <select
+                          value={filters.priority}
+                          onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
+                          className="w-full p-2 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-[#fafafa]"
+                        >
+                          <option value="">All</option>
+                          {priorityColumn.options?.map(opt => (
+                            <option key={opt.id} value={opt.id}>{opt.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Assignee Filter */}
+                    <div>
+                      <label className="block text-xs text-[#71717a] mb-1">Assignee</label>
+                      <select
+                        value={filters.assignee}
+                        onChange={(e) => setFilters({ ...filters, assignee: e.target.value })}
+                        className="w-full p-2 bg-[#27272a] border border-[#3f3f46] rounded-lg text-sm text-[#fafafa]"
+                      >
+                        <option value="">All</option>
+                        {users.map(u => (
+                          <option key={u.user_id} value={u.user_id}>{u.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Date From */}
+                    <div>
+                      <label className="block text-xs text-[#71717a] mb-1">Date From</label>
+                      <Input
+                        type="date"
+                        value={filters.dateFrom}
+                        onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                        className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                      />
+                    </div>
+
+                    {/* Date To */}
+                    <div>
+                      <label className="block text-xs text-[#71717a] mb-1">Date To</label>
+                      <Input
+                        type="date"
+                        value={filters.dateTo}
+                        onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                        className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 overflow-auto p-6">
+              <NotionTable
+                columns={selectedDb.columns}
+                rows={filteredRows}
+                users={users}
+                onUpdateCell={handleUpdateCell}
+                onDeleteRow={handleDeleteRow}
+                onAddColumn={handleAddColumn}
+                onDeleteColumn={handleDeleteColumn}
+                onAddRow={handleAddRow}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <Database className="h-16 w-16 text-[#3f3f46] mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-[#fafafa] mb-2">No project selected</h2>
+              <p className="text-[#a1a1aa] mb-4">Select a project from the sidebar or create a new one</p>
+              <Button
+                onClick={() => setShowTemplateModal(true)}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Project
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Template Modal */}
         {showTemplateModal && (
           <TemplateModal
             templates={templates}
@@ -417,7 +499,7 @@ export default function OperationsPage() {
   );
 }
 
-// ============== NOTION TABLE COMPONENT ==============
+// ============== NOTION TABLE ==============
 function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddColumn, onDeleteColumn, onAddRow }) {
   const [editingCell, setEditingCell] = useState(null);
   const [showAddColumn, setShowAddColumn] = useState(false);
@@ -428,7 +510,6 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
 
   const handleAddColumn = () => {
     if (!newColumnName.trim()) return;
-    
     let options = [];
     if (newColumnType === 'select' || newColumnType === 'multi_select') {
       options = [
@@ -437,7 +518,6 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
         { id: 'opt_3', name: 'Option 3', color: '#10b981' }
       ];
     }
-    
     onAddColumn(newColumnName, newColumnType, options);
     setNewColumnName('');
     setNewColumnType('text');
@@ -445,16 +525,16 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
   };
 
   return (
-    <div className="min-w-full">
-      <table className="w-full border-collapse">
+    <div className="bg-[#18181b] rounded-lg border border-[#27272a] overflow-hidden">
+      <table className="w-full">
         <thead>
-          <tr className="border-b border-[#27272a]">
-            <th className="w-8 p-2 text-left"></th>
+          <tr className="bg-[#0c0a09]">
+            <th className="w-10 p-3"></th>
             {sortedColumns.map(col => (
               <th 
                 key={col.column_id} 
-                className="p-2 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider group"
-                style={{ minWidth: col.width || 200 }}
+                className="p-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider group border-l border-[#27272a]"
+                style={{ minWidth: col.width || 180 }}
               >
                 <div className="flex items-center gap-2">
                   {COLUMN_ICONS[col.type]}
@@ -463,21 +543,21 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                     variant="ghost"
                     size="sm"
                     onClick={() => onDeleteColumn(col.column_id)}
-                    className="opacity-0 group-hover:opacity-100 h-5 w-5 p-0 text-[#71717a] hover:text-red-400"
+                    className="opacity-0 group-hover:opacity-100 h-5 w-5 p-0 text-[#71717a] hover:text-red-400 ml-auto"
                   >
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
               </th>
             ))}
-            <th className="w-40 p-2">
+            <th className="w-36 p-3 border-l border-[#27272a]">
               {showAddColumn ? (
                 <div className="flex items-center gap-1">
                   <Input
                     value={newColumnName}
                     onChange={(e) => setNewColumnName(e.target.value)}
-                    placeholder="Name"
-                    className="h-7 text-xs bg-[#27272a] border-[#3f3f46] text-[#fafafa] w-24"
+                    placeholder="Column name"
+                    className="h-7 text-xs bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
                     autoFocus
                     onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
                   />
@@ -490,7 +570,7 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                       <option key={t.type} value={t.type}>{t.name}</option>
                     ))}
                   </select>
-                  <Button size="sm" onClick={handleAddColumn} className="h-7 px-2 bg-[#10b981] hover:bg-[#059669]">
+                  <Button size="sm" onClick={handleAddColumn} className="h-7 px-2 bg-[#10b981]">
                     <Check className="h-3 w-3" />
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => setShowAddColumn(false)} className="h-7 px-2">
@@ -505,29 +585,27 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                   className="text-[#71717a] hover:text-[#fafafa] text-xs"
                 >
                   <Plus className="h-3 w-3 mr-1" />
-                  Add Column
+                  Column
                 </Button>
               )}
             </th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={row.row_id} className="border-b border-[#27272a]/50 hover:bg-[#27272a]/30 group">
-              <td className="p-2">
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onDeleteRow(row.row_id)}
-                    className="h-6 w-6 p-0 text-[#71717a] hover:text-red-400"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
+          {rows.map((row) => (
+            <tr key={row.row_id} className="border-t border-[#27272a] hover:bg-[#27272a]/30 group">
+              <td className="p-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDeleteRow(row.row_id)}
+                  className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 text-[#71717a] hover:text-red-400"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
               </td>
               {sortedColumns.map(col => (
-                <td key={col.column_id} className="p-1">
+                <td key={col.column_id} className="p-2 border-l border-[#27272a]">
                   <CellEditor
                     column={col}
                     value={row.values?.[col.column_id]}
@@ -539,12 +617,10 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                   />
                 </td>
               ))}
-              <td></td>
+              <td className="border-l border-[#27272a]"></td>
             </tr>
           ))}
-          
-          {/* Add New Row */}
-          <tr className="border-b border-[#27272a]/30">
+          <tr className="border-t border-[#27272a]">
             <td colSpan={sortedColumns.length + 2} className="p-2">
               <Button
                 variant="ghost"
@@ -552,7 +628,7 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                 className="text-[#71717a] hover:text-[#fafafa] text-sm w-full justify-start"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                New row
+                New task
               </Button>
             </td>
           </tr>
@@ -562,221 +638,105 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
   );
 }
 
-// ============== CELL EDITOR COMPONENT ==============
+// ============== CELL EDITOR ==============
 function CellEditor({ column, value, users, isEditing, onStartEdit, onEndEdit, onChange }) {
   const [localValue, setLocalValue] = useState(value);
   const inputRef = useRef(null);
 
-  useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
+  useEffect(() => { setLocalValue(value); }, [value]);
+  useEffect(() => { if (isEditing && inputRef.current) inputRef.current.focus(); }, [isEditing]);
 
-  useEffect(() => {
-    if (isEditing && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isEditing]);
-
-  const handleSave = () => {
-    onChange(localValue);
-    onEndEdit();
-  };
-
+  const handleSave = () => { onChange(localValue); onEndEdit(); };
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && column.type !== 'text') {
-      handleSave();
-    }
-    if (e.key === 'Escape') {
-      setLocalValue(value);
-      onEndEdit();
-    }
+    if (e.key === 'Enter' && column.type !== 'text') handleSave();
+    if (e.key === 'Escape') { setLocalValue(value); onEndEdit(); }
   };
 
-  // Render based on column type
   switch (column.type) {
     case 'text':
       return isEditing ? (
-        <Input
-          ref={inputRef}
-          value={localValue || ''}
-          onChange={(e) => setLocalValue(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
-        />
+        <Input ref={inputRef} value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave} onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div
-          onClick={onStartEdit}
-          className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded"
-        >
-          {value || <span className="text-[#71717a]">Empty</span>}
+        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded">
+          {value || <span className="text-[#52525b]">Empty</span>}
         </div>
       );
 
     case 'number':
       return isEditing ? (
-        <Input
-          ref={inputRef}
-          type="number"
-          value={localValue || ''}
-          onChange={(e) => setLocalValue(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
-        />
+        <Input ref={inputRef} type="number" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave} onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div
-          onClick={onStartEdit}
-          className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded"
-        >
-          {value || <span className="text-[#71717a]">-</span>}
+        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded">
+          {value ?? <span className="text-[#52525b]">-</span>}
         </div>
       );
 
     case 'select':
-      return (
-        <SelectCell
-          column={column}
-          value={value}
-          onChange={onChange}
-        />
-      );
+      return <SelectCell column={column} value={value} onChange={onChange} />;
 
     case 'multi_select':
-      return (
-        <MultiSelectCell
-          column={column}
-          value={value}
-          onChange={onChange}
-        />
-      );
+      return <MultiSelectCell column={column} value={value} onChange={onChange} />;
 
     case 'date':
       return isEditing ? (
-        <Input
-          ref={inputRef}
-          type="date"
-          value={localValue || ''}
+        <Input ref={inputRef} type="date" value={localValue || ''}
           onChange={(e) => { setLocalValue(e.target.value); onChange(e.target.value); }}
-          onBlur={onEndEdit}
-          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
-        />
+          onBlur={onEndEdit} className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div
-          onClick={onStartEdit}
-          className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2"
-        >
-          {value ? (
-            <>
-              <Calendar className="h-3 w-3 text-[#71717a]" />
-              {new Date(value).toLocaleDateString()}
-            </>
-          ) : (
-            <span className="text-[#71717a]">No date</span>
-          )}
+        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2">
+          {value ? <><Calendar className="h-3 w-3 text-[#71717a]" />{new Date(value).toLocaleDateString()}</> : <span className="text-[#52525b]">Set date</span>}
         </div>
       );
 
     case 'url':
       return isEditing ? (
-        <Input
-          ref={inputRef}
-          type="url"
-          value={localValue || ''}
-          onChange={(e) => setLocalValue(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          placeholder="https://"
-          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
-        />
+        <Input ref={inputRef} type="url" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave} onKeyDown={handleKeyDown} placeholder="https://"
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div
-          onClick={onStartEdit}
-          className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded flex items-center gap-2"
-        >
-          {value ? (
-            <a href={value} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-              <Link2 className="h-3 w-3" />
-              {value.replace(/^https?:\/\//, '').substring(0, 30)}...
-            </a>
-          ) : (
-            <span className="text-[#71717a]">Add URL</span>
-          )}
+        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
+          {value ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            <Link2 className="h-3 w-3" />{value.replace(/^https?:\/\//, '').substring(0, 25)}
+          </a> : <span className="text-[#52525b]">Add URL</span>}
         </div>
       );
 
     case 'email':
       return isEditing ? (
-        <Input
-          ref={inputRef}
-          type="email"
-          value={localValue || ''}
-          onChange={(e) => setLocalValue(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
-        />
+        <Input ref={inputRef} type="email" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave} onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div
-          onClick={onStartEdit}
-          className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded"
-        >
-          {value ? (
-            <a href={`mailto:${value}`} className="text-[#6366f1] hover:underline" onClick={(e) => e.stopPropagation()}>
-              {value}
-            </a>
-          ) : (
-            <span className="text-[#71717a]">Add email</span>
-          )}
+        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
+          {value ? <a href={`mailto:${value}`} className="text-[#6366f1] hover:underline" onClick={(e) => e.stopPropagation()}>{value}</a> : <span className="text-[#52525b]">Add email</span>}
         </div>
       );
 
     case 'phone':
       return isEditing ? (
-        <Input
-          ref={inputRef}
-          type="tel"
-          value={localValue || ''}
-          onChange={(e) => setLocalValue(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]"
-        />
+        <Input ref={inputRef} type="tel" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
+          onBlur={handleSave} onKeyDown={handleKeyDown}
+          className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div
-          onClick={onStartEdit}
-          className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded"
-        >
-          {value ? (
-            <a href={`tel:${value}`} className="text-[#fafafa]" onClick={(e) => e.stopPropagation()}>
-              {value}
-            </a>
-          ) : (
-            <span className="text-[#71717a]">Add phone</span>
-          )}
+        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
+          {value ? <a href={`tel:${value}`} className="text-[#fafafa]" onClick={(e) => e.stopPropagation()}>{value}</a> : <span className="text-[#52525b]">Add phone</span>}
         </div>
       );
 
     case 'checkbox':
       return (
         <div className="flex items-center justify-center">
-          <input
-            type="checkbox"
-            checked={!!value}
-            onChange={(e) => onChange(e.target.checked)}
-            className="h-4 w-4 rounded border-[#3f3f46] bg-[#27272a] text-[#6366f1] focus:ring-[#6366f1]"
-          />
+          <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)}
+            className="h-4 w-4 rounded border-[#3f3f46] bg-[#27272a] text-[#6366f1]" />
         </div>
       );
 
     case 'person':
-      return (
-        <PersonCell
-          value={value}
-          users={users}
-          onChange={onChange}
-        />
-      );
+      return <PersonCell value={value} users={users} onChange={onChange} />;
 
     default:
       return <div className="px-2 py-1 text-[#fafafa]">{String(value || '')}</div>;
@@ -787,40 +747,20 @@ function CellEditor({ column, value, users, isEditing, onStartEdit, onEndEdit, o
 function SelectCell({ column, value, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const options = column.options || [];
-  
-  const selectedOption = options.find(o => o.id === value || o.name === value);
+  const selected = options.find(o => o.id === value || o.name === value);
 
   return (
     <div className="relative">
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex items-center"
-      >
-        {selectedOption ? (
-          <Badge style={{ backgroundColor: `${selectedOption.color}20`, color: selectedOption.color }}>
-            {selectedOption.name}
-          </Badge>
-        ) : (
-          <span className="text-[#71717a]">Select...</span>
-        )}
+      <div onClick={() => setIsOpen(!isOpen)} className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex items-center">
+        {selected ? <Badge style={{ backgroundColor: `${selected.color}20`, color: selected.color }}>{selected.name}</Badge> : <span className="text-[#52525b]">Select...</span>}
       </div>
-      
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[150px] py-1">
-            <div
-              onClick={() => { onChange(null); setIsOpen(false); }}
-              className="px-3 py-2 text-sm text-[#71717a] hover:bg-[#3f3f46] cursor-pointer"
-            >
-              Clear
-            </div>
+          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[140px] py-1">
+            <div onClick={() => { onChange(null); setIsOpen(false); }} className="px-3 py-2 text-sm text-[#71717a] hover:bg-[#3f3f46] cursor-pointer">Clear</div>
             {options.map(opt => (
-              <div
-                key={opt.id}
-                onClick={() => { onChange(opt.id); setIsOpen(false); }}
-                className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2"
-              >
+              <div key={opt.id} onClick={() => { onChange(opt.id); setIsOpen(false); }} className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2">
                 <div className="w-3 h-3 rounded" style={{ backgroundColor: opt.color }} />
                 <span className="text-[#fafafa] text-sm">{opt.name}</span>
               </div>
@@ -837,43 +777,24 @@ function MultiSelectCell({ column, value, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const options = column.options || [];
   const selectedIds = Array.isArray(value) ? value : [];
-  
-  const selectedOptions = options.filter(o => selectedIds.includes(o.id));
+  const selectedOpts = options.filter(o => selectedIds.includes(o.id));
 
-  const toggleOption = (optId) => {
-    const newValue = selectedIds.includes(optId)
-      ? selectedIds.filter(id => id !== optId)
-      : [...selectedIds, optId];
-    onChange(newValue);
+  const toggle = (optId) => {
+    const newVal = selectedIds.includes(optId) ? selectedIds.filter(id => id !== optId) : [...selectedIds, optId];
+    onChange(newVal);
   };
 
   return (
     <div className="relative">
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex flex-wrap gap-1"
-      >
-        {selectedOptions.length > 0 ? (
-          selectedOptions.map(opt => (
-            <Badge key={opt.id} style={{ backgroundColor: `${opt.color}20`, color: opt.color }} className="text-xs">
-              {opt.name}
-            </Badge>
-          ))
-        ) : (
-          <span className="text-[#71717a]">Select...</span>
-        )}
+      <div onClick={() => setIsOpen(!isOpen)} className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex flex-wrap gap-1">
+        {selectedOpts.length > 0 ? selectedOpts.map(opt => <Badge key={opt.id} style={{ backgroundColor: `${opt.color}20`, color: opt.color }} className="text-xs">{opt.name}</Badge>) : <span className="text-[#52525b]">Select...</span>}
       </div>
-      
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[150px] py-1">
+          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[140px] py-1">
             {options.map(opt => (
-              <div
-                key={opt.id}
-                onClick={() => toggleOption(opt.id)}
-                className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2"
-              >
+              <div key={opt.id} onClick={() => toggle(opt.id)} className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2">
                 <div className={`w-4 h-4 rounded border ${selectedIds.includes(opt.id) ? 'bg-[#6366f1] border-[#6366f1]' : 'border-[#3f3f46]'} flex items-center justify-center`}>
                   {selectedIds.includes(opt.id) && <Check className="h-3 w-3 text-white" />}
                 </div>
@@ -891,45 +812,26 @@ function MultiSelectCell({ column, value, onChange }) {
 // ============== PERSON CELL ==============
 function PersonCell({ value, users, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
-  const selectedUser = users.find(u => u.user_id === value);
+  const selected = users.find(u => u.user_id === value);
 
   return (
     <div className="relative">
-      <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex items-center gap-2"
-      >
-        {selectedUser ? (
+      <div onClick={() => setIsOpen(!isOpen)} className="min-h-[32px] px-2 py-1 cursor-pointer hover:bg-[#27272a] rounded flex items-center gap-2">
+        {selected ? (
           <>
-            <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">
-              {selectedUser.name?.charAt(0).toUpperCase()}
-            </div>
-            <span className="text-[#fafafa] text-sm">{selectedUser.name}</span>
+            <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">{selected.name?.charAt(0).toUpperCase()}</div>
+            <span className="text-[#fafafa] text-sm">{selected.name}</span>
           </>
-        ) : (
-          <span className="text-[#71717a]">Assign...</span>
-        )}
+        ) : <span className="text-[#52525b]">Assign...</span>}
       </div>
-      
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[180px] py-1 max-h-[200px] overflow-y-auto">
-            <div
-              onClick={() => { onChange(null); setIsOpen(false); }}
-              className="px-3 py-2 text-sm text-[#71717a] hover:bg-[#3f3f46] cursor-pointer"
-            >
-              Unassign
-            </div>
+          <div className="absolute top-full left-0 mt-1 z-20 bg-[#27272a] border border-[#3f3f46] rounded-lg shadow-xl min-w-[160px] py-1 max-h-[180px] overflow-y-auto">
+            <div onClick={() => { onChange(null); setIsOpen(false); }} className="px-3 py-2 text-sm text-[#71717a] hover:bg-[#3f3f46] cursor-pointer">Unassign</div>
             {users.map(user => (
-              <div
-                key={user.user_id}
-                onClick={() => { onChange(user.user_id); setIsOpen(false); }}
-                className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2"
-              >
-                <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">
-                  {user.name?.charAt(0).toUpperCase()}
-                </div>
+              <div key={user.user_id} onClick={() => { onChange(user.user_id); setIsOpen(false); }} className="px-3 py-2 hover:bg-[#3f3f46] cursor-pointer flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">{user.name?.charAt(0).toUpperCase()}</div>
                 <span className="text-[#fafafa] text-sm">{user.name}</span>
               </div>
             ))}
@@ -946,97 +848,53 @@ function TemplateModal({ templates, onSelect, onCreateBlank, onClose }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
 
   const handleCreate = () => {
-    if (!dbName.trim()) {
-      toast.error('Please enter a name');
-      return;
-    }
-    if (selectedTemplate) {
-      onSelect(selectedTemplate, dbName);
-    } else {
-      onCreateBlank(dbName);
-    }
+    if (!dbName.trim()) { toast.error('Enter a project name'); return; }
+    if (selectedTemplate) onSelect(selectedTemplate, dbName);
+    else onCreateBlank(dbName);
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="bg-[#18181b] border-[#27272a] w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-        <CardHeader className="flex flex-row items-center justify-between border-b border-[#27272a]">
-          <CardTitle className="text-[#fafafa]">Create New Database</CardTitle>
-          <Button variant="ghost" onClick={onClose} className="text-[#a1a1aa]">
-            <X className="h-5 w-5" />
-          </Button>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-y-auto p-4">
-          {/* Name Input */}
+      <div className="bg-[#18181b] border border-[#27272a] rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-[#27272a]">
+          <h2 className="text-lg font-semibold text-[#fafafa]">New Project</h2>
+          <Button variant="ghost" onClick={onClose} className="text-[#71717a]"><X className="h-5 w-5" /></Button>
+        </div>
+        <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 130px)' }}>
           <div className="mb-6">
-            <label className="block text-sm text-[#a1a1aa] mb-2">Database Name</label>
-            <Input
-              value={dbName}
-              onChange={(e) => setDbName(e.target.value)}
-              placeholder="Enter database name..."
-              className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
-              autoFocus
-            />
+            <label className="block text-sm text-[#a1a1aa] mb-2">Project Name</label>
+            <Input value={dbName} onChange={(e) => setDbName(e.target.value)} placeholder="e.g., Website Development"
+              className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]" autoFocus />
           </div>
-
-          {/* Templates */}
           <div className="mb-4">
-            <label className="block text-sm text-[#a1a1aa] mb-3">Choose a Template (optional)</label>
+            <label className="block text-sm text-[#a1a1aa] mb-3">Template (optional)</label>
             <div className="grid grid-cols-2 gap-3">
-              {/* Blank option */}
-              <div
-                onClick={() => setSelectedTemplate(null)}
-                className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                  selectedTemplate === null
-                    ? 'border-[#6366f1] bg-[#6366f1]/10'
-                    : 'border-[#27272a] hover:border-[#3f3f46]'
-                }`}
-              >
+              <div onClick={() => setSelectedTemplate(null)}
+                className={`p-4 rounded-lg border cursor-pointer ${selectedTemplate === null ? 'border-[#6366f1] bg-[#6366f1]/10' : 'border-[#27272a] hover:border-[#3f3f46]'}`}>
                 <div className="flex items-center gap-3 mb-2">
                   <span className="text-2xl">📄</span>
                   <span className="font-medium text-[#fafafa]">Blank</span>
                 </div>
-                <p className="text-xs text-[#71717a]">Start from scratch with default columns</p>
+                <p className="text-xs text-[#71717a]">Start with default columns</p>
               </div>
-
-              {/* Templates */}
-              {templates.map(template => (
-                <div
-                  key={template.id}
-                  onClick={() => setSelectedTemplate(template.id)}
-                  className={`p-4 rounded-lg border cursor-pointer transition-all ${
-                    selectedTemplate === template.id
-                      ? 'border-[#6366f1] bg-[#6366f1]/10'
-                      : 'border-[#27272a] hover:border-[#3f3f46]'
-                  }`}
-                >
+              {templates.map(t => (
+                <div key={t.id} onClick={() => setSelectedTemplate(t.id)}
+                  className={`p-4 rounded-lg border cursor-pointer ${selectedTemplate === t.id ? 'border-[#6366f1] bg-[#6366f1]/10' : 'border-[#27272a] hover:border-[#3f3f46]'}`}>
                   <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">{template.icon}</span>
-                    <span className="font-medium text-[#fafafa]">{template.name}</span>
+                    <span className="text-2xl">{t.icon}</span>
+                    <span className="font-medium text-[#fafafa]">{t.name}</span>
                   </div>
-                  <p className="text-xs text-[#71717a]">{template.description}</p>
+                  <p className="text-xs text-[#71717a]">{t.description}</p>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-[#27272a]">
-            <Button
-              onClick={onClose}
-              className="flex-1 bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-            >
-              Create Database
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="flex gap-3 p-4 border-t border-[#27272a]">
+          <Button onClick={onClose} className="flex-1 bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]">Cancel</Button>
+          <Button onClick={handleCreate} className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white">Create Project</Button>
+        </div>
+      </div>
     </div>
   );
 }
