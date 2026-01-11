@@ -41,6 +41,40 @@ init_notion_db(db)
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
+# ============== STARTUP EVENT - ENSURE ADMIN EXISTS ==============
+@app.on_event("startup")
+async def ensure_admin_user():
+    """Ensure admin user exists on startup for login access"""
+    existing_admin = await db.users.find_one({"email": "admin@drawlead.com"})
+    if not existing_admin:
+        admin_id = f"user_{uuid.uuid4().hex[:12]}"
+        password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        admin_doc = {
+            "user_id": admin_id,
+            "email": "admin@drawlead.com",
+            "name": "Admin User",
+            "role": "super_admin",
+            "password_hash": password_hash,
+            "is_active": True,
+            "module_access": ["leads", "operations", "finance", "reports", "settings", "hr"],
+            "project_access": [],
+            "can_create_projects": True,
+            "can_delete_tasks": True,
+            "can_manage_users": True,
+            "created_at": datetime.now(timezone.utc)
+        }
+        await db.users.insert_one(admin_doc)
+        logging.info("Admin user created automatically on startup")
+    else:
+        # Ensure admin has password_hash (in case it was created via Google OAuth)
+        if not existing_admin.get("password_hash"):
+            password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            await db.users.update_one(
+                {"email": "admin@drawlead.com"},
+                {"$set": {"password_hash": password_hash}}
+            )
+            logging.info("Admin user password updated on startup")
+
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
 async def health_check():
