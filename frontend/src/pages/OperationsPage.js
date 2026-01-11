@@ -61,11 +61,6 @@ export default function OperationsPage() {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
-  // Get pinned databases for tabs
-  const pinnedDatabases = databases
-    .filter(db => db.is_pinned)
-    .sort((a, b) => (a.pin_order || 0) - (b.pin_order || 0));
-
   const loadDatabases = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/notion/databases`, { headers });
