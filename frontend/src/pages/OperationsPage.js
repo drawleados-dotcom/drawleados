@@ -285,39 +285,41 @@ export default function OperationsPage() {
   return (
     <Layout>
       <div className="h-full flex flex-col bg-[#09090b]" data-testid="operations-page">
-        {/* Header with Pinned Tabs */}
-        <div className="bg-[#18181b] border-b border-[#27272a] px-6 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-[#fafafa]">Operations</h1>
+        {/* Compact Header with Pinned Tabs */}
+        <div className="bg-[#0c0a09] border-b border-[#27272a] px-6 py-3">
+          {/* Pinned Database Tabs as Primary Navigation */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {databases.map(db => (
+                <button
+                  key={db.database_id}
+                  onClick={() => setSelectedDb(db)}
+                  data-testid={`db-tab-${db.database_id}`}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                    selectedDb?.database_id === db.database_id
+                      ? 'bg-[#27272a] text-[#fafafa] border border-[#3f3f46]'
+                      : 'text-[#71717a] hover:bg-[#18181b] hover:text-[#a1a1aa]'
+                  }`}
+                >
+                  <span className="text-base">{db.icon}</span>
+                  <span>{db.name}</span>
+                  {db.is_pinned && <span className="text-[10px] text-[#6366f1]">★</span>}
+                </button>
+              ))}
+              
+              {databases.length === 0 && (
+                <p className="text-sm text-[#52525b] px-4">No projects yet. Create your first one!</p>
+              )}
+            </div>
+            
             <Button
               onClick={() => setShowTemplateModal(true)}
-              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              data-testid="new-project-btn"
+              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white shrink-0"
             >
               <Plus className="h-4 w-4 mr-2" />
               New Project
             </Button>
-          </div>
-
-          {/* Pinned Database Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {pinnedDatabases.map(db => (
-              <button
-                key={db.database_id}
-                onClick={() => setSelectedDb(db)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                  selectedDb?.database_id === db.database_id
-                    ? 'bg-[#6366f1] text-white'
-                    : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46] hover:text-white'
-                }`}
-              >
-                <span>{db.icon}</span>
-                <span>{db.name}</span>
-              </button>
-            ))}
-            
-            {pinnedDatabases.length === 0 && databases.length > 0 && (
-              <p className="text-sm text-[#71717a]">Pin databases from sidebar to show as tabs</p>
-            )}
           </div>
         </div>
 
