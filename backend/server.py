@@ -412,11 +412,22 @@ async def login(credentials: UserLogin):
     # Find user
     user_doc = await db.users.find_one({"email": credentials.email}, {"_id": 0})
     
-    if not user_doc or not user_doc.get("password_hash"):
+    logging.info(f"Login attempt for: {credentials.email}")
+    logging.info(f"User found: {user_doc is not None}")
+    
+    if not user_doc:
+        logging.info("User not found in database")
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    if not user_doc.get("password_hash"):
+        logging.info("User has no password_hash")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Verify password
-    if not verify_password(credentials.password, user_doc["password_hash"]):
+    password_valid = verify_password(credentials.password, user_doc["password_hash"])
+    logging.info(f"Password valid: {password_valid}")
+    
+    if not password_valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Create session
