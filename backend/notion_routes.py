@@ -1,0 +1,734 @@
+"""
+Notion-like Database System for Operations
+Supports custom columns, inline editing, and multiple views
+"""
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
+import uuid
+
+notion_router = APIRouter(prefix="/notion", tags=["Notion Database"])
+db = None
+
+def init_notion_db(database):
+    global db
+    db = database
+
+# ============== MODELS ==============
+
+class ColumnType:
+    TEXT = "text"
+    NUMBER = "number"
+    SELECT = "select"
+    MULTI_SELECT = "multi_select"
+    DATE = "date"
+    URL = "url"
+    EMAIL = "email"
+    PHONE = "phone"
+    CHECKBOX = "checkbox"
+    PERSON = "person"
+
+class Column(BaseModel):
+    column_id: str
+    name: str
+    type: str  # text, number, select, multi_select, date, url, email, phone, checkbox, person
+    options: List[Dict[str, str]] = []  # For select/multi_select: [{id, name, color}]
+    width: int = 200
+    order: int = 0
+    is_visible: bool = True
+
+class ColumnCreate(BaseModel):
+    name: str
+    type: str
+    options: List[Dict[str, str]] = []
+
+class DatabaseCreate(BaseModel):
+    name: str
+    icon: str = "📋"
+    description: str = ""
+
+class RowCreate(BaseModel):
+    values: Dict[str, Any] = {}
+
+# ============== AUTH HELPER ==============
+
+async def get_current_user(request: Request) -> dict:
+    """Get current user from session token"""
+    session_token = None
+    
+    if "session_token" in request.cookies:
+        session_token = request.cookies.get("session_token")
+    
+    if not session_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            session_token = auth_header.split(" ")[1]
+    
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    session_doc = await db.user_sessions.find_one(
+        {"session_token": session_token},
+        {"_id": 0}
+    )
+    
+    if not session_doc:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    expires_at = session_doc["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    user_doc = await db.users.find_one(
+        {"user_id": session_doc["user_id"]},
+        {"_id": 0, "password_hash": 0}
+    )
+    
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return user_doc
+
+# ============== DATABASE ROUTES ==============
+
+@notion_router.get("/databases")
+async def get_all_databases(request: Request):
+    """Get all databases"""
+    await get_current_user(request)
+    
+    databases = await db.notion_databases.find(
+        {},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return databases
+
+@notion_router.post("/databases")
+async def create_database(data: DatabaseCreate, request: Request):
+    """Create a new database"""
+    user = await get_current_user(request)
+    
+    database_id = f"db_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Default columns
+    default_columns = [
+        {
+            "column_id": f"col_{uuid.uuid4().hex[:8]}",
+            "name": "Name",
+            "type": "text",
+            "options": [],
+            "width": 250,
+            "order": 0,
+            "is_visible": True,
+            "is_primary": True
+        },
+        {
+            "column_id": f"col_{uuid.uuid4().hex[:8]}",
+            "name": "Status",
+            "type": "select",
+            "options": [
+                {"id": "opt_1", "name": "Not Started", "color": "#71717a"},
+                {"id": "opt_2", "name": "In Progress", "color": "#3b82f6"},
+                {"id": "opt_3", "name": "Completed", "color": "#10b981"},
+                {"id": "opt_4", "name": "On Hold", "color": "#f59e0b"}
+            ],
+            "width": 150,
+            "order": 1,
+            "is_visible": True
+        },
+        {
+            "column_id": f"col_{uuid.uuid4().hex[:8]}",
+            "name": "Priority",
+            "type": "select",
+            "options": [
+                {"id": "pri_1", "name": "Low", "color": "#71717a"},
+                {"id": "pri_2", "name": "Medium", "color": "#f59e0b"},
+                {"id": "pri_3", "name": "High", "color": "#ef4444"}
+            ],
+            "width": 120,
+            "order": 2,
+            "is_visible": True
+        },
+        {
+            "column_id": f"col_{uuid.uuid4().hex[:8]}",
+            "name": "Due Date",
+            "type": "date",
+            "options": [],
+            "width": 150,
+            "order": 3,
+            "is_visible": True
+        }
+    ]
+    
+    database_doc = {
+        "database_id": database_id,
+        "name": data.name,
+        "icon": data.icon,
+        "description": data.description,
+        "columns": default_columns,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.notion_databases.insert_one(database_doc)
+    return await db.notion_databases.find_one({"database_id": database_id}, {"_id": 0})
+
+@notion_router.get("/databases/{database_id}")
+async def get_database(database_id: str, request: Request):
+    """Get a database with its columns"""
+    await get_current_user(request)
+    
+    database = await db.notion_databases.find_one(
+        {"database_id": database_id},
+        {"_id": 0}
+    )
+    
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    return database
+
+@notion_router.put("/databases/{database_id}")
+async def update_database(database_id: str, data: Dict[str, Any], request: Request):
+    """Update database properties"""
+    await get_current_user(request)
+    
+    allowed_fields = ["name", "icon", "description"]
+    update_data = {k: v for k, v in data.items() if k in allowed_fields}
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.notion_databases.update_one(
+        {"database_id": database_id},
+        {"$set": update_data}
+    )
+    
+    return await db.notion_databases.find_one({"database_id": database_id}, {"_id": 0})
+
+@notion_router.delete("/databases/{database_id}")
+async def delete_database(database_id: str, request: Request):
+    """Delete a database and all its rows"""
+    await get_current_user(request)
+    
+    await db.notion_databases.delete_one({"database_id": database_id})
+    await db.notion_rows.delete_many({"database_id": database_id})
+    
+    return {"message": "Database deleted"}
+
+# ============== COLUMN ROUTES ==============
+
+@notion_router.post("/databases/{database_id}/columns")
+async def add_column(database_id: str, data: ColumnCreate, request: Request):
+    """Add a new column to database"""
+    await get_current_user(request)
+    
+    database = await db.notion_databases.find_one({"database_id": database_id})
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    columns = database.get("columns", [])
+    max_order = max([c.get("order", 0) for c in columns], default=-1)
+    
+    new_column = {
+        "column_id": f"col_{uuid.uuid4().hex[:8]}",
+        "name": data.name,
+        "type": data.type,
+        "options": data.options,
+        "width": 200,
+        "order": max_order + 1,
+        "is_visible": True
+    }
+    
+    await db.notion_databases.update_one(
+        {"database_id": database_id},
+        {
+            "$push": {"columns": new_column},
+            "$set": {"updated_at": datetime.now(timezone.utc)}
+        }
+    )
+    
+    return new_column
+
+@notion_router.put("/databases/{database_id}/columns/{column_id}")
+async def update_column(database_id: str, column_id: str, data: Dict[str, Any], request: Request):
+    """Update a column"""
+    await get_current_user(request)
+    
+    database = await db.notion_databases.find_one({"database_id": database_id})
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    columns = database.get("columns", [])
+    for i, col in enumerate(columns):
+        if col["column_id"] == column_id:
+            for key, value in data.items():
+                if key in ["name", "type", "options", "width", "order", "is_visible"]:
+                    columns[i][key] = value
+            break
+    
+    await db.notion_databases.update_one(
+        {"database_id": database_id},
+        {
+            "$set": {
+                "columns": columns,
+                "updated_at": datetime.now(timezone.utc)
+            }
+        }
+    )
+    
+    return {"message": "Column updated"}
+
+@notion_router.delete("/databases/{database_id}/columns/{column_id}")
+async def delete_column(database_id: str, column_id: str, request: Request):
+    """Delete a column"""
+    await get_current_user(request)
+    
+    await db.notion_databases.update_one(
+        {"database_id": database_id},
+        {
+            "$pull": {"columns": {"column_id": column_id}},
+            "$set": {"updated_at": datetime.now(timezone.utc)}
+        }
+    )
+    
+    # Remove column data from all rows
+    await db.notion_rows.update_many(
+        {"database_id": database_id},
+        {"$unset": {f"values.{column_id}": ""}}
+    )
+    
+    return {"message": "Column deleted"}
+
+@notion_router.put("/databases/{database_id}/columns/reorder")
+async def reorder_columns(database_id: str, column_orders: List[Dict[str, Any]], request: Request):
+    """Reorder columns"""
+    await get_current_user(request)
+    
+    database = await db.notion_databases.find_one({"database_id": database_id})
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    columns = database.get("columns", [])
+    order_map = {item["column_id"]: item["order"] for item in column_orders}
+    
+    for col in columns:
+        if col["column_id"] in order_map:
+            col["order"] = order_map[col["column_id"]]
+    
+    columns.sort(key=lambda x: x.get("order", 0))
+    
+    await db.notion_databases.update_one(
+        {"database_id": database_id},
+        {"$set": {"columns": columns, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    return {"message": "Columns reordered"}
+
+# ============== ROW ROUTES ==============
+
+@notion_router.get("/databases/{database_id}/rows")
+async def get_rows(
+    database_id: str, 
+    request: Request,
+    group_by: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: str = "asc",
+    filter_column: Optional[str] = None,
+    filter_value: Optional[str] = None
+):
+    """Get all rows from a database"""
+    await get_current_user(request)
+    
+    query = {"database_id": database_id}
+    
+    # Apply filter
+    if filter_column and filter_value:
+        query[f"values.{filter_column}"] = {"$regex": filter_value, "$options": "i"}
+    
+    # Determine sort
+    sort_field = "created_at"
+    sort_direction = 1 if sort_order == "asc" else -1
+    if sort_by:
+        sort_field = f"values.{sort_by}"
+    
+    rows = await db.notion_rows.find(
+        query,
+        {"_id": 0}
+    ).sort(sort_field, sort_direction).to_list(1000)
+    
+    # Group if requested
+    if group_by:
+        grouped = {}
+        for row in rows:
+            group_value = row.get("values", {}).get(group_by, "Ungrouped")
+            if isinstance(group_value, dict):
+                group_value = group_value.get("name", "Ungrouped")
+            if group_value not in grouped:
+                grouped[group_value] = []
+            grouped[group_value].append(row)
+        return {"grouped": True, "groups": grouped}
+    
+    return {"grouped": False, "rows": rows}
+
+@notion_router.post("/databases/{database_id}/rows")
+async def create_row(database_id: str, data: RowCreate, request: Request):
+    """Create a new row"""
+    user = await get_current_user(request)
+    
+    database = await db.notion_databases.find_one({"database_id": database_id})
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    row_id = f"row_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    row_doc = {
+        "row_id": row_id,
+        "database_id": database_id,
+        "values": data.values,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.notion_rows.insert_one(row_doc)
+    return await db.notion_rows.find_one({"row_id": row_id}, {"_id": 0})
+
+@notion_router.put("/databases/{database_id}/rows/{row_id}")
+async def update_row(database_id: str, row_id: str, data: Dict[str, Any], request: Request):
+    """Update a row's values"""
+    await get_current_user(request)
+    
+    # Build update for specific values
+    update_set = {"updated_at": datetime.now(timezone.utc)}
+    for key, value in data.get("values", {}).items():
+        update_set[f"values.{key}"] = value
+    
+    await db.notion_rows.update_one(
+        {"row_id": row_id, "database_id": database_id},
+        {"$set": update_set}
+    )
+    
+    return await db.notion_rows.find_one({"row_id": row_id}, {"_id": 0})
+
+@notion_router.put("/databases/{database_id}/rows/{row_id}/cell")
+async def update_cell(database_id: str, row_id: str, data: Dict[str, Any], request: Request):
+    """Update a single cell value"""
+    await get_current_user(request)
+    
+    column_id = data.get("column_id")
+    value = data.get("value")
+    
+    if not column_id:
+        raise HTTPException(status_code=400, detail="column_id required")
+    
+    await db.notion_rows.update_one(
+        {"row_id": row_id, "database_id": database_id},
+        {"$set": {
+            f"values.{column_id}": value,
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    return await db.notion_rows.find_one({"row_id": row_id}, {"_id": 0})
+
+@notion_router.delete("/databases/{database_id}/rows/{row_id}")
+async def delete_row(database_id: str, row_id: str, request: Request):
+    """Delete a row"""
+    await get_current_user(request)
+    
+    await db.notion_rows.delete_one({"row_id": row_id, "database_id": database_id})
+    return {"message": "Row deleted"}
+
+@notion_router.post("/databases/{database_id}/rows/bulk-delete")
+async def bulk_delete_rows(database_id: str, data: Dict[str, Any], request: Request):
+    """Delete multiple rows"""
+    await get_current_user(request)
+    
+    row_ids = data.get("row_ids", [])
+    if not row_ids:
+        raise HTTPException(status_code=400, detail="row_ids required")
+    
+    await db.notion_rows.delete_many({
+        "database_id": database_id,
+        "row_id": {"$in": row_ids}
+    })
+    
+    return {"message": f"Deleted {len(row_ids)} rows"}
+
+# ============== TEMPLATE ROUTES ==============
+
+@notion_router.get("/templates")
+async def get_templates(request: Request):
+    """Get available database templates"""
+    await get_current_user(request)
+    
+    templates = [
+        {
+            "id": "project_tracker",
+            "name": "Project Tracker",
+            "icon": "📊",
+            "description": "Track projects with status, priority, and deadlines",
+            "columns": [
+                {"name": "Project Name", "type": "text"},
+                {"name": "Client", "type": "text"},
+                {"name": "Status", "type": "select", "options": [
+                    {"name": "Planning", "color": "#71717a"},
+                    {"name": "In Progress", "color": "#3b82f6"},
+                    {"name": "Review", "color": "#f59e0b"},
+                    {"name": "Completed", "color": "#10b981"}
+                ]},
+                {"name": "Priority", "type": "select", "options": [
+                    {"name": "Low", "color": "#71717a"},
+                    {"name": "Medium", "color": "#f59e0b"},
+                    {"name": "High", "color": "#ef4444"}
+                ]},
+                {"name": "Due Date", "type": "date"},
+                {"name": "Assignee", "type": "person"},
+                {"name": "Budget", "type": "number"}
+            ]
+        },
+        {
+            "id": "task_list",
+            "name": "Task List",
+            "icon": "✅",
+            "description": "Simple task management with checkboxes",
+            "columns": [
+                {"name": "Task", "type": "text"},
+                {"name": "Done", "type": "checkbox"},
+                {"name": "Due Date", "type": "date"},
+                {"name": "Priority", "type": "select", "options": [
+                    {"name": "Low", "color": "#71717a"},
+                    {"name": "Medium", "color": "#f59e0b"},
+                    {"name": "High", "color": "#ef4444"}
+                ]}
+            ]
+        },
+        {
+            "id": "client_directory",
+            "name": "Client Directory",
+            "icon": "👥",
+            "description": "Manage client contacts and information",
+            "columns": [
+                {"name": "Name", "type": "text"},
+                {"name": "Company", "type": "text"},
+                {"name": "Email", "type": "email"},
+                {"name": "Phone", "type": "phone"},
+                {"name": "Website", "type": "url"},
+                {"name": "Status", "type": "select", "options": [
+                    {"name": "Lead", "color": "#71717a"},
+                    {"name": "Active", "color": "#10b981"},
+                    {"name": "Inactive", "color": "#ef4444"}
+                ]}
+            ]
+        },
+        {
+            "id": "content_calendar",
+            "name": "Content Calendar",
+            "icon": "📅",
+            "description": "Plan and track content across platforms",
+            "columns": [
+                {"name": "Title", "type": "text"},
+                {"name": "Platform", "type": "multi_select", "options": [
+                    {"name": "Instagram", "color": "#e11d48"},
+                    {"name": "Facebook", "color": "#3b82f6"},
+                    {"name": "LinkedIn", "color": "#0077b5"},
+                    {"name": "Twitter", "color": "#1da1f2"},
+                    {"name": "YouTube", "color": "#ff0000"}
+                ]},
+                {"name": "Type", "type": "select", "options": [
+                    {"name": "Post", "color": "#10b981"},
+                    {"name": "Story", "color": "#8b5cf6"},
+                    {"name": "Reel", "color": "#f59e0b"},
+                    {"name": "Video", "color": "#ef4444"}
+                ]},
+                {"name": "Publish Date", "type": "date"},
+                {"name": "Status", "type": "select", "options": [
+                    {"name": "Idea", "color": "#71717a"},
+                    {"name": "Writing", "color": "#3b82f6"},
+                    {"name": "Review", "color": "#f59e0b"},
+                    {"name": "Scheduled", "color": "#8b5cf6"},
+                    {"name": "Published", "color": "#10b981"}
+                ]}
+            ]
+        },
+        {
+            "id": "service_catalog",
+            "name": "Service Catalog",
+            "icon": "🛠️",
+            "description": "Track services with pricing and URLs",
+            "columns": [
+                {"name": "Service Name", "type": "text"},
+                {"name": "Category", "type": "select", "options": [
+                    {"name": "Web Development", "color": "#3b82f6"},
+                    {"name": "Design", "color": "#8b5cf6"},
+                    {"name": "Marketing", "color": "#10b981"},
+                    {"name": "SEO", "color": "#f59e0b"}
+                ]},
+                {"name": "Price", "type": "number"},
+                {"name": "URL", "type": "url"},
+                {"name": "Active", "type": "checkbox"}
+            ]
+        }
+    ]
+    
+    return templates
+
+@notion_router.post("/databases/from-template/{template_id}")
+async def create_from_template(template_id: str, data: Dict[str, Any], request: Request):
+    """Create a database from template"""
+    user = await get_current_user(request)
+    
+    templates = {
+        "project_tracker": {
+            "name": data.get("name", "Project Tracker"),
+            "icon": "📊",
+            "columns": [
+                {"name": "Project Name", "type": "text", "is_primary": True},
+                {"name": "Client", "type": "text"},
+                {"name": "Status", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Planning", "color": "#71717a"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "In Progress", "color": "#3b82f6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Review", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Completed", "color": "#10b981"}
+                ]},
+                {"name": "Priority", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Low", "color": "#71717a"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Medium", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "High", "color": "#ef4444"}
+                ]},
+                {"name": "Due Date", "type": "date"},
+                {"name": "Assignee", "type": "person"},
+                {"name": "Budget", "type": "number"}
+            ]
+        },
+        "task_list": {
+            "name": data.get("name", "Task List"),
+            "icon": "✅",
+            "columns": [
+                {"name": "Task", "type": "text", "is_primary": True},
+                {"name": "Done", "type": "checkbox"},
+                {"name": "Due Date", "type": "date"},
+                {"name": "Priority", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Low", "color": "#71717a"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Medium", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "High", "color": "#ef4444"}
+                ]}
+            ]
+        },
+        "client_directory": {
+            "name": data.get("name", "Client Directory"),
+            "icon": "👥",
+            "columns": [
+                {"name": "Name", "type": "text", "is_primary": True},
+                {"name": "Company", "type": "text"},
+                {"name": "Email", "type": "email"},
+                {"name": "Phone", "type": "phone"},
+                {"name": "Website", "type": "url"},
+                {"name": "Status", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Lead", "color": "#71717a"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Active", "color": "#10b981"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Inactive", "color": "#ef4444"}
+                ]}
+            ]
+        },
+        "content_calendar": {
+            "name": data.get("name", "Content Calendar"),
+            "icon": "📅",
+            "columns": [
+                {"name": "Title", "type": "text", "is_primary": True},
+                {"name": "Platform", "type": "multi_select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Instagram", "color": "#e11d48"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Facebook", "color": "#3b82f6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "LinkedIn", "color": "#0077b5"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Twitter", "color": "#1da1f2"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "YouTube", "color": "#ff0000"}
+                ]},
+                {"name": "Type", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Post", "color": "#10b981"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Story", "color": "#8b5cf6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Reel", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Video", "color": "#ef4444"}
+                ]},
+                {"name": "Publish Date", "type": "date"},
+                {"name": "Status", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Idea", "color": "#71717a"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Writing", "color": "#3b82f6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Review", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Scheduled", "color": "#8b5cf6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Published", "color": "#10b981"}
+                ]}
+            ]
+        },
+        "service_catalog": {
+            "name": data.get("name", "Service Catalog"),
+            "icon": "🛠️",
+            "columns": [
+                {"name": "Service Name", "type": "text", "is_primary": True},
+                {"name": "Category", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Web Development", "color": "#3b82f6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Design", "color": "#8b5cf6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Marketing", "color": "#10b981"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "SEO", "color": "#f59e0b"}
+                ]},
+                {"name": "Price", "type": "number"},
+                {"name": "URL", "type": "url"},
+                {"name": "Active", "type": "checkbox"}
+            ]
+        }
+    }
+    
+    template = templates.get(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    database_id = f"db_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Build columns with IDs
+    columns = []
+    for i, col in enumerate(template["columns"]):
+        columns.append({
+            "column_id": f"col_{uuid.uuid4().hex[:8]}",
+            "name": col["name"],
+            "type": col["type"],
+            "options": col.get("options", []),
+            "width": 200 if col["type"] != "text" else 250,
+            "order": i,
+            "is_visible": True,
+            "is_primary": col.get("is_primary", False)
+        })
+    
+    database_doc = {
+        "database_id": database_id,
+        "name": template["name"],
+        "icon": template["icon"],
+        "description": "",
+        "columns": columns,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.notion_databases.insert_one(database_doc)
+    return await db.notion_databases.find_one({"database_id": database_id}, {"_id": 0})
+
+# ============== USERS FOR PERSON FIELD ==============
+
+@notion_router.get("/users")
+async def get_users_for_assignment(request: Request):
+    """Get list of users for person field"""
+    await get_current_user(request)
+    
+    users = await db.users.find(
+        {"is_active": True},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
+    ).to_list(100)
+    
+    return users
