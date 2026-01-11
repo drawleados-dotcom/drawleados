@@ -136,7 +136,7 @@ export default function LoginPage() {
           </div>
 
           <p className="mt-6 text-center text-sm text-[#a1a1aa]">
-            Demo credentials: admin@drawlead.com / admin123
+            Demo: vinoth@drawlead.com / admin123
           </p>
         </div>
       </div>
