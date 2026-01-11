@@ -234,10 +234,48 @@ export default function OperationsPage() {
   };
 
   const handleDeleteRow = async (rowId) => {
+    // Find task name for confirmation
+    const row = rows.find(r => r.row_id === rowId);
+    const nameColumn = selectedDb?.columns?.find(c => c.is_primary || c.name.toLowerCase() === 'name');
+    const taskName = row?.values?.[nameColumn?.column_id] || 'Untitled Task';
+    
+    setDeleteModal({
+      show: true,
+      type: 'task',
+      item: { id: rowId, name: taskName },
+      confirmText: ''
+    });
+  };
+
+  const executeDeleteRow = async (rowId) => {
     try {
       await axios.delete(`${API}/api/notion/databases/${selectedDb.database_id}/rows/${rowId}`, { headers });
       setRows(rows.filter(r => r.row_id !== rowId));
       toast.success('Task deleted');
+      setDeleteModal({ show: false, type: '', item: null, confirmText: '' });
+    } catch (error) {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const handleDeleteProject = async (projectId) => {
+    const project = projects.find(p => p.project_id === projectId);
+    setDeleteModal({
+      show: true,
+      type: 'project',
+      item: { id: projectId, name: project?.name || 'Untitled Project' },
+      confirmText: ''
+    });
+  };
+
+  const executeDeleteProject = async (projectId) => {
+    try {
+      await axios.delete(`${API}/api/notion/databases/${selectedDb.database_id}/projects/${projectId}`, { headers });
+      setProjects(projects.filter(p => p.project_id !== projectId));
+      // Move tasks to ungrouped
+      setRows(rows.map(r => r.project_id === projectId ? { ...r, project_id: null } : r));
+      toast.success('Project deleted');
+      setDeleteModal({ show: false, type: '', item: null, confirmText: '' });
     } catch (error) {
       toast.error('Failed to delete');
     }
