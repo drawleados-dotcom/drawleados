@@ -4,8 +4,9 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Badge } from '../components/ui/badge';
 import { 
-  Plus, ChevronDown, Link2, Calendar, Hash, Mail, Phone, Check, User, X,
-  Trash2, Search, Filter, SlidersHorizontal, Database
+  Plus, ChevronDown, ChevronRight, Link2, Calendar, Hash, Mail, Phone, Check, User, X,
+  Trash2, Search, SlidersHorizontal, Database, Star, Copy, Edit3, ExternalLink,
+  LayoutGrid, Table2, FolderPlus, MoreHorizontal, GripVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -43,9 +44,16 @@ export default function OperationsPage() {
   const [databases, setDatabases] = useState([]);
   const [selectedDb, setSelectedDb] = useState(null);
   const [rows, setRows] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [users, setUsers] = useState([]);
+  const [viewMode, setViewMode] = useState('table'); // 'table', 'kanban', 'byProject'
+  const [expandedProjects, setExpandedProjects] = useState({});
+  
+  // Context Menu
+  const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, database: null });
+  const [renameModal, setRenameModal] = useState({ show: false, database: null, name: '' });
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,7 +74,6 @@ export default function OperationsPage() {
       const res = await axios.get(`${API}/api/notion/databases`, { headers });
       setDatabases(res.data);
       
-      // Select from URL param or first pinned or first database
       const params = new URLSearchParams(window.location.search);
       const dbId = params.get('db');
       
@@ -97,6 +104,20 @@ export default function OperationsPage() {
     }
   }, [selectedDb, token]);
 
+  const loadProjects = useCallback(async () => {
+    if (!selectedDb) return;
+    try {
+      const res = await axios.get(`${API}/api/notion/databases/${selectedDb.database_id}/projects`, { headers });
+      setProjects(res.data || []);
+      // Expand all projects by default
+      const expanded = {};
+      res.data.forEach(p => { expanded[p.project_id] = true; });
+      setExpandedProjects(expanded);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+    }
+  }, [selectedDb, token]);
+
   const loadTemplates = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/notion/templates`, { headers });
@@ -124,12 +145,22 @@ export default function OperationsPage() {
   useEffect(() => {
     if (selectedDb) {
       loadRows();
+      loadProjects();
     }
-  }, [selectedDb, loadRows]);
+  }, [selectedDb, loadRows, loadProjects]);
 
-  const handleCreateDatabase = async (name) => {
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu({ show: false, x: 0, y: 0, database: null });
+    if (contextMenu.show) {
+      document.addEventListener('click', handleClick);
+      return () => document.removeEventListener('click', handleClick);
+    }
+  }, [contextMenu.show]);
+
+  const handleCreateDatabase = async (name, category = '') => {
     try {
-      const res = await axios.post(`${API}/api/notion/databases`, { name, icon: '📋' }, { headers });
+      const res = await axios.post(`${API}/api/notion/databases`, { name, icon: '📋', category }, { headers });
       setDatabases([res.data, ...databases]);
       setSelectedDb(res.data);
       setShowTemplateModal(false);
@@ -151,14 +182,34 @@ export default function OperationsPage() {
     }
   };
 
-  const handleAddRow = async () => {
+  const handleAddRow = async (projectId = null) => {
     if (!selectedDb) return;
     try {
-      const res = await axios.post(`${API}/api/notion/databases/${selectedDb.database_id}/rows`, { values: {} }, { headers });
+      const res = await axios.post(`${API}/api/notion/databases/${selectedDb.database_id}/rows`, 
+        { values: {}, project_id: projectId }, 
+        { headers }
+      );
       setRows([...rows, res.data]);
       toast.success('Task added');
     } catch (error) {
       toast.error('Failed to add task');
+    }
+  };
+
+  const handleAddProject = async () => {
+    if (!selectedDb) return;
+    const name = prompt('Enter project name:');
+    if (!name) return;
+    try {
+      const res = await axios.post(`${API}/api/notion/databases/${selectedDb.database_id}/projects`, 
+        { name, icon: '📁' }, 
+        { headers }
+      );
+      setProjects([...projects, res.data]);
+      setExpandedProjects({ ...expandedProjects, [res.data.project_id]: true });
+      toast.success('Project created');
+    } catch (error) {
+      toast.error('Failed to create project');
     }
   };
 
@@ -213,9 +264,77 @@ export default function OperationsPage() {
     }
   };
 
+  // Context Menu Actions
+  const handleContextMenu = (e, database) => {
+    e.preventDefault();
+    setContextMenu({
+      show: true,
+      x: e.clientX,
+      y: e.clientY,
+      database
+    });
+  };
+
+  const handleFavorite = async (database) => {
+    try {
+      await axios.put(`${API}/api/notion/databases/${database.database_id}`, 
+        { is_favorite: !database.is_favorite }, 
+        { headers }
+      );
+      loadDatabases();
+      toast.success(database.is_favorite ? 'Removed from favorites' : 'Added to favorites');
+    } catch (error) {
+      toast.error('Failed to update');
+    }
+  };
+
+  const handleDuplicate = async (database) => {
+    try {
+      const res = await axios.post(`${API}/api/notion/databases/${database.database_id}/duplicate`, {}, { headers });
+      setDatabases([res.data, ...databases]);
+      toast.success('Database duplicated');
+    } catch (error) {
+      toast.error('Failed to duplicate');
+    }
+  };
+
+  const handleRename = async () => {
+    if (!renameModal.name.trim()) return;
+    try {
+      await axios.put(`${API}/api/notion/databases/${renameModal.database.database_id}`, 
+        { name: renameModal.name }, 
+        { headers }
+      );
+      loadDatabases();
+      setRenameModal({ show: false, database: null, name: '' });
+      toast.success('Renamed successfully');
+    } catch (error) {
+      toast.error('Failed to rename');
+    }
+  };
+
+  const handleDelete = async (database) => {
+    if (!window.confirm(`Delete "${database.name}" and all its data?`)) return;
+    try {
+      await axios.delete(`${API}/api/notion/databases/${database.database_id}`, { headers });
+      setDatabases(databases.filter(d => d.database_id !== database.database_id));
+      if (selectedDb?.database_id === database.database_id) {
+        setSelectedDb(databases.find(d => d.database_id !== database.database_id) || null);
+      }
+      toast.success('Database deleted');
+    } catch (error) {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const copyLink = (database) => {
+    const url = `${window.location.origin}/operations?db=${database.database_id}`;
+    navigator.clipboard.writeText(url);
+    toast.success('Link copied!');
+  };
+
   // Apply filters
   const filteredRows = rows.filter(row => {
-    // Search filter
     if (searchQuery) {
       const matches = Object.values(row.values || {}).some(val => 
         String(val).toLowerCase().includes(searchQuery.toLowerCase())
@@ -223,7 +342,6 @@ export default function OperationsPage() {
       if (!matches) return false;
     }
 
-    // Status filter
     if (filters.status) {
       const statusCol = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'status');
       if (statusCol) {
@@ -232,7 +350,6 @@ export default function OperationsPage() {
       }
     }
 
-    // Priority filter
     if (filters.priority) {
       const priorityCol = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'priority');
       if (priorityCol) {
@@ -241,7 +358,6 @@ export default function OperationsPage() {
       }
     }
 
-    // Assignee filter
     if (filters.assignee) {
       const personCol = selectedDb?.columns?.find(c => c.type === 'person');
       if (personCol) {
@@ -250,7 +366,6 @@ export default function OperationsPage() {
       }
     }
 
-    // Date range filter
     if (filters.dateFrom || filters.dateTo) {
       const dateCol = selectedDb?.columns?.find(c => c.type === 'date');
       if (dateCol) {
@@ -266,7 +381,6 @@ export default function OperationsPage() {
     return true;
   });
 
-  // Get filter options
   const statusColumn = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'status');
   const priorityColumn = selectedDb?.columns?.find(c => c.name.toLowerCase() === 'priority');
 
@@ -277,18 +391,53 @@ export default function OperationsPage() {
 
   const hasActiveFilters = Object.values(filters).some(v => v) || searchQuery;
 
+  // Group rows by project for "By Project" view
+  const getRowsByProject = () => {
+    const grouped = { ungrouped: [] };
+    projects.forEach(p => { grouped[p.project_id] = []; });
+    
+    filteredRows.forEach(row => {
+      if (row.project_id && grouped[row.project_id]) {
+        grouped[row.project_id].push(row);
+      } else {
+        grouped.ungrouped.push(row);
+      }
+    });
+    
+    return grouped;
+  };
+
+  // Group rows by status for Kanban view
+  const getRowsByStatus = () => {
+    const grouped = {};
+    const statusOpts = statusColumn?.options || [];
+    statusOpts.forEach(opt => { grouped[opt.id] = []; });
+    grouped['none'] = [];
+    
+    filteredRows.forEach(row => {
+      const status = row.values?.[statusColumn?.column_id];
+      if (status && grouped[status]) {
+        grouped[status].push(row);
+      } else {
+        grouped['none'].push(row);
+      }
+    });
+    
+    return grouped;
+  };
+
   return (
     <Layout>
       <div className="h-full flex flex-col bg-[#09090b]" data-testid="operations-page">
-        {/* Compact Header with Pinned Tabs */}
+        {/* Header with Tabs */}
         <div className="bg-[#0c0a09] border-b border-[#27272a] px-6 py-3">
-          {/* Pinned Database Tabs as Primary Navigation */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1 overflow-x-auto">
               {databases.map(db => (
                 <button
                   key={db.database_id}
                   onClick={() => setSelectedDb(db)}
+                  onContextMenu={(e) => handleContextMenu(e, db)}
                   data-testid={`db-tab-${db.database_id}`}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     selectedDb?.database_id === db.database_id
@@ -298,7 +447,7 @@ export default function OperationsPage() {
                 >
                   <span className="text-base">{db.icon}</span>
                   <span>{db.name}</span>
-                  {db.is_pinned && <span className="text-[10px] text-[#6366f1]">★</span>}
+                  {db.is_favorite && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
                 </button>
               ))}
               
@@ -313,34 +462,68 @@ export default function OperationsPage() {
               className="bg-[#6366f1] hover:bg-[#4f46e5] text-white shrink-0"
             >
               <Plus className="h-4 w-4 mr-2" />
-              New Project
+              New Database
             </Button>
           </div>
         </div>
 
         {selectedDb ? (
           <>
-            {/* Main Toolbar */}
+            {/* Toolbar */}
             <div className="px-6 py-4 bg-[#09090b]">
-              {/* Top row - Title and Add Task */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{selectedDb.icon}</span>
                   <h1 className="text-xl font-semibold text-[#fafafa]">{selectedDb.name}</h1>
-                  <Badge className="bg-[#27272a] text-[#71717a] text-xs">{filteredRows.length} {filteredRows.length === 1 ? 'task' : 'tasks'}</Badge>
+                  <Badge className="bg-[#27272a] text-[#71717a] text-xs">{filteredRows.length} tasks</Badge>
                 </div>
-                <Button
-                  onClick={handleAddRow}
-                  data-testid="add-task-btn"
-                  className="bg-[#10b981] hover:bg-[#059669] text-white font-medium px-6"
-                  size="lg"
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  Add Task
-                </Button>
+                <div className="flex items-center gap-2">
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center bg-[#18181b] rounded-lg p-1 border border-[#27272a]">
+                    <button
+                      onClick={() => setViewMode('table')}
+                      className={`p-2 rounded ${viewMode === 'table' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                      title="Table View"
+                    >
+                      <Table2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('kanban')}
+                      className={`p-2 rounded ${viewMode === 'kanban' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                      title="Kanban View"
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('byProject')}
+                      className={`p-2 rounded ${viewMode === 'byProject' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                      title="By Project View"
+                    >
+                      <FolderPlus className="h-4 w-4" />
+                    </button>
+                  </div>
+                  
+                  <Button
+                    onClick={handleAddProject}
+                    variant="outline"
+                    className="border-[#27272a] bg-[#18181b] text-[#a1a1aa] hover:text-[#fafafa]"
+                  >
+                    <FolderPlus className="h-4 w-4 mr-2" />
+                    New Group
+                  </Button>
+                  
+                  <Button
+                    onClick={() => handleAddRow(null)}
+                    data-testid="add-task-btn"
+                    className="bg-[#10b981] hover:bg-[#059669] text-white font-medium px-6"
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Add Task
+                  </Button>
+                </div>
               </div>
               
-              {/* Search and Filters Row */}
+              {/* Search and Filters */}
               <div className="flex items-center gap-3">
                 <div className="relative flex-1 max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#52525b]" />
@@ -349,17 +532,16 @@ export default function OperationsPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     data-testid="search-input"
-                    className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] placeholder:text-[#52525b] focus:border-[#6366f1]"
+                    className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] placeholder:text-[#52525b]"
                   />
                 </div>
                 
-                {/* Quick Status Filters */}
                 {statusColumn && (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => setFilters({ ...filters, status: '' })}
                       className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                        !filters.status ? 'bg-[#6366f1] text-white' : 'bg-[#18181b] text-[#71717a] hover:text-[#a1a1aa]'
+                        !filters.status ? 'bg-[#6366f1] text-white' : 'bg-[#18181b] text-[#71717a]'
                       }`}
                     >
                       All
@@ -369,9 +551,7 @@ export default function OperationsPage() {
                         key={opt.id}
                         onClick={() => setFilters({ ...filters, status: filters.status === opt.id ? '' : opt.id })}
                         className={`px-3 py-1.5 rounded text-xs font-medium transition-all ${
-                          filters.status === opt.id 
-                            ? 'text-white' 
-                            : 'bg-[#18181b] text-[#71717a] hover:text-[#a1a1aa]'
+                          filters.status === opt.id ? 'text-white' : 'bg-[#18181b] text-[#71717a]'
                         }`}
                         style={filters.status === opt.id ? { backgroundColor: opt.color } : {}}
                       >
@@ -383,82 +563,71 @@ export default function OperationsPage() {
                 
                 <Button
                   onClick={() => setShowFilters(!showFilters)}
-                  data-testid="filters-btn"
                   variant="outline"
-                  className={`border-[#27272a] ${showFilters || hasActiveFilters ? 'bg-[#6366f1]/10 text-[#6366f1] border-[#6366f1]' : 'bg-[#18181b] text-[#71717a]'}`}
+                  className={`border-[#27272a] ${showFilters || hasActiveFilters ? 'bg-[#6366f1]/10 text-[#6366f1]' : 'bg-[#18181b] text-[#71717a]'}`}
                 >
                   <SlidersHorizontal className="h-4 w-4 mr-2" />
                   More Filters
-                  {hasActiveFilters && (
-                    <span className="ml-2 w-2 h-2 rounded-full bg-[#6366f1]" />
-                  )}
+                  {hasActiveFilters && <span className="ml-2 w-2 h-2 rounded-full bg-[#6366f1]" />}
                 </Button>
               </div>
 
-              {/* Expanded Advanced Filters */}
+              {/* Advanced Filters */}
               {showFilters && (
                 <div className="mt-4 p-4 bg-[#18181b] rounded-lg border border-[#27272a]">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-medium text-[#fafafa]">Advanced Filters</h3>
                     {hasActiveFilters && (
-                      <Button variant="ghost" size="sm" onClick={clearFilters} className="text-[#71717a] hover:text-[#fafafa] text-xs">
-                        <X className="h-3 w-3 mr-1" />
-                        Clear all
+                      <Button variant="ghost" size="sm" onClick={clearFilters} className="text-[#71717a] text-xs">
+                        <X className="h-3 w-3 mr-1" /> Clear all
                       </Button>
                     )}
                   </div>
                   <div className="grid grid-cols-4 gap-4">
-                    {/* Priority Filter */}
                     {priorityColumn && (
                       <div>
-                        <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Priority</label>
+                        <label className="block text-xs text-[#52525b] mb-1.5">Priority</label>
                         <select
                           value={filters.priority}
                           onChange={(e) => setFilters({ ...filters, priority: e.target.value })}
-                          className="w-full p-2.5 bg-[#09090b] border border-[#27272a] rounded-lg text-sm text-[#fafafa] focus:border-[#6366f1] focus:outline-none"
+                          className="w-full p-2.5 bg-[#09090b] border border-[#27272a] rounded-lg text-sm text-[#fafafa]"
                         >
-                          <option value="">All Priorities</option>
+                          <option value="">All</option>
                           {priorityColumn.options?.map(opt => (
                             <option key={opt.id} value={opt.id}>{opt.name}</option>
                           ))}
                         </select>
                       </div>
                     )}
-
-                    {/* Assignee Filter */}
                     <div>
-                      <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Assignee</label>
+                      <label className="block text-xs text-[#52525b] mb-1.5">Assignee</label>
                       <select
                         value={filters.assignee}
                         onChange={(e) => setFilters({ ...filters, assignee: e.target.value })}
-                        className="w-full p-2.5 bg-[#09090b] border border-[#27272a] rounded-lg text-sm text-[#fafafa] focus:border-[#6366f1] focus:outline-none"
+                        className="w-full p-2.5 bg-[#09090b] border border-[#27272a] rounded-lg text-sm text-[#fafafa]"
                       >
-                        <option value="">All Team</option>
+                        <option value="">All</option>
                         {users.map(u => (
                           <option key={u.user_id} value={u.user_id}>{u.name}</option>
                         ))}
                       </select>
                     </div>
-
-                    {/* Date From */}
                     <div>
-                      <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Due After</label>
+                      <label className="block text-xs text-[#52525b] mb-1.5">Due After</label>
                       <Input
                         type="date"
                         value={filters.dateFrom}
                         onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                        className="bg-[#09090b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
+                        className="bg-[#09090b] border-[#27272a] text-[#fafafa]"
                       />
                     </div>
-
-                    {/* Date To */}
                     <div>
-                      <label className="block text-xs text-[#52525b] mb-1.5 font-medium">Due Before</label>
+                      <label className="block text-xs text-[#52525b] mb-1.5">Due Before</label>
                       <Input
                         type="date"
                         value={filters.dateTo}
                         onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                        className="bg-[#09090b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
+                        className="bg-[#09090b] border-[#27272a] text-[#fafafa]"
                       />
                     </div>
                   </div>
@@ -466,18 +635,48 @@ export default function OperationsPage() {
               )}
             </div>
 
-            {/* Table */}
+            {/* Content Area */}
             <div className="flex-1 overflow-auto px-6 pb-6">
-              <NotionTable
-                columns={selectedDb.columns}
-                rows={filteredRows}
-                users={users}
-                onUpdateCell={handleUpdateCell}
-                onDeleteRow={handleDeleteRow}
-                onAddColumn={handleAddColumn}
-                onDeleteColumn={handleDeleteColumn}
-                onAddRow={handleAddRow}
-              />
+              {viewMode === 'table' && (
+                <NotionTable
+                  columns={selectedDb.columns}
+                  rows={filteredRows}
+                  users={users}
+                  onUpdateCell={handleUpdateCell}
+                  onDeleteRow={handleDeleteRow}
+                  onAddColumn={handleAddColumn}
+                  onDeleteColumn={handleDeleteColumn}
+                  onAddRow={() => handleAddRow(null)}
+                />
+              )}
+              
+              {viewMode === 'kanban' && statusColumn && (
+                <KanbanView
+                  columns={selectedDb.columns}
+                  rows={filteredRows}
+                  statusColumn={statusColumn}
+                  users={users}
+                  onUpdateCell={handleUpdateCell}
+                  onDeleteRow={handleDeleteRow}
+                  onAddRow={() => handleAddRow(null)}
+                  getRowsByStatus={getRowsByStatus}
+                />
+              )}
+              
+              {viewMode === 'byProject' && (
+                <ByProjectView
+                  columns={selectedDb.columns}
+                  projects={projects}
+                  rows={filteredRows}
+                  users={users}
+                  expandedProjects={expandedProjects}
+                  setExpandedProjects={setExpandedProjects}
+                  onUpdateCell={handleUpdateCell}
+                  onDeleteRow={handleDeleteRow}
+                  onAddRow={handleAddRow}
+                  getRowsByProject={getRowsByProject}
+                />
+              )}
             </div>
           </>
         ) : (
@@ -488,17 +687,50 @@ export default function OperationsPage() {
               </div>
               <h2 className="text-xl font-semibold text-[#fafafa] mb-2">Start your first project</h2>
               <p className="text-[#71717a] mb-6 text-sm">
-                Create a project database to start tracking tasks, clients, or content. Choose from templates or start from scratch.
+                Create a database to start tracking tasks, clients, or content.
               </p>
               <Button
                 onClick={() => setShowTemplateModal(true)}
-                data-testid="create-first-project-btn"
                 className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-8"
-                size="lg"
               >
                 <Plus className="h-5 w-5 mr-2" />
-                Create Project
+                Create Database
               </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Context Menu */}
+        {contextMenu.show && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            database={contextMenu.database}
+            onFavorite={() => handleFavorite(contextMenu.database)}
+            onCopyLink={() => copyLink(contextMenu.database)}
+            onDuplicate={() => handleDuplicate(contextMenu.database)}
+            onRename={() => setRenameModal({ show: true, database: contextMenu.database, name: contextMenu.database.name })}
+            onDelete={() => handleDelete(contextMenu.database)}
+            onClose={() => setContextMenu({ show: false, x: 0, y: 0, database: null })}
+          />
+        )}
+
+        {/* Rename Modal */}
+        {renameModal.show && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold text-[#fafafa] mb-4">Rename Database</h3>
+              <Input
+                value={renameModal.name}
+                onChange={(e) => setRenameModal({ ...renameModal, name: e.target.value })}
+                className="bg-[#27272a] border-[#3f3f46] text-[#fafafa] mb-4"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleRename()}
+              />
+              <div className="flex gap-3">
+                <Button onClick={() => setRenameModal({ show: false, database: null, name: '' })} className="flex-1 bg-[#27272a]">Cancel</Button>
+                <Button onClick={handleRename} className="flex-1 bg-[#6366f1]">Save</Button>
+              </div>
             </div>
           </div>
         )}
@@ -517,9 +749,410 @@ export default function OperationsPage() {
   );
 }
 
-// ============== NOTION TABLE ==============
+// ============== CONTEXT MENU ==============
+function ContextMenu({ x, y, database, onFavorite, onCopyLink, onDuplicate, onRename, onDelete, onClose }) {
+  const menuRef = useRef(null);
+  
+  // Adjust position if menu goes off screen
+  const adjustedX = Math.min(x, window.innerWidth - 200);
+  const adjustedY = Math.min(y, window.innerHeight - 300);
+  
+  return (
+    <div 
+      ref={menuRef}
+      className="fixed z-50 bg-[#18181b] border border-[#27272a] rounded-lg shadow-xl py-1 min-w-[200px]"
+      style={{ left: adjustedX, top: adjustedY }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="px-3 py-2 text-xs text-[#52525b] font-medium border-b border-[#27272a]">Database</div>
+      
+      <button
+        onClick={() => { onFavorite(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#fafafa] hover:bg-[#27272a]"
+      >
+        <Star className={`h-4 w-4 ${database.is_favorite ? 'text-yellow-500 fill-yellow-500' : ''}`} />
+        {database.is_favorite ? 'Remove from Favorites' : 'Add to Favorites'}
+      </button>
+      
+      <button
+        onClick={() => { onCopyLink(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#fafafa] hover:bg-[#27272a]"
+      >
+        <Link2 className="h-4 w-4" />
+        Copy link
+      </button>
+      
+      <button
+        onClick={() => { onDuplicate(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#fafafa] hover:bg-[#27272a]"
+      >
+        <Copy className="h-4 w-4" />
+        Duplicate
+      </button>
+      
+      <button
+        onClick={() => { onRename(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#fafafa] hover:bg-[#27272a]"
+      >
+        <Edit3 className="h-4 w-4" />
+        Rename
+      </button>
+      
+      <div className="border-t border-[#27272a] my-1" />
+      
+      <button
+        onClick={() => { window.open(`/operations?db=${database.database_id}`, '_blank'); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#fafafa] hover:bg-[#27272a]"
+      >
+        <ExternalLink className="h-4 w-4" />
+        Open in new tab
+      </button>
+      
+      <div className="border-t border-[#27272a] my-1" />
+      
+      <button
+        onClick={() => { onDelete(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 text-sm text-red-400 hover:bg-[#27272a]"
+      >
+        <Trash2 className="h-4 w-4" />
+        Move to Trash
+      </button>
+    </div>
+  );
+}
+
+// ============== KANBAN VIEW ==============
+function KanbanView({ columns, rows, statusColumn, users, onUpdateCell, onDeleteRow, onAddRow, getRowsByStatus }) {
+  const rowsByStatus = getRowsByStatus();
+  const nameColumn = columns.find(c => c.is_primary || c.name.toLowerCase() === 'name');
+  
+  return (
+    <div className="flex gap-4 overflow-x-auto pb-4">
+      {statusColumn.options?.map(status => (
+        <div key={status.id} className="flex-shrink-0 w-72 bg-[#18181b] rounded-lg border border-[#27272a]">
+          <div className="p-3 border-b border-[#27272a] flex items-center gap-2">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: status.color }} />
+            <span className="text-sm font-medium text-[#fafafa]">{status.name}</span>
+            <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">
+              {rowsByStatus[status.id]?.length || 0}
+            </Badge>
+          </div>
+          <div className="p-2 space-y-2 max-h-[calc(100vh-350px)] overflow-y-auto">
+            {rowsByStatus[status.id]?.map(row => (
+              <KanbanCard
+                key={row.row_id}
+                row={row}
+                columns={columns}
+                nameColumn={nameColumn}
+                users={users}
+                onDelete={() => onDeleteRow(row.row_id)}
+              />
+            ))}
+            <button
+              onClick={onAddRow}
+              className="w-full p-2 text-sm text-[#71717a] hover:text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" /> Add task
+            </button>
+          </div>
+        </div>
+      ))}
+      
+      {/* No Status column */}
+      {rowsByStatus['none']?.length > 0 && (
+        <div className="flex-shrink-0 w-72 bg-[#18181b] rounded-lg border border-[#27272a]">
+          <div className="p-3 border-b border-[#27272a] flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-[#52525b]" />
+            <span className="text-sm font-medium text-[#fafafa]">No Status</span>
+            <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">{rowsByStatus['none'].length}</Badge>
+          </div>
+          <div className="p-2 space-y-2">
+            {rowsByStatus['none'].map(row => (
+              <KanbanCard
+                key={row.row_id}
+                row={row}
+                columns={columns}
+                nameColumn={nameColumn}
+                users={users}
+                onDelete={() => onDeleteRow(row.row_id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KanbanCard({ row, columns, nameColumn, users, onDelete }) {
+  const priorityCol = columns.find(c => c.name.toLowerCase() === 'priority');
+  const dateCol = columns.find(c => c.type === 'date');
+  const personCol = columns.find(c => c.type === 'person');
+  
+  const priority = priorityCol?.options?.find(o => o.id === row.values?.[priorityCol?.column_id]);
+  const assignee = users.find(u => u.user_id === row.values?.[personCol?.column_id]);
+  const dueDate = row.values?.[dateCol?.column_id];
+  
+  return (
+    <div className="p-3 bg-[#0c0a09] rounded-lg border border-[#27272a] hover:border-[#3f3f46] group">
+      <div className="flex items-start justify-between mb-2">
+        <span className="text-sm text-[#fafafa]">
+          {row.values?.[nameColumn?.column_id] || 'Untitled'}
+        </span>
+        <button
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 text-[#71717a] hover:text-red-400"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {priority && (
+          <Badge style={{ backgroundColor: `${priority.color}20`, color: priority.color }} className="text-xs">
+            {priority.name}
+          </Badge>
+        )}
+        {dueDate && (
+          <span className="text-xs text-[#71717a] flex items-center gap-1">
+            <Calendar className="h-3 w-3" />
+            {new Date(dueDate).toLocaleDateString()}
+          </span>
+        )}
+        {assignee && (
+          <div className="ml-auto w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">
+            {assignee.name?.charAt(0).toUpperCase()}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============== BY PROJECT VIEW ==============
+function ByProjectView({ columns, projects, rows, users, expandedProjects, setExpandedProjects, onUpdateCell, onDeleteRow, onAddRow, getRowsByProject }) {
+  const rowsByProject = getRowsByProject();
+  const nameColumn = columns.find(c => c.is_primary || c.name.toLowerCase() === 'name');
+  
+  const toggleProject = (projectId) => {
+    setExpandedProjects({ ...expandedProjects, [projectId]: !expandedProjects[projectId] });
+  };
+  
+  return (
+    <div className="space-y-4">
+      {projects.map(project => (
+        <div key={project.project_id} className="bg-[#18181b] rounded-lg border border-[#27272a]">
+          <button
+            onClick={() => toggleProject(project.project_id)}
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-[#27272a]/30"
+          >
+            {expandedProjects[project.project_id] ? (
+              <ChevronDown className="h-4 w-4 text-[#71717a]" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-[#71717a]" />
+            )}
+            <span className="text-lg">{project.icon}</span>
+            <span className="font-medium text-[#fafafa]">{project.name}</span>
+            <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-2">
+              {rowsByProject[project.project_id]?.length || 0}
+            </Badge>
+            <button
+              onClick={(e) => { e.stopPropagation(); onAddRow(project.project_id); }}
+              className="ml-auto text-[#71717a] hover:text-[#fafafa] p-1"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </button>
+          
+          {expandedProjects[project.project_id] && (
+            <div className="border-t border-[#27272a]">
+              <ProjectTable
+                columns={columns}
+                rows={rowsByProject[project.project_id] || []}
+                users={users}
+                onUpdateCell={onUpdateCell}
+                onDeleteRow={onDeleteRow}
+                onAddRow={() => onAddRow(project.project_id)}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+      
+      {/* Ungrouped Tasks */}
+      {rowsByProject.ungrouped?.length > 0 && (
+        <div className="bg-[#18181b] rounded-lg border border-[#27272a]">
+          <div className="flex items-center gap-3 p-3">
+            <span className="text-lg">📋</span>
+            <span className="font-medium text-[#fafafa]">Ungrouped Tasks</span>
+            <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-2">
+              {rowsByProject.ungrouped.length}
+            </Badge>
+          </div>
+          <div className="border-t border-[#27272a]">
+            <ProjectTable
+              columns={columns}
+              rows={rowsByProject.ungrouped}
+              users={users}
+              onUpdateCell={onUpdateCell}
+              onDeleteRow={onDeleteRow}
+              onAddRow={() => onAddRow(null)}
+            />
+          </div>
+        </div>
+      )}
+      
+      {projects.length === 0 && rowsByProject.ungrouped?.length === 0 && (
+        <div className="text-center py-8 text-[#71717a]">
+          <FolderPlus className="h-12 w-12 mx-auto mb-3 text-[#3f3f46]" />
+          <p>No projects yet. Click "New Group" to create one.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddRow }) {
+  const sortedColumns = [...columns].sort((a, b) => (a.order || 0) - (b.order || 0));
+  
+  return (
+    <table className="w-full">
+      <thead>
+        <tr className="bg-[#0c0a09]">
+          <th className="w-10 p-2"></th>
+          {sortedColumns.slice(0, 6).map(col => (
+            <th key={col.column_id} className="p-2 text-left text-xs font-medium text-[#71717a] uppercase">
+              {col.name}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(row => (
+          <tr key={row.row_id} className="border-t border-[#27272a] hover:bg-[#27272a]/30 group">
+            <td className="p-2">
+              <button
+                onClick={() => onDeleteRow(row.row_id)}
+                className="opacity-0 group-hover:opacity-100 text-[#71717a] hover:text-red-400"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </td>
+            {sortedColumns.slice(0, 6).map(col => (
+              <td key={col.column_id} className="p-2">
+                <MiniCellEditor
+                  column={col}
+                  value={row.values?.[col.column_id]}
+                  users={users}
+                  onChange={(value) => onUpdateCell(row.row_id, col.column_id, value)}
+                />
+              </td>
+            ))}
+          </tr>
+        ))}
+        <tr className="border-t border-[#27272a]">
+          <td colSpan={sortedColumns.length + 1} className="p-2">
+            <button
+              onClick={onAddRow}
+              className="text-[#71717a] hover:text-[#fafafa] text-sm flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" /> New task
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+function MiniCellEditor({ column, value, users, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [localValue, setLocalValue] = useState(value);
+  
+  useEffect(() => { setLocalValue(value); }, [value]);
+  
+  const handleSave = () => { onChange(localValue); setEditing(false); };
+  
+  if (column.type === 'select') {
+    const selected = column.options?.find(o => o.id === value);
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-transparent text-sm text-[#fafafa] border-none focus:ring-0 cursor-pointer"
+      >
+        <option value="">-</option>
+        {column.options?.map(opt => (
+          <option key={opt.id} value={opt.id}>{opt.name}</option>
+        ))}
+      </select>
+    );
+  }
+  
+  if (column.type === 'checkbox') {
+    return (
+      <input
+        type="checkbox"
+        checked={!!value}
+        onChange={(e) => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border-[#3f3f46] bg-[#27272a] text-[#6366f1]"
+      />
+    );
+  }
+  
+  if (column.type === 'date') {
+    return (
+      <input
+        type="date"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-transparent text-sm text-[#fafafa] border-none"
+      />
+    );
+  }
+  
+  if (column.type === 'person') {
+    const selected = users.find(u => u.user_id === value);
+    return (
+      <select
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-transparent text-sm text-[#fafafa] border-none focus:ring-0 cursor-pointer"
+      >
+        <option value="">-</option>
+        {users.map(u => (
+          <option key={u.user_id} value={u.user_id}>{u.name}</option>
+        ))}
+      </select>
+    );
+  }
+  
+  // Default text
+  if (editing) {
+    return (
+      <input
+        type="text"
+        value={localValue || ''}
+        onChange={(e) => setLocalValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+        className="bg-[#27272a] text-sm text-[#fafafa] border border-[#6366f1] rounded px-1 w-full"
+        autoFocus
+      />
+    );
+  }
+  
+  return (
+    <div
+      onClick={() => setEditing(true)}
+      className="text-sm text-[#fafafa] cursor-text min-h-[24px]"
+    >
+      {value || <span className="text-[#52525b]">-</span>}
+    </div>
+  );
+}
+
+// ============== NOTION TABLE (existing, simplified) ==============
 function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddColumn, onDeleteColumn, onAddRow }) {
-  const [editingCell, setEditingCell] = useState(null);
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
   const [newColumnType, setNewColumnType] = useState('text');
@@ -574,8 +1207,8 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                   <Input
                     value={newColumnName}
                     onChange={(e) => setNewColumnName(e.target.value)}
-                    placeholder="Column name"
-                    className="h-7 text-xs bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    placeholder="Name"
+                    className="h-7 text-xs bg-[#27272a] border-[#3f3f46] text-[#fafafa] w-20"
                     autoFocus
                     onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()}
                   />
@@ -596,14 +1229,8 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                   </Button>
                 </div>
               ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowAddColumn(true)}
-                  className="text-[#71717a] hover:text-[#fafafa] text-xs"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Column
+                <Button variant="ghost" size="sm" onClick={() => setShowAddColumn(true)} className="text-[#71717a] text-xs">
+                  <Plus className="h-3 w-3 mr-1" /> Column
                 </Button>
               )}
             </th>
@@ -628,9 +1255,6 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
                     column={col}
                     value={row.values?.[col.column_id]}
                     users={users}
-                    isEditing={editingCell === `${row.row_id}-${col.column_id}`}
-                    onStartEdit={() => setEditingCell(`${row.row_id}-${col.column_id}`)}
-                    onEndEdit={() => setEditingCell(null)}
                     onChange={(value) => onUpdateCell(row.row_id, col.column_id, value)}
                   />
                 </td>
@@ -640,13 +1264,8 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
           ))}
           <tr className="border-t border-[#27272a]">
             <td colSpan={sortedColumns.length + 2} className="p-2">
-              <Button
-                variant="ghost"
-                onClick={onAddRow}
-                className="text-[#71717a] hover:text-[#fafafa] text-sm w-full justify-start"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New task
+              <Button variant="ghost" onClick={onAddRow} className="text-[#71717a] hover:text-[#fafafa] text-sm w-full justify-start">
+                <Plus className="h-4 w-4 mr-2" /> New task
               </Button>
             </td>
           </tr>
@@ -657,38 +1276,39 @@ function NotionTable({ columns, rows, users, onUpdateCell, onDeleteRow, onAddCol
 }
 
 // ============== CELL EDITOR ==============
-function CellEditor({ column, value, users, isEditing, onStartEdit, onEndEdit, onChange }) {
+function CellEditor({ column, value, users, onChange }) {
+  const [editing, setEditing] = useState(false);
   const [localValue, setLocalValue] = useState(value);
   const inputRef = useRef(null);
 
   useEffect(() => { setLocalValue(value); }, [value]);
-  useEffect(() => { if (isEditing && inputRef.current) inputRef.current.focus(); }, [isEditing]);
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
 
-  const handleSave = () => { onChange(localValue); onEndEdit(); };
+  const handleSave = () => { onChange(localValue); setEditing(false); };
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && column.type !== 'text') handleSave();
-    if (e.key === 'Escape') { setLocalValue(value); onEndEdit(); }
+    if (e.key === 'Escape') { setLocalValue(value); setEditing(false); }
   };
 
   switch (column.type) {
     case 'text':
-      return isEditing ? (
+      return editing ? (
         <Input ref={inputRef} value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
           onBlur={handleSave} onKeyDown={handleKeyDown}
           className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded">
+        <div onClick={() => setEditing(true)} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded">
           {value || <span className="text-[#52525b]">Empty</span>}
         </div>
       );
 
     case 'number':
-      return isEditing ? (
+      return editing ? (
         <Input ref={inputRef} type="number" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
           onBlur={handleSave} onKeyDown={handleKeyDown}
           className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded">
+        <div onClick={() => setEditing(true)} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded">
           {value ?? <span className="text-[#52525b]">-</span>}
         </div>
       );
@@ -700,23 +1320,23 @@ function CellEditor({ column, value, users, isEditing, onStartEdit, onEndEdit, o
       return <MultiSelectCell column={column} value={value} onChange={onChange} />;
 
     case 'date':
-      return isEditing ? (
+      return editing ? (
         <Input ref={inputRef} type="date" value={localValue || ''}
           onChange={(e) => { setLocalValue(e.target.value); onChange(e.target.value); }}
-          onBlur={onEndEdit} className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
+          onBlur={() => setEditing(false)} className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2">
+        <div onClick={() => setEditing(true)} className="min-h-[32px] px-2 py-1 cursor-text text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2">
           {value ? <><Calendar className="h-3 w-3 text-[#71717a]" />{new Date(value).toLocaleDateString()}</> : <span className="text-[#52525b]">Set date</span>}
         </div>
       );
 
     case 'url':
-      return isEditing ? (
+      return editing ? (
         <Input ref={inputRef} type="url" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
           onBlur={handleSave} onKeyDown={handleKeyDown} placeholder="https://"
           className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
+        <div onClick={() => setEditing(true)} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
           {value ? <a href={value} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             <Link2 className="h-3 w-3" />{value.replace(/^https?:\/\//, '').substring(0, 25)}
           </a> : <span className="text-[#52525b]">Add URL</span>}
@@ -724,23 +1344,23 @@ function CellEditor({ column, value, users, isEditing, onStartEdit, onEndEdit, o
       );
 
     case 'email':
-      return isEditing ? (
+      return editing ? (
         <Input ref={inputRef} type="email" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
           onBlur={handleSave} onKeyDown={handleKeyDown}
           className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
+        <div onClick={() => setEditing(true)} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
           {value ? <a href={`mailto:${value}`} className="text-[#6366f1] hover:underline" onClick={(e) => e.stopPropagation()}>{value}</a> : <span className="text-[#52525b]">Add email</span>}
         </div>
       );
 
     case 'phone':
-      return isEditing ? (
+      return editing ? (
         <Input ref={inputRef} type="tel" value={localValue || ''} onChange={(e) => setLocalValue(e.target.value)}
           onBlur={handleSave} onKeyDown={handleKeyDown}
           className="h-8 bg-[#27272a] border-[#6366f1] text-[#fafafa]" />
       ) : (
-        <div onClick={onStartEdit} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
+        <div onClick={() => setEditing(true)} className="min-h-[32px] px-2 py-1 cursor-text hover:bg-[#27272a] rounded">
           {value ? <a href={`tel:${value}`} className="text-[#fafafa]" onClick={(e) => e.stopPropagation()}>{value}</a> : <span className="text-[#52525b]">Add phone</span>}
         </div>
       );
@@ -866,7 +1486,7 @@ function TemplateModal({ templates, onSelect, onCreateBlank, onClose }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
 
   const handleCreate = () => {
-    if (!dbName.trim()) { toast.error('Enter a project name'); return; }
+    if (!dbName.trim()) { toast.error('Enter a name'); return; }
     if (selectedTemplate) onSelect(selectedTemplate, dbName);
     else onCreateBlank(dbName);
   };
@@ -875,13 +1495,13 @@ function TemplateModal({ templates, onSelect, onCreateBlank, onClose }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-[#18181b] border border-[#27272a] rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-[#27272a]">
-          <h2 className="text-lg font-semibold text-[#fafafa]">New Project</h2>
+          <h2 className="text-lg font-semibold text-[#fafafa]">New Database</h2>
           <Button variant="ghost" onClick={onClose} className="text-[#71717a]"><X className="h-5 w-5" /></Button>
         </div>
         <div className="p-4 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 130px)' }}>
           <div className="mb-6">
-            <label className="block text-sm text-[#a1a1aa] mb-2">Project Name</label>
-            <Input value={dbName} onChange={(e) => setDbName(e.target.value)} placeholder="e.g., Website Development"
+            <label className="block text-sm text-[#a1a1aa] mb-2">Database Name</label>
+            <Input value={dbName} onChange={(e) => setDbName(e.target.value)} placeholder="e.g., Client Projects"
               className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]" autoFocus />
           </div>
           <div className="mb-4">
@@ -910,7 +1530,7 @@ function TemplateModal({ templates, onSelect, onCreateBlank, onClose }) {
         </div>
         <div className="flex gap-3 p-4 border-t border-[#27272a]">
           <Button onClick={onClose} className="flex-1 bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]">Cancel</Button>
-          <Button onClick={handleCreate} className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white">Create Project</Button>
+          <Button onClick={handleCreate} className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white">Create</Button>
         </div>
       </div>
     </div>
