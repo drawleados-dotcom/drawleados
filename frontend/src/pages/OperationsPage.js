@@ -360,16 +360,35 @@ export default function OperationsPage() {
   };
 
   const handleDelete = async (database) => {
-    if (!window.confirm(`Delete "${database.name}" and all its data?`)) return;
+    setDeleteModal({
+      show: true,
+      type: 'database',
+      item: { id: database.database_id, name: database.name },
+      confirmText: ''
+    });
+  };
+
+  const executeDeleteDatabase = async (databaseId) => {
     try {
-      await axios.delete(`${API}/api/notion/databases/${database.database_id}`, { headers });
-      setDatabases(databases.filter(d => d.database_id !== database.database_id));
-      if (selectedDb?.database_id === database.database_id) {
-        setSelectedDb(databases.find(d => d.database_id !== database.database_id) || null);
+      await axios.delete(`${API}/api/notion/databases/${databaseId}`, { headers });
+      setDatabases(databases.filter(d => d.database_id !== databaseId));
+      if (selectedDb?.database_id === databaseId) {
+        setSelectedDb(databases.find(d => d.database_id !== databaseId) || null);
       }
       toast.success('Database deleted');
+      setDeleteModal({ show: false, type: '', item: null, confirmText: '' });
     } catch (error) {
       toast.error('Failed to delete');
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (deleteModal.type === 'database') {
+      executeDeleteDatabase(deleteModal.item.id);
+    } else if (deleteModal.type === 'project') {
+      executeDeleteProject(deleteModal.item.id);
+    } else if (deleteModal.type === 'task') {
+      executeDeleteRow(deleteModal.item.id);
     }
   };
 
