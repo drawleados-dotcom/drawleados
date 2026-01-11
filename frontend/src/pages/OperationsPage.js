@@ -1613,3 +1613,100 @@ function TemplateModal({ templates, onSelect, onCreateBlank, onClose }) {
     </div>
   );
 }
+
+// ============== DELETE CONFIRMATION MODAL ==============
+function DeleteConfirmationModal({ type, itemName, confirmText, onConfirmTextChange, onConfirm, onCancel }) {
+  const typeLabels = {
+    database: 'Database',
+    project: 'Project',
+    task: 'Task'
+  };
+  
+  const typeDescriptions = {
+    database: 'This will permanently delete the database, all its projects, and all tasks. This action cannot be undone.',
+    project: 'This will delete the project. All tasks in this project will be moved to "Ungrouped Tasks".',
+    task: 'This will permanently delete this task. This action cannot be undone.'
+  };
+  
+  const label = typeLabels[type] || 'Item';
+  const description = typeDescriptions[type] || 'This action cannot be undone.';
+  const isConfirmed = confirmText.toLowerCase() === itemName.toLowerCase();
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#18181b] border border-[#27272a] rounded-xl w-full max-w-md">
+        <div className="p-6">
+          {/* Warning Icon */}
+          <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+            <Trash2 className="h-6 w-6 text-red-500" />
+          </div>
+          
+          <h3 className="text-lg font-semibold text-[#fafafa] text-center mb-2">
+            Delete {label}
+          </h3>
+          
+          <p className="text-sm text-[#71717a] text-center mb-4">
+            {description}
+          </p>
+          
+          {/* Item name display */}
+          <div className="bg-[#0c0a09] border border-[#27272a] rounded-lg p-3 mb-4">
+            <p className="text-xs text-[#52525b] mb-1">{label} to be deleted:</p>
+            <p className="text-[#fafafa] font-medium break-all">{itemName}</p>
+          </div>
+          
+          {/* Confirmation input */}
+          <div className="mb-4">
+            <label className="block text-sm text-[#a1a1aa] mb-2">
+              Type <span className="font-semibold text-[#fafafa]">{itemName}</span> to confirm:
+            </label>
+            <Input
+              value={confirmText}
+              onChange={(e) => onConfirmTextChange(e.target.value)}
+              placeholder={`Enter "${itemName}" to confirm`}
+              className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+              autoFocus
+              data-testid="delete-confirm-input"
+            />
+          </div>
+          
+          {/* Match indicator */}
+          {confirmText && (
+            <div className={`text-xs mb-4 flex items-center gap-2 ${isConfirmed ? 'text-green-500' : 'text-red-400'}`}>
+              {isConfirmed ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  <span>Name matches</span>
+                </>
+              ) : (
+                <>
+                  <X className="h-3 w-3" />
+                  <span>Name does not match</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Actions */}
+        <div className="flex gap-3 p-4 border-t border-[#27272a]">
+          <Button 
+            onClick={onCancel} 
+            className="flex-1 bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={onConfirm}
+            disabled={!isConfirmed}
+            className={`flex-1 ${isConfirmed ? 'bg-red-600 hover:bg-red-700' : 'bg-red-600/30 cursor-not-allowed'} text-white`}
+            data-testid="delete-confirm-btn"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete {label}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
