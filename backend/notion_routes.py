@@ -200,7 +200,7 @@ async def update_database(database_id: str, data: Dict[str, Any], request: Reque
     """Update database properties"""
     await get_current_user(request)
     
-    allowed_fields = ["name", "icon", "description"]
+    allowed_fields = ["name", "icon", "description", "is_pinned", "pin_order"]
     update_data = {k: v for k, v in data.items() if k in allowed_fields}
     update_data["updated_at"] = datetime.now(timezone.utc)
     
@@ -208,6 +208,41 @@ async def update_database(database_id: str, data: Dict[str, Any], request: Reque
         {"database_id": database_id},
         {"$set": update_data}
     )
+    
+    return await db.notion_databases.find_one({"database_id": database_id}, {"_id": 0})
+
+@notion_router.put("/databases/{database_id}/pin")
+async def toggle_pin_database(database_id: str, request: Request):
+    """Toggle pin status of a database"""
+    await get_current_user(request)
+    
+    database = await db.notion_databases.find_one({"database_id": database_id})
+    if not database:
+        raise HTTPException(status_code=404, detail="Database not found")
+    
+    is_currently_pinned = database.get("is_pinned", False)
+    
+    if not is_currently_pinned:
+        # Check if already have 5 pinned
+        pinned_count = await db.notion_databases.count_documents({"is_pinned": True})
+        if pinned_count >= 5:
+            raise HTTPException(status_code=400, detail="Maximum 5 databases can be pinned")
+        
+        # Get next pin order
+        max_order = 0
+        pinned_dbs = await db.notion_databases.find({"is_pinned": True}).to_list(5)
+        if pinned_dbs:
+            max_order = max([d.get("pin_order", 0) for d in pinned_dbs])
+        
+        await db.notion_databases.update_one(
+            {"database_id": database_id},
+            {"$set": {"is_pinned": True, "pin_order": max_order + 1}}
+        )
+    else:
+        await db.notion_databases.update_one(
+            {"database_id": database_id},
+            {"$set": {"is_pinned": False, "pin_order": 0}}
+        )
     
     return await db.notion_databases.find_one({"database_id": database_id}, {"_id": 0})
 
