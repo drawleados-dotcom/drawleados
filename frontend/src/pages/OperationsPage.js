@@ -1007,7 +1007,7 @@ function KanbanCard({ row, columns, nameColumn, users, onDelete }) {
 }
 
 // ============== BY PROJECT VIEW ==============
-function ByProjectView({ columns, projects, rows, users, expandedProjects, setExpandedProjects, onUpdateCell, onDeleteRow, onAddRow, getRowsByProject }) {
+function ByProjectView({ columns, projects, rows, users, expandedProjects, setExpandedProjects, onUpdateCell, onDeleteRow, onDeleteProject, onAddRow, getRowsByProject }) {
   const rowsByProject = getRowsByProject();
   const nameColumn = columns.find(c => c.is_primary || c.name.toLowerCase() === 'name');
   
@@ -1018,28 +1018,40 @@ function ByProjectView({ columns, projects, rows, users, expandedProjects, setEx
   return (
     <div className="space-y-4">
       {projects.map(project => (
-        <div key={project.project_id} className="bg-[#18181b] rounded-lg border border-[#27272a]">
-          <button
-            onClick={() => toggleProject(project.project_id)}
-            className="w-full flex items-center gap-3 p-3 text-left hover:bg-[#27272a]/30"
-          >
-            {expandedProjects[project.project_id] ? (
-              <ChevronDown className="h-4 w-4 text-[#71717a]" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-[#71717a]" />
-            )}
-            <span className="text-lg">{project.icon}</span>
-            <span className="font-medium text-[#fafafa]">{project.name}</span>
-            <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-2">
-              {rowsByProject[project.project_id]?.length || 0}
-            </Badge>
+        <div key={project.project_id} className="bg-[#18181b] rounded-lg border border-[#27272a] group">
+          <div className="flex items-center gap-3 p-3 hover:bg-[#27272a]/30">
             <button
-              onClick={(e) => { e.stopPropagation(); onAddRow(project.project_id); }}
-              className="ml-auto text-[#71717a] hover:text-[#fafafa] p-1"
+              onClick={() => toggleProject(project.project_id)}
+              className="flex items-center gap-3 flex-1 text-left"
             >
-              <Plus className="h-4 w-4" />
+              {expandedProjects[project.project_id] ? (
+                <ChevronDown className="h-4 w-4 text-[#71717a]" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-[#71717a]" />
+              )}
+              <span className="text-lg">{project.icon}</span>
+              <span className="font-medium text-[#fafafa]">{project.name}</span>
+              <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-2">
+                {rowsByProject[project.project_id]?.length || 0}
+              </Badge>
             </button>
-          </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddRow(project.project_id); }}
+                className="text-[#71717a] hover:text-[#fafafa] p-1"
+                title="Add task"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onDeleteProject(project.project_id); }}
+                className="opacity-0 group-hover:opacity-100 text-[#71717a] hover:text-red-400 p-1"
+                title="Delete project"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
           
           {expandedProjects[project.project_id] && (
             <div className="border-t border-[#27272a]">
