@@ -39,10 +39,16 @@ init_hr_db(db)
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-# Health check endpoint for Kubernetes
+# Health check endpoint for Kubernetes (root level)
 @app.get("/health")
 async def health_check():
     """Health check endpoint for deployment readiness"""
+    return {"status": "healthy", "service": "drawlead-os"}
+
+# Health check endpoint under /api for external access
+@api_router.get("/health")
+async def api_health_check():
+    """Health check endpoint for deployment readiness (API route)"""
     return {"status": "healthy", "service": "drawlead-os"}
 
 EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
