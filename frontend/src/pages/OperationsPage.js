@@ -55,6 +55,14 @@ export default function OperationsPage() {
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, database: null });
   const [renameModal, setRenameModal] = useState({ show: false, database: null, name: '' });
   
+  // Delete Confirmation Modal
+  const [deleteModal, setDeleteModal] = useState({ 
+    show: false, 
+    type: '', // 'database', 'project', 'task'
+    item: null,
+    confirmText: ''
+  });
+  
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
