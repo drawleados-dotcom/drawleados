@@ -47,9 +47,15 @@ class DatabaseCreate(BaseModel):
     name: str
     icon: str = "📋"
     description: str = ""
+    category: str = ""  # Service-based category (Website, SEO, etc.) or custom
+
+class ProjectCreate(BaseModel):
+    name: str
+    icon: str = "📁"
 
 class RowCreate(BaseModel):
     values: Dict[str, Any] = {}
+    project_id: Optional[str] = None  # Link to parent project
 
 # ============== AUTH HELPER ==============
 
