@@ -486,16 +486,22 @@ export default function OperationsPage() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Database className="h-16 w-16 text-[#3f3f46] mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-[#fafafa] mb-2">No project selected</h2>
-              <p className="text-[#a1a1aa] mb-4">Select a project from the sidebar or create a new one</p>
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-center max-w-md">
+              <div className="w-20 h-20 rounded-2xl bg-[#18181b] border border-[#27272a] flex items-center justify-center mx-auto mb-6">
+                <Database className="h-10 w-10 text-[#3f3f46]" />
+              </div>
+              <h2 className="text-xl font-semibold text-[#fafafa] mb-2">Start your first project</h2>
+              <p className="text-[#71717a] mb-6 text-sm">
+                Create a project database to start tracking tasks, clients, or content. Choose from templates or start from scratch.
+              </p>
               <Button
                 onClick={() => setShowTemplateModal(true)}
-                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                data-testid="create-first-project-btn"
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-8"
+                size="lg"
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="h-5 w-5 mr-2" />
                 Create Project
               </Button>
             </div>
