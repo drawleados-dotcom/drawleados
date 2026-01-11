@@ -1,26 +1,23 @@
 # Drawlead OS - Product Requirements Document
 
-## Last Updated: January 9, 2026
+## Last Updated: January 11, 2026
 
 ---
 
-## Recent Changes (January 9, 2026)
+## Recent Changes (January 11, 2026)
+- **Notion-like Operations Module:** Replaced old Operations page with full Notion-style database system
+  - Custom databases with templates (Project Tracker, Task List, etc.)
+  - 10 column types: Text, Number, Select, Multi-select, Date, URL, Email, Phone, Checkbox, Person
+  - Inline cell editing with auto-save
+  - Add/delete columns and rows
+  - Search functionality
+  - Color-coded select dropdowns
+
+## Previous Changes (January 9, 2026)
 - **Bug Fix:** Resolved "Access denied" error when admin users tried to create new users
-  - Root cause: `can_manage_users` permission was `false` for admin role
-  - Fixed in database and seed data
 - **CORS Fix:** Updated backend CORS config to support localhost testing
 - **HR Module Implementation:** Built comprehensive HR portal for employees
-  - Attendance system with WFH/Office clock-in
-  - Employee profile (view-only)
-  - Leave management with balance tracking
-  - Payslips download
-  - Performance reviews (Q1-Q4)
-  - Access control: Employees restricted to Dashboard, Operations, HR only
 - **HR Admin Module:** Built admin dashboard for HR management
-  - Dashboard with employee stats (total, present, absent, WFH, pending leaves)
-  - Employee management with profile editing
-  - Leave request approval/rejection with email notifications
-  - Team attendance overview
 - **Deployment Fix:** Added `/health` endpoint for Kubernetes health checks
 
 ## Overview
