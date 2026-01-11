@@ -800,6 +800,18 @@ export default function OperationsPage() {
           </div>
         )}
 
+        {/* Delete Confirmation Modal */}
+        {deleteModal.show && (
+          <DeleteConfirmationModal
+            type={deleteModal.type}
+            itemName={deleteModal.item?.name || ''}
+            confirmText={deleteModal.confirmText}
+            onConfirmTextChange={(text) => setDeleteModal({ ...deleteModal, confirmText: text })}
+            onConfirm={handleConfirmDelete}
+            onCancel={() => setDeleteModal({ show: false, type: '', item: null, confirmText: '' })}
+          />
+        )}
+
         {/* Template Modal */}
         {showTemplateModal && (
           <TemplateModal
