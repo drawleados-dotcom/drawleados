@@ -1145,9 +1145,8 @@ function KanbanCard({ row, columns, nameColumn, users, onDelete }) {
 }
 
 // ============== BY PROJECT VIEW ==============
-function ByProjectView({ columns, projects, rows, users, expandedProjects, setExpandedProjects, onUpdateCell, onDeleteRow, onDeleteProject, onAddRow, getRowsByProject }) {
+function ByProjectView({ columns, projects, rows, users, expandedProjects, setExpandedProjects, onUpdateCell, onDeleteRow, onDeleteProject, onAddRow, getRowsByProject, projectDocs, onOpenDocument, onAddDocument, onRemoveDocument }) {
   const rowsByProject = getRowsByProject();
-  const nameColumn = columns.find(c => c.is_primary || c.name.toLowerCase() === 'name');
   
   const toggleProject = (projectId) => {
     setExpandedProjects({ ...expandedProjects, [projectId]: !expandedProjects[projectId] });
@@ -1155,56 +1154,95 @@ function ByProjectView({ columns, projects, rows, users, expandedProjects, setEx
   
   return (
     <div className="space-y-4">
-      {projects.map(project => (
-        <div key={project.project_id} className="bg-[#18181b] rounded-lg border border-[#27272a] group">
-          <div className="flex items-center gap-3 p-3 hover:bg-[#27272a]/30">
-            <button
-              onClick={() => toggleProject(project.project_id)}
-              className="flex items-center gap-3 flex-1 text-left"
-            >
-              {expandedProjects[project.project_id] ? (
-                <ChevronDown className="h-4 w-4 text-[#71717a]" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-[#71717a]" />
-              )}
-              <span className="text-lg">{project.icon}</span>
-              <span className="font-medium text-[#fafafa]">{project.name}</span>
-              <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-2">
-                {rowsByProject[project.project_id]?.length || 0}
-              </Badge>
-            </button>
-            <div className="flex items-center gap-1">
+      {projects.map(project => {
+        const docs = projectDocs?.[project.project_id] || [];
+        
+        return (
+          <div key={project.project_id} className="bg-[#18181b] rounded-lg border border-[#27272a] group">
+            {/* Project Header */}
+            <div className="flex items-center gap-3 p-3 hover:bg-[#27272a]/30">
               <button
-                onClick={(e) => { e.stopPropagation(); onAddRow(project.project_id); }}
-                className="text-[#71717a] hover:text-[#fafafa] p-1"
-                title="Add task"
+                onClick={() => toggleProject(project.project_id)}
+                className="flex items-center gap-3 flex-1 text-left"
               >
-                <Plus className="h-4 w-4" />
+                {expandedProjects[project.project_id] ? (
+                  <ChevronDown className="h-4 w-4 text-[#71717a]" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-[#71717a]" />
+                )}
+                <span className="text-lg">{project.icon}</span>
+                <span className="font-medium text-[#fafafa]">{project.name}</span>
+                <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-2">
+                  {rowsByProject[project.project_id]?.length || 0} tasks
+                </Badge>
+                {docs.length > 0 && (
+                  <Badge className="bg-[#10b981]/20 text-[#10b981] text-xs">
+                    {docs.length} docs
+                  </Badge>
+                )}
               </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); onDeleteProject(project.project_id); }}
-                className="opacity-0 group-hover:opacity-100 text-[#71717a] hover:text-red-400 p-1"
-                title="Delete project"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAddDocument?.(project.project_id); }}
+                  className="text-[#71717a] hover:text-[#10b981] p-1"
+                  title="Add Google Sheet/Doc"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAddRow(project.project_id); }}
+                  className="text-[#71717a] hover:text-[#fafafa] p-1"
+                  title="Add task"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDeleteProject(project.project_id); }}
+                  className="opacity-0 group-hover:opacity-100 text-[#71717a] hover:text-red-400 p-1"
+                  title="Delete project"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
+            
+            {/* Expanded Content */}
+            {expandedProjects[project.project_id] && (
+              <div className="border-t border-[#27272a]">
+                {/* Google Docs Section */}
+                {docs.length > 0 && (
+                  <div className="p-3 bg-[#0c0a09] border-b border-[#27272a]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileSpreadsheet className="h-4 w-4 text-[#10b981]" />
+                      <span className="text-xs font-medium text-[#a1a1aa]">Linked Documents</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {docs.map(doc => (
+                        <DocumentChip
+                          key={doc.doc_id}
+                          doc={doc}
+                          onClick={() => onOpenDocument?.(doc)}
+                          onRemove={() => onRemoveDocument?.(project.project_id, doc.doc_id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Tasks Table */}
+                <ProjectTable
+                  columns={columns}
+                  rows={rowsByProject[project.project_id] || []}
+                  users={users}
+                  onUpdateCell={onUpdateCell}
+                  onDeleteRow={onDeleteRow}
+                  onAddRow={() => onAddRow(project.project_id)}
+                />
+              </div>
+            )}
           </div>
-          
-          {expandedProjects[project.project_id] && (
-            <div className="border-t border-[#27272a]">
-              <ProjectTable
-                columns={columns}
-                rows={rowsByProject[project.project_id] || []}
-                users={users}
-                onUpdateCell={onUpdateCell}
-                onDeleteRow={onDeleteRow}
-                onAddRow={() => onAddRow(project.project_id)}
-              />
-            </div>
-          )}
-        </div>
-      ))}
+        );
+      })}
       
       {/* Ungrouped Tasks */}
       {rowsByProject.ungrouped?.length > 0 && (
