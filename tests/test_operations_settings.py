@@ -7,7 +7,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://workflowdeck.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://drawlead-marketing.preview.emergentagent.com').rstrip('/')
 SESSION_TOKEN = os.environ.get('SESSION_TOKEN', 'test_session_1767922691324')
 
 class TestAuthAndUsers:
