@@ -1538,6 +1538,7 @@ api_router.include_router(operations_router)
 api_router.include_router(hr_router)
 api_router.include_router(notion_router)
 api_router.include_router(chat_router)
+api_router.include_router(marketing_router)
 
 # Include router in main app
 app.include_router(api_router)
