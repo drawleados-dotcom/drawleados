@@ -1899,3 +1899,265 @@ function DeleteConfirmationModal({ type, itemName, confirmText, onConfirmTextCha
     </div>
   );
 }
+
+
+// ============== DOCUMENT CHIP ==============
+function DocumentChip({ doc, onClick, onRemove }) {
+  const isSheet = doc.file_type === 'sheet';
+  
+  return (
+    <div 
+      className="flex items-center gap-2 px-3 py-1.5 bg-[#18181b] border border-[#27272a] rounded-lg hover:border-[#3f3f46] transition-colors group cursor-pointer"
+      onClick={onClick}
+    >
+      {isSheet ? (
+        <FileSpreadsheet className="h-4 w-4 text-[#10b981]" />
+      ) : (
+        <FileText className="h-4 w-4 text-[#3b82f6]" />
+      )}
+      <span className="text-sm text-[#fafafa] max-w-[150px] truncate">{doc.name}</span>
+      <button
+        onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
+        className="opacity-0 group-hover:opacity-100 text-[#71717a] hover:text-red-400"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+// ============== ADD DOCUMENT MODAL ==============
+function AddDocumentModal({ projectId, onAdd, onClose }) {
+  const [url, setUrl] = useState('');
+  const [name, setName] = useState('');
+  const [docType, setDocType] = useState(null);
+  
+  // Detect document type from URL
+  useEffect(() => {
+    if (url.includes('docs.google.com/spreadsheets') || url.includes('sheets.google.com')) {
+      setDocType('sheet');
+    } else if (url.includes('docs.google.com/document')) {
+      setDocType('doc');
+    } else {
+      setDocType(null);
+    }
+  }, [url]);
+  
+  const handleSubmit = () => {
+    if (!url.trim()) {
+      return;
+    }
+    onAdd(projectId, url, name || undefined);
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#18181b] border border-[#27272a] rounded-xl w-full max-w-lg">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-lg bg-[#10b981]/20 flex items-center justify-center">
+              <FileSpreadsheet className="h-5 w-5 text-[#10b981]" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-[#fafafa]">Add Google Document</h3>
+              <p className="text-sm text-[#71717a]">Paste a Google Sheet or Doc link</p>
+            </div>
+          </div>
+          
+          {/* URL Input */}
+          <div className="mb-4">
+            <label className="block text-sm text-[#a1a1aa] mb-2">Google Docs/Sheets URL</label>
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+              autoFocus
+            />
+            {url && (
+              <div className="mt-2 flex items-center gap-2">
+                {docType === 'sheet' && (
+                  <>
+                    <FileSpreadsheet className="h-4 w-4 text-[#10b981]" />
+                    <span className="text-xs text-[#10b981]">Google Sheet detected</span>
+                  </>
+                )}
+                {docType === 'doc' && (
+                  <>
+                    <FileText className="h-4 w-4 text-[#3b82f6]" />
+                    <span className="text-xs text-[#3b82f6]">Google Doc detected</span>
+                  </>
+                )}
+                {url && !docType && (
+                  <span className="text-xs text-red-400">Invalid Google Docs/Sheets URL</span>
+                )}
+              </div>
+            )}
+          </div>
+          
+          {/* Name Input */}
+          <div className="mb-6">
+            <label className="block text-sm text-[#a1a1aa] mb-2">Display Name (optional)</label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Content Calendar, Project Tracker"
+              className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+            />
+          </div>
+          
+          {/* Info Box */}
+          <div className="bg-[#0c0a09] border border-[#27272a] rounded-lg p-4 mb-6">
+            <h4 className="text-sm font-medium text-[#fafafa] mb-2">Important</h4>
+            <ul className="text-xs text-[#71717a] space-y-1">
+              <li>• Make sure the document is shared or you have access</li>
+              <li>• Documents will open in an embedded view</li>
+              <li>• You can edit if you have edit permissions</li>
+            </ul>
+          </div>
+        </div>
+        
+        {/* Actions */}
+        <div className="flex gap-3 p-4 border-t border-[#27272a]">
+          <Button onClick={onClose} className="flex-1 bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit}
+            disabled={!docType}
+            className={`flex-1 ${docType ? 'bg-[#10b981] hover:bg-[#059669]' : 'bg-[#10b981]/30 cursor-not-allowed'} text-white`}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Document
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============== GOOGLE DOC PANEL (Split View) ==============
+function GoogleDocPanel({ doc, width, isFullscreen, onClose, onToggleFullscreen }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const iframeRef = useRef(null);
+  
+  const isSheet = doc?.file_type === 'sheet';
+  
+  // Generate embed URL
+  const getEmbedUrl = () => {
+    if (!doc?.file_id) return null;
+    if (isSheet) {
+      return `https://docs.google.com/spreadsheets/d/${doc.file_id}/edit?usp=sharing&rm=minimal&embedded=true`;
+    }
+    return `https://docs.google.com/document/d/${doc.file_id}/edit?usp=sharing&rm=minimal&embedded=true`;
+  };
+  
+  const embedUrl = getEmbedUrl();
+  
+  const handleLoad = () => {
+    setIsLoading(false);
+  };
+  
+  const handleError = () => {
+    setIsLoading(false);
+    setHasError(true);
+  };
+  
+  const refreshDoc = () => {
+    setIsLoading(true);
+    setHasError(false);
+    if (iframeRef.current) {
+      iframeRef.current.src = embedUrl;
+    }
+  };
+  
+  const openInGoogle = () => {
+    window.open(doc.url, '_blank');
+  };
+  
+  if (!doc) return null;
+  
+  return (
+    <div 
+      className={`flex flex-col bg-[#0c0a09] border-l border-[#27272a] ${isFullscreen ? 'fixed inset-0 z-50' : ''}`}
+      style={{ width: isFullscreen ? '100%' : `${width}%` }}
+    >
+      {/* Panel Header */}
+      <div className="flex items-center justify-between p-3 border-b border-[#27272a] bg-[#18181b]">
+        <div className="flex items-center gap-3">
+          {isSheet ? (
+            <FileSpreadsheet className="h-5 w-5 text-[#10b981]" />
+          ) : (
+            <FileText className="h-5 w-5 text-[#3b82f6]" />
+          )}
+          <div>
+            <h3 className="text-sm font-medium text-[#fafafa] truncate max-w-[200px]">{doc.name}</h3>
+            <p className="text-xs text-[#71717a]">{isSheet ? 'Google Sheet' : 'Google Doc'}</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={refreshDoc} className="text-[#71717a] hover:text-[#fafafa]" title="Refresh">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={openInGoogle} className="text-[#71717a] hover:text-[#fafafa]" title="Open in Google">
+            <ExternalLink className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onToggleFullscreen} className="text-[#71717a] hover:text-[#fafafa]" title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-[#71717a] hover:text-[#fafafa]" title="Close">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      
+      {/* Document Embed */}
+      <div className="flex-1 relative">
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#0c0a09]">
+            <div className="text-center">
+              <RefreshCw className="h-8 w-8 text-[#6366f1] animate-spin mx-auto mb-2" />
+              <p className="text-sm text-[#71717a]">Loading document...</p>
+            </div>
+          </div>
+        )}
+        
+        {hasError ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-[#0c0a09]">
+            <div className="text-center p-6">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+                <X className="h-8 w-8 text-red-500" />
+              </div>
+              <h3 className="text-lg font-medium text-[#fafafa] mb-2">Unable to load document</h3>
+              <p className="text-sm text-[#71717a] mb-4">
+                The document may be private or the link is invalid.
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button onClick={refreshDoc} variant="outline" className="border-[#27272a]">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try Again
+                </Button>
+                <Button onClick={openInGoogle} className="bg-[#6366f1]">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open in Google
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <iframe
+            ref={iframeRef}
+            src={embedUrl}
+            className="w-full h-full border-0"
+            onLoad={handleLoad}
+            onError={handleError}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        )}
+      </div>
+    </div>
+  );
+}
