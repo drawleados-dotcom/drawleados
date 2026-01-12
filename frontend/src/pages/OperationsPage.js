@@ -64,6 +64,15 @@ export default function OperationsPage() {
     confirmText: ''
   });
   
+  // Google Docs Split View
+  const [projectDocs, setProjectDocs] = useState({});
+  const [selectedDoc, setSelectedDoc] = useState(null);
+  const [showDocPanel, setShowDocPanel] = useState(false);
+  const [docPanelWidth, setDocPanelWidth] = useState(50); // percentage
+  const [isResizing, setIsResizing] = useState(false);
+  const [showAddDocModal, setShowAddDocModal] = useState({ show: false, projectId: null });
+  const [docFullscreen, setDocFullscreen] = useState(false);
+  
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
