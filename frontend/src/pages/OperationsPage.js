@@ -800,47 +800,76 @@ export default function OperationsPage() {
               )}
             </div>
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-auto px-6 pb-6">
-              {viewMode === 'table' && (
-                <NotionTable
-                  columns={selectedDb.columns}
-                  rows={filteredRows}
-                  users={users}
-                  onUpdateCell={handleUpdateCell}
-                  onDeleteRow={handleDeleteRow}
-                  onAddColumn={handleAddColumn}
-                  onDeleteColumn={handleDeleteColumn}
-                  onAddRow={() => handleAddRow(null)}
+            {/* Content Area with Split View */}
+            <div id="split-container" className="flex-1 flex overflow-hidden">
+              {/* Left Panel - Operations Board */}
+              <div 
+                className="overflow-auto px-6 pb-6 transition-all"
+                style={{ width: showDocPanel && !docFullscreen ? `${100 - docPanelWidth}%` : '100%' }}
+              >
+                {viewMode === 'table' && (
+                  <NotionTable
+                    columns={selectedDb.columns}
+                    rows={filteredRows}
+                    users={users}
+                    onUpdateCell={handleUpdateCell}
+                    onDeleteRow={handleDeleteRow}
+                    onAddColumn={handleAddColumn}
+                    onDeleteColumn={handleDeleteColumn}
+                    onAddRow={() => handleAddRow(null)}
+                  />
+                )}
+                
+                {viewMode === 'kanban' && statusColumn && (
+                  <KanbanView
+                    columns={selectedDb.columns}
+                    rows={filteredRows}
+                    statusColumn={statusColumn}
+                    users={users}
+                    onUpdateCell={handleUpdateCell}
+                    onDeleteRow={handleDeleteRow}
+                    onAddRow={() => handleAddRow(null)}
+                    getRowsByStatus={getRowsByStatus}
+                  />
+                )}
+                
+                {viewMode === 'byProject' && (
+                  <ByProjectView
+                    columns={selectedDb.columns}
+                    projects={projects}
+                    rows={filteredRows}
+                    users={users}
+                    expandedProjects={expandedProjects}
+                    setExpandedProjects={setExpandedProjects}
+                    onUpdateCell={handleUpdateCell}
+                    onDeleteRow={handleDeleteRow}
+                    onDeleteProject={handleDeleteProject}
+                    onAddRow={handleAddRow}
+                    getRowsByProject={getRowsByProject}
+                    projectDocs={projectDocs}
+                    onOpenDocument={openDocument}
+                    onAddDocument={(projectId) => setShowAddDocModal({ show: true, projectId })}
+                    onRemoveDocument={handleRemoveDocument}
+                  />
+                )}
+              </div>
+
+              {/* Resize Handle */}
+              {showDocPanel && !docFullscreen && (
+                <div
+                  className="w-1 bg-[#27272a] hover:bg-[#6366f1] cursor-col-resize flex-shrink-0 transition-colors"
+                  onMouseDown={() => setIsResizing(true)}
                 />
               )}
-              
-              {viewMode === 'kanban' && statusColumn && (
-                <KanbanView
-                  columns={selectedDb.columns}
-                  rows={filteredRows}
-                  statusColumn={statusColumn}
-                  users={users}
-                  onUpdateCell={handleUpdateCell}
-                  onDeleteRow={handleDeleteRow}
-                  onAddRow={() => handleAddRow(null)}
-                  getRowsByStatus={getRowsByStatus}
-                />
-              )}
-              
-              {viewMode === 'byProject' && (
-                <ByProjectView
-                  columns={selectedDb.columns}
-                  projects={projects}
-                  rows={filteredRows}
-                  users={users}
-                  expandedProjects={expandedProjects}
-                  setExpandedProjects={setExpandedProjects}
-                  onUpdateCell={handleUpdateCell}
-                  onDeleteRow={handleDeleteRow}
-                  onDeleteProject={handleDeleteProject}
-                  onAddRow={handleAddRow}
-                  getRowsByProject={getRowsByProject}
+
+              {/* Right Panel - Google Doc/Sheet Preview */}
+              {showDocPanel && (
+                <GoogleDocPanel
+                  doc={selectedDoc}
+                  width={docFullscreen ? 100 : docPanelWidth}
+                  isFullscreen={docFullscreen}
+                  onClose={() => { setShowDocPanel(false); setSelectedDoc(null); }}
+                  onToggleFullscreen={() => setDocFullscreen(!docFullscreen)}
                 />
               )}
             </div>
