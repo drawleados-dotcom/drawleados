@@ -321,6 +321,9 @@ const Sidebar = () => {
           Logout
         </Button>
       </div>
+
+      {/* Chat Panel */}
+      <ChatPanel isOpen={chatOpen} onClose={() => { setChatOpen(false); loadUnreadCount(); }} />
     </div>
   );
 };
