@@ -15,9 +15,12 @@ import {
   ChevronDown,
   Plus,
   Database,
+  MessageSquare,
 } from 'lucide-react';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import axios from 'axios';
+import ChatPanel from './ChatPanel';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -27,6 +30,8 @@ const Sidebar = () => {
   const { user, logout, isAdmin } = useAuth();
   const [databases, setDatabases] = useState([]);
   const [operationsExpanded, setOperationsExpanded] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const token = localStorage.getItem('session_token');
 
@@ -48,9 +53,27 @@ const Sidebar = () => {
     }
   }, [token]);
 
+  // Load unread message count
+  const loadUnreadCount = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API}/api/chat/unread-count`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUnreadCount(res.data.unread_count || 0);
+    } catch (error) {
+      console.error('Error loading unread count:', error);
+    }
+  }, [token]);
+
   useEffect(() => {
     loadDatabases();
-  }, [loadDatabases]);
+    loadUnreadCount();
+    
+    // Poll for unread count every 10 seconds
+    const interval = setInterval(loadUnreadCount, 10000);
+    return () => clearInterval(interval);
+  }, [loadDatabases, loadUnreadCount]);
 
   // Expand Operations if we're on that page
   useEffect(() => {
