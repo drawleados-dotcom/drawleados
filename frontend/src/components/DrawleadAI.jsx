@@ -145,7 +145,7 @@ const DrawleadAI = ({ currentModule = 'general', contextData = null }) => {
       {/* Floating AI Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110 ${
+        className={`fixed bottom-24 right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110 ${
           isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'
         }`}
         style={{ background: `linear-gradient(135deg, ${contextColors[contextType]}, #8b5cf6)` }}
@@ -157,7 +157,7 @@ const DrawleadAI = ({ currentModule = 'general', contextData = null }) => {
 
       {/* AI Chat Panel */}
       <div
-        className={`fixed bottom-6 right-6 z-50 w-[420px] h-[600px] bg-[#0c0a09] border border-[#27272a] rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
+        className={`fixed bottom-24 right-6 z-50 w-[420px] h-[550px] bg-[#0c0a09] border border-[#27272a] rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
           isOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
         }`}
         data-testid="ai-chat-panel"
