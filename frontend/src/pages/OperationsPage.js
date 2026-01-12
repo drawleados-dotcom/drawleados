@@ -951,6 +951,15 @@ export default function OperationsPage() {
             onClose={() => setShowTemplateModal(false)}
           />
         )}
+
+        {/* Add Google Doc/Sheet Modal */}
+        {showAddDocModal.show && (
+          <AddDocumentModal
+            projectId={showAddDocModal.projectId}
+            onAdd={handleAddDocument}
+            onClose={() => setShowAddDocModal({ show: false, projectId: null })}
+          />
+        )}
       </div>
     </Layout>
   );
