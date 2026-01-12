@@ -943,3 +943,197 @@ async def get_users_for_assignment(request: Request):
     ).to_list(100)
     
     return users
+
+# ============== GOOGLE DOCS/SHEETS INTEGRATION ==============
+
+def parse_google_url(url: str) -> dict:
+    """Parse Google Docs/Sheets URL to extract file ID and type"""
+    import re
+    
+    # Google Sheets patterns
+    sheets_patterns = [
+        r'docs\.google\.com/spreadsheets/d/([a-zA-Z0-9_-]+)',
+        r'sheets\.google\.com/.*?/d/([a-zA-Z0-9_-]+)',
+    ]
+    
+    # Google Docs patterns
+    docs_patterns = [
+        r'docs\.google\.com/document/d/([a-zA-Z0-9_-]+)',
+    ]
+    
+    for pattern in sheets_patterns:
+        match = re.search(pattern, url)
+        if match:
+            return {"file_id": match.group(1), "type": "sheet"}
+    
+    for pattern in docs_patterns:
+        match = re.search(pattern, url)
+        if match:
+            return {"file_id": match.group(1), "type": "doc"}
+    
+    return None
+
+@notion_router.get("/projects/{project_id}/documents")
+async def get_project_documents(project_id: str, request: Request):
+    """Get all Google Docs/Sheets attached to a project"""
+    await get_current_user(request)
+    
+    documents = await db.project_documents.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return documents
+
+@notion_router.post("/projects/{project_id}/documents")
+async def add_project_document(project_id: str, data: GoogleDocCreate, request: Request):
+    """Add a Google Doc/Sheet to a project"""
+    user = await get_current_user(request)
+    
+    # Verify project exists
+    project = await db.notion_projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Parse URL
+    parsed = parse_google_url(data.url)
+    if not parsed:
+        raise HTTPException(status_code=400, detail="Invalid Google Docs/Sheets URL")
+    
+    # Check if already added
+    existing = await db.project_documents.find_one({
+        "project_id": project_id,
+        "file_id": parsed["file_id"]
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="Document already added to this project")
+    
+    doc_id = f"gdoc_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    # Generate embed URL
+    if parsed["type"] == "sheet":
+        embed_url = f"https://docs.google.com/spreadsheets/d/{parsed['file_id']}/edit?usp=sharing&rm=minimal"
+    else:
+        embed_url = f"https://docs.google.com/document/d/{parsed['file_id']}/edit?usp=sharing&rm=minimal"
+    
+    doc_record = {
+        "doc_id": doc_id,
+        "project_id": project_id,
+        "file_id": parsed["file_id"],
+        "file_type": parsed["type"],
+        "name": data.name or f"{'Sheet' if parsed['type'] == 'sheet' else 'Doc'} - {parsed['file_id'][:8]}",
+        "url": data.url,
+        "embed_url": embed_url,
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name", "Unknown"),
+        "created_at": now
+    }
+    
+    await db.project_documents.insert_one(doc_record)
+    
+    # Log activity
+    activity_doc = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "project_id": project_id,
+        "type": "document_added",
+        "description": f"Added {parsed['type']} document: {doc_record['name']}",
+        "user_id": user["user_id"],
+        "user_name": user.get("name", "Unknown"),
+        "metadata": {"doc_id": doc_id, "file_type": parsed["type"]},
+        "created_at": now
+    }
+    await db.project_activity.insert_one(activity_doc)
+    
+    return await db.project_documents.find_one({"doc_id": doc_id}, {"_id": 0})
+
+@notion_router.put("/projects/{project_id}/documents/{doc_id}")
+async def update_project_document(project_id: str, doc_id: str, data: GoogleDocUpdate, request: Request):
+    """Update a document's name"""
+    await get_current_user(request)
+    
+    update_data = {}
+    if data.name:
+        update_data["name"] = data.name
+    
+    if update_data:
+        await db.project_documents.update_one(
+            {"doc_id": doc_id, "project_id": project_id},
+            {"$set": update_data}
+        )
+    
+    return await db.project_documents.find_one({"doc_id": doc_id}, {"_id": 0})
+
+@notion_router.delete("/projects/{project_id}/documents/{doc_id}")
+async def remove_project_document(project_id: str, doc_id: str, request: Request):
+    """Remove a Google Doc/Sheet from a project"""
+    user = await get_current_user(request)
+    
+    doc = await db.project_documents.find_one({"doc_id": doc_id, "project_id": project_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    await db.project_documents.delete_one({"doc_id": doc_id})
+    
+    # Log activity
+    now = datetime.now(timezone.utc)
+    activity_doc = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "project_id": project_id,
+        "type": "document_removed",
+        "description": f"Removed document: {doc.get('name', 'Unknown')}",
+        "user_id": user["user_id"],
+        "user_name": user.get("name", "Unknown"),
+        "metadata": {"doc_id": doc_id},
+        "created_at": now
+    }
+    await db.project_activity.insert_one(activity_doc)
+    
+    return {"message": "Document removed"}
+
+@notion_router.get("/projects/{project_id}/activity")
+async def get_project_activity(project_id: str, request: Request, limit: int = 50):
+    """Get activity log for a project"""
+    await get_current_user(request)
+    
+    activities = await db.project_activity.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    return activities
+
+# Link task to document
+@notion_router.post("/rows/{row_id}/link-document")
+async def link_task_to_document(row_id: str, data: Dict[str, str], request: Request):
+    """Link a task to a Google Doc/Sheet"""
+    user = await get_current_user(request)
+    
+    doc_id = data.get("doc_id")
+    if not doc_id:
+        raise HTTPException(status_code=400, detail="doc_id required")
+    
+    # Verify document exists
+    doc = await db.project_documents.find_one({"doc_id": doc_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Add to task's linked_documents
+    await db.notion_rows.update_one(
+        {"row_id": row_id},
+        {"$addToSet": {"linked_documents": doc_id}}
+    )
+    
+    return {"message": "Document linked to task"}
+
+@notion_router.delete("/rows/{row_id}/link-document/{doc_id}")
+async def unlink_task_from_document(row_id: str, doc_id: str, request: Request):
+    """Unlink a document from a task"""
+    await get_current_user(request)
+    
+    await db.notion_rows.update_one(
+        {"row_id": row_id},
+        {"$pull": {"linked_documents": doc_id}}
+    )
+    
+    return {"message": "Document unlinked from task"}
