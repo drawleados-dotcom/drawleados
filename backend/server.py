@@ -24,6 +24,7 @@ from hr_routes import hr_router, init_hr_db
 from notion_routes import notion_router, init_notion_db
 from chat_routes import chat_router, init_chat_db
 from marketing_routes import marketing_router, init_marketing_db
+from ai_routes import ai_router, init_ai_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -40,6 +41,7 @@ init_hr_db(db)
 init_notion_db(db)
 init_chat_db(db)
 init_marketing_db(db)
+init_ai_db(db)
 
 # Create the main app
 app = FastAPI()
@@ -1539,6 +1541,7 @@ api_router.include_router(hr_router)
 api_router.include_router(notion_router)
 api_router.include_router(chat_router)
 api_router.include_router(marketing_router)
+api_router.include_router(ai_router)
 
 # Include router in main app
 app.include_router(api_router)
