@@ -16,6 +16,7 @@ import {
   Plus,
   Database,
   MessageSquare,
+  Megaphone,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -205,6 +206,22 @@ const Sidebar = () => {
           <UserCircle className="h-5 w-5" strokeWidth={1.5} />
           HR
         </Link>
+
+        {/* Marketing - Admin only */}
+        {isAdmin && (
+          <Link
+            to="/marketing"
+            data-testid="nav-marketing"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+              location.pathname === '/marketing'
+                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+            }`}
+          >
+            <Megaphone className="h-5 w-5" strokeWidth={1.5} />
+            Marketing
+          </Link>
+        )}
 
         {/* Team Chat */}
         <button

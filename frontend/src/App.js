@@ -15,6 +15,7 @@ import OperationsPage from './pages/OperationsPage';
 import SettingsPage from './pages/SettingsPage';
 import HRPage from './pages/HRPage';
 import HRAdminPage from './pages/HRAdminPage';
+import MarketingModule from './pages/MarketingModule';
 import './App.css';
 
 function AppRouter() {
@@ -97,6 +98,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <HRAdminPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/marketing"
+        element={
+          <ProtectedRoute>
+            <MarketingModule />
           </ProtectedRoute>
         }
       />
