@@ -123,7 +123,7 @@ async def get_project_channel(project_id: str, request: Request):
         }
         
         await db.chat_channels.insert_one(channel)
-        del channel["_id"] if "_id" in channel else None
+        channel.pop("_id", None)
     
     return channel
 
