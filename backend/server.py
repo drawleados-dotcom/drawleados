@@ -23,6 +23,7 @@ from operations_routes import operations_router, init_operations_db
 from hr_routes import hr_router, init_hr_db
 from notion_routes import notion_router, init_notion_db
 from chat_routes import chat_router, init_chat_db
+from marketing_routes import marketing_router, init_marketing_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -38,6 +39,7 @@ init_operations_db(db)
 init_hr_db(db)
 init_notion_db(db)
 init_chat_db(db)
+init_marketing_db(db)
 
 # Create the main app
 app = FastAPI()
