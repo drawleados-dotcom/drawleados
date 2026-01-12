@@ -6,7 +6,8 @@ import { Badge } from '../components/ui/badge';
 import { 
   Plus, ChevronDown, ChevronRight, Link2, Calendar, Hash, Mail, Phone, Check, User, X,
   Trash2, Search, SlidersHorizontal, Database, Star, Copy, Edit3, ExternalLink,
-  LayoutGrid, Table2, FolderPlus, MoreHorizontal, GripVertical
+  LayoutGrid, Table2, FolderPlus, MoreHorizontal, GripVertical, FileSpreadsheet, FileText,
+  PanelRightClose, PanelRight, Maximize2, Minimize2, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
