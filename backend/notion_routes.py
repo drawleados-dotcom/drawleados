@@ -57,6 +57,13 @@ class RowCreate(BaseModel):
     values: Dict[str, Any] = {}
     project_id: Optional[str] = None  # Link to parent project
 
+class GoogleDocCreate(BaseModel):
+    url: str
+    name: Optional[str] = None
+
+class GoogleDocUpdate(BaseModel):
+    name: Optional[str] = None
+
 # ============== AUTH HELPER ==============
 
 async def get_current_user(request: Request) -> dict:
