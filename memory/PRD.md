@@ -4,41 +4,44 @@
 
 ---
 
-## Recent Changes (January 12, 2026)
+## Recent Changes (January 12, 2026 - Latest)
 
-### Google Sheets & Docs Integration - NEW
-Fully integrated Google Docs/Sheets into the Operations module:
+### Slack-like Team Chat Module - NEW
+Built a full team communication system:
 
 **Features:**
-- **Paste Link Approach:** Users paste Google Doc/Sheet URLs (no OAuth required)
-- **URL Detection:** Automatically detects Sheet vs Doc from URL
-- **Document Attachment:** Multiple docs per project
-- **Split View:** Resizable panel with embedded document preview
-- **Live Editing:** Users can edit if they have permissions
-- **Document Management:** Add, view, remove documents from projects
+- **Team Channels:** Create channels like #general, #marketing
+- **Project-linked Channels:** Each project auto-gets a chat channel
+- **Real-time Messages:** Polling updates every 3 seconds
+- **Online Status:** Green indicators for online users
+- **Unread Badges:** Shows unread count on sidebar and channels
+- **Message Actions:** Send, edit (own), delete (own) messages
+- **User Avatars:** Initials-based avatars with colors
 
-**UI Components:**
-- FileSpreadsheet icon on each project header
-- "Add Google Document" modal with URL validation
-- "Linked Documents" section with document chips
-- Split view panel with Refresh/Fullscreen/Open in Google/Close buttons
-- Resizable panel (drag to resize left/right)
+**UI:**
+- Team Chat button in sidebar with unread badge
+- Slide-out chat panel (400px wide)
+- Channel list on left, messages on right
+- Message input with send button
+- Online users list with green dot indicators
 
 **Backend APIs:**
-- `GET /api/notion/projects/{id}/documents` - List documents
-- `POST /api/notion/projects/{id}/documents` - Add document
-- `PUT /api/notion/projects/{id}/documents/{doc_id}` - Update name
-- `DELETE /api/notion/projects/{id}/documents/{doc_id}` - Remove document
-- `GET /api/notion/projects/{id}/activity` - Activity log
-- `POST /api/notion/rows/{row_id}/link-document` - Link task to document
+- `GET /api/chat/channels` - List all channels
+- `POST /api/chat/channels` - Create channel
+- `GET /api/chat/channels/{id}/messages` - Get messages
+- `POST /api/chat/channels/{id}/messages` - Send message
+- `DELETE /api/chat/channels/{id}/messages/{msg_id}` - Delete message
+- `GET /api/chat/unread-count` - Total unread count
+- `POST /api/chat/online` - Heartbeat for online status
+- `GET /api/chat/online-users` - List online users
 
-**Testing:** 15/15 backend tests passed, 13/13 frontend features working
+### Previous (Same Day)
+- Google Sheets/Docs integration with split view
+- Paste-link approach for document embedding
 
 ## Previous Changes (January 11, 2026)
-- Right-click context menu on database tabs
-- Three view modes: Table, Kanban, By Project
-- Hierarchical project structure
-- Safe delete confirmation (type name to confirm)
+- Right-click context menu, 3 view modes
+- Project hierarchy, safe delete confirmation
 - Login fix for vinoth@drawlead.com
 
 ## Architecture
@@ -46,65 +49,87 @@ Fully integrated Google Docs/Sheets into the Operations module:
 /app/
 ├── backend/
 │   ├── server.py
-│   ├── notion_routes.py      # Database, Project, Row, Document APIs
+│   ├── notion_routes.py
+│   ├── chat_routes.py        # NEW - Team chat API
 │   ├── hr_routes.py
 │   └── finance_routes.py
 └── frontend/
     └── src/
-        ├── pages/
-        │   └── OperationsPage.js   # Split view, Google Docs integration
-        └── components/
+        ├── components/
+        │   ├── Sidebar.js      # Updated with chat button
+        │   └── ChatPanel.jsx   # NEW - Chat UI component
+        └── pages/
+            └── OperationsPage.js
 ```
 
 ## Key Features
 
+### Team Chat Module ✅ NEW
+- Channels (team-wide & project-linked)
+- Real-time messaging with polling
+- Online status indicators
+- Unread message badges
+- Message history
+
 ### Operations Module ✅ COMPLETE
-- **Databases:** CRUD, templates, favorites, duplicate
-- **Context Menu:** Right-click with 6 options
-- **Views:** Table, Kanban, By Project
-- **Projects:** Create groups within databases
-- **Google Docs Integration:** Paste links, split view preview
-- **Safe Delete:** Type-to-confirm for all deletions
+- Notion-like databases
+- Google Docs/Sheets integration
+- Split view for documents
+- Table, Kanban, By Project views
+- Context menu, safe delete
 
 ### HR Module ✅ COMPLETE
-- Employee Portal: Attendance, leave, profile
-- Admin Portal: Team management
-- Email notifications (MOCKED - needs Resend API key)
+- Employee & Admin portals
+- Email notifications (MOCKED)
 
 ### Finance Module ✅ COMPLETE
-- Invoices with GST
-- Month-wise reports
-- PDF export
+- Invoices, reports, PDF export
 
 ## Database Schema
 
-### project_documents (NEW)
+### chat_channels (NEW)
 ```json
 {
-  "doc_id": "gdoc_xxxx",
-  "project_id": "proj_xxxx",
-  "file_id": "1BxiMVs...",
-  "file_type": "sheet|doc",
-  "name": "Content Calendar",
-  "url": "https://docs.google.com/...",
-  "embed_url": "https://docs.google.com/.../edit?embedded=true",
+  "channel_id": "ch_xxxx",
+  "name": "general",
+  "description": "General team chat",
+  "icon": "#",
+  "project_id": "proj_xxxx | null",
+  "is_project_channel": false,
   "created_by": "user_xxxx",
-  "created_by_name": "Vinoth",
   "created_at": "datetime"
 }
 ```
 
-### project_activity (NEW)
+### chat_messages (NEW)
 ```json
 {
-  "activity_id": "act_xxxx",
-  "project_id": "proj_xxxx",
-  "type": "document_added|document_removed|document_opened",
-  "description": "Added sheet document: Content Calendar",
+  "message_id": "msg_xxxx",
+  "channel_id": "ch_xxxx",
+  "content": "Hello team!",
   "user_id": "user_xxxx",
   "user_name": "Vinoth",
-  "metadata": {...},
-  "created_at": "datetime"
+  "created_at": "datetime",
+  "is_edited": false
+}
+```
+
+### chat_read_status (NEW)
+```json
+{
+  "channel_id": "ch_xxxx",
+  "user_id": "user_xxxx",
+  "last_read_at": "datetime"
+}
+```
+
+### user_online_status (NEW)
+```json
+{
+  "user_id": "user_xxxx",
+  "user_name": "Vinoth",
+  "last_seen": "datetime",
+  "is_online": true
 }
 ```
 
@@ -114,22 +139,22 @@ Fully integrated Google Docs/Sheets into the Operations module:
 ## Pending Tasks
 
 ### P1 (High Priority)
-- Resend Email Config (user must provide API key)
-- Code Refactoring (split OperationsPage.js - now 2164 lines)
+- Resend Email Config
+- Code Refactoring (split large components)
 
 ### P2 (Medium Priority)
 - Finance: Payroll, GST, Budgeting tabs
-- Drag-and-drop in Kanban view
+- Direct Messages (1-on-1 chat)
 
 ### P3 (Backlog)
-- Calendar/Timeline views
-- Task-to-document linking UI
-- Activity timeline view
+- WebSocket for real-time (replace polling)
+- Message reactions/emojis
+- File attachments in chat
 
 ## Tech Stack
 - **Backend:** FastAPI, MongoDB, Pydantic, JWT
 - **Frontend:** React, Tailwind CSS, shadcn/ui, lucide-react
-- **Integrations:** Google Docs/Sheets embed (iframe), Resend (MOCKED)
+- **Real-time:** Polling (3s interval) - can upgrade to WebSocket
 
 ## Known Mocked Integrations
-- **Resend Email:** Requires user's RESEND_API_KEY in backend/.env
+- **Resend Email:** Requires user's RESEND_API_KEY
