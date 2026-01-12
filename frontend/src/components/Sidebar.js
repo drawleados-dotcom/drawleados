@@ -206,6 +206,21 @@ const Sidebar = () => {
           HR
         </Link>
 
+        {/* Team Chat */}
+        <button
+          onClick={() => setChatOpen(true)}
+          data-testid="nav-chat"
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]"
+        >
+          <MessageSquare className="h-5 w-5" strokeWidth={1.5} />
+          <span className="flex-1 text-left">Team Chat</span>
+          {unreadCount > 0 && (
+            <Badge className="bg-[#ef4444] text-white text-xs px-1.5 py-0 min-w-[20px]">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </Badge>
+          )}
+        </button>
+
         {/* HR Admin - Admin/Manager only */}
         {canManageHR && (
           <Link
