@@ -154,6 +154,23 @@ export default function OperationsPage() {
     }
   }, [token]);
 
+  // Load documents for a project
+  const loadProjectDocs = useCallback(async (projectId) => {
+    try {
+      const res = await axios.get(`${API}/api/notion/projects/${projectId}/documents`, { headers });
+      setProjectDocs(prev => ({ ...prev, [projectId]: res.data }));
+    } catch (error) {
+      console.error('Error loading project documents:', error);
+    }
+  }, [token]);
+
+  // Load docs for all projects when projects change
+  useEffect(() => {
+    projects.forEach(project => {
+      loadProjectDocs(project.project_id);
+    });
+  }, [projects, loadProjectDocs]);
+
   useEffect(() => {
     loadDatabases();
     loadTemplates();
@@ -175,6 +192,79 @@ export default function OperationsPage() {
       return () => document.removeEventListener('click', handleClick);
     }
   }, [contextMenu.show]);
+
+  // Handle resize for split view
+  const handleMouseMove = useCallback((e) => {
+    if (!isResizing) return;
+    const container = document.getElementById('split-container');
+    if (container) {
+      const containerRect = container.getBoundingClientRect();
+      const newWidth = ((containerRect.right - e.clientX) / containerRect.width) * 100;
+      setDocPanelWidth(Math.min(Math.max(newWidth, 25), 75));
+    }
+  }, [isResizing]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isResizing, handleMouseMove, handleMouseUp]);
+
+  // Add document to project
+  const handleAddDocument = async (projectId, url, name) => {
+    try {
+      const res = await axios.post(
+        `${API}/api/notion/projects/${projectId}/documents`,
+        { url, name },
+        { headers }
+      );
+      setProjectDocs(prev => ({
+        ...prev,
+        [projectId]: [res.data, ...(prev[projectId] || [])]
+      }));
+      setShowAddDocModal({ show: false, projectId: null });
+      toast.success('Document added successfully');
+      
+      // Auto-open the document
+      setSelectedDoc(res.data);
+      setShowDocPanel(true);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add document');
+    }
+  };
+
+  // Remove document from project
+  const handleRemoveDocument = async (projectId, docId) => {
+    try {
+      await axios.delete(`${API}/api/notion/projects/${projectId}/documents/${docId}`, { headers });
+      setProjectDocs(prev => ({
+        ...prev,
+        [projectId]: (prev[projectId] || []).filter(d => d.doc_id !== docId)
+      }));
+      if (selectedDoc?.doc_id === docId) {
+        setSelectedDoc(null);
+        setShowDocPanel(false);
+      }
+      toast.success('Document removed');
+    } catch (error) {
+      toast.error('Failed to remove document');
+    }
+  };
+
+  // Open document in split view
+  const openDocument = (doc) => {
+    setSelectedDoc(doc);
+    setShowDocPanel(true);
+  };
 
   const handleCreateDatabase = async (name, category = '') => {
     try {
