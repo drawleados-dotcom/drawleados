@@ -180,18 +180,76 @@ const Sidebar = () => {
           {/* Service Types */}
           {operationsExpanded && (
             <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-              <Link
-                to="/website-projects"
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.pathname === '/website-projects'
-                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-                data-testid="nav-website-projects"
-              >
-                <span className="text-base">🌐</span>
-                <span>Website Development</span>
-              </Link>
+              {/* Website Development with submenu */}
+              <div>
+                <button
+                  onClick={() => setWebsiteExpanded(!websiteExpanded)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                    location.pathname.startsWith('/website-projects')
+                      ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                      : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                  data-testid="nav-website-projects"
+                >
+                  {websiteExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  <Globe className="h-4 w-4" />
+                  <span className="flex-1 text-left">Website Development</span>
+                  <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs px-1.5">{websiteProjects.length}</Badge>
+                </button>
+                
+                {/* Projects Submenu */}
+                {websiteExpanded && (
+                  <div className={`ml-4 mt-1 space-y-0.5 border-l pl-2 ${isDark ? 'border-[#3f3f46]' : 'border-gray-300'}`}>
+                    {/* All Projects Link */}
+                    <Link
+                      to="/website-projects"
+                      className={`flex items-center gap-2 px-2 py-1.5 text-xs font-medium rounded transition-all ${
+                        location.pathname === '/website-projects' && !location.search
+                          ? isDark ? 'bg-[#6366f1]/20 text-[#6366f1]' : 'bg-[#6366f1]/10 text-[#6366f1]'
+                          : isDark ? 'text-[#71717a] hover:text-[#a1a1aa]' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      <FolderOpen className="h-3 w-3" />
+                      <span>All Projects</span>
+                    </Link>
+                    
+                    {/* Individual Projects */}
+                    {websiteProjects.slice(0, 5).map(project => (
+                      <Link
+                        key={project.project_id}
+                        to={`/website-projects?id=${project.project_id}`}
+                        className={`flex items-center gap-2 px-2 py-1.5 text-xs font-medium rounded transition-all ${
+                          location.search.includes(project.project_id)
+                            ? isDark ? 'bg-[#6366f1]/20 text-[#6366f1]' : 'bg-[#6366f1]/10 text-[#6366f1]'
+                            : isDark ? 'text-[#71717a] hover:text-[#a1a1aa]' : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                        <span className="truncate flex-1">{project.name}</span>
+                        <span className="text-[10px] opacity-60">{project.progress}%</span>
+                      </Link>
+                    ))}
+                    
+                    {websiteProjects.length > 5 && (
+                      <Link
+                        to="/website-projects"
+                        className={`flex items-center gap-2 px-2 py-1 text-xs ${isDark ? 'text-[#6366f1]' : 'text-[#6366f1]'}`}
+                      >
+                        <span>+{websiteProjects.length - 5} more</span>
+                      </Link>
+                    )}
+                    
+                    {/* New Project */}
+                    <Link
+                      to="/website-projects?action=new"
+                      className={`flex items-center gap-2 px-2 py-1.5 text-xs font-medium rounded transition-all ${isDark ? 'text-[#6366f1] hover:bg-[#6366f1]/10' : 'text-[#6366f1] hover:bg-[#6366f1]/10'}`}
+                    >
+                      <Plus className="h-3 w-3" />
+                      <span>New Project</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
               
               <Link
                 to="/sop-works?service=seo"
