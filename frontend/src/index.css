@@ -5,7 +5,9 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* Dark theme (default) */
+  :root,
+  .dark {
     --background: 240 10% 3.9%;
     --foreground: 0 0% 98%;
     --card: 240 10% 9.4%;
@@ -26,6 +28,55 @@
     --input: 240 3.7% 15.9%;
     --ring: 239 84% 67%;
     --radius: 0.75rem;
+    
+    /* Custom theme variables */
+    --bg-primary: #09090b;
+    --bg-secondary: #0c0a09;
+    --bg-card: #18181b;
+    --bg-hover: #27272a;
+    --text-primary: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --border-color: #27272a;
+    --toast-bg: #18181b;
+    --toast-text: #fafafa;
+    --toast-border: #27272a;
+  }
+
+  /* Light theme */
+  .light {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 270 75% 65%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 239 84% 67%;
+    
+    /* Custom theme variables - Light */
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --bg-hover: #f1f5f9;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --border-color: #e2e8f0;
+    --toast-bg: #ffffff;
+    --toast-text: #0f172a;
+    --toast-border: #e2e8f0;
   }
 }
 
@@ -33,9 +84,21 @@
   * {
     @apply border-border;
   }
+  
   body {
-    @apply bg-[#09090b] text-foreground;
+    @apply bg-background text-foreground;
     font-family: 'Manrope', sans-serif;
+  }
+  
+  /* Dark mode body */
+  .dark body,
+  :root body {
+    background-color: #09090b;
+  }
+  
+  /* Light mode body */
+  .light body {
+    background-color: #f8fafc;
   }
   
   h1, h2, h3, h4, h5, h6 {
@@ -51,6 +114,11 @@
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(24px);
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.light .glass-morphism {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .glow-primary {
