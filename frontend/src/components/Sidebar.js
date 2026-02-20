@@ -159,12 +159,13 @@ const Sidebar = () => {
           {operationsExpanded && (
             <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
               <Link
-                to="/sop-works?service=website"
+                to="/website-projects"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.search.includes('service=website')
+                  location.pathname === '/website-projects'
                     ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
+                data-testid="nav-website-projects"
               >
                 <span className="text-base">🌐</span>
                 <span>Website Development</span>
@@ -261,8 +262,6 @@ const Sidebar = () => {
             to="/hr-admin"
             data-testid="nav-hr-admin"
             className={`${navItemBase} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
           >
             <Shield className="h-5 w-5" strokeWidth={2} />
             HR Admin
