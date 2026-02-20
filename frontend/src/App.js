@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { Toaster } from './components/ui/sonner';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
@@ -126,19 +127,21 @@ function AppRouter() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRouter />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: {
-              background: '#18181b',
-              color: '#fafafa',
-              border: '1px solid #27272a',
-            },
-          }}
-        />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRouter />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: 'var(--toast-bg, #18181b)',
+                color: 'var(--toast-text, #fafafa)',
+                border: '1px solid var(--toast-border, #27272a)',
+              },
+            }}
+          />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }
