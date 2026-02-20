@@ -217,6 +217,56 @@ SERVICE_TEMPLATES = {
             {"title": "Insights & recommendations", "stage": "reporting", "priority": "high", "estimated_hours": 2},
             {"title": "Client presentation", "stage": "reporting", "priority": "high", "estimated_hours": 1}
         ]
+    },
+    "social_media": {
+        "name": "Social Media Management",
+        "icon": "📱",
+        "color": "#ec4899",
+        "stages": [
+            {"id": "strategy", "name": "Strategy", "color": "#71717a", "order": 0},
+            {"id": "content_planning", "name": "Content Planning", "color": "#8b5cf6", "order": 1},
+            {"id": "content_creation", "name": "Content Creation", "color": "#3b82f6", "order": 2},
+            {"id": "scheduling", "name": "Scheduling & Publishing", "color": "#f59e0b", "order": 3},
+            {"id": "engagement", "name": "Engagement & Reporting", "color": "#10b981", "order": 4}
+        ],
+        "tasks": [
+            # Strategy Phase
+            {"title": "Brand voice & guidelines review", "stage": "strategy", "priority": "high", "estimated_hours": 2},
+            {"title": "Competitor social analysis", "stage": "strategy", "priority": "high", "estimated_hours": 3},
+            {"title": "Target audience definition", "stage": "strategy", "priority": "high", "estimated_hours": 2},
+            {"title": "Platform selection & goals", "stage": "strategy", "priority": "high", "estimated_hours": 1},
+            {"title": "Content pillars identification", "stage": "strategy", "priority": "high", "estimated_hours": 2},
+            {"title": "Posting frequency planning", "stage": "strategy", "priority": "medium", "estimated_hours": 1},
+            # Content Planning Phase
+            {"title": "Monthly content calendar creation", "stage": "content_planning", "priority": "high", "estimated_hours": 4},
+            {"title": "Content themes for the month", "stage": "content_planning", "priority": "high", "estimated_hours": 2},
+            {"title": "Hashtag research", "stage": "content_planning", "priority": "medium", "estimated_hours": 2},
+            {"title": "Caption writing (batch)", "stage": "content_planning", "priority": "high", "estimated_hours": 4},
+            {"title": "Trending topics research", "stage": "content_planning", "priority": "medium", "estimated_hours": 1},
+            {"title": "Client content approval", "stage": "content_planning", "priority": "high", "estimated_hours": 2},
+            # Content Creation Phase
+            {"title": "Static post designs", "stage": "content_creation", "priority": "high", "estimated_hours": 6},
+            {"title": "Carousel/Slider designs", "stage": "content_creation", "priority": "medium", "estimated_hours": 4},
+            {"title": "Reel/Video scripting", "stage": "content_creation", "priority": "medium", "estimated_hours": 3},
+            {"title": "Reel/Video shooting", "stage": "content_creation", "priority": "medium", "estimated_hours": 4},
+            {"title": "Reel/Video editing", "stage": "content_creation", "priority": "medium", "estimated_hours": 5},
+            {"title": "Story templates creation", "stage": "content_creation", "priority": "low", "estimated_hours": 2},
+            {"title": "Creative review & revisions", "stage": "content_creation", "priority": "high", "estimated_hours": 2},
+            # Scheduling Phase
+            {"title": "Content upload to scheduler", "stage": "scheduling", "priority": "high", "estimated_hours": 2},
+            {"title": "Optimal time scheduling", "stage": "scheduling", "priority": "high", "estimated_hours": 1},
+            {"title": "Cross-platform posting", "stage": "scheduling", "priority": "medium", "estimated_hours": 1},
+            {"title": "Story posting (daily)", "stage": "scheduling", "priority": "medium", "estimated_hours": 1},
+            {"title": "Link in bio updates", "stage": "scheduling", "priority": "low", "estimated_hours": 0.5},
+            # Engagement Phase
+            {"title": "Daily comment responses", "stage": "engagement", "priority": "high", "estimated_hours": 1},
+            {"title": "DM management", "stage": "engagement", "priority": "high", "estimated_hours": 1},
+            {"title": "Community engagement", "stage": "engagement", "priority": "medium", "estimated_hours": 1},
+            {"title": "Influencer/collab outreach", "stage": "engagement", "priority": "low", "estimated_hours": 2},
+            {"title": "Weekly analytics review", "stage": "engagement", "priority": "high", "estimated_hours": 1},
+            {"title": "Monthly performance report", "stage": "engagement", "priority": "high", "estimated_hours": 2},
+            {"title": "Insights & recommendations", "stage": "engagement", "priority": "high", "estimated_hours": 1}
+        ]
     }
 }
 
