@@ -579,7 +579,7 @@ const WebsiteProjectsPage = () => {
 
   const filteredProjectsSummary = allProjectsSummary.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    (developerFilter === '' || p.developer === developerFilter)
+    (developerFilter === 'all' || developerFilter === '' || p.developer === developerFilter)
   );
 
   if (loading) {
