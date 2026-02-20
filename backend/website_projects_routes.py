@@ -781,3 +781,325 @@ async def check_edit_permission(request: Request):
     """Check if current user can edit project details"""
     user = await get_current_user(request)
     return {"can_edit": can_edit_project(user), "role": user.get("role")}
+
+# ============== PAGE SUB-TASKS (Notion-like) ==============
+
+class PageSubTaskCreate(BaseModel):
+    title: str
+    completed: bool = False
+
+class PageSubTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    completed: Optional[bool] = None
+
+@website_projects_router.get("/pages/{page_id}/subtasks")
+async def get_page_subtasks(request: Request, page_id: str):
+    """Get all sub-tasks for a page"""
+    user = await get_current_user(request)
+    
+    subtasks = await db.website_page_subtasks.find(
+        {"page_id": page_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(100)
+    
+    return subtasks
+
+@website_projects_router.post("/pages/{page_id}/subtasks")
+async def create_page_subtask(request: Request, page_id: str, subtask_data: PageSubTaskCreate):
+    """Create a sub-task for a page (auto-generates date)"""
+    user = await get_current_user(request)
+    
+    subtask_id = f"wpst_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    subtask = {
+        "subtask_id": subtask_id,
+        "page_id": page_id,
+        "title": subtask_data.title,
+        "completed": subtask_data.completed,
+        "created_at": now,
+        "updated_at": now,
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name", "Unknown")
+    }
+    
+    await db.website_page_subtasks.insert_one(subtask)
+    subtask.pop("_id", None)
+    return subtask
+
+@website_projects_router.put("/subtasks/{subtask_id}")
+async def update_page_subtask(request: Request, subtask_id: str, update_data: PageSubTaskUpdate):
+    """Update a page sub-task"""
+    user = await get_current_user(request)
+    
+    update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.website_page_subtasks.update_one(
+        {"subtask_id": subtask_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.website_page_subtasks.find_one({"subtask_id": subtask_id}, {"_id": 0})
+    return updated
+
+@website_projects_router.delete("/subtasks/{subtask_id}")
+async def delete_page_subtask(request: Request, subtask_id: str):
+    """Delete a page sub-task"""
+    user = await get_current_user(request)
+    
+    result = await db.website_page_subtasks.delete_one({"subtask_id": subtask_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Sub-task not found")
+    
+    return {"message": "Sub-task deleted"}
+
+# ============== PAGE SCREENSHOTS ==============
+
+class ScreenshotCreate(BaseModel):
+    url: str
+    caption: Optional[str] = None
+
+@website_projects_router.get("/pages/{page_id}/screenshots")
+async def get_page_screenshots(request: Request, page_id: str):
+    """Get all screenshots for a page"""
+    user = await get_current_user(request)
+    
+    screenshots = await db.website_page_screenshots.find(
+        {"page_id": page_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(50)
+    
+    return screenshots
+
+@website_projects_router.post("/pages/{page_id}/screenshots")
+async def add_page_screenshot(request: Request, page_id: str, screenshot_data: ScreenshotCreate):
+    """Add a screenshot to a page"""
+    user = await get_current_user(request)
+    
+    screenshot_id = f"wpss_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    screenshot = {
+        "screenshot_id": screenshot_id,
+        "page_id": page_id,
+        "url": screenshot_data.url,
+        "caption": screenshot_data.caption,
+        "created_at": now,
+        "created_by": user["user_id"]
+    }
+    
+    await db.website_page_screenshots.insert_one(screenshot)
+    screenshot.pop("_id", None)
+    return screenshot
+
+@website_projects_router.delete("/screenshots/{screenshot_id}")
+async def delete_page_screenshot(request: Request, screenshot_id: str):
+    """Delete a screenshot"""
+    user = await get_current_user(request)
+    
+    result = await db.website_page_screenshots.delete_one({"screenshot_id": screenshot_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Screenshot not found")
+    
+    return {"message": "Screenshot deleted"}
+
+# ============== CROSS-PROJECT TASKS VIEW ==============
+
+@website_projects_router.get("/all-tasks")
+async def get_all_tasks_across_projects(
+    request: Request, 
+    due_date: Optional[str] = None,
+    developer: Optional[str] = None
+):
+    """Get all tasks across all projects with filters for Operations Head view"""
+    user = await get_current_user(request)
+    
+    all_tasks = []
+    
+    # Get all projects
+    projects = await db.website_projects.find({}, {"_id": 0}).to_list(100)
+    project_map = {p["project_id"]: p for p in projects}
+    
+    # 1. Get page-level tasks (with phase due dates)
+    page_tasks = await db.website_page_tasks.find({}, {"_id": 0}).to_list(500)
+    
+    for pt in page_tasks:
+        project = project_map.get(pt.get("project_id"), {})
+        base_info = {
+            "project_id": pt.get("project_id"),
+            "project_name": project.get("name", "Unknown"),
+            "page_name": pt.get("page_name"),
+            "task_id": pt.get("task_id"),
+            "task_type": "page_phase"
+        }
+        
+        # Check each phase
+        for phase in ["wireframe", "ui", "content", "dev"]:
+            phase_due = pt.get(f"{phase}_due")
+            phase_status = pt.get(f"{phase}_status", "To-Do")
+            phase_assignee = pt.get(f"{phase}_assignee")
+            
+            if phase_status == "Completed":
+                continue
+                
+            # Apply filters
+            if due_date and phase_due != due_date:
+                continue
+            if developer and phase_assignee != developer:
+                continue
+            
+            if phase_due or (not due_date and not developer):
+                all_tasks.append({
+                    **base_info,
+                    "phase": phase,
+                    "title": f"{pt.get('page_name')} - {phase.title()}",
+                    "due_date": phase_due,
+                    "status": phase_status,
+                    "assignee": phase_assignee,
+                    "url": pt.get(f"{phase}_url")
+                })
+    
+    # 2. Get project-level tasks
+    project_tasks = await db.website_project_tasks.find({}, {"_id": 0}).to_list(500)
+    
+    for task in project_tasks:
+        if task.get("status") == "Completed":
+            continue
+            
+        project = project_map.get(task.get("project_id"), {})
+        
+        # Apply filters
+        if due_date and task.get("due_date") != due_date:
+            continue
+        if developer and task.get("assigned_to") != developer:
+            continue
+        
+        if task.get("due_date") or (not due_date and not developer):
+            all_tasks.append({
+                "project_id": task.get("project_id"),
+                "project_name": project.get("name", "Unknown"),
+                "task_id": task.get("task_id"),
+                "task_type": "project_task",
+                "title": task.get("title"),
+                "description": task.get("description"),
+                "due_date": task.get("due_date"),
+                "status": task.get("status"),
+                "assignee": task.get("assigned_to"),
+                "priority": task.get("priority")
+            })
+    
+    # 3. Get section-level tasks (with phase due dates)
+    sections = await db.website_page_sections.find({}, {"_id": 0}).to_list(500)
+    
+    # Get page info for sections
+    page_map = {pt["task_id"]: pt for pt in page_tasks}
+    
+    for sec in sections:
+        page = page_map.get(sec.get("page_id"), {})
+        project = project_map.get(page.get("project_id"), {})
+        
+        for phase in ["wireframe", "ui", "content", "dev"]:
+            phase_due = sec.get(f"{phase}_due")
+            phase_status = sec.get(f"{phase}_status", "To-Do")
+            phase_assignee = sec.get(f"{phase}_assignee")
+            
+            if phase_status == "Completed":
+                continue
+                
+            # Apply filters
+            if due_date and phase_due != due_date:
+                continue
+            if developer and phase_assignee != developer:
+                continue
+            
+            if phase_due or (not due_date and not developer):
+                all_tasks.append({
+                    "project_id": page.get("project_id"),
+                    "project_name": project.get("name", "Unknown"),
+                    "page_name": page.get("page_name"),
+                    "section_name": sec.get("name"),
+                    "section_id": sec.get("section_id"),
+                    "task_type": "section_phase",
+                    "phase": phase,
+                    "title": f"{page.get('page_name')} > {sec.get('name')} - {phase.title()}",
+                    "due_date": phase_due,
+                    "status": phase_status,
+                    "assignee": phase_assignee,
+                    "url": sec.get(f"{phase}_url")
+                })
+    
+    # Sort by due date
+    all_tasks.sort(key=lambda x: x.get("due_date") or "9999-99-99")
+    
+    return all_tasks
+
+@website_projects_router.get("/all-projects-summary")
+async def get_all_projects_summary(request: Request):
+    """Get summary of all projects for Operations Head view"""
+    user = await get_current_user(request)
+    
+    projects = await db.website_projects.find({}, {"_id": 0}).to_list(100)
+    
+    summaries = []
+    for project in projects:
+        project_id = project["project_id"]
+        
+        # Get page tasks for this project
+        page_tasks = await db.website_page_tasks.find(
+            {"project_id": project_id},
+            {"_id": 0}
+        ).to_list(100)
+        
+        total_pages = len(page_tasks)
+        
+        # Calculate phase completion percentages
+        phases = {"wireframe": 0, "ui": 0, "content": 0, "dev": 0}
+        for pt in page_tasks:
+            for phase in phases:
+                if pt.get(f"{phase}_status") == "Completed":
+                    phases[phase] += 1
+        
+        # Calculate overall dev percentage
+        dev_percent = round((phases["dev"] / total_pages * 100) if total_pages > 0 else 0, 1)
+        overall_percent = round(
+            sum(phases.values()) / (total_pages * 4) * 100 if total_pages > 0 else 0, 1
+        )
+        
+        summaries.append({
+            "project_id": project_id,
+            "name": project.get("name"),
+            "domain_url": project.get("domain_url"),
+            "platform": project.get("platform"),
+            "developer": project.get("developer"),
+            "onboarding_date": project.get("onboarding_date"),
+            "deadline": project.get("deadline"),
+            "status": project.get("status", "active"),
+            "total_pages": total_pages,
+            "dev_percent": dev_percent,
+            "overall_percent": overall_percent,
+            "phase_stats": {
+                "wireframe": round(phases["wireframe"] / total_pages * 100 if total_pages > 0 else 0, 1),
+                "ui": round(phases["ui"] / total_pages * 100 if total_pages > 0 else 0, 1),
+                "content": round(phases["content"] / total_pages * 100 if total_pages > 0 else 0, 1),
+                "dev": dev_percent
+            }
+        })
+    
+    # Sort by deadline
+    summaries.sort(key=lambda x: x.get("deadline") or "9999-99-99")
+    
+    return summaries
+
+@website_projects_router.get("/team-members")
+async def get_team_members(request: Request):
+    """Get list of team members for assignee dropdowns"""
+    user = await get_current_user(request)
+    
+    # Get users who can work on projects
+    users = await db.users.find(
+        {"role": {"$in": ["admin", "super_admin", "project_manager", "employee"]}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
+    ).to_list(50)
+    
+    return users
