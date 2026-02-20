@@ -1253,21 +1253,6 @@ const PhaseTableCell = ({ task, phase, onUpdate, teamMembers, isDark }) => {
     </div>
   );
 };
-            <button
-              onClick={() => setIsEditing(true)}
-              className={`text-[10px] ${textSecondary} hover:text-[#6366f1] flex items-center justify-center gap-1 w-full`}
-            >
-              <Plus className="h-3 w-3" /> Add URL
-            </button>
-          )}
-          {task[`${phase}_due`] && (
-            <span className={`text-[10px] ${textSecondary} block`}>{task[`${phase}_due`]}</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
 
 const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, options, teamMembers, isDark, isEdit }) => {
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
