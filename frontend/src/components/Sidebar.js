@@ -113,7 +113,7 @@ const Sidebar = () => {
     navigate('/login');
   };
 
-  const isOperationsActive = location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works');
+  const isOperationsActive = location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works') || location.pathname.startsWith('/website-projects');
 
   // Base styles for nav items
   const navItemBase = `flex items-center gap-3 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300`;
