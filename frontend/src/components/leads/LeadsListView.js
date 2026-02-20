@@ -2,68 +2,70 @@ import React from 'react';
 import { Edit, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const LeadsListView = ({ leads, services, sources, statuses, onEditLead, onDeleteLead }) => {
   const { isAdmin } = useAuth();
+  const { isDark } = useTheme();
 
   return (
-    <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+    <div className={`border rounded-xl overflow-hidden ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200 shadow-sm'}`}>
       <div className="overflow-x-auto">
         <table className="w-full" data-testid="leads-table">
-          <thead className="bg-[#09090b] border-b border-[#27272a]">
+          <thead className={`border-b ${isDark ? 'bg-[#09090b] border-[#27272a]' : 'bg-gray-50 border-gray-200'}`}>
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+              <th className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
                 Name
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+              <th className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
                 Contact
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+              <th className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
                 Service
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+              <th className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
                 Source
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+              <th className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
                 Status
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+              <th className={`px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
                 Cost
               </th>
-              <th className="px-6 py-4 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+              <th className={`px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#27272a]">
+          <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
             {leads.length > 0 ? (
               leads.map((lead) => (
                 <tr
                   key={lead.lead_id}
-                  className="hover:bg-[#27272a]/20 transition-colors"
+                  className={`transition-colors ${isDark ? 'hover:bg-[#27272a]/20' : 'hover:bg-gray-50'}`}
                   data-testid={`lead-row-${lead.lead_id}`}
                 >
                   <td className="px-6 py-4">
                     <div>
-                      <p className="text-sm font-medium text-[#fafafa]">{lead.name}</p>
+                      <p className={`text-sm font-medium ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{lead.name}</p>
                       {lead.business_name && (
-                        <p className="text-xs text-[#a1a1aa] mt-1">{lead.business_name}</p>
+                        <p className={`text-xs mt-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{lead.business_name}</p>
                       )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div>
-                      <p className="text-sm text-[#fafafa]">{lead.phone}</p>
+                      <p className={`text-sm ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{lead.phone}</p>
                       {lead.email && (
-                        <p className="text-xs text-[#a1a1aa] mt-1">{lead.email}</p>
+                        <p className={`text-xs mt-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{lead.email}</p>
                       )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-[#fafafa]">{lead.service_name || '-'}</p>
+                    <p className={`text-sm ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{lead.service_name || '-'}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-[#fafafa]">{lead.source_name || '-'}</p>
+                    <p className={`text-sm ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{lead.source_name || '-'}</p>
                   </td>
                   <td className="px-6 py-4">
                     <span
@@ -77,7 +79,7 @@ const LeadsListView = ({ leads, services, sources, statuses, onEditLead, onDelet
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-[#fafafa]">
+                    <p className={`text-sm ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>
                       {lead.service_cost ? `₹${lead.service_cost.toLocaleString()}` : '-'}
                     </p>
                   </td>
