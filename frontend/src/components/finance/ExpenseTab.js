@@ -78,6 +78,10 @@ const ExpenseTab = () => {
   });
   const [fiscalQuarter, setFiscalQuarter] = useState(null);
   
+  // Cashbook month/year filter
+  const [cashbookMonth, setCashbookMonth] = useState(new Date().getMonth() + 1);
+  const [cashbookYear, setCashbookYear] = useState(new Date().getFullYear());
+  
   // Modal states
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [showAddAccount, setShowAddAccount] = useState(false);
