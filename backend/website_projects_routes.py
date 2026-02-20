@@ -110,14 +110,26 @@ class SectionUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     screenshot_url: Optional[str] = None
+    # Wireframe phase
     wireframe_status: Optional[str] = None
     wireframe_url: Optional[str] = None
+    wireframe_due: Optional[str] = None
+    wireframe_assignee: Optional[str] = None
+    # UI phase
     ui_status: Optional[str] = None
     ui_url: Optional[str] = None
+    ui_due: Optional[str] = None
+    ui_assignee: Optional[str] = None
+    # Dev phase
     dev_status: Optional[str] = None
     dev_url: Optional[str] = None
+    dev_due: Optional[str] = None
+    dev_assignee: Optional[str] = None
+    # Content phase
     content_status: Optional[str] = None
     content_url: Optional[str] = None
+    content_due: Optional[str] = None
+    content_assignee: Optional[str] = None
 
 class FeedbackCreate(BaseModel):
     content: str
