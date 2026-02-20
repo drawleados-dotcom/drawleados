@@ -157,15 +157,15 @@ const Sidebar = () => {
 
           {/* Nested Databases */}
           {operationsExpanded && (
-            <div className="ml-4 mt-1 space-y-0.5 border-l border-[#27272a] pl-3">
+            <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
               {databases.map((db) => (
                 <Link
                   key={db.database_id}
                   to={`/operations?db=${db.database_id}`}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-all ${
+                  className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
                     location.search.includes(db.database_id)
-                      ? 'bg-[#27272a] text-[#fafafa]'
-                      : 'text-[#71717a] hover:bg-[#27272a]/50 hover:text-[#a1a1aa]'
+                      ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                      : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                   }`}
                 >
                   <span className="text-base">{db.icon || '📋'}</span>
@@ -174,7 +174,7 @@ const Sidebar = () => {
               ))}
 
               {databases.length === 0 && (
-                <div className="px-3 py-2 text-xs text-[#52525b]">
+                <div className={`px-3 py-2 text-xs ${isDark ? 'text-[#52525b]' : 'text-gray-400'}`}>
                   No databases yet
                 </div>
               )}
@@ -182,7 +182,7 @@ const Sidebar = () => {
               {/* Add New Database Link */}
               <Link
                 to="/operations"
-                className="flex items-center gap-2 px-3 py-2 text-sm text-[#52525b] hover:text-[#a1a1aa] rounded-lg transition-all"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${isDark ? 'text-[#71717a] hover:text-[#a1a1aa]' : 'text-gray-500 hover:text-gray-700'}`}
               >
                 <Plus className="h-4 w-4" />
                 <span>New Database</span>
@@ -195,13 +195,9 @@ const Sidebar = () => {
         <Link
           to="/sop-works"
           data-testid="nav-sop-works"
-          className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-            location.pathname === '/sop-works'
-              ? 'bg-[#6366f1]/15 text-[#6366f1]'
-              : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-          }`}
+          className={`${navItemBase} ${location.pathname === '/sop-works' ? navItemActive : navItemInactive}`}
         >
-          <ClipboardList className="h-5 w-5" strokeWidth={1.5} />
+          <ClipboardList className="h-5 w-5" strokeWidth={2} />
           SOP Works
         </Link>
 
@@ -209,13 +205,9 @@ const Sidebar = () => {
         <Link
           to="/hr"
           data-testid="nav-hr"
-          className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-            location.pathname === '/hr'
-              ? 'bg-[#6366f1]/15 text-[#6366f1]'
-              : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-          }`}
+          className={`${navItemBase} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
         >
-          <UserCircle className="h-5 w-5" strokeWidth={1.5} />
+          <UserCircle className="h-5 w-5" strokeWidth={2} />
           HR
         </Link>
 
@@ -224,13 +216,9 @@ const Sidebar = () => {
           <Link
             to="/marketing"
             data-testid="nav-marketing"
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              location.pathname === '/marketing'
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
+            className={`${navItemBase} ${location.pathname === '/marketing' ? navItemActive : navItemInactive}`}
           >
-            <Megaphone className="h-5 w-5" strokeWidth={1.5} />
+            <Megaphone className="h-5 w-5" strokeWidth={2} />
             Marketing
           </Link>
         )}
@@ -239,9 +227,9 @@ const Sidebar = () => {
         <button
           onClick={() => setChatOpen(true)}
           data-testid="nav-chat"
-          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]"
+          className={`w-full ${navItemBase} ${navItemInactive}`}
         >
-          <MessageSquare className="h-5 w-5" strokeWidth={1.5} />
+          <MessageSquare className="h-5 w-5" strokeWidth={2} />
           <span className="flex-1 text-left">Team Chat</span>
           {unreadCount > 0 && (
             <Badge className="bg-[#ef4444] text-white text-xs px-1.5 py-0 min-w-[20px]">
@@ -255,9 +243,7 @@ const Sidebar = () => {
           <Link
             to="/hr-admin"
             data-testid="nav-hr-admin"
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              location.pathname === '/hr-admin'
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
+            className={`${navItemBase} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
                 : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
             }`}
           >
