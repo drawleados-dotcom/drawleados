@@ -47,6 +47,7 @@ init_marketing_db(db)
 init_ai_db(db)
 init_sop_db(db)
 init_website_projects_db(db)
+set_expense_db(db)
 
 # Create the main app
 app = FastAPI()
