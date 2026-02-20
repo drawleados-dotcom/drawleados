@@ -163,10 +163,10 @@ const Dashboard = () => {
                 </Pie>
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#18181b',
-                    border: '1px solid #27272a',
+                    backgroundColor: isDark ? '#18181b' : '#ffffff',
+                    border: isDark ? '1px solid #27272a' : '1px solid #e5e7eb',
                     borderRadius: '8px',
-                    color: '#fafafa',
+                    color: isDark ? '#fafafa' : '#111827',
                   }}
                 />
               </PieChart>
@@ -174,25 +174,25 @@ const Dashboard = () => {
           </div>
 
           {/* Service Performance */}
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-[#fafafa] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+          <div className={`border rounded-xl p-6 ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200 shadow-sm'}`}>
+            <h2 className={`text-xl font-semibold mb-4 ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
               Service Performance
             </h2>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={stats?.by_service || []}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#27272a' : '#e5e7eb'} />
                 <XAxis
                   dataKey="service_name"
-                  stroke="#a1a1aa"
-                  tick={{ fill: '#a1a1aa', fontSize: 12 }}
+                  stroke={isDark ? '#a1a1aa' : '#6b7280'}
+                  tick={{ fill: isDark ? '#a1a1aa' : '#6b7280', fontSize: 12 }}
                 />
-                <YAxis stroke="#a1a1aa" tick={{ fill: '#a1a1aa' }} />
+                <YAxis stroke={isDark ? '#a1a1aa' : '#6b7280'} tick={{ fill: isDark ? '#a1a1aa' : '#6b7280' }} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#18181b',
-                    border: '1px solid #27272a',
+                    backgroundColor: isDark ? '#18181b' : '#ffffff',
+                    border: isDark ? '1px solid #27272a' : '1px solid #e5e7eb',
                     borderRadius: '8px',
-                    color: '#fafafa',
+                    color: isDark ? '#fafafa' : '#111827',
                   }}
                 />
                 <Bar dataKey="count" fill="#6366f1" radius={[8, 8, 0, 0]} />
@@ -202,8 +202,8 @@ const Dashboard = () => {
         </div>
 
         {/* Recent Leads */}
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6">
-          <h2 className="text-xl font-semibold text-[#fafafa] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+        <div className={`border rounded-xl p-6 ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200 shadow-sm'}`}>
+          <h2 className={`text-xl font-semibold mb-4 ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
             Recent Leads
           </h2>
           <div className="space-y-3">
@@ -211,11 +211,14 @@ const Dashboard = () => {
               recentLeads.map((lead) => (
                 <div
                   key={lead.lead_id}
-                  className="flex items-center justify-between p-4 bg-[#09090b] border border-[#27272a] rounded-lg hover:border-[#6366f1]/20 transition-all duration-300"
+                  className={`flex items-center justify-between p-4 border rounded-lg transition-all duration-300 ${isDark 
+                    ? 'bg-[#09090b] border-[#27272a] hover:border-[#6366f1]/20' 
+                    : 'bg-gray-50 border-gray-200 hover:border-[#6366f1]/30'
+                  }`}
                 >
                   <div className="flex-1">
-                    <h3 className="text-sm font-medium text-[#fafafa]">{lead.name}</h3>
-                    <p className="text-xs text-[#a1a1aa] mt-1">
+                    <h3 className={`text-sm font-medium ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{lead.name}</h3>
+                    <p className={`text-xs mt-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>
                       {lead.business_name} • {lead.service_name || 'No service'}
                     </p>
                   </div>
