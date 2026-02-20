@@ -6,106 +6,118 @@
 
 ## Recent Changes (January 12, 2026 - Latest)
 
-### Drawlead AI Assistant ✅ NEW (Just Completed)
-Built a context-aware operational AI assistant powered by Claude Sonnet 4.5:
+### Theme Toggle (Dark/Light/System) ✅ NEW
+Added global theme switching capability:
+- **Dark Mode** (default): Original dark theme
+- **Light Mode**: Clean light theme for daytime use
+- **System Mode**: Follows OS preference automatically
+- Toggle button in header (top-right corner)
+- Theme preference persisted in localStorage
+
+### SOP Works Board ✅ NEW
+Built a comprehensive SOP-based project management system:
+
+**Service Templates:**
+- **Website Development**: 27 tasks, 5 stages (Discovery → Design → Development → Testing → Launch), 102h
+- **SEO**: 30 tasks, 5 stages (Audit → Keyword Research → On-Page → Off-Page → Reporting), 75h
+- **SEM/Google Ads**: 31 tasks, 5 stages (Strategy → Campaign Setup → Optimization → Scaling → Reporting), 71h
+- **Meta Ads**: 36 tasks, 5 stages (Strategy → Creative → Campaign Setup → Optimization → Reporting), 73.5h
 
 **Features:**
-- **Global AI Button:** Floating button on all pages (bottom-right)
-- **Context Awareness:** Auto-detects current module (Sales on /leads, Operations on /operations)
-- **Smart Prompts:** Suggested prompts change per context
-- **Conversation Memory:** Chat history persisted in MongoDB
-- **Quick Actions:** Lead summary, follow-up suggestions, project analysis
-- **5 Modes:** General, Sales, Operations, Marketing, Finance
+- Kanban board per project with drag-to-stage
+- Auto-create tasks from SOP template
+- Client/Lead linking
+- Progress tracking
+- Task completion toggle
+- Project filtering by service type
 
-**UI:**
-- Floating purple gradient button with pulse indicator
-- Slide-out chat panel (420x550px)
-- Color-coded context badges
-- Message bubbles (user right, AI left)
-- "Powered by Claude" footer
+### Drawlead AI Assistant ✅ COMPLETE
+- Context-aware AI powered by Claude Sonnet 4.5
+- Floating button + chat panel
+- Sales & Operations intelligence
 
-**Backend APIs:**
-- `POST /api/ai/chat` - Send message, get AI response
-- `POST /api/ai/chat/{id}` - Continue conversation
-- `GET /api/ai/conversations` - List user's conversations
-- `GET /api/ai/suggested-prompts/{context}` - Get context prompts
-- `POST /api/ai/quick/lead-summary` - Analyze specific lead
-- `POST /api/ai/quick/follow-up-suggestions` - Get follow-up actions
-- `POST /api/ai/quick/project-analysis` - Analyze projects
-
-**Database:**
-- `ai_conversations` collection for chat history
-
-### Previous (Same Day)
-- Marketing Module with Analytics, Blog, Social Media, Email tabs
+### Marketing Module ✅ COMPLETE
+- Analytics, Blog, Social Media, Email tabs
+- Demo data fallback
 
 ## Architecture
 ```
 /app/
 ├── backend/
 │   ├── server.py
-│   ├── ai_routes.py          # NEW - Drawlead AI
+│   ├── sop_routes.py         # NEW - SOP Works Board
+│   ├── ai_routes.py
 │   ├── marketing_routes.py
-│   ├── notion_routes.py
-│   ├── chat_routes.py
-│   ├── hr_routes.py
-│   └── finance_routes.py
+│   └── ...
 └── frontend/
     └── src/
         ├── components/
-        │   ├── DrawleadAI.jsx   # NEW - AI floating button & chat
-        │   ├── Layout.js        # Updated with AI integration
-        │   ├── Sidebar.js
-        │   └── marketing/
+        │   ├── ThemeToggle.jsx   # NEW - Dark/Light toggle
+        │   ├── Layout.js         # Updated with header + theme
+        │   ├── DrawleadAI.jsx
+        │   └── Sidebar.js        # Updated with theme support
+        ├── contexts/
+        │   ├── ThemeContext.js   # NEW - Theme provider
+        │   └── AuthContext.js
         └── pages/
-            ├── MarketingModule.js
-            └── OperationsPage.js
+            ├── SOPWorksBoard.js  # NEW - SOP Works page
+            └── ...
 ```
 
 ## Key Features
 
-### Drawlead AI ✅ NEW (Just Completed)
-- Context-aware AI assistant (Claude Sonnet 4.5)
-- Auto-switches context based on current page
-- Sales & Operations intelligence
-- Conversation history & quick actions
+### Theme System ✅ NEW
+- Dark/Light/System mode toggle
+- Persisted in localStorage
+- CSS variables for consistent theming
+
+### SOP Works Board ✅ NEW
+- 4 service templates with 124 total tasks
+- Kanban workflow visualization
+- Client linking
+- Progress tracking
+
+### Drawlead AI ✅ COMPLETE
+- Context-aware assistant
+- Sales & Operations modes
 
 ### Marketing Module ✅ COMPLETE
-- Analytics dashboard (demo GA4 data)
-- Blog management with full CRUD
-- Social media Kanban (4 platforms)
-- Email inbox visibility
-
-### Team Chat Module ✅ COMPLETE
-- Team channels & real-time messaging
-- Online status indicators
-- Unread message badges
+- Analytics, Blog, Social, Email
 
 ### Operations Module ✅ COMPLETE
 - Notion-like databases
-- Google Docs/Sheets integration
-- Multiple view modes
 
 ### HR Module ✅ COMPLETE
 - Employee & Admin portals
 
 ### Finance Module ✅ COMPLETE
-- Invoices, reports, PDF export
+- Invoices, reports
 
 ## Database Schema
 
-### ai_conversations (NEW)
+### sop_projects (NEW)
 ```json
 {
-  "conversation_id": "conv_xxxx",
-  "user_id": "user_xxxx",
-  "context_type": "sales|operations|marketing|finance|general",
-  "messages": [
-    {"role": "user", "content": "...", "timestamp": "..."},
-    {"role": "assistant", "content": "...", "timestamp": "..."}
-  ],
-  "created_at": "datetime",
-  "updated_at": "datetime"
+  "project_id": "sop_proj_xxxx",
+  "name": "Client Website Redesign",
+  "service_type": "website|seo|sem|meta_ads",
+  "stages": [...],
+  "client_id": "lead_xxxx",
+  "client_name": "Client Name",
+  "status": "active|on_hold|completed"
+}
+```
+
+### sop_tasks (NEW)
+```json
+{
+  "task_id": "sop_task_xxxx",
+  "project_id": "sop_proj_xxxx",
+  "title": "Wireframe creation",
+  "stage": "design",
+  "priority": "high|medium|low",
+  "estimated_hours": 8,
+  "is_completed": false
 }
 ```
 
@@ -115,37 +127,24 @@ Built a context-aware operational AI assistant powered by Claude Sonnet 4.5:
 ## Pending Tasks
 
 ### P1 (High Priority)
-- Add inline AI buttons to Lead detail modal
-- Add inline AI buttons to Project/Task views
-- Resend Email Config (requires user API key)
-- Code Refactoring (split OperationsPage.js)
+- Test SOP Works Board (testing in progress)
+- Resend Email Config
 
 ### P2 (Medium Priority)
-- Finance: Payroll, GST, Budgeting tabs UI
-- Direct Messages (1-on-1 chat)
+- Finance: Payroll, GST tabs UI
 - Real GA4/WordPress/Gmail integrations
-- Chat Backend Persistence (MongoDB)
 
 ### P3 (Backlog)
-- WebSocket for real-time (replace polling)
+- WebSocket for real-time
 - AI conversation export
-- AI learning from user feedback
-- Marketing Module integrations
 
 ## Tech Stack
-- **Backend:** FastAPI, MongoDB, Pydantic, JWT, bcrypt
-- **Frontend:** React, Tailwind CSS, shadcn/ui, lucide-react
-- **AI:** Claude Sonnet 4.5 via emergentintegrations library
-- **Real-time:** Polling (3s interval)
+- **Backend:** FastAPI, MongoDB
+- **Frontend:** React, Tailwind CSS, shadcn/ui
+- **AI:** Claude Sonnet 4.5
+- **Theming:** CSS variables, localStorage
 
-## Known Mocked Integrations
-- **Resend Email:** Requires RESEND_API_KEY
-- **Google Analytics:** Demo data (GA4 integration pending)
-- **WordPress:** Local storage (WP sync pending)
-- **Gmail:** Demo emails (OAuth pending)
-- **Team Chat:** In-memory storage
-
-## Testing
+## Testing Status
 - **AI Module:** 22/22 tests passed
 - **Marketing Module:** 23/23 tests passed
-- Test files: `/app/tests/test_ai_module.py`, `/app/tests/test_marketing_module.py`
+- **SOP Works Board:** Testing in progress
