@@ -696,7 +696,7 @@ const WebsiteProjectsPage = () => {
             </div>
 
             {/* Cross-Project Tasks Panel */}
-            {(dueDateFilter || developerFilter) && (
+            {(dueDateFilter || (developerFilter && developerFilter !== 'all')) && (
               <div className={`w-80 border-l ${borderColor} ${bgCard} flex flex-col`}>
                 <div className={`p-3 border-b ${borderColor}`}>
                   <h3 className={`text-sm font-semibold ${textPrimary}`}>
