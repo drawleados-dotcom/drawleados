@@ -142,10 +142,9 @@ const ExpenseTab = () => {
     if (!selectedAccount) return;
     setLoading(true);
     try {
-      const now = new Date();
       const res = await axios.get(`${API}/api/expense/cashflow`, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { month: now.getMonth() + 1, year: now.getFullYear() }
+        params: { month: cashbookMonth, year: cashbookYear }
       });
       setCashbookData(res.data);
     } catch (error) {
@@ -154,7 +153,7 @@ const ExpenseTab = () => {
     } finally {
       setLoading(false);
     }
-  }, [token, selectedAccount]);
+  }, [token, selectedAccount, cashbookMonth, cashbookYear]);
 
   // Load master expense view
   const loadMasterExpense = useCallback(async () => {
