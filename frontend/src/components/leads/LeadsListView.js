@@ -89,7 +89,7 @@ const LeadsListView = ({ leads, services, sources, statuses, onEditLead, onDelet
                         size="sm"
                         onClick={() => onEditLead(lead)}
                         data-testid={`edit-lead-${lead.lead_id}`}
-                        className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8 w-8 p-0"
+                        className={`h-8 w-8 p-0 ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -110,7 +110,7 @@ const LeadsListView = ({ leads, services, sources, statuses, onEditLead, onDelet
             ) : (
               <tr>
                 <td colSpan="7" className="px-6 py-12 text-center">
-                  <p className="text-[#a1a1aa]">No leads found</p>
+                  <p className={isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}>No leads found</p>
                 </td>
               </tr>
             )}
