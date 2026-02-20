@@ -154,7 +154,7 @@ const WebsiteProjectsPage = () => {
       let url = `${API}/api/website-projects/all-tasks`;
       const params = new URLSearchParams();
       if (dueDateFilter) params.append('due_date', dueDateFilter);
-      if (developerFilter) params.append('developer', developerFilter);
+      if (developerFilter && developerFilter !== 'all') params.append('developer', developerFilter);
       if (params.toString()) url += `?${params.toString()}`;
       
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` } });
