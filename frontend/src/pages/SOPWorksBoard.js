@@ -667,6 +667,47 @@ const SOPWorksBoard = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Add Custom Service Modal */}
+        <Dialog open={isAddServiceModalOpen} onOpenChange={setIsAddServiceModalOpen}>
+          <DialogContent className="bg-[#18181b] border-[#27272a] max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="text-[#fafafa]">Add Custom Service</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-[#0c0a09] rounded-lg border border-[#27272a]">
+                <p className="text-sm text-[#a1a1aa] mb-4">
+                  Custom service templates are coming soon! For now, you can use the existing templates:
+                </p>
+                <div className="space-y-2">
+                  {templates.map((t) => (
+                    <div 
+                      key={t.service_type}
+                      className="flex items-center justify-between p-3 bg-[#18181b] rounded-lg border border-[#27272a]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>{t.icon}</span>
+                        <span className="text-[#fafafa]">{t.name}</span>
+                      </div>
+                      <span className="text-xs text-[#71717a]">{t.task_count} tasks</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <p className="text-xs text-[#52525b] text-center">
+                Need a custom template? Contact your admin to set up new service workflows.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button 
+                onClick={() => setIsAddServiceModalOpen(false)} 
+                className="bg-[#6366f1] hover:bg-[#5558dd]"
+              >
+                Got it
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
