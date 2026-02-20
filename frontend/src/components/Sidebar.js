@@ -93,6 +93,13 @@ const Sidebar = () => {
 
   const isOperationsActive = location.pathname.startsWith('/operations');
 
+  // Base styles for nav items
+  const navItemBase = `flex items-center gap-3 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300`;
+  const navItemActive = `bg-[#6366f1]/15 text-[#6366f1] font-bold`;
+  const navItemInactive = isDark 
+    ? 'text-[#e4e4e7] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+    : 'text-gray-700 hover:bg-[#6366f1]/10 hover:text-[#6366f1]';
+
   return (
     <div
       className={`h-screen w-64 border-r flex flex-col ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}
@@ -114,15 +121,9 @@ const Sidebar = () => {
         <Link
           to="/dashboard"
           data-testid="nav-dashboard"
-          className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-            location.pathname === '/dashboard'
-              ? 'bg-[#6366f1]/15 text-[#6366f1]'
-              : isDark 
-                ? 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-                : 'text-gray-600 hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-          }`}
+          className={`${navItemBase} ${location.pathname === '/dashboard' ? navItemActive : navItemInactive}`}
         >
-          <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />
+          <LayoutDashboard className="h-5 w-5" strokeWidth={2} />
           Dashboard
         </Link>
 
@@ -131,13 +132,9 @@ const Sidebar = () => {
           <Link
             to="/leads"
             data-testid="nav-leads"
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              location.pathname === '/leads'
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
+            className={`${navItemBase} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
           >
-            <Users className="h-5 w-5" strokeWidth={1.5} />
+            <Users className="h-5 w-5" strokeWidth={2} />
             Leads
           </Link>
         )}
@@ -147,11 +144,7 @@ const Sidebar = () => {
           <button
             onClick={() => setOperationsExpanded(!operationsExpanded)}
             data-testid="nav-operations"
-            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              isOperationsActive
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
+            className={`w-full ${navItemBase} ${isOperationsActive ? navItemActive : navItemInactive}`}
           >
             {operationsExpanded ? (
               <ChevronDown className="h-4 w-4" />
