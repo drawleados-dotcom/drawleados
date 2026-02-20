@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -29,7 +30,8 @@ import {
   Link2,
   ArrowLeft,
   GripVertical,
-  AlertCircle
+  AlertCircle,
+  Smartphone
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -40,7 +42,8 @@ const serviceIcons = {
   website: Globe,
   seo: Search,
   sem: BarChart3,
-  meta_ads: Target
+  meta_ads: Target,
+  social_media: Smartphone
 };
 
 const priorityColors = {
@@ -50,6 +53,7 @@ const priorityColors = {
 };
 
 const SOPWorksBoard = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [templates, setTemplates] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -58,6 +62,7 @@ const SOPWorksBoard = () => {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isAddServiceModalOpen, setIsAddServiceModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedServiceType, setSelectedServiceType] = useState(null);
