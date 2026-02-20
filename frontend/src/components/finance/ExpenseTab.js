@@ -324,6 +324,18 @@ const ExpenseTab = () => {
     if (!cashbookData) return null;
 
     const balance = selectedAccount?.current_balance || 0;
+    
+    const months = [
+      { value: 1, label: 'January' }, { value: 2, label: 'February' },
+      { value: 3, label: 'March' }, { value: 4, label: 'April' },
+      { value: 5, label: 'May' }, { value: 6, label: 'June' },
+      { value: 7, label: 'July' }, { value: 8, label: 'August' },
+      { value: 9, label: 'September' }, { value: 10, label: 'October' },
+      { value: 11, label: 'November' }, { value: 12, label: 'December' }
+    ];
+    
+    const years = [];
+    for (let y = 2024; y <= 2027; y++) years.push(y);
 
     return (
       <div className="space-y-4">
@@ -336,7 +348,30 @@ const ExpenseTab = () => {
                 {formatCurrency(balance)}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
+              {/* Month/Year Selector */}
+              <div className="flex gap-2">
+                <Select value={cashbookMonth.toString()} onValueChange={(v) => setCashbookMonth(parseInt(v))}>
+                  <SelectTrigger className={`w-[130px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+                    <SelectValue placeholder="Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {months.map((m) => (
+                      <SelectItem key={m.value} value={m.value.toString()}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={cashbookYear.toString()} onValueChange={(v) => setCashbookYear(parseInt(v))}>
+                  <SelectTrigger className={`w-[100px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((y) => (
+                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 onClick={() => { setEntryType('credit'); setShowAddEntry(true); }}
                 className="bg-[#22c55e] hover:bg-[#16a34a] text-white"
