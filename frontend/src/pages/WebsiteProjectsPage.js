@@ -1036,7 +1036,7 @@ const WebsiteProjectsPage = () => {
                   <TabsTrigger value="ui"><Palette className="h-3 w-3 mr-1" /> UI</TabsTrigger>
                   <TabsTrigger value="dev"><Code className="h-3 w-3 mr-1" /> Dev</TabsTrigger>
                   <TabsTrigger value="content"><FileText className="h-3 w-3 mr-1" /> Content</TabsTrigger>
-                </Tabs>
+                </TabsList>
 
                 {['wireframe', 'ui', 'dev', 'content'].map(phase => (
                   <TabsContent key={phase} value={phase} className="flex-1 overflow-auto p-4 space-y-4">
