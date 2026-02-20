@@ -88,6 +88,45 @@ class PageTaskUpdate(BaseModel):
     assigned_to: Optional[str] = None
     notes: Optional[str] = None
 
+# ============== NEW: SECTION MODELS ==============
+
+class SectionCreate(BaseModel):
+    name: str  # Hero Section, About Section, etc.
+    description: Optional[str] = None
+    screenshot_url: Optional[str] = None  # Paste screenshot URL
+
+class SectionUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    screenshot_url: Optional[str] = None
+    wireframe_status: Optional[str] = None
+    wireframe_url: Optional[str] = None
+    ui_status: Optional[str] = None
+    ui_url: Optional[str] = None
+    dev_status: Optional[str] = None
+    dev_url: Optional[str] = None
+    content_status: Optional[str] = None
+    content_url: Optional[str] = None
+
+class FeedbackCreate(BaseModel):
+    content: str
+    feedback_type: str = "comment"  # comment, revision, approval
+
+class ProjectTaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigned_to: Optional[str] = None
+    due_date: Optional[str] = None
+    priority: str = "medium"  # low, medium, high
+
+class ProjectTaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigned_to: Optional[str] = None
+    due_date: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+
 # ============== DEFAULT PAGES ==============
 
 DEFAULT_PAGES = [
