@@ -78,6 +78,10 @@ const FinanceModule = () => {
             <RevenueTab />
           </TabsContent>
 
+          <TabsContent value="expenses" className="mt-6">
+            <ExpenseTab />
+          </TabsContent>
+
           <TabsContent value="invoices" className="mt-6">
             <InvoicesTab />
           </TabsContent>
