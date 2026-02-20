@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../utils/api';
 import {
   Users,
@@ -14,6 +15,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const Dashboard = () => {
   const { user, isAdmin } = useAuth();
+  const { isDark } = useTheme();
   const [stats, setStats] = useState(null);
   const [recentLeads, setRecentLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +45,7 @@ const Dashboard = () => {
     return (
       <Layout>
         <div className="flex items-center justify-center h-full">
-          <p className="text-[#a1a1aa]">Loading dashboard...</p>
+          <p className={isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}>Loading dashboard...</p>
         </div>
       </Layout>
     );
