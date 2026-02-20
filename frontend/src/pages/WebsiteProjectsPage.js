@@ -630,7 +630,7 @@ const WebsiteProjectsPage = () => {
                 <SelectValue placeholder="All Developers" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Developers</SelectItem>
+                <SelectItem value="all">All Developers</SelectItem>
                 {teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -1052,7 +1052,7 @@ const WebsiteProjectsPage = () => {
                         <label className={`text-xs ${textSecondary}`}>Assignee</label>
                         <Select value={selectedSection[`${phase}_assignee`] || ''} onValueChange={(v) => handleUpdateSection(selectedSection.section_id, { [`${phase}_assignee`]: v })}>
                           <SelectTrigger className={bgSecondary}><SelectValue placeholder="Assign" /></SelectTrigger>
-                          <SelectContent><SelectItem value="">Unassigned</SelectItem>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}</SelectContent>
+                          <SelectContent><SelectItem value="none">Unassigned</SelectItem>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}</SelectContent>
                         </Select>
                       </div>
                       <div>
@@ -1155,7 +1155,7 @@ const PhaseCard = ({ phase, page, teamMembers, onUpdate, isDark }) => {
         </Select>
         <Select value={page[`${phase}_assignee`] || ''} onValueChange={(v) => onUpdate(`${phase}_assignee`, v)}>
           <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Assignee" /></SelectTrigger>
-          <SelectContent><SelectItem value="">Unassigned</SelectItem>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}</SelectContent>
+          <SelectContent><SelectItem value="none">Unassigned</SelectItem>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}</SelectContent>
         </Select>
         <Input type="date" value={page[`${phase}_due`] || ''} onChange={(e) => onUpdate(`${phase}_due`, e.target.value)} className="h-7 text-xs" placeholder="Due" />
       </div>
