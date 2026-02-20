@@ -66,7 +66,7 @@ const WebsiteProjectsPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dueDateFilter, setDueDateFilter] = useState('');
-  const [developerFilter, setDeveloperFilter] = useState('');
+  const [developerFilter, setDeveloperFilter] = useState('all');
   
   // UI States
   const [activeTab, setActiveTab] = useState('pages');
