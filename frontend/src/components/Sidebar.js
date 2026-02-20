@@ -139,7 +139,7 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Operations with nested databases */}
+        {/* Operations with Service Types */}
         <div>
           <button
             onClick={() => setOperationsExpanded(!operationsExpanded)}
@@ -151,55 +151,72 @@ const Sidebar = () => {
             ) : (
               <ChevronRight className="h-4 w-4" />
             )}
-            <Package className="h-5 w-5" strokeWidth={1.5} />
+            <Package className="h-5 w-5" strokeWidth={2} />
             <span className="flex-1 text-left">Operations</span>
           </button>
 
-          {/* Nested Databases */}
+          {/* Service Types */}
           {operationsExpanded && (
             <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-              {databases.map((db) => (
-                <Link
-                  key={db.database_id}
-                  to={`/operations?db=${db.database_id}`}
-                  className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                    location.search.includes(db.database_id)
-                      ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                      : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                >
-                  <span className="text-base">{db.icon || '📋'}</span>
-                  <span className="truncate">{db.name}</span>
-                </Link>
-              ))}
-
-              {databases.length === 0 && (
-                <div className={`px-3 py-2 text-xs ${isDark ? 'text-[#52525b]' : 'text-gray-400'}`}>
-                  No databases yet
-                </div>
-              )}
-
-              {/* Add New Database Link */}
               <Link
-                to="/operations"
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${isDark ? 'text-[#71717a] hover:text-[#a1a1aa]' : 'text-gray-500 hover:text-gray-700'}`}
+                to="/sop-works?service=website"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.search.includes('service=website')
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span className="text-base">🌐</span>
+                <span>Website Development</span>
+              </Link>
+              
+              <Link
+                to="/sop-works?service=seo"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.search.includes('service=seo')
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span className="text-base">🔍</span>
+                <span>SEO</span>
+              </Link>
+              
+              <Link
+                to="/sop-works?service=social_media"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.search.includes('service=social_media')
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span className="text-base">📱</span>
+                <span>Social Media</span>
+              </Link>
+              
+              <Link
+                to="/sop-works?service=meta_ads"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.search.includes('service=meta_ads')
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span className="text-base">📊</span>
+                <span>Meta Ads</span>
+              </Link>
+
+              {/* Add Custom Service */}
+              <Link
+                to="/sop-works?action=add-service"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${isDark ? 'text-[#6366f1] hover:bg-[#6366f1]/10' : 'text-[#6366f1] hover:bg-[#6366f1]/10'}`}
               >
                 <Plus className="h-4 w-4" />
-                <span>New Database</span>
+                <span>Add Custom Service</span>
               </Link>
             </div>
           )}
         </div>
-
-        {/* SOP Works Board */}
-        <Link
-          to="/sop-works"
-          data-testid="nav-sop-works"
-          className={`${navItemBase} ${location.pathname === '/sop-works' ? navItemActive : navItemInactive}`}
-        >
-          <ClipboardList className="h-5 w-5" strokeWidth={2} />
-          SOP Works
-        </Link>
 
         {/* HR - for everyone */}
         <Link
