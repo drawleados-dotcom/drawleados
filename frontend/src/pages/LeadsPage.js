@@ -155,20 +155,23 @@ const LeadsPage = () => {
         {/* Search */}
         <div className="flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#a1a1aa]" />
+            <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-400'}`} />
             <Input
               placeholder="Search leads..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               data-testid="search-leads-input"
-              className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
+              className={`pl-10 ${isDark 
+                ? 'bg-[#18181b] border-[#27272a] text-[#fafafa]' 
+                : 'bg-white border-gray-300 text-gray-900'
+              } focus:border-[#6366f1]`}
             />
           </div>
         </div>
 
         {/* Tabs */}
         <Tabs value={activeView} onValueChange={setActiveView} className="w-full">
-          <TabsList className="bg-[#18181b] border border-[#27272a] p-1">
+          <TabsList className={`p-1 ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-gray-100 border border-gray-200'}`}>
             <TabsTrigger
               value="list"
               data-testid="list-view-tab"
