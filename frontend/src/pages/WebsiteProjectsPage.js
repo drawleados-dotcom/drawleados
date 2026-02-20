@@ -1190,31 +1190,21 @@ const StatusBadge = ({ status, onChange }) => (
   </Select>
 );
 
-// Phase Table Cell - Status + Add URL link (like the screenshot)
-const PhaseTableCell = ({ task, phase, onUpdate, isDark }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [url, setUrl] = useState(task[`${phase}_url`] || '');
-  const [due, setDue] = useState(task[`${phase}_due`] || '');
-  
+// Phase Table Cell - All fields editable: Status, Assignee, Due Date, URL
+const PhaseTableCell = ({ task, phase, onUpdate, teamMembers, isDark }) => {
   const status = task[`${phase}_status`] || 'To-Do';
+  const assignee = task[`${phase}_assignee`] || 'none';
+  const dueDate = task[`${phase}_due`] || '';
+  const url = task[`${phase}_url`] || '';
+  
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
 
-  const handleSave = () => {
-    if (url !== task[`${phase}_url`]) {
-      onUpdate(task.task_id, `${phase}_url`, url);
-    }
-    if (due !== task[`${phase}_due`]) {
-      onUpdate(task.task_id, `${phase}_due`, due);
-    }
-    setIsEditing(false);
-  };
-
   return (
-    <div className={`p-2 rounded ${bgSecondary} space-y-1`}>
+    <div className={`p-1.5 rounded ${bgSecondary} space-y-1`}>
       {/* Status Dropdown */}
       <Select value={status} onValueChange={(v) => onUpdate(task.task_id, `${phase}_status`, v)}>
-        <SelectTrigger className={`h-6 text-xs ${STATUS_COLORS[status]} border w-full`}>
+        <SelectTrigger className={`h-6 text-[10px] ${STATUS_COLORS[status]} border w-full`}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -1222,42 +1212,47 @@ const PhaseTableCell = ({ task, phase, onUpdate, isDark }) => {
         </SelectContent>
       </Select>
 
-      {/* URL + Due Date */}
-      {isEditing ? (
-        <div className="space-y-1">
-          <Input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="Paste URL"
-            className="h-6 text-xs"
-            autoFocus
-          />
-          <Input
-            type="date"
-            value={due}
-            onChange={(e) => setDue(e.target.value)}
-            className="h-6 text-xs"
-          />
-          <div className="flex gap-1">
-            <Button size="sm" onClick={handleSave} className="h-5 text-[10px] flex-1 bg-[#6366f1]">Save</Button>
-            <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)} className="h-5 text-[10px] px-1">
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
+      {/* Assignee Dropdown */}
+      <Select value={assignee} onValueChange={(v) => onUpdate(task.task_id, `${phase}_assignee`, v === 'none' ? '' : v)}>
+        <SelectTrigger className="h-6 text-[10px] w-full">
+          <User className="h-3 w-3 mr-1 opacity-50" />
+          <SelectValue placeholder="Assign" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Unassigned</SelectItem>
+          {teamMembers?.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
+        </SelectContent>
+      </Select>
+
+      {/* Due Date */}
+      <Input
+        type="date"
+        value={dueDate}
+        onChange={(e) => onUpdate(task.task_id, `${phase}_due`, e.target.value)}
+        className="h-6 text-[10px] w-full"
+      />
+
+      {/* URL */}
+      {url ? (
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-[10px] text-[#6366f1] hover:underline flex items-center justify-center gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Link2 className="h-3 w-3" /> View URL
+        </a>
       ) : (
-        <div className="text-center">
-          {task[`${phase}_url`] ? (
-            <a 
-              href={task[`${phase}_url`]} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-[10px] text-[#6366f1] hover:underline flex items-center justify-center gap-1"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Link2 className="h-3 w-3" /> View
-            </a>
-          ) : (
+        <Input
+          placeholder="+ Add URL"
+          onBlur={(e) => e.target.value && onUpdate(task.task_id, `${phase}_url`, e.target.value)}
+          className={`h-6 text-[10px] w-full text-center ${textSecondary}`}
+        />
+      )}
+    </div>
+  );
+};
             <button
               onClick={() => setIsEditing(true)}
               className={`text-[10px] ${textSecondary} hover:text-[#6366f1] flex items-center justify-center gap-1 w-full`}
