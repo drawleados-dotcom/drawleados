@@ -1,10 +1,43 @@
 # Drawlead OS - Product Requirements Document
 
-## Last Updated: December 2025
+## Last Updated: February 2026
 
 ---
 
-## Recent Changes (December 2025 - Latest)
+## Recent Changes (February 2026 - Latest)
+
+### Expense Module - Dashboard-First UX ✅
+Complete cashflow management system with modern dashboard experience:
+
+**Dashboard View (Default):**
+- Summary Cards: Total Cash In, Total Cash Out, Current Balance, Pending Payments
+- Bank Accounts: 4 clickable account cards (Current, GST, Savings, Cash in Hand)
+- Expense by Category: Progress bars with percentages and amounts
+- Recent Transactions: List with IN/OUT icons, colored amounts
+
+**Table View Toggle:**
+- Excel-like detailed view when needed
+- Columns: Type, Date, Description, Category, Amount, Actions
+- IN/OUT badges with green/red coloring
+
+**Features:**
+- Add Income / Add Expense buttons with modal forms
+- Category dropdown for expenses (Salary, Office Exp, CEO, Vendor Payments, etc.)
+- Filter bar: Date range, Category filter, Search, Refresh
+- Real-time balance calculation per account
+
+**API Endpoints:**
+- `/api/expense/bank-accounts` - CRUD for bank accounts
+- `/api/expense/categories` - Expense categories
+- `/api/expense/income` - Income entries
+- `/api/expense/payments` - Expense payments
+- `/api/expense/cashflow` - Monthly cashflow view
+- `/api/expense/summary` - Cash In/Out/Balance summary
+- `/api/expense/master-view` - Fiscal year category breakdown
+
+---
+
+## Previous Updates (December 2025)
 
 ### Website Projects - Table Layout Updated ✅
 Updated pages table to match screenshot design:
