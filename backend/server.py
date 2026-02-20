@@ -1550,6 +1550,7 @@ api_router.include_router(marketing_router)
 api_router.include_router(ai_router)
 api_router.include_router(sop_router)
 api_router.include_router(website_projects_router)
+api_router.include_router(expense_router)
 
 # Include router in main app
 app.include_router(api_router)
