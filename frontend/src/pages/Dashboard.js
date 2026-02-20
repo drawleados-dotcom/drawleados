@@ -236,7 +236,7 @@ const Dashboard = () => {
                 </div>
               ))
             ) : (
-              <p className="text-center text-[#a1a1aa] py-8">No recent leads</p>
+              <p className={`text-center py-8 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>No recent leads</p>
             )}
           </div>
         </div>
