@@ -809,26 +809,46 @@ const WebsiteProjectsPage = () => {
                 <thead className={`${bgSecondary} sticky top-0 z-10`}>
                   <tr className={`text-xs ${textSecondary} uppercase`}>
                     <th className="px-4 py-3 text-left font-semibold w-8">#</th>
-                    <th className="px-4 py-3 text-left font-semibold">Page Name</th>
-                    <th className="px-4 py-3 text-center font-semibold">Wireframe</th>
-                    <th className="px-4 py-3 text-center font-semibold">UI Design</th>
-                    <th className="px-4 py-3 text-center font-semibold">Content</th>
-                    <th className="px-4 py-3 text-center font-semibold">Development</th>
-                    <th className="px-4 py-3 text-center font-semibold">Overall</th>
+                    <th className="px-4 py-3 text-left font-semibold min-w-[150px]">Page Name</th>
+                    <th className="px-2 py-3 text-center font-semibold min-w-[130px]">
+                      <div>Wireframe</div>
+                      <div className="text-[10px] font-normal opacity-60">Status / URL / Due</div>
+                    </th>
+                    <th className="px-2 py-3 text-center font-semibold min-w-[130px]">
+                      <div>UI Design</div>
+                      <div className="text-[10px] font-normal opacity-60">Status / URL / Due</div>
+                    </th>
+                    <th className="px-2 py-3 text-center font-semibold min-w-[130px]">
+                      <div>Content</div>
+                      <div className="text-[10px] font-normal opacity-60">Status / URL / Due</div>
+                    </th>
+                    <th className="px-2 py-3 text-center font-semibold min-w-[130px]">
+                      <div>Development</div>
+                      <div className="text-[10px] font-normal opacity-60">Status / URL / Due</div>
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold w-24">Overall</th>
                     <th className="px-4 py-3 text-center font-semibold w-16">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredPages.map((task, idx) => (
                     <tr key={task.task_id} className={`border-b ${borderColor} hover:${bgSecondary} transition-colors cursor-pointer`} onClick={() => openPage(task)}>
-                      <td className={`px-4 py-3 text-sm ${textSecondary}`}>{task.sno}</td>
-                      <td className={`px-4 py-3`}><span className={`text-sm font-medium ${textPrimary} hover:text-[#6366f1]`}>{task.page_name}</span></td>
-                      <td className="px-2 py-2" onClick={e => e.stopPropagation()}><StatusBadge status={task.wireframe_status} onChange={(v) => handleStatusChange(task.task_id, 'wireframe_status', v)} /></td>
-                      <td className="px-2 py-2" onClick={e => e.stopPropagation()}><StatusBadge status={task.ui_status} onChange={(v) => handleStatusChange(task.task_id, 'ui_status', v)} /></td>
-                      <td className="px-2 py-2" onClick={e => e.stopPropagation()}><StatusBadge status={task.content_status} onChange={(v) => handleStatusChange(task.task_id, 'content_status', v)} /></td>
-                      <td className="px-2 py-2" onClick={e => e.stopPropagation()}><StatusBadge status={task.dev_status} onChange={(v) => handleStatusChange(task.task_id, 'dev_status', v)} /></td>
+                      <td className={`px-4 py-2 text-sm ${textSecondary}`}>{task.sno}</td>
+                      <td className={`px-4 py-2`}><span className={`text-sm font-medium ${textPrimary} hover:text-[#6366f1]`}>{task.page_name}</span></td>
+                      <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
+                        <PhaseTableCell task={task} phase="wireframe" onUpdate={handleStatusChange} isDark={isDark} />
+                      </td>
+                      <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
+                        <PhaseTableCell task={task} phase="ui" onUpdate={handleStatusChange} isDark={isDark} />
+                      </td>
+                      <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
+                        <PhaseTableCell task={task} phase="content" onUpdate={handleStatusChange} isDark={isDark} />
+                      </td>
+                      <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
+                        <PhaseTableCell task={task} phase="dev" onUpdate={handleStatusChange} isDark={isDark} />
+                      </td>
                       <td className="px-2 py-2" onClick={e => e.stopPropagation()}><StatusBadge status={task.overall_status} onChange={(v) => handleStatusChange(task.task_id, 'overall_status', v)} /></td>
-                      <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                      <td className="px-4 py-2 text-center" onClick={e => e.stopPropagation()}>
                         <Button variant="ghost" size="sm" onClick={() => handleDeletePage(task.task_id)} className="text-red-400 h-7 w-7 p-0"><Trash2 className="h-4 w-4" /></Button>
                       </td>
                     </tr>
