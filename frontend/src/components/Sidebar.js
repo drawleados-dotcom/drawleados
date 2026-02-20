@@ -247,7 +247,7 @@ const Sidebar = () => {
                 : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
             }`}
           >
-            <Shield className="h-5 w-5" strokeWidth={1.5} />
+            <Shield className="h-5 w-5" strokeWidth={2} />
             HR Admin
           </Link>
         )}
@@ -257,13 +257,9 @@ const Sidebar = () => {
           <Link
             to="/reports"
             data-testid="nav-reports"
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              location.pathname === '/reports'
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
+            className={`${navItemBase} ${location.pathname === '/reports' ? navItemActive : navItemInactive}`}
           >
-            <TrendingUp className="h-5 w-5" strokeWidth={1.5} />
+            <TrendingUp className="h-5 w-5" strokeWidth={2} />
             Reports
           </Link>
         )}
@@ -273,13 +269,9 @@ const Sidebar = () => {
           <Link
             to="/finance"
             data-testid="nav-finance"
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              location.pathname === '/finance'
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
+            className={`${navItemBase} ${location.pathname === '/finance' ? navItemActive : navItemInactive}`}
           >
-            <DollarSign className="h-5 w-5" strokeWidth={1.5} />
+            <DollarSign className="h-5 w-5" strokeWidth={2} />
             Finance
           </Link>
         )}
@@ -289,13 +281,9 @@ const Sidebar = () => {
           <Link
             to="/services"
             data-testid="nav-services"
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              location.pathname === '/services'
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
+            className={`${navItemBase} ${location.pathname === '/services' ? navItemActive : navItemInactive}`}
           >
-            <Package className="h-5 w-5" strokeWidth={1.5} />
+            <Package className="h-5 w-5" strokeWidth={2} />
             Services
           </Link>
         )}
@@ -305,26 +293,22 @@ const Sidebar = () => {
           <Link
             to="/settings"
             data-testid="nav-settings"
-            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-              location.pathname === '/settings'
-                ? 'bg-[#6366f1]/15 text-[#6366f1]'
-                : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
-            }`}
+            className={`${navItemBase} ${location.pathname === '/settings' ? navItemActive : navItemInactive}`}
           >
-            <Settings className="h-5 w-5" strokeWidth={1.5} />
+            <Settings className="h-5 w-5" strokeWidth={2} />
             Settings
           </Link>
         )}
       </nav>
 
-      <div className="p-4 border-t border-[#27272a]">
+      <div className={`p-4 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
         <div className="flex items-center gap-3 px-4 py-3 mb-2">
           <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-semibold">
             {user?.name?.charAt(0).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-[#fafafa] truncate">{user?.name}</p>
-            <p className="text-xs text-[#a1a1aa] capitalize">{user?.role}</p>
+            <p className={`text-sm font-semibold truncate ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{user?.name}</p>
+            <p className={`text-xs capitalize ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{user?.role}</p>
           </div>
         </div>
         <Button
