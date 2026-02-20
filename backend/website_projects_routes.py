@@ -72,21 +72,32 @@ class PageTaskCreate(BaseModel):
 class PageTaskUpdate(BaseModel):
     page_name: Optional[str] = None
     sno: Optional[int] = None
+    # Wireframe phase
     wireframe_url: Optional[str] = None
     wireframe_due: Optional[str] = None
     wireframe_status: Optional[str] = None
+    wireframe_assignee: Optional[str] = None
+    # UI phase
     ui_url: Optional[str] = None
     ui_due: Optional[str] = None
     ui_status: Optional[str] = None
+    ui_assignee: Optional[str] = None
+    # Content phase
     content_url: Optional[str] = None
     content_due: Optional[str] = None
     content_status: Optional[str] = None
+    content_assignee: Optional[str] = None
+    # Dev phase
     dev_url: Optional[str] = None
     dev_due: Optional[str] = None
     dev_status: Optional[str] = None
+    dev_assignee: Optional[str] = None
+    # Overall
     overall_status: Optional[str] = None
     assigned_to: Optional[str] = None
     notes: Optional[str] = None
+    # Page content (Google Docs-like)
+    page_content: Optional[str] = None  # JSON content for the page
 
 # ============== NEW: SECTION MODELS ==============
 
