@@ -1,77 +1,106 @@
 <analysis>**original_problem_statement:**
-The user wants to build a comprehensive internal operating system called Drawlead OS. The project has evolved significantly to include multiple modules:
-
-1.  **HR Module:** A complete employee and admin portal for attendance, leave, payslips, etc. (Completed)
-2.  **Operations Module (Notion-like):** A highly advanced, customizable database system for managing projects and tasks. This includes:
-    *   Multiple views (Table, Kanban, By Project).
-    *   Hierarchical projects/groups within databases.
-    *   Right-click context menus for actions like duplicate, rename, etc.
-    *   Safe-delete confirmation modals.
-3.  **Google Docs/Sheets Integration:** Ability to attach Google Drive files (via link pasting) to projects and view/edit them in a resizable split-screen view within the Operations module. (Completed)
-4.  **Slack-like Team Chat:** An in-app real-time messaging system with channels, online indicators, and unread message notifications, accessible from the main sidebar. (Completed)
-5.  **Marketing Module (Current Request):** A new, comprehensive module to centralize marketing efforts, including:
-    *   Google Analytics dashboard integration.
-    *   WordPress blog publishing.
-    *   Social media content calendars (Instagram, LinkedIn, YouTube, Twitter/X).
-    *   Read-only Gmail inbox visibility.
-    *   A summary dashboard.
-    *   All features should support realistic demo data as a fallback.
+The user is building a comprehensive internal operating system, Drawlead OS. The project includes several modules:
+1.  **HR Module:** A complete employee and admin portal. (Completed)
+2.  **Operations Module (Notion-like):** An advanced database system for managing projects and tasks. (Completed)
+3.  **Google Docs/Sheets Integration:** Attach and view Google Drive files within the app. (Completed)
+4.  **Team Chat:** A Slack-like real-time messaging system. (Completed)
+5.  **Marketing Module:** A dashboard for Google Analytics, WordPress, social media, and Gmail. (Completed)
+6.  **Drawlead AI Assistant:** A context-aware AI clone (using Claude Sonnet 4.5) integrated into the Sales and Operations modules to provide suggestions, summaries, and drafts. (Completed)
+7.  **SOP Works Board:** A new module within Operations to manage standardized projects (Website, SEO, SEM, Meta Ads) using pre-built task templates and Kanban boards. (In Progress)
+8.  **Theme Toggle:** A global dark/light/system theme toggle in the application header. (In Progress/Buggy)
+9.  **Enhanced Website Projects View:** A new, spreadsheet-like project management view specifically for Website Development services, featuring project tabs, detailed metadata headers, phased task tables, and advanced filtering, based on a user-provided screenshot. (Current Request)
 
 **User's preferred language**: English
 
 **what currently exists?**
-The application is a full-stack system (FastAPI, React, MongoDB).
-*   **HR Module:** A complete and functional HR module for employees and admins is in place.
-*   **Advanced Operations Module:** The Operations page has been transformed into a powerful Notion-like system. It supports creating databases, hierarchical projects/groups, and tasks. It features multiple views (Table, Kanban, By Project), a right-click context menu, and a safe-delete confirmation modal.
-*   **Google Docs/Sheets Integration:** Users can paste Google Doc/Sheet links into projects. These are displayed in a resizable split-view panel for live editing within the app.
-*   **Team Chat:** A Slack-like chat feature is integrated. It's accessible from the sidebar, opens in a panel, and supports channels, real-time messaging (via polling), and online user status.
-*   **Authentication:** The critical login bug has been resolved. A startup script now ensures an admin user () exists, making the deployed application accessible. Google OAuth is also partially implemented for new user sign-ups.
+The application is a full-stack system (FastAPI, React, MongoDB) with several functional modules. The HR, advanced Operations, Team Chat, Marketing, and AI Assistant modules are complete and have been tested. An initial version of the SOP Works Board has been built, with backend routes and a frontend page. A global theme toggle (Light/Dark/System) has also been added, but its implementation is incomplete and causing UI inconsistencies. The sidebar has been reorganized to group operational services under a dropdown.
 
 **Last working item**:
-The user requested the creation of a comprehensive Marketing Module.
+The agent started working on the user's latest request to build an enhanced, spreadsheet-like project management view for Website Development projects.
 
-*   **Last item agent was working:** Starting the backend implementation for the new Marketing Module. The agent has created a new routes file () and was about to register it in the main FastAPI application ().
-*   **Status:** IN PROGRESS
-*   **Agent Testing Done:** N
-*   **Which testing method agent to use?** both
-*   **User Testing Done:** N
+- **Last item agent was working:** Creating the backend foundation for the new Website Projects view. A new routes file () was created, but it is empty and not yet registered in the main  application.
+- **Status:** NOT STARTED
+- **Agent Testing Done:** N
+- **Which testing method agent to use?** both
+- **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-*   None.
+- **Issue 1: Incomplete Light/Dark Theme Implementation (P0)**
+    - **Description:** The user reported that switching to light mode only partially changes the UI, leaving many components in dark mode. The agent attempted piecemeal fixes on several pages, but the issue persists. The root cause is the lack of a global, systematic theme application.
+    - **Attempted fixes:** The agent made ad-hoc  edits to , , and  to change hardcoded color classes. This approach is not scalable.
+    - **Next debug checklist:**
+        1.  Review  and  to ensure CSS variables for light/dark themes are correctly defined and applied to the root/body.
+        2.  Refactor components (, , , etc.) to use semantic theme classes (e.g., , ) instead of hardcoded colors (e.g., , ).
+        3.  Ensure the  from  correctly applies the theme class to the main application container.
+    - **Why fix this issue and what will be achieved with the fix?** Fixing this will provide a consistent and professional user experience across the entire application, fulfilling the user's explicit request for a fully functional theme toggle.
+    - **Status:** IN PROGRESS
+    - **Is recurring issue?** N
+    - **Should Test frontend/backend/both after fix?** frontend
+    - **Blocked on other issue:** No
+
+- **Issue 2: Sidebar Font Weight (P1)**
+    - **Description:** The user requested that the sidebar navigation items have a bolder font. The agent made some changes, but the fix needs verification.
+    - **Next debug checklist:** Inspect the CSS classes applied to the navigation links in . Ensure a class like  or  is correctly applied and not being overridden.
+    - **Why fix this issue and what will be achieved with the fix?** Improves UI/UX by adhering to the user's design feedback.
+    - **Status:** IN PROGRESS
+    - **Is recurring issue?** N
+    - **Should Test frontend/backend/both after fix?** frontend
+    - **Blocked on other issue:** No
+
+- **Issue 3: Automated Screenshot Authentication Failures (P2)**
+    - **Description:** The  repeatedly fails due to authentication issues within the testing environment (Playwright). It seems unable to persist the login session, resulting in blank or login pages.
+    - **Attempted fixes:** Tried explicit waits, setting localStorage directly, and passing the session token. None worked reliably. The agent correctly escalated to using the .
+    - **Next debug checklist:** For now, avoid using the  for post-login verification. Rely on the  for UI testing, as it has a more robust authentication mechanism. This is a platform-level issue that may be outside the agent's ability to fix directly.
+    - **Why fix this issue and what will be achieved with the fix?** Resolving this would speed up development by enabling quick, reliable UI smoke tests without invoking the full testing agent.
+    - **Status:** BLOCKED
+    - **Is recurring issue?** Y
+    - **Should Test frontend/backend/both after fix?** NA
+    - **Blocked on other issue:** No
 
 **In progress Task List**:
-*   **Task 1: Build the Marketing Module (P0)**
-    *   **Description:** Implement the full Marketing Module as per the user's detailed specifications. This includes a tabbed UI for Analytics, Blog, Social Media, and Email, with full integration support (GA4, WordPress, Gmail) and a demo data fallback.
-    *   **Where to resume:** The agent has created . The next logical step is to include this new router in  and then begin defining the Pydantic models and API endpoints for the first tab of the marketing module (e.g., Google Analytics).
-    *   **What will be achieved with this?** A major new functional area of the application will be created, centralizing all marketing activities as requested by the user.
-    *   **Status:** IN PROGRESS
-    *   **Should Test frontend/backend/both after fix?** both
-    *   **Blocked on something:** No
+- **Task 1: Build Enhanced Website Projects View (P0)**
+    - **Where to resume:**
+        1.  Open  and register the  from .
+        2.  Define Pydantic models and API endpoints in  to support CRUD operations for projects, tasks, and their associated metadata (domain, developer, phases, etc.), based on the structure shown in the user's  artifact.
+        3.  Create a new frontend page .
+        4.  Implement the spreadsheet-like UI with project tabs at the bottom, a detailed header, and a filterable task table.
+    - **What will be achieved with this?** A highly specialized and powerful project management interface for website development, tailored exactly to the user's specifications.
+    - **Status:** IN PROGRESS
+    - **Should Test frontend/backend/both after fix?** both
+    - **Blocked on something:** No
+
+- **Task 2: Finalize SOP Works Board (P1)**
+    - **Where to resume:** The testing agent was called for this feature, but the results were never checked.
+        1.  List files in  to find the latest report (likely ).
+        2.  Read the report file to identify any bugs or failures.
+        3.  Fix any issues reported by the testing agent.
+        4.  Perform a final verification to ensure the feature is stable.
+    - **What will be achieved with this?** A complete, tested, and verified SOP Works Board module.
+    - **Status:** TESTING PENDING
+    - **Should Test frontend/backend/both after fix?** both
+    - **Blocked on something:** No
 
 **Upcoming and Future Tasks**
-
 *   **Upcoming Tasks:**
-    *   **Refactor OperationsPage.js (P1):** The  file has become extremely large (over 2000 lines) and complex. It should be broken down into smaller, manageable components (e.g., , , , ) to improve maintainability.
-    *   **User Verification (P1):** The user has not formally verified the Google Docs and Team Chat features on their deployed environment. The agent should prompt for this confirmation.
-    *   **Resend API Key Configuration (P2):** The Resend integration for HR email notifications still uses placeholder keys. The agent must remind the user to provide their actual API key and sender email in the  file.
+    *   **Refactor OperationsPage.js (P1):** The  file is over 86KB and must be broken down into smaller components to improve maintainability.
+    *   **User Verification (P1):** Prompt the user to formally verify the Google Docs, Team Chat, and the month-wise report in the Finance module.
+    *   **Resend API Key Configuration (P2):** The Resend integration uses placeholder keys. Remind the user to provide their actual API key in .
 
 *   **Future Tasks:**
     *   **Finance Module:** Build the UI for the pending Payroll, GST, and Budgeting tabs.
     *   **Sales Module:** Implement CSV Import/Export for leads.
-    *   **Chat Backend Refactor:** The current chat backend uses in-memory lists, which will lose all data on restart. This should be migrated to use the MongoDB database for persistence.
-    *   **Kanban Drag-and-Drop:** Enhance the Kanban view in the Operations module to support dragging and dropping tasks between status columns.
+    *   **Chat Backend Refactor:** Migrate the in-memory chat backend to use MongoDB for persistence.
+    *   **Kanban Drag-and-Drop:** Add drag-and-drop functionality to the Operations module's Kanban view.
 
 **Completed work in this session**
-- **Operations Page UI Polish:** Refined the Operations page UI with better filters, a cleaner header, and a more prominent Add Task button.
-- **Advanced Operations Features:** Implemented a right-click context menu, hierarchical projects/groups, and multiple view modes (Table, Kanban, By Project).
-- **Safe Delete Confirmation:** Added a GitHub-style confirmation modal for deleting tasks, projects, and databases, requiring the user to type the item's name.
-- **Critical Login Bug Fix:** Diagnosed and fixed a persistent login failure by identifying a stale password hash issue and implementing a robust server startup script to ensure the admin user always exists with a valid password.
-- **Google Docs/Sheets Integration:** Built a feature to paste Google Drive file links into projects, which can be viewed and edited in an embedded, resizable split-view panel.
-- **Slack-like Team Chat:** Created a real-time team chat module with channels, online user presence, and an interface accessible from the main sidebar.
+- **Marketing Module (DONE):** Built and tested a complete marketing hub with a tabbed UI and demo data.
+- **Drawlead AI Assistant (DONE):** Integrated Claude Sonnet 4.5 to create a context-aware AI helper for Sales and Operations, accessible via a global floating button.
+- **SOP Works Board (Initial Implementation):** Created the backend and frontend for a new SOP management board with pre-built templates.
+- **Theme Toggle (Partial Implementation):** Added a light/dark mode toggle in the header, though the implementation is buggy.
+- **Sidebar Reorganization (DONE):** Restructured the Operations navigation into a dropdown menu listing specific services.
 
 **Earlier issues found/mentioned but not fixed**
-- **User Verification Pending from Previous Forks:**
-    - The month-wise report/view in the Finance module's invoice tab has never been formally verified by the user.
+- **User Verification Pending from Previous Forks:** The month-wise report/view in the Finance module's invoice tab has never been formally verified by the user.
 
 **Known issue recurrence from previous fork**
 - N/A
@@ -80,83 +109,100 @@ The user requested the creation of a comprehensive Marketing Module.
 
 
 **Key Technical Concepts**
-*   **Backend:** FastAPI, MongoDB (), Pydantic, JWT,  for passwords. Server startup events.
-*   **Frontend:** React, Tailwind CSS, ,  for resizable views.
-*   **Real-time:** The chat module uses front-end polling every 3 seconds to simulate real-time updates.
-*   **Integration:**  embedding for Google Docs/Sheets.  for emails (mocked).
+*   **Backend:** FastAPI, MongoDB (), Pydantic, JWT.
+*   **Frontend:** React, Tailwind CSS, , .
+*   **Integrations:**
+    *    library for LLM access (Claude Sonnet 4.5).
+    *    for Google Docs.
+*   **State Management:** React Context API (, ).
 
 **key DB schema**
 *   **users:** 
 *   **notion_databases:** 
-*   **notion_projects:** (Implicitly managed via rows, should be a dedicated collection) 
 *   **notion_rows:** 
-*   **google_documents:**  (New)
-*   **chat_channels:**  (New - currently in-memory)
-*   **chat_messages:**  (New - currently in-memory)
+*   **sop_projects:** (New) 
+*   **website_projects:** (New) 
+*   **ai_chats:** (New) 
+
+**changes in tech stack**
+-  library was added for accessing LLMs with the Emergent LLM Key.
 
 **All files of reference**
-*   **/app/backend/server.py**: Heavily modified to fix login bug with a startup function and to include new routers for chat and marketing.
-*   **/app/backend/notion_routes.py**: Extended to support projects/groups and linking Google documents.
-*   **/app/backend/chat_routes.py**: (New) Contains all API logic for the team chat.
-*   **/app/backend/marketing_routes.py**: (New) Placeholder file for the marketing module.
-*   **/app/frontend/src/pages/OperationsPage.js**: Massively rewritten to a single large file containing logic for multiple views, context menus, safe delete, split-panes, and document linking.
-*   **/app/frontend/src/components/Sidebar.js**: Modified to add the Team Chat entry point and panel logic.
-*   **/app/frontend/src/components/ChatPanel.jsx**: (New) The complete UI for the team chat feature.
+*   **/app/backend/server.py**: Updated to include new routers for marketing, AI, and SOPs.
+*   **/app/backend/sop_routes.py**: Contains logic and templates for the SOP Works Board.
+*   **/app/backend/website_projects_routes.py**: Placeholder file for the new website projects feature.
+*   **/app/frontend/src/pages/SOPWorksBoard.js**: New page for the SOP Works Board feature.
+*   **/app/frontend/src/components/DrawleadAI.jsx**: New component for the floating AI chat panel.
+*   **/app/frontend/src/contexts/ThemeContext.js**: New context for managing light/dark themes.
+*   **/app/frontend/src/components/ThemeToggle.jsx**: New UI component for the theme switcher.
+*   **/app/frontend/src/components/Sidebar.js**: Heavily modified to add new navigation items, sub-menus, and theme support classes.
+*   **/app/frontend/src/pages/LeadsPage.js**: Modified to support theming.
+*   **/app/frontend/src/pages/Dashboard.js**: Modified to support theming.
 
 **Areas that need refactoring**:
-*   **Critical:**  is a monolith (>2000 lines) and must be broken down into smaller, reusable components. This is a significant technical debt.
-*   **High Priority:** The chat backend relies on in-memory Python lists. This is not persistent and will lose all data on server restart. It must be migrated to use MongoDB collections.
+*   **Critical:**  remains a monolith (>86KB) and severely hinders development. It must be broken down.
+*   **High Priority:** The recent theme implementation was done with hardcoded color values across multiple files. This should be refactored to use a centralized system of CSS variables defined in  to make theming robust and maintainable.
 
 **key api endpoints**
-*    (POST - Fixed)
-*    (POST, DELETE - New for managing projects)
-*    (GET, POST - New for GDocs)
-*    (GET, POST - New)
-*    (GET, POST - New)
+*    (GET)
+*    (POST)
+*    (POST)
+*    (GET)
+*    (GET, POST)
 
 **Critical Info for New Agent**
-*   **Top Priority:** Continue building the **Marketing Module**, starting with the backend logic in . The user has approved a tabbed UI and demo data fallback.
-*   **Login Credentials:** The primary admin user is now  with password . A server startup script ensures this user exists, which is crucial for deployed environments.
-*   **Technical Debt:** Be aware that  is extremely large and difficult to work with. Any further changes to it will be challenging. A refactor should be proposed to the user soon. The chat system is not persistent.
+*   **Top Priority:** Begin implementing the **Enhanced Website Projects View** as per the user's latest request and screenshot.
+*   **Fix Theming:** Before adding new UI, fix the broken Light/Dark mode. The current piecemeal approach is failing. Adopt a global CSS variable strategy.
+*   **Testing:** The  is unreliable due to auth issues. **Use  for all UI verification** until this is resolved. Check for the  test report to finalize the SOP Works Board.
+*   **User Interaction:** The user is providing detailed, multi-part requests. Break them down, plan your work, and confirm with  before major implementation.
+
+**documents and test reports created in this job**
+*   /app/test_reports/iteration_6.json
+*   /app/test_reports/iteration_7.json
+*   /app/memory/PRD.md (updated)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User:** Selected implementation choices for the Marketing Module: use tabs, build full integrations, and use demo data. (Completed)
-2.  **Agent:** Asked for clarification on the Marketing Module approach. (Completed)
-3.  **User:** Provided a very detailed PRD for a comprehensive Marketing Module. (Completed)
-4.  **Agent:** Finished implementing the Team Chat module. (Completed)
-5.  **User:** Confirmed choices for the Team Chat module: team channels, real-time messaging, in-app notifications. (Completed)
-6.  **Agent:** Asked for clarification on the Team Chat request. (Completed)
-7.  **User:** Pivoted from a Gmail integration to requesting a module like slack chat. (Completed)
-8.  **Agent:** Asked for clarification on the Gmail integration request. (Completed)
-9.  **User:** Requested Gmail integration within the app. (Completed)
-10. **User:** Was unable to see the Google Docs features. (Completed, agent clarified location and need for redeployment).
+10. **User:** Requested a spreadsheet-like project management view for Website projects, providing a screenshot for reference. (In Progress)
+9.  **User:** Requested reorganization of the Operations sidebar to show services like Website Development, SEO, etc., and add a Custom Service option. (Completed)
+8.  **User:** Reported that light mode is only partially working and that sidebar fonts should be bolder. (In Progress - Bug)
+7.  **User:** Asked a question about making the web app a mobile app for the Play Store. (Answered)
+6.  **User:** Responded to , confirming choices for the SOP Works Board: use both pre-built templates and Kanban boards, link to clients, but skip AI suggestions for now. (Completed)
+5.  **Agent:** Asked for confirmation on the plan to build the SOP Works Board. (Completed)
+4.  **User:** Requested the creation of a comprehensive SOP-based Works Board for various services (Website, SEO, SEM, Meta Ads). (In Progress)
+3.  **User:** Responded to , confirming choices for the Drawlead AI feature: use Claude Sonnet 4.5 and focus on Sales and Operations modules first. (Completed)
+2.  **Agent:** Asked for confirmation on the plan to build the AI assistant. (Completed)
+1.  **User:** Provided a detailed PRD for the Drawlead AI feature. (Completed)
 
 **Project Health Check:**
-*   **Broken:** None.
+*   **Broken:**
+    *   **Theming:** The Light/Dark mode feature is not applied consistently across the application, resulting in a broken UI when switching themes.
 *   **Mocked:**
-    *   **Resend Integration:** Uses placeholder API keys. Email notifications are not functional.
-    *   **Team Chat:** Backend data is stored in-memory and is not persistent.
+    *   **Resend Integration:** Still uses placeholder API keys; email notifications are non-functional.
+    *   **Team Chat:** The backend uses in-memory lists and is not persistent.
 
 **3rd Party Integrations**
 *   **Emergent-managed Google Auth:** For user login.
+*   **Claude Sonnet 4.5:** For the Drawlead AI assistant, accessed via  and the Emergent LLM Key.
 *   **jsPDF & jspdf-autotable:** For client-side PDF generation.
 *   **Resend:** For sending email notifications (requires user API key).
-*   **react-split-pane:** Used for the resizable split-view in the Operations module.
+*   **react-split-pane:** For the resizable split-view in the Operations module.
 
 **Testing status**
-*   **Testing agent used after significant changes:** YES. The agent consistently used the testing agent after every major feature implementation (Operations UI, Advanced Ops, Google Docs link, Team Chat), with all tests passing.
-*   **Troubleshoot agent used after agent stuck in loop:** No.
-*   **Test files created:** None.
-*   **Known regressions:** None.
+- **Testing agent used after significant changes:** YES (for Marketing and AI modules).
+- **Troubleshoot agent used after agent stuck in loop:** NO.
+- **Test files created:**
+    - 
+    - 
+- **Known regressions:** The theme toggle implementation has introduced visual bugs in light mode.
+- **Pending Tests:** The test report for the SOP Works Board () was never checked.
 
 **Credentials to test flow:**
 *   **Admin:**
     *   Email: 
     *   Password: 
-*   **Employee (Test):**
-    *   Email: 
-    *   Password: 
 
 **What agent forgot to execute**
-*   **User Verification:** The agent has not followed up on verifying older features from previous sessions, specifically the month-wise report in the Finance module.
-*   **Propose Refactoring:** The agent identified that  is a monolith but did not formally propose a refactoring task to the user, which is now a critical point of technical debt.</analysis>
+*   The agent never checked the test report after calling the testing agent for the **SOP Works Board** feature. Its status is unknown.
+*   The agent did not address the new **theming issue** with a robust, global solution, leading to a buggy implementation.
+*   The agent has not proposed the critical **refactoring of ** to the user.
+*   The agent has not followed up on **user verification for older features** (Finance module report, Google Docs, Team Chat).</analysis>
