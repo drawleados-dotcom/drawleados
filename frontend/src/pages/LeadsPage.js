@@ -10,8 +10,10 @@ import LeadsKanbanView from '../components/leads/LeadsKanbanView';
 import LeadsChartView from '../components/leads/LeadsChartView';
 import LeadFormModal from '../components/leads/LeadFormModal';
 import { toast } from 'sonner';
+import { useTheme } from '../contexts/ThemeContext';
 
 const LeadsPage = () => {
+  const { isDark } = useTheme();
   const [leads, setLeads] = useState([]);
   const [services, setServices] = useState([]);
   const [sources, setSources] = useState([]);
@@ -103,7 +105,7 @@ const LeadsPage = () => {
     return (
       <Layout>
         <div className="flex items-center justify-center h-full">
-          <p className="text-[#a1a1aa]">Loading leads...</p>
+          <p className={isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}>Loading leads...</p>
         </div>
       </Layout>
     );
@@ -123,7 +125,7 @@ const LeadsPage = () => {
                 Leads
               </span>
             </h1>
-            <p className="text-[#a1a1aa] text-base">
+            <p className={`text-base ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
               Manage your sales pipeline with {filteredLeads.length} leads
             </p>
           </div>
@@ -131,7 +133,10 @@ const LeadsPage = () => {
             <Button
               onClick={handleExport}
               data-testid="export-leads-button"
-              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] border border-[#3f3f46]"
+              className={isDark 
+                ? 'bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] border border-[#3f3f46]'
+                : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300'
+              }
             >
               <Download className="h-4 w-4 mr-2" />
               Export
