@@ -26,6 +26,7 @@ from chat_routes import chat_router, init_chat_db
 from marketing_routes import marketing_router, init_marketing_db
 from ai_routes import ai_router, init_ai_db
 from sop_routes import sop_router, init_sop_db
+from website_projects_routes import website_projects_router, init_website_projects_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -44,6 +45,7 @@ init_chat_db(db)
 init_marketing_db(db)
 init_ai_db(db)
 init_sop_db(db)
+init_website_projects_db(db)
 
 # Create the main app
 app = FastAPI()
@@ -1545,6 +1547,7 @@ api_router.include_router(chat_router)
 api_router.include_router(marketing_router)
 api_router.include_router(ai_router)
 api_router.include_router(sop_router)
+api_router.include_router(website_projects_router)
 
 # Include router in main app
 app.include_router(api_router)
