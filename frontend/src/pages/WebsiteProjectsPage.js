@@ -836,16 +836,16 @@ const WebsiteProjectsPage = () => {
                       <td className={`px-4 py-2 text-sm ${textSecondary}`}>{task.sno}</td>
                       <td className={`px-4 py-2`}><span className={`text-sm font-medium ${textPrimary} hover:text-[#6366f1]`}>{task.page_name}</span></td>
                       <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
-                        <PhaseTableCell task={task} phase="wireframe" onUpdate={handleStatusChange} isDark={isDark} />
+                        <PhaseTableCell task={task} phase="wireframe" onUpdate={handleStatusChange} teamMembers={teamMembers} isDark={isDark} />
                       </td>
                       <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
-                        <PhaseTableCell task={task} phase="ui" onUpdate={handleStatusChange} isDark={isDark} />
+                        <PhaseTableCell task={task} phase="ui" onUpdate={handleStatusChange} teamMembers={teamMembers} isDark={isDark} />
                       </td>
                       <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
-                        <PhaseTableCell task={task} phase="content" onUpdate={handleStatusChange} isDark={isDark} />
+                        <PhaseTableCell task={task} phase="content" onUpdate={handleStatusChange} teamMembers={teamMembers} isDark={isDark} />
                       </td>
                       <td className="px-1 py-1" onClick={e => e.stopPropagation()}>
-                        <PhaseTableCell task={task} phase="dev" onUpdate={handleStatusChange} isDark={isDark} />
+                        <PhaseTableCell task={task} phase="dev" onUpdate={handleStatusChange} teamMembers={teamMembers} isDark={isDark} />
                       </td>
                       <td className="px-2 py-2" onClick={e => e.stopPropagation()}><StatusBadge status={task.overall_status} onChange={(v) => handleStatusChange(task.task_id, 'overall_status', v)} /></td>
                       <td className="px-4 py-2 text-center" onClick={e => e.stopPropagation()}>
