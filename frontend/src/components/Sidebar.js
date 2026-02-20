@@ -194,6 +194,20 @@ const Sidebar = () => {
           )}
         </div>
 
+        {/* SOP Works Board */}
+        <Link
+          to="/sop-works"
+          data-testid="nav-sop-works"
+          className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
+            location.pathname === '/sop-works'
+              ? 'bg-[#6366f1]/15 text-[#6366f1]'
+              : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+          }`}
+        >
+          <ClipboardList className="h-5 w-5" strokeWidth={1.5} />
+          SOP Works
+        </Link>
+
         {/* HR - for everyone */}
         <Link
           to="/hr"
