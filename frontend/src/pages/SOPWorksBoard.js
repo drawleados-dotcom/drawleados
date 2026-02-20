@@ -150,6 +150,7 @@ const SOPWorksBoard = () => {
     }
   }, [token]);
 
+  // Initial load
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true);
@@ -158,6 +159,28 @@ const SOPWorksBoard = () => {
     };
     loadAll();
   }, [loadDashboard, loadTemplates, loadProjects, loadClients]);
+
+  // Handle URL parameters
+  useEffect(() => {
+    const serviceParam = searchParams.get('service');
+    const actionParam = searchParams.get('action');
+    
+    if (serviceParam && templates.length > 0) {
+      // Navigate to service tab and load projects
+      const validServices = ['website', 'seo', 'sem', 'meta_ads', 'social_media'];
+      if (validServices.includes(serviceParam)) {
+        setActiveTab(serviceParam);
+        loadProjects(serviceParam);
+      }
+    }
+    
+    if (actionParam === 'add-service') {
+      setIsAddServiceModalOpen(true);
+      // Clear the URL param
+      searchParams.delete('action');
+      setSearchParams(searchParams);
+    }
+  }, [searchParams, templates, loadProjects, setSearchParams]);
 
   // Actions
   const createProject = async () => {
