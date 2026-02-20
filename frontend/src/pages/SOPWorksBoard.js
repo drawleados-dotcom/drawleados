@@ -504,7 +504,7 @@ const SOPWorksBoard = () => {
           </TabsContent>
 
           {/* Service-specific Tabs */}
-          {['website', 'seo', 'sem', 'meta_ads'].map((serviceType) => (
+          {['website', 'seo', 'social_media', 'meta_ads'].map((serviceType) => (
             <TabsContent key={serviceType} value={serviceType} className="mt-6">
               <ServiceProjectList
                 serviceType={serviceType}
