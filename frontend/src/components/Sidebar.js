@@ -74,19 +74,37 @@ const Sidebar = () => {
     }
   }, [token]);
 
+  // Load website projects for sidebar
+  const loadWebsiteProjects = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API}/api/website-projects/projects`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setWebsiteProjects(res.data || []);
+    } catch (error) {
+      console.error('Error loading website projects:', error);
+    }
+  }, [token]);
+
   useEffect(() => {
     loadDatabases();
     loadUnreadCount();
+    loadWebsiteProjects();
     
     // Poll for unread count every 10 seconds
     const interval = setInterval(loadUnreadCount, 10000);
     return () => clearInterval(interval);
-  }, [loadDatabases, loadUnreadCount]);
+  }, [loadDatabases, loadUnreadCount, loadWebsiteProjects]);
 
   // Expand Operations if we're on that page
   useEffect(() => {
-    if (location.pathname.startsWith('/operations')) {
+    if (location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works')) {
       setOperationsExpanded(true);
+    }
+    if (location.pathname.startsWith('/website-projects')) {
+      setOperationsExpanded(true);
+      setWebsiteExpanded(true);
     }
   }, [location.pathname]);
 
