@@ -6,6 +6,7 @@ import PayrollTab from '../components/finance/PayrollTab';
 import GSTTab from '../components/finance/GSTTab';
 import BudgetTab from '../components/finance/BudgetTab';
 import RevenueTab from '../components/finance/RevenueTab';
+import ExpenseTab from '../components/finance/ExpenseTab';
 
 const FinanceModule = () => {
   const [activeTab, setActiveTab] = useState('revenue');
