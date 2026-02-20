@@ -27,6 +27,7 @@ from marketing_routes import marketing_router, init_marketing_db
 from ai_routes import ai_router, init_ai_db
 from sop_routes import sop_router, init_sop_db
 from website_projects_routes import website_projects_router, init_website_projects_db
+from expense_routes import expense_router, set_expense_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
