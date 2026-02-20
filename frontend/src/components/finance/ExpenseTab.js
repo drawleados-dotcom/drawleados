@@ -120,15 +120,25 @@ const ExpenseTab = () => {
     try {
       const headers = { Authorization: `Bearer ${token}` };
       
-      const [accountsRes, categoriesRes, summaryRes] = await Promise.all([
+      const [accountsRes, categoriesRes, summaryRes, incomeRes, paymentsRes] = await Promise.all([
         axios.get(`${API}/api/expense/bank-accounts`, { headers }),
         axios.get(`${API}/api/expense/categories`, { headers }),
         axios.get(`${API}/api/expense/summary`, { headers }),
+        axios.get(`${API}/api/expense/income`, { headers }),
+        axios.get(`${API}/api/expense/payments`, { headers }).catch(() => ({ data: [] })),
       ]);
       
       setAccounts(accountsRes.data || []);
       setCategories(categoriesRes.data || []);
       setSummary(summaryRes.data || {});
+      
+      // Combine recent transactions from income and payments
+      const credits = (incomeRes.data || []).map(e => ({ ...e, type: 'credit' }));
+      const debits = (paymentsRes.data || []).map(e => ({ ...e, type: 'debit' }));
+      const combined = [...credits, ...debits].sort((a, b) => 
+        new Date(b.date || b.payment_date) - new Date(a.date || a.payment_date)
+      );
+      setRecentTransactions(combined);
       
       // Load cashflow for current month
       const now = new Date();
@@ -137,14 +147,6 @@ const ExpenseTab = () => {
         params: { month: now.getMonth() + 1, year: now.getFullYear() }
       });
       setCashflowData(cashflowRes.data);
-      
-      // Combine recent transactions
-      const credits = (cashflowRes.data?.credit?.entries || []).map(e => ({ ...e, type: 'credit' }));
-      const debits = (cashflowRes.data?.debit?.entries || []).map(e => ({ ...e, type: 'debit' }));
-      const combined = [...credits, ...debits].sort((a, b) => 
-        new Date(b.date || b.payment_date) - new Date(a.date || a.payment_date)
-      );
-      setRecentTransactions(combined.slice(0, 10));
       
       // Load master expense
       const fyYear = parseInt(fiscalYear.split('-')[0]);
