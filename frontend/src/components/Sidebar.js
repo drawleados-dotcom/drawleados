@@ -19,6 +19,8 @@ import {
   MessageSquare,
   Megaphone,
   ClipboardList,
+  Globe,
+  FolderOpen,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -34,6 +36,8 @@ const Sidebar = () => {
   const { isDark } = useTheme();
   const [databases, setDatabases] = useState([]);
   const [operationsExpanded, setOperationsExpanded] = useState(true);
+  const [websiteExpanded, setWebsiteExpanded] = useState(false);
+  const [websiteProjects, setWebsiteProjects] = useState([]);
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
