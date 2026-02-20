@@ -12,7 +12,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://sop-works.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://finance-ledger-37.preview.emergentagent.com')
 
 class TestHRModule:
     """HR Module API Tests"""
