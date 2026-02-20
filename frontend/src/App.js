@@ -16,6 +16,7 @@ import SettingsPage from './pages/SettingsPage';
 import HRPage from './pages/HRPage';
 import HRAdminPage from './pages/HRAdminPage';
 import MarketingModule from './pages/MarketingModule';
+import SOPWorksBoard from './pages/SOPWorksBoard';
 import './App.css';
 
 function AppRouter() {
@@ -106,6 +107,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <MarketingModule />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sop-works"
+        element={
+          <ProtectedRoute>
+            <SOPWorksBoard />
           </ProtectedRoute>
         }
       />
