@@ -38,6 +38,13 @@ const FinanceModule = () => {
               Revenue Dashboard
             </TabsTrigger>
             <TabsTrigger
+              value="expenses"
+              data-testid="expenses-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              Expenses
+            </TabsTrigger>
+            <TabsTrigger
               value="invoices"
               data-testid="invoices-tab"
               className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
