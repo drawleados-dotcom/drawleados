@@ -1,0 +1,495 @@
+"""
+Enhanced Website Projects - Spreadsheet-like project management
+Supports page-based tasks with multiple phases (Wireframe, UI, Content, Dev)
+"""
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
+import uuid
+
+website_projects_router = APIRouter(prefix="/website-projects", tags=["Website Projects"])
+db = None
+
+def init_website_projects_db(database):
+    global db
+    db = database
+
+# ============== MODELS ==============
+
+class ProjectCreate(BaseModel):
+    name: str  # Client/Project name
+    onboarding_date: Optional[str] = None
+    deadline: Optional[str] = None
+    domain_url: Optional[str] = None
+    platform: str = "Website"  # Website, Shopify, WordPress, etc.
+    website_type: str = "Business Website"  # Business, E-commerce, Portfolio, etc.
+    developer: Optional[str] = None
+    server_details: Optional[str] = None
+    client_drive_url: Optional[str] = None
+    documents_url: Optional[str] = None
+    communication_url: Optional[str] = None
+    client_id: Optional[str] = None  # Link to lead
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    onboarding_date: Optional[str] = None
+    deadline: Optional[str] = None
+    domain_url: Optional[str] = None
+    platform: Optional[str] = None
+    website_type: Optional[str] = None
+    developer: Optional[str] = None
+    server_details: Optional[str] = None
+    client_drive_url: Optional[str] = None
+    documents_url: Optional[str] = None
+    communication_url: Optional[str] = None
+    status: Optional[str] = None
+
+class PageTaskCreate(BaseModel):
+    page_name: str  # Home Page, About Us, etc.
+    sno: Optional[int] = None
+    # Wireframe phase
+    wireframe_url: Optional[str] = None
+    wireframe_due: Optional[str] = None
+    wireframe_status: str = "To-Do"
+    # UI phase
+    ui_url: Optional[str] = None
+    ui_due: Optional[str] = None
+    ui_status: str = "To-Do"
+    # Content phase
+    content_url: Optional[str] = None
+    content_due: Optional[str] = None
+    content_status: str = "To-Do"
+    # Dev phase
+    dev_url: Optional[str] = None
+    dev_due: Optional[str] = None
+    dev_status: str = "To-Do"
+    # Overall
+    overall_status: str = "To-Do"
+    assigned_to: Optional[str] = None
+    notes: Optional[str] = None
+
+class PageTaskUpdate(BaseModel):
+    page_name: Optional[str] = None
+    sno: Optional[int] = None
+    wireframe_url: Optional[str] = None
+    wireframe_due: Optional[str] = None
+    wireframe_status: Optional[str] = None
+    ui_url: Optional[str] = None
+    ui_due: Optional[str] = None
+    ui_status: Optional[str] = None
+    content_url: Optional[str] = None
+    content_due: Optional[str] = None
+    content_status: Optional[str] = None
+    dev_url: Optional[str] = None
+    dev_due: Optional[str] = None
+    dev_status: Optional[str] = None
+    overall_status: Optional[str] = None
+    assigned_to: Optional[str] = None
+    notes: Optional[str] = None
+
+# ============== DEFAULT PAGES ==============
+
+DEFAULT_PAGES = [
+    "Home Page",
+    "About Us",
+    "Services",
+    "Projects/Portfolio",
+    "Contact Us",
+    "Blog",
+    "Privacy Policy",
+    "Terms & Conditions"
+]
+
+STATUS_OPTIONS = ["To-Do", "In Progress", "Client Review", "Client Approved", "Completed", "On Hold"]
+
+# ============== AUTH HELPER ==============
+
+async def get_current_user(request: Request):
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            session_token = auth_header[7:]
+    
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    session = await db.user_sessions.find_one({"session_token": session_token})
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return user
+
+# ============== PROJECT ROUTES ==============
+
+@website_projects_router.post("/projects")
+async def create_project(request: Request, project_data: ProjectCreate):
+    """Create a new website project with default pages"""
+    user = await get_current_user(request)
+    
+    project_id = f"wp_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    project = {
+        "project_id": project_id,
+        "name": project_data.name,
+        "onboarding_date": project_data.onboarding_date or now.strftime("%Y-%m-%d"),
+        "deadline": project_data.deadline,
+        "domain_url": project_data.domain_url,
+        "platform": project_data.platform,
+        "website_type": project_data.website_type,
+        "developer": project_data.developer,
+        "server_details": project_data.server_details,
+        "client_drive_url": project_data.client_drive_url,
+        "documents_url": project_data.documents_url,
+        "communication_url": project_data.communication_url,
+        "client_id": project_data.client_id,
+        "status": "active",
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_projects.insert_one(project)
+    
+    # Create default page tasks
+    for idx, page_name in enumerate(DEFAULT_PAGES, 1):
+        task_id = f"wpt_{uuid.uuid4().hex[:12]}"
+        task = {
+            "task_id": task_id,
+            "project_id": project_id,
+            "sno": idx,
+            "page_name": page_name,
+            "wireframe_url": None,
+            "wireframe_due": None,
+            "wireframe_status": "To-Do",
+            "ui_url": None,
+            "ui_due": None,
+            "ui_status": "To-Do",
+            "content_url": None,
+            "content_due": None,
+            "content_status": "To-Do",
+            "dev_url": None,
+            "dev_due": None,
+            "dev_status": "To-Do",
+            "overall_status": "To-Do",
+            "assigned_to": None,
+            "notes": None,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.website_page_tasks.insert_one(task)
+    
+    project.pop("_id", None)
+    return {**project, "pages_created": len(DEFAULT_PAGES)}
+
+@website_projects_router.get("/projects")
+async def get_projects(
+    request: Request,
+    status: Optional[str] = None,
+    developer: Optional[str] = None,
+    platform: Optional[str] = None
+):
+    """Get all website projects with filters"""
+    user = await get_current_user(request)
+    
+    query = {}
+    if status:
+        query["status"] = status
+    if developer:
+        query["developer"] = developer
+    if platform:
+        query["platform"] = platform
+    
+    projects = await db.website_projects.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Add progress stats for each project
+    for project in projects:
+        tasks = await db.website_page_tasks.find(
+            {"project_id": project["project_id"]},
+            {"_id": 0, "overall_status": 1}
+        ).to_list(100)
+        
+        total = len(tasks)
+        completed = len([t for t in tasks if t.get("overall_status") == "Completed"])
+        project["total_pages"] = total
+        project["completed_pages"] = completed
+        project["progress"] = round((completed / total * 100) if total > 0 else 0, 1)
+    
+    return projects
+
+@website_projects_router.get("/projects/{project_id}")
+async def get_project(request: Request, project_id: str):
+    """Get a single project with all page tasks"""
+    user = await get_current_user(request)
+    
+    project = await db.website_projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get all page tasks
+    tasks = await db.website_page_tasks.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("sno", 1).to_list(100)
+    
+    # Calculate stats
+    total = len(tasks)
+    stats = {
+        "total_pages": total,
+        "wireframe": {
+            "completed": len([t for t in tasks if t.get("wireframe_status") == "Completed"]),
+            "in_progress": len([t for t in tasks if t.get("wireframe_status") == "In Progress"])
+        },
+        "ui": {
+            "completed": len([t for t in tasks if t.get("ui_status") == "Completed"]),
+            "in_progress": len([t for t in tasks if t.get("ui_status") == "In Progress"])
+        },
+        "content": {
+            "completed": len([t for t in tasks if t.get("content_status") == "Completed"]),
+            "in_progress": len([t for t in tasks if t.get("content_status") == "In Progress"])
+        },
+        "dev": {
+            "completed": len([t for t in tasks if t.get("dev_status") == "Completed"]),
+            "in_progress": len([t for t in tasks if t.get("dev_status") == "In Progress"])
+        },
+        "overall_completed": len([t for t in tasks if t.get("overall_status") == "Completed"])
+    }
+    
+    return {
+        **project,
+        "tasks": tasks,
+        "stats": stats
+    }
+
+@website_projects_router.put("/projects/{project_id}")
+async def update_project(request: Request, project_id: str, update_data: ProjectUpdate):
+    """Update project metadata"""
+    user = await get_current_user(request)
+    
+    project = await db.website_projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.website_projects.update_one(
+        {"project_id": project_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.website_projects.find_one({"project_id": project_id}, {"_id": 0})
+    return updated
+
+@website_projects_router.delete("/projects/{project_id}")
+async def delete_project(request: Request, project_id: str):
+    """Delete a project and all its tasks"""
+    user = await get_current_user(request)
+    
+    # Delete all tasks
+    await db.website_page_tasks.delete_many({"project_id": project_id})
+    
+    # Delete project
+    result = await db.website_projects.delete_one({"project_id": project_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return {"message": "Project deleted"}
+
+# ============== PAGE TASK ROUTES ==============
+
+@website_projects_router.post("/projects/{project_id}/pages")
+async def add_page_task(request: Request, project_id: str, task_data: PageTaskCreate):
+    """Add a new page task to project"""
+    user = await get_current_user(request)
+    
+    project = await db.website_projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get next sno
+    last_task = await db.website_page_tasks.find_one(
+        {"project_id": project_id},
+        sort=[("sno", -1)]
+    )
+    next_sno = (last_task.get("sno", 0) + 1) if last_task else 1
+    
+    task_id = f"wpt_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    task = {
+        "task_id": task_id,
+        "project_id": project_id,
+        "sno": task_data.sno or next_sno,
+        "page_name": task_data.page_name,
+        "wireframe_url": task_data.wireframe_url,
+        "wireframe_due": task_data.wireframe_due,
+        "wireframe_status": task_data.wireframe_status,
+        "ui_url": task_data.ui_url,
+        "ui_due": task_data.ui_due,
+        "ui_status": task_data.ui_status,
+        "content_url": task_data.content_url,
+        "content_due": task_data.content_due,
+        "content_status": task_data.content_status,
+        "dev_url": task_data.dev_url,
+        "dev_due": task_data.dev_due,
+        "dev_status": task_data.dev_status,
+        "overall_status": task_data.overall_status,
+        "assigned_to": task_data.assigned_to,
+        "notes": task_data.notes,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_page_tasks.insert_one(task)
+    task.pop("_id", None)
+    return task
+
+@website_projects_router.put("/pages/{task_id}")
+async def update_page_task(request: Request, task_id: str, update_data: PageTaskUpdate):
+    """Update a page task"""
+    user = await get_current_user(request)
+    
+    task = await db.website_page_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    
+    # Auto-calculate overall status based on phases
+    if any(k.endswith("_status") and k != "overall_status" for k in update_dict):
+        # Get current task data merged with updates
+        current = {**task, **update_dict}
+        statuses = [
+            current.get("wireframe_status", "To-Do"),
+            current.get("ui_status", "To-Do"),
+            current.get("content_status", "To-Do"),
+            current.get("dev_status", "To-Do")
+        ]
+        
+        if all(s == "Completed" for s in statuses):
+            update_dict["overall_status"] = "Completed"
+        elif any(s == "In Progress" for s in statuses):
+            update_dict["overall_status"] = "In Progress"
+        elif any(s == "Client Review" for s in statuses):
+            update_dict["overall_status"] = "Client Review"
+    
+    await db.website_page_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.website_page_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    return updated
+
+@website_projects_router.delete("/pages/{task_id}")
+async def delete_page_task(request: Request, task_id: str):
+    """Delete a page task"""
+    user = await get_current_user(request)
+    
+    result = await db.website_page_tasks.delete_one({"task_id": task_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {"message": "Task deleted"}
+
+# ============== BULK UPDATE ==============
+
+@website_projects_router.put("/projects/{project_id}/bulk-update")
+async def bulk_update_tasks(request: Request, project_id: str, updates: List[Dict[str, Any]]):
+    """Bulk update multiple page tasks"""
+    user = await get_current_user(request)
+    
+    updated_count = 0
+    for update in updates:
+        task_id = update.pop("task_id", None)
+        if task_id and update:
+            update["updated_at"] = datetime.now(timezone.utc)
+            result = await db.website_page_tasks.update_one(
+                {"task_id": task_id, "project_id": project_id},
+                {"$set": update}
+            )
+            if result.modified_count > 0:
+                updated_count += 1
+    
+    return {"updated": updated_count}
+
+# ============== FILTERS & OPTIONS ==============
+
+@website_projects_router.get("/options")
+async def get_options(request: Request):
+    """Get available options for dropdowns"""
+    user = await get_current_user(request)
+    
+    # Get unique developers
+    developers = await db.website_projects.distinct("developer")
+    developers = [d for d in developers if d]
+    
+    # Get unique platforms
+    platforms = await db.website_projects.distinct("platform")
+    platforms = [p for p in platforms if p]
+    
+    # Get team members for assignment
+    team = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(50)
+    
+    return {
+        "statuses": STATUS_OPTIONS,
+        "developers": developers,
+        "platforms": platforms or ["Website", "Shopify", "WordPress", "Custom"],
+        "website_types": ["Business Website", "E-commerce", "Portfolio", "Landing Page", "Blog", "Web App"],
+        "team_members": team,
+        "default_pages": DEFAULT_PAGES
+    }
+
+# ============== DASHBOARD ==============
+
+@website_projects_router.get("/dashboard")
+async def get_dashboard(request: Request):
+    """Get dashboard stats for website projects"""
+    user = await get_current_user(request)
+    
+    total_projects = await db.website_projects.count_documents({})
+    active_projects = await db.website_projects.count_documents({"status": "active"})
+    
+    # Get projects by developer
+    pipeline = [
+        {"$match": {"developer": {"$ne": None}}},
+        {"$group": {"_id": "$developer", "count": {"$sum": 1}}}
+    ]
+    by_developer = await db.website_projects.aggregate(pipeline).to_list(20)
+    
+    # Get projects by platform
+    pipeline = [
+        {"$group": {"_id": "$platform", "count": {"$sum": 1}}}
+    ]
+    by_platform = await db.website_projects.aggregate(pipeline).to_list(20)
+    
+    # Get recent projects
+    recent = await db.website_projects.find(
+        {"status": "active"},
+        {"_id": 0}
+    ).sort("updated_at", -1).limit(5).to_list(5)
+    
+    for project in recent:
+        tasks = await db.website_page_tasks.find(
+            {"project_id": project["project_id"]},
+            {"_id": 0, "overall_status": 1}
+        ).to_list(100)
+        total = len(tasks)
+        completed = len([t for t in tasks if t.get("overall_status") == "Completed"])
+        project["progress"] = round((completed / total * 100) if total > 0 else 0, 1)
+    
+    return {
+        "total_projects": total_projects,
+        "active_projects": active_projects,
+        "by_developer": [{"developer": d["_id"], "count": d["count"]} for d in by_developer],
+        "by_platform": [{"platform": p["_id"], "count": p["count"]} for p in by_platform],
+        "recent_projects": recent
+    }
