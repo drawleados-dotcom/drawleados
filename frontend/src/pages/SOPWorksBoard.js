@@ -312,7 +312,7 @@ const SOPWorksBoard = () => {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-[#18181b] border border-[#27272a] p-1">
+          <TabsList className="bg-[#18181b] border border-[#27272a] p-1 flex-wrap">
             <TabsTrigger
               value="dashboard"
               className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
@@ -334,11 +334,11 @@ const SOPWorksBoard = () => {
               SEO
             </TabsTrigger>
             <TabsTrigger
-              value="sem"
-              className="data-[state=active]:bg-[#f59e0b] data-[state=active]:text-white flex items-center gap-2"
+              value="social_media"
+              className="data-[state=active]:bg-[#ec4899] data-[state=active]:text-white flex items-center gap-2"
             >
-              <BarChart3 className="h-4 w-4" />
-              SEM
+              <Smartphone className="h-4 w-4" />
+              Social Media
             </TabsTrigger>
             <TabsTrigger
               value="meta_ads"
