@@ -17,6 +17,7 @@ import {
   Database,
   MessageSquare,
   Megaphone,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
