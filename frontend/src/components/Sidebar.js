@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   LayoutDashboard,
   Users,
@@ -30,6 +31,7 @@ const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, isAdmin } = useAuth();
+  const { isDark } = useTheme();
   const [databases, setDatabases] = useState([]);
   const [operationsExpanded, setOperationsExpanded] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
@@ -93,7 +95,7 @@ const Sidebar = () => {
 
   return (
     <div
-      className="h-screen w-64 bg-[#0c0a09] border-r border-[#27272a] flex flex-col"
+      className={`h-screen w-64 border-r flex flex-col ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}
       data-testid="sidebar"
     >
       <div className="p-6">
@@ -115,7 +117,9 @@ const Sidebar = () => {
           className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
             location.pathname === '/dashboard'
               ? 'bg-[#6366f1]/15 text-[#6366f1]'
-              : 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+              : isDark 
+                ? 'text-[#a1a1aa] hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
+                : 'text-gray-600 hover:bg-[#6366f1]/10 hover:text-[#6366f1]'
           }`}
         >
           <LayoutDashboard className="h-5 w-5" strokeWidth={1.5} />
