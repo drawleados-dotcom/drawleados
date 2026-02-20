@@ -92,12 +92,12 @@ const Dashboard = () => {
         {/* Header */}
         <div>
           <h1
-            className="text-4xl font-bold tracking-tight mb-2"
+            className={`text-4xl font-bold tracking-tight mb-2 ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}
             style={{ fontFamily: 'Plus Jakarta Sans' }}
           >
             Welcome back, <span className="bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">{user?.name}</span>
           </h1>
-          <p className="text-[#a1a1aa] text-base">Here's what's happening with your leads today.</p>
+          <p className={`text-base ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Here's what's happening with your leads today.</p>
         </div>
 
         {/* Stat Cards */}
@@ -107,7 +107,10 @@ const Dashboard = () => {
             return (
               <div
                 key={index}
-                className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 hover:border-[#6366f1]/20 transition-all duration-300 glow-hover"
+                className={`border rounded-xl p-6 transition-all duration-300 glow-hover ${isDark 
+                  ? 'bg-[#18181b] border-[#27272a] hover:border-[#6366f1]/20' 
+                  : 'bg-white border-gray-200 hover:border-[#6366f1]/30 shadow-sm'
+                }`}
                 data-testid={`stat-card-${stat.title.toLowerCase().replace(' ', '-')}`}
               >
                 <div className="flex items-center justify-between mb-4">
@@ -128,8 +131,8 @@ const Dashboard = () => {
                     </span>
                   </div>
                 </div>
-                <h3 className="text-3xl font-bold text-[#fafafa] mb-1">{stat.value}</h3>
-                <p className="text-sm text-[#a1a1aa]">{stat.title}</p>
+                <h3 className={`text-3xl font-bold mb-1 ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{stat.value}</h3>
+                <p className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>{stat.title}</p>
               </div>
             );
           })}
@@ -138,8 +141,8 @@ const Dashboard = () => {
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Status Distribution */}
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-[#fafafa] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+          <div className={`border rounded-xl p-6 ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200 shadow-sm'}`}>
+            <h2 className={`text-xl font-semibold mb-4 ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
               Status Distribution
             </h2>
             <ResponsiveContainer width="100%" height={250}>
