@@ -6,140 +6,105 @@
 
 ## Recent Changes (December 2025 - Latest)
 
-### Website Projects View ✅ NEW
-Built an enhanced spreadsheet-like project management interface for website development:
+### Website Projects View - Enhanced ✅ NEW
+Major overhaul of the website project management interface:
 
-**Features:**
-- **Project Management**: Create/delete projects with automatic 8 default pages (Home, About, Services, Portfolio, Contact, Blog, Privacy, Terms)
-- **Collapsible Header**: Domain URL, Developer, Onboarding/Deadline dates, Client Drive, Server details
-- **Phase Tracking**: 4 development phases per page:
-  - Wireframe (Status + URL + Due Date)
-  - UI Design (Status + URL + Due Date)
-  - Content (Status + URL + Due Date)
-  - Development (Status + URL + Due Date)
-- **Phase Progress Stats**: Real-time completion counts per phase
-- **Status Options**: To-Do, In Progress, Client Review, Client Approved, Completed, On Hold
-- **Auto-Calculation**: Overall status auto-updates based on phase statuses
-- **Project Tabs**: Right sidebar with all projects and progress bars
-- **Search & Filter**: Search pages, filter by status
+**UI Restructuring:**
+- Removed right sidebar with project tabs
+- Added Website Development dropdown in main sidebar with:
+  - All Projects link
+  - Individual project links with progress %
+  - New Project link
+- Added Pages/Tasks tabs at top with Add buttons
+
+**Page Detail Sidebar (Click any page row):**
+- Opens slide-out panel (width: 320px)
+- Add sections with name and screenshot URL (paste)
+- View sections with screenshot preview
+- Phase badges (WF, UI, CT, DV) for quick status
+
+**Section Detail Sidebar (Click any section):**
+- Opens slide-out panel (width: 384px, z-50)
+- 4 Phase Tabs: Wireframe | UI | Dev | Content
+- Each tab has:
+  - Status dropdown
+  - URL input (Figma/Link)
+- Client Feedback section (Google Docs style):
+  - Shows existing feedback with user name
+  - Add feedback button
+  - Resolve button per feedback
+
+**Role-Based Access:**
+- Edit/Delete buttons visible only for:
+  - super_admin
+  - admin
+  - project_manager
+
+**New API Endpoints:**
+- `GET/POST /api/website-projects/projects/:id/tasks` - Project tasks
+- `PUT/DELETE /api/website-projects/tasks/:id` - Task management
+- `GET/POST /api/website-projects/pages/:id/sections` - Page sections
+- `PUT/DELETE /api/website-projects/sections/:id` - Section management
+- `GET/POST /api/website-projects/sections/:id/feedback` - Section feedback
+- `PUT/DELETE /api/website-projects/feedback/:id` - Feedback management
+- `GET /api/website-projects/check-permission` - Check edit permission
+
+### Previous: Website Projects View (Initial) ✅
+Built spreadsheet-like interface with phase tracking.
 
 ### Theme Toggle (Dark/Light/System) ✅ FIXED
-Fixed global theme switching capability:
-- **Dark Mode** (default): Original dark theme
-- **Light Mode**: Clean light theme for daytime use
-- **System Mode**: Follows OS preference automatically
-- Toggle button in header (top-right corner)
-- Theme preference persisted in localStorage
-- All pages now properly themed (Dashboard, Website Projects, Sidebar, etc.)
+Global theme switching working on all pages.
 
 ### SOP Works Board ✅ COMPLETE
-Built a comprehensive SOP-based project management system:
-
-**Service Templates:**
-- **Website Development**: 27 tasks, 5 stages (Discovery → Design → Development → Testing → Launch), 102h
-- **SEO**: 30 tasks, 5 stages (Audit → Keyword Research → On-Page → Off-Page → Reporting), 75h
-- **SEM/Google Ads**: 31 tasks, 5 stages (Strategy → Campaign Setup → Optimization → Scaling → Reporting), 71h
-- **Meta Ads**: 36 tasks, 5 stages (Strategy → Creative → Campaign Setup → Optimization → Reporting), 73.5h
-
-**Features:**
-- Kanban board per project with drag-to-stage
-- Auto-create tasks from SOP template
-- Client/Lead linking
-- Progress tracking
-- Task completion toggle
-- Project filtering by service type
+4 service templates with Kanban workflow.
 
 ### Drawlead AI Assistant ✅ COMPLETE
-- Context-aware AI powered by Claude Sonnet 4.5
-- Floating button + chat panel
-- Sales & Operations intelligence
+Claude Sonnet 4.5 powered context-aware assistant.
 
 ### Marketing Module ✅ COMPLETE
-- Analytics, Blog, Social Media, Email tabs
-- Demo data fallback
+Analytics, Blog, Social Media, Email tabs.
 
 ## Architecture
 ```
 /app/
 ├── backend/
 │   ├── server.py
-│   ├── website_projects_routes.py  # NEW - Website Projects
-│   ├── sop_routes.py               # SOP Works Board
+│   ├── website_projects_routes.py  # Enhanced with sections/feedback
+│   ├── sop_routes.py
 │   ├── ai_routes.py
-│   ├── marketing_routes.py
 │   └── ...
 └── frontend/
     └── src/
         ├── components/
-        │   ├── ThemeToggle.jsx     # Dark/Light toggle
-        │   ├── Layout.js           # Header + theme
-        │   ├── DrawleadAI.jsx
-        │   └── Sidebar.js          # Theme-aware navigation
-        ├── contexts/
-        │   ├── ThemeContext.js     # Theme provider
-        │   └── AuthContext.js
+        │   ├── Sidebar.js          # Website Development dropdown
+        │   ├── ThemeToggle.jsx
+        │   └── ...
         └── pages/
-            ├── WebsiteProjectsPage.js  # NEW - Website Projects
-            ├── SOPWorksBoard.js        # SOP Works page
+            ├── WebsiteProjectsPage.js  # Enhanced with sidebars
+            ├── SOPWorksBoard.js
             └── ...
 ```
 
-## Key Features
-
-### Website Projects ✅ NEW
-- Spreadsheet-like interface for website development
-- 4 development phases per page (Wireframe, UI, Content, Dev)
-- Auto-status calculation
-- Phase progress tracking
-- Project tabs sidebar
-
-### Theme System ✅ FIXED
-- Dark/Light/System mode toggle
-- Persisted in localStorage
-- Consistent theming across all pages
-
-### SOP Works Board ✅ COMPLETE
-- 4 service templates with 124 total tasks
-- Kanban workflow visualization
-- Client linking
-- Progress tracking
-
-### Drawlead AI ✅ COMPLETE
-- Context-aware assistant
-- Sales & Operations modes
-
-### Marketing Module ✅ COMPLETE
-- Analytics, Blog, Social, Email
-
-### Operations Module ✅ COMPLETE
-- Notion-like databases
-
-### HR Module ✅ COMPLETE
-- Employee & Admin portals
-
-### Finance Module ✅ COMPLETE
-- Invoices, reports
-
 ## Database Schema
 
-### website_projects (NEW)
+### website_projects
 ```json
 {
   "project_id": "wp_xxxx",
   "name": "Client Company",
   "domain_url": "example.com",
   "platform": "Website|Shopify|WordPress|Custom",
-  "website_type": "Business Website|E-commerce|Portfolio|Landing Page|Blog|Web App",
+  "website_type": "Business Website|E-commerce|Portfolio",
   "developer": "John Doe",
   "onboarding_date": "2025-01-15",
   "deadline": "2025-03-01",
-  "server_details": "AWS/GCP/etc",
+  "server_details": "AWS/GCP",
   "client_drive_url": "https://drive.google.com/...",
   "status": "active|completed|on_hold"
 }
 ```
 
-### website_page_tasks (NEW)
+### website_page_tasks
 ```json
 {
   "task_id": "wpt_xxxx",
@@ -148,45 +113,81 @@ Built a comprehensive SOP-based project management system:
   "page_name": "Home Page",
   "wireframe_status": "To-Do|In Progress|Completed|...",
   "wireframe_url": "figma.com/...",
-  "wireframe_due": "2025-01-20",
   "ui_status": "To-Do",
-  "ui_url": null,
-  "ui_due": null,
   "content_status": "To-Do",
   "dev_status": "To-Do",
   "overall_status": "To-Do"
 }
 ```
 
-### sop_projects
+### website_project_tasks (NEW)
 ```json
 {
-  "project_id": "sop_proj_xxxx",
-  "name": "Client Website Redesign",
-  "service_type": "website|seo|sem|meta_ads",
-  "stages": [...],
-  "client_id": "lead_xxxx",
-  "client_name": "Client Name",
-  "status": "active|on_hold|completed"
+  "task_id": "wptask_xxxx",
+  "project_id": "wp_xxxx",
+  "title": "Setup hosting",
+  "description": "Configure AWS hosting",
+  "assigned_to": "user_xxxx",
+  "due_date": "2025-01-20",
+  "priority": "low|medium|high",
+  "status": "To-Do|In Progress|Completed",
+  "created_by": "user_xxxx"
+}
+```
+
+### website_page_sections (NEW)
+```json
+{
+  "section_id": "wpsec_xxxx",
+  "page_id": "wpt_xxxx",
+  "order": 1,
+  "name": "Hero Section",
+  "description": "Main hero area",
+  "screenshot_url": "https://...",
+  "wireframe_status": "To-Do",
+  "wireframe_url": "figma.com/...",
+  "ui_status": "To-Do",
+  "ui_url": null,
+  "dev_status": "To-Do",
+  "dev_url": null,
+  "content_status": "To-Do",
+  "content_url": null
+}
+```
+
+### website_section_feedback (NEW)
+```json
+{
+  "feedback_id": "wpfb_xxxx",
+  "section_id": "wpsec_xxxx",
+  "content": "Please make the hero image larger",
+  "feedback_type": "comment|revision|approval",
+  "status": "open|resolved",
+  "created_by": "user_xxxx",
+  "created_by_name": "Vinoth"
 }
 ```
 
 ## Test Credentials
 - **Admin:** vinoth@drawlead.com / admin123
 
+## Testing Status
+- **Website Projects Enhanced:** 23/23 backend tests passed ✅
+- **Frontend:** 100% features working ✅
+- **Test Report:** `/app/test_reports/iteration_9.json`
+
 ## Pending Tasks
 
 ### P1 (High Priority)
-- Resend Email Config (user needs to provide API key)
+- Configure Resend API key for email notifications
 
 ### P2 (Medium Priority)
-- Finance: Payroll, GST tabs UI
+- Finance Module: Payroll, GST tabs UI
 - Real GA4/WordPress/Gmail integrations
 - Refactor OperationsPage.js (86KB+ monolith)
 
 ### P3 (Backlog)
 - WebSocket for real-time chat
-- AI conversation export
 - Kanban drag-and-drop for Operations
 - CSV Import/Export for leads
 
@@ -194,25 +195,3 @@ Built a comprehensive SOP-based project management system:
 - **Backend:** FastAPI, MongoDB
 - **Frontend:** React, Tailwind CSS, shadcn/ui
 - **AI:** Claude Sonnet 4.5 (via emergentintegrations)
-- **Theming:** CSS variables, localStorage
-
-## Testing Status
-- **Website Projects:** 17/17 backend tests passed ✅
-- **Theme Toggle:** Working on all pages ✅
-- **AI Module:** 22/22 tests passed ✅
-- **Marketing Module:** 23/23 tests passed ✅
-- **SOP Works Board:** Fully tested ✅
-
-## API Endpoints
-
-### Website Projects
-- `GET /api/website-projects/options` - Get dropdown options
-- `GET /api/website-projects/projects` - List all projects
-- `POST /api/website-projects/projects` - Create project (auto-creates 8 pages)
-- `GET /api/website-projects/projects/{id}` - Get project with tasks
-- `PUT /api/website-projects/projects/{id}` - Update project
-- `DELETE /api/website-projects/projects/{id}` - Delete project
-- `POST /api/website-projects/projects/{id}/pages` - Add custom page
-- `PUT /api/website-projects/pages/{task_id}` - Update page task
-- `DELETE /api/website-projects/pages/{task_id}` - Delete page
-- `GET /api/website-projects/dashboard` - Dashboard stats
