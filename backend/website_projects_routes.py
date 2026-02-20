@@ -532,3 +532,229 @@ async def get_dashboard(request: Request):
         "by_platform": [{"platform": p["_id"], "count": p["count"]} for p in by_platform],
         "recent_projects": recent
     }
+
+# ============== ROLE CHECK HELPER ==============
+
+def can_edit_project(user):
+    """Check if user can edit project details (Operations/CEO only)"""
+    return user.get("role") in ["super_admin", "admin", "project_manager"]
+
+# ============== PROJECT TASKS (Separate from Page Tasks) ==============
+
+@website_projects_router.get("/projects/{project_id}/tasks")
+async def get_project_tasks(request: Request, project_id: str):
+    """Get all tasks for a project"""
+    user = await get_current_user(request)
+    
+    tasks = await db.website_project_tasks.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return tasks
+
+@website_projects_router.post("/projects/{project_id}/tasks")
+async def create_project_task(request: Request, project_id: str, task_data: ProjectTaskCreate):
+    """Create a new task for the project"""
+    user = await get_current_user(request)
+    
+    task_id = f"wptask_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    task = {
+        "task_id": task_id,
+        "project_id": project_id,
+        "title": task_data.title,
+        "description": task_data.description,
+        "assigned_to": task_data.assigned_to,
+        "due_date": task_data.due_date,
+        "priority": task_data.priority,
+        "status": "To-Do",
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_project_tasks.insert_one(task)
+    task.pop("_id", None)
+    return task
+
+@website_projects_router.put("/tasks/{task_id}")
+async def update_project_task(request: Request, task_id: str, update_data: ProjectTaskUpdate):
+    """Update a project task"""
+    user = await get_current_user(request)
+    
+    update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.website_project_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.website_project_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    return updated
+
+@website_projects_router.delete("/tasks/{task_id}")
+async def delete_project_task(request: Request, task_id: str):
+    """Delete a project task"""
+    user = await get_current_user(request)
+    
+    result = await db.website_project_tasks.delete_one({"task_id": task_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {"message": "Task deleted"}
+
+# ============== PAGE SECTIONS ==============
+
+@website_projects_router.get("/pages/{page_id}/sections")
+async def get_page_sections(request: Request, page_id: str):
+    """Get all sections for a page"""
+    user = await get_current_user(request)
+    
+    sections = await db.website_page_sections.find(
+        {"page_id": page_id},
+        {"_id": 0}
+    ).sort("order", 1).to_list(100)
+    
+    return sections
+
+@website_projects_router.post("/pages/{page_id}/sections")
+async def create_page_section(request: Request, page_id: str, section_data: SectionCreate):
+    """Create a new section for a page"""
+    user = await get_current_user(request)
+    
+    # Get next order
+    last_section = await db.website_page_sections.find_one(
+        {"page_id": page_id},
+        sort=[("order", -1)]
+    )
+    next_order = (last_section.get("order", 0) + 1) if last_section else 1
+    
+    section_id = f"wpsec_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    section = {
+        "section_id": section_id,
+        "page_id": page_id,
+        "order": next_order,
+        "name": section_data.name,
+        "description": section_data.description,
+        "screenshot_url": section_data.screenshot_url,
+        "wireframe_status": "To-Do",
+        "wireframe_url": None,
+        "ui_status": "To-Do",
+        "ui_url": None,
+        "dev_status": "To-Do",
+        "dev_url": None,
+        "content_status": "To-Do",
+        "content_url": None,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_page_sections.insert_one(section)
+    section.pop("_id", None)
+    return section
+
+@website_projects_router.put("/sections/{section_id}")
+async def update_page_section(request: Request, section_id: str, update_data: SectionUpdate):
+    """Update a page section"""
+    user = await get_current_user(request)
+    
+    update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.website_page_sections.update_one(
+        {"section_id": section_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.website_page_sections.find_one({"section_id": section_id}, {"_id": 0})
+    return updated
+
+@website_projects_router.delete("/sections/{section_id}")
+async def delete_page_section(request: Request, section_id: str):
+    """Delete a page section"""
+    user = await get_current_user(request)
+    
+    # Also delete feedback for this section
+    await db.website_section_feedback.delete_many({"section_id": section_id})
+    
+    result = await db.website_page_sections.delete_one({"section_id": section_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Section not found")
+    
+    return {"message": "Section deleted"}
+
+# ============== SECTION FEEDBACK (Google Docs Style) ==============
+
+@website_projects_router.get("/sections/{section_id}/feedback")
+async def get_section_feedback(request: Request, section_id: str):
+    """Get all feedback for a section"""
+    user = await get_current_user(request)
+    
+    feedback = await db.website_section_feedback.find(
+        {"section_id": section_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return feedback
+
+@website_projects_router.post("/sections/{section_id}/feedback")
+async def create_section_feedback(request: Request, section_id: str, feedback_data: FeedbackCreate):
+    """Create feedback for a section (like Google Docs comments)"""
+    user = await get_current_user(request)
+    
+    feedback_id = f"wpfb_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    feedback = {
+        "feedback_id": feedback_id,
+        "section_id": section_id,
+        "content": feedback_data.content,
+        "feedback_type": feedback_data.feedback_type,
+        "status": "open",  # open, resolved
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name", "Unknown"),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_section_feedback.insert_one(feedback)
+    feedback.pop("_id", None)
+    return feedback
+
+@website_projects_router.put("/feedback/{feedback_id}")
+async def update_feedback(request: Request, feedback_id: str, status: str):
+    """Update feedback status (resolve/reopen)"""
+    user = await get_current_user(request)
+    
+    await db.website_section_feedback.update_one(
+        {"feedback_id": feedback_id},
+        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    updated = await db.website_section_feedback.find_one({"feedback_id": feedback_id}, {"_id": 0})
+    return updated
+
+@website_projects_router.delete("/feedback/{feedback_id}")
+async def delete_feedback(request: Request, feedback_id: str):
+    """Delete feedback"""
+    user = await get_current_user(request)
+    
+    result = await db.website_section_feedback.delete_one({"feedback_id": feedback_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    
+    return {"message": "Feedback deleted"}
+
+# ============== CHECK EDIT PERMISSION ==============
+
+@website_projects_router.get("/check-permission")
+async def check_edit_permission(request: Request):
+    """Check if current user can edit project details"""
+    user = await get_current_user(request)
+    return {"can_edit": can_edit_project(user), "role": user.get("role")}
