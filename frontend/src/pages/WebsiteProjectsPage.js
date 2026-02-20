@@ -1190,6 +1190,90 @@ const StatusBadge = ({ status, onChange }) => (
   </Select>
 );
 
+// Phase Table Cell - Status + Add URL link (like the screenshot)
+const PhaseTableCell = ({ task, phase, onUpdate, isDark }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [url, setUrl] = useState(task[`${phase}_url`] || '');
+  const [due, setDue] = useState(task[`${phase}_due`] || '');
+  
+  const status = task[`${phase}_status`] || 'To-Do';
+  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
+  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
+
+  const handleSave = () => {
+    if (url !== task[`${phase}_url`]) {
+      onUpdate(task.task_id, `${phase}_url`, url);
+    }
+    if (due !== task[`${phase}_due`]) {
+      onUpdate(task.task_id, `${phase}_due`, due);
+    }
+    setIsEditing(false);
+  };
+
+  return (
+    <div className={`p-2 rounded ${bgSecondary} space-y-1`}>
+      {/* Status Dropdown */}
+      <Select value={status} onValueChange={(v) => onUpdate(task.task_id, `${phase}_status`, v)}>
+        <SelectTrigger className={`h-6 text-xs ${STATUS_COLORS[status]} border w-full`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+        </SelectContent>
+      </Select>
+
+      {/* URL + Due Date */}
+      {isEditing ? (
+        <div className="space-y-1">
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="Paste URL"
+            className="h-6 text-xs"
+            autoFocus
+          />
+          <Input
+            type="date"
+            value={due}
+            onChange={(e) => setDue(e.target.value)}
+            className="h-6 text-xs"
+          />
+          <div className="flex gap-1">
+            <Button size="sm" onClick={handleSave} className="h-5 text-[10px] flex-1 bg-[#6366f1]">Save</Button>
+            <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)} className="h-5 text-[10px] px-1">
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center">
+          {task[`${phase}_url`] ? (
+            <a 
+              href={task[`${phase}_url`]} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-[10px] text-[#6366f1] hover:underline flex items-center justify-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Link2 className="h-3 w-3" /> View
+            </a>
+          ) : (
+            <button
+              onClick={() => setIsEditing(true)}
+              className={`text-[10px] ${textSecondary} hover:text-[#6366f1] flex items-center justify-center gap-1 w-full`}
+            >
+              <Plus className="h-3 w-3" /> Add URL
+            </button>
+          )}
+          {task[`${phase}_due`] && (
+            <span className={`text-[10px] ${textSecondary} block`}>{task[`${phase}_due`]}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, options, teamMembers, isDark, isEdit }) => {
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
