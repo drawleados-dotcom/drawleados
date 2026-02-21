@@ -257,3 +257,57 @@ async def assign_task_to_creative(task_data: dict):
         return {"message": "Task assigned to creative team", "task_id": task_doc["task_id"]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== DESIGN TYPES MANAGEMENT ==============
+
+class DesignType(BaseModel):
+    id: str
+    name: str
+    sizes: List[str] = []
+
+@creative_router.get("/design-types")
+async def get_design_types():
+    """Get all design types (built-in + custom)"""
+    try:
+        # Built-in design types
+        built_in = [
+            {"id": "poster", "name": "Poster", "sizes": ["A4", "A3", "A2", "18x24", "24x36", "Custom"], "is_custom": False},
+            {"id": "story", "name": "Story", "sizes": ["1080x1920", "9:16", "Custom"], "is_custom": False},
+            {"id": "brochure", "name": "Brochure", "sizes": ["A4 Bi-fold", "A4 Tri-fold", "A5", "DL", "Custom"], "is_custom": False},
+            {"id": "social_post", "name": "Social Post", "sizes": ["1080x1080", "1200x628", "1080x1350", "Custom"], "is_custom": False},
+            {"id": "banner", "name": "Banner", "sizes": ["728x90", "300x250", "160x600", "970x250", "Custom"], "is_custom": False},
+            {"id": "logo", "name": "Logo", "sizes": ["Square", "Horizontal", "Vertical", "Icon"], "is_custom": False},
+            {"id": "video_thumbnail", "name": "Video Thumbnail", "sizes": ["1280x720", "1920x1080", "Custom"], "is_custom": False},
+            {"id": "presentation", "name": "Presentation", "sizes": ["16:9", "4:3", "A4"], "is_custom": False},
+        ]
+        
+        # Get custom design types from DB
+        custom_types = await db.design_types.find({}, {"_id": 0}).to_list(100)
+        
+        return {"built_in": built_in, "custom": custom_types}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@creative_router.post("/design-types")
+async def create_design_type(design_type: DesignType):
+    """Create a custom design type"""
+    try:
+        type_doc = {
+            **design_type.dict(),
+            "is_custom": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.design_types.insert_one(type_doc)
+        return {"message": "Design type created", "id": design_type.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@creative_router.delete("/design-types/{type_id}")
+async def delete_design_type(type_id: str):
+    """Delete a custom design type"""
+    try:
+        await db.design_types.delete_one({"id": type_id})
+        return {"message": "Design type deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
