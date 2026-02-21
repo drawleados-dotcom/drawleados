@@ -100,22 +100,21 @@ const CreativeDesignBoard = () => {
   // Load data
   const loadData = useCallback(async () => {
     try {
-      const [projRes, taskRes, userRes, webProjRes] = await Promise.all([
+      const [projRes, taskRes, userRes, webProjRes, typesRes] = await Promise.all([
         axios.get(`${API}/api/creative/projects`, { headers }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/creative/tasks`, { headers }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/users`, { headers }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/website-projects/projects`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/api/creative/design-types`, { headers }).catch(() => ({ data: { built_in: DESIGN_TYPES, custom: [] } })),
       ]);
       setProjects(projRes.data || []);
       setTasks(taskRes.data || []);
       setTeamMembers(userRes.data || []);
       setWebsiteProjects(webProjRes.data || []);
       
-      // Load custom design types from localStorage
-      const savedTypes = localStorage.getItem('custom_design_types');
-      if (savedTypes) {
-        setDesignTypes([...DESIGN_TYPES, ...JSON.parse(savedTypes)]);
-      }
+      // Load design types from API
+      const typesData = typesRes.data || { built_in: DESIGN_TYPES, custom: [] };
+      setDesignTypes([...typesData.built_in, ...typesData.custom]);
     } catch (error) { console.error('Error:', error); }
   }, [token]);
 
