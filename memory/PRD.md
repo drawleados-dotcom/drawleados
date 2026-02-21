@@ -6,6 +6,52 @@
 
 ## Recent Changes (February 2026 - Latest)
 
+### Creative Design Board ✅ (February 2026)
+Complete design task management system with stage-wise tracking:
+
+**Structure:**
+- Two main tabs: **Website UI** and **Design**
+- List view with columns: Task Name, Project, Design Type, Design Content, Design File, Status, Final, Actions
+- Board view option (Kanban-style by stage)
+
+**Design Types:**
+- Poster, Story, Brochure, Social Post, Banner, Logo, Video Thumbnail, Presentation
+- Custom design types with sizes can be added
+- Each type has predefined size options
+
+**Stage-wise Tracking (4 Stages):**
+1. Design Content - Due Date, Assignee, Link, Status
+2. Design File - Due Date, Assignee, Link, Status
+3. Review - Due Date, Assignee, Link, Status
+4. Final - Due Date, Assignee, Link, Status
+
+**API Endpoints:**
+- `/api/creative/projects` - Creative projects CRUD
+- `/api/creative/tasks` - Tasks with stage data CRUD
+- `/api/creative/design-types` - Built-in + custom design types
+
+### HR Attendance Enhancement ✅ (February 2026)
+Enhanced sign-in/logout flow with manual time entry:
+
+**Features:**
+- **Auto-capture Clock In Time:** Time automatically recorded when user clicks "Clock In - Office" or "Clock In - WFH"
+- **Manual Logout Time Entry:** When clicking "Clock Out", a modal appears with:
+  - Display of clock-in time
+  - Time picker for manual logout time entry
+  - "Enter your actual logout time" helper text
+  - Cancel and Confirm Logout buttons
+- Backend accepts `manual_logout_time` parameter in HH:MM format
+
+### Expense View Date Filter ✅ (February 2026)
+Added month/year filter to Expense tab in Finance module:
+
+**Features:**
+- Month dropdown (January - December)
+- Year dropdown (2024, 2025, 2026, 2027)
+- Filters apply to category expense items
+- Items reload when filter changes
+- Backend `/api/expense/entries` accepts `month` and `year` params
+
 ### Enhanced Add Cash In Flow with Invoice Integration ✅ (February 2026)
 Multi-step wizard for recording income with invoice integration:
 
