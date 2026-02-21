@@ -6,88 +6,116 @@
 
 ## Recent Changes (February 2026 - Latest)
 
-### Expense Module - Two Boards System ✅ (February 2026)
-Complete cashflow management system matching user's Excel workflow:
+### Finance Module - Complete 7-Tab System ✅ (February 2026)
+Comprehensive financial management system with Notion-like customization:
 
-**1. Expense Budget Board (Master View):**
-- Master Expense table with 12 categories (Salary, Office Exp, CEO, Vendor Payments, Loans & Debts, Tools & Subscriptions, BNI, Tax & Auditing, Mentorship, Events & Networking, Courses & Books, Marketing & Branding)
-- Grand Expenses columns: Total, Paid, Balance
-- Fiscal Year dropdown (2024-25, 2025-26, 2026-27)
-- Quarter dropdown (Q1-Q4) with monthly breakdown
-- Click category → Drill-down to see items inside (e.g., Salary → Anbarasan, Harini, Swathi)
-- Add Category / Add Item buttons
+**7 Main Tabs:**
 
-**2. Cashbook Board (Credit/Debit):**
-- Amount in Account balance header
-- 4 Bank Account tabs: Current, GST, Savings, Cash in Hand
-- Month/Year selector
-- **Credit/Inward (Green):** Sno, Date, Income From, Payment Type (Prepaid/Partial/One-Time), Payment Cycle (Monthly/Yearly/One-Time), Invoice Type (GST/NO GST), Invoice Number, Amount, Tax, Total
-- **Debit/Outward (Red):** Sno, Date, Expense To, Category (color-coded badge), Amount, Tax, Total, Remarks
+1. **Dashboard Tab:**
+   - 5 KPI Cards: Total Revenue, Payment Due, Outstanding, Total Expense, Profit
+   - Bank Accounts section (Current, GST, Savings, Cash in Hand)
+   - Quick Action buttons: Add Cash In, Add Cash Out, Add Outstanding, View Budget
+   - Export Dashboard to Excel
 
-**Key Flow:**
-When recording debit expense:
-1. Select Category → Shows existing items in that category
-2. Select existing item OR click "Add New Item"
-3. If existing: Payment reduces balance in Expense Budget
-4. If new: Creates entry in Expense Budget and records payment
+2. **Cashbook Tab:**
+   - Side-by-side Cash In (Green) / Cash Out (Red) tables
+   - Bank Account tabs: Current Account, GST Account, Savings Account, Cash in Hand
+   - Month/Year filter dropdowns
+   - Add buttons for both Cash In and Cash Out
+   - Export Cashbook to Excel
+
+3. **Expense Tab (Category Accordion View):**
+   - 12+ colored category badges (Salary, Office Expense, CEO, Vendor Payments, etc.)
+   - Click category to expand and see expenses inside
+   - Add Category button
+   - Add expense inside category (+ button on each category)
+   - Total/Paid/Balance columns per category
+   - Export Expenses to Excel
+
+4. **Budget Tab:**
+   - Monthly filter tabs (Jan-Jun)
+   - Year selector dropdown
+   - Category cards showing Total/Paid/Balance
+   - Click category card to see detailed view
+   - Export Budget to Excel
+
+5. **Invoice Tab:**
+   - Summary cards: Total Invoices, Paid, Pending, Overdue
+   - Invoice table: Invoice #, Client, Date, Due Date, Amount, Status, Actions
+   - Create Invoice button
+   - Export to Excel
+
+6. **Outstanding Tab:**
+   - Summary cards: Total Expected, Received, Balance
+   - Outstanding table: Expected Date, Project Name, Type, Amount, Revenue Type, Received, Balance, Remarks
+   - Record Payment button for each entry
+   - Add Outstanding button
+   - Export Outstanding to Excel
+
+7. **Custom Tab (Notion-like Customization):**
+   - "+" button to add custom tabs
+   - Create tab with custom name
+   - Delete custom tab (X button)
+   - Add Row/Add Data functionality
+   - Tabs stored in localStorage
+
+**Key Features:**
+- Excel export on EVERY tab using xlsx library
+- Category-based expense tracking with accordion view
+- Color-coded badges for categories and project types
+- Dark mode support throughout
+- data-testid attributes for testing
 
 **API Endpoints:**
+- `/api/expense/dashboard-summary` - Dashboard KPIs
 - `/api/expense/bank-accounts` - CRUD for bank accounts
 - `/api/expense/categories` - Expense categories (12 default)
 - `/api/expense/entries` - Items within categories
 - `/api/expense/income` - Credit/Income entries
 - `/api/expense/payments` - Debit/Expense payments
 - `/api/expense/cashflow` - Monthly cashflow view
-- `/api/expense/master-view` - Fiscal year category breakdown
+- `/api/expense/outstanding` - Outstanding revenue CRUD
+- `/api/expense/budget-monthly` - Monthly budget data
 
 ---
 
-## Previous Updates (December 2025)
+## Previous Updates (December 2025 - February 2026)
 
-### Website Projects - Table Layout Updated ✅
-Updated pages table to match screenshot design:
-- Each phase cell shows: **Status dropdown** + **"+ Add URL"** link
-- Click "+ Add URL" to add URL and Due Date
-- Shows "View" link when URL is added
-- Cleaner, more compact layout
+### Expense Module - Two Boards System ✅
+- Expense Budget Board (Master View)
+- Cashbook Board (Credit/Debit)
+- Bank Account management
+- Category-based expense tracking
 
 ### Website Projects - Complete Overhaul ✅
 **3 Navigation Views:**
+1. All Projects View (table with filters)
+2. Project Detail View (phases, pages, tasks)
+3. Page Detail View (phase cards, screenshots, sections)
 
-1. **All Projects View** (Default at `/website-projects`)
-   - Table: Project name, Dev %, Overall %, Developer, Onboarding, Deadline, Pages
-   - Filters: Search, Due Date picker, Developer dropdown
-   - Cross-project Tasks Panel
-
-2. **Project Detail View** (`/website-projects?id=xxx`)
-   - Collapsible header with metadata
-   - Phase progress stats (Wireframe, UI, Content, Dev)
-   - Pages/Tasks tabs
-
-3. **Page Detail View** (`/website-projects?id=xxx&page=yyy`)
-   - 4 Phase Cards with Status/Assignee/Due Date
-   - Screenshots, Tasks/Notes, Sections
-
-### Previous Updates
+### Other Completed Features
 - SOP Works Board ✅
 - Drawlead AI Assistant ✅
 - Marketing Module ✅
 - Theme Toggle ✅
+
+---
 
 ## Pending/Future Tasks
 
 ### PENDING: Google Calendar Integration 📅
 When user reminds, implement:
 - New sidebar item "My Calendar / CEO" (super admin only)
-- Emergent-managed Google Auth (requires GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
+- Emergent-managed Google Auth
 - Show real Google Calendar events
-- Tasks view with department tabs: All | Sales | Marketing | Operations | HR | Finance | Execution | RD
-- Check user availability when assigning tasks
+- Tasks view with department tabs
 
 ### Other Pending
 - Configure Resend API key for email notifications
 - Refactor OperationsPage.js (86KB+ monolith)
-- Finance Module: Payroll, GST tabs
+- Refactor WebsiteProjectsPage.js
+
+---
 
 ## Test Credentials
 - **Admin:** vinoth@drawlead.com / admin123
@@ -96,10 +124,26 @@ When user reminds, implement:
 
 | Feature | Status |
 |---------|--------|
+| Finance Module - 7 Tabs | ✅ Complete |
+| Dashboard with KPIs | ✅ Complete |
+| Cashbook (Cash In/Out) | ✅ Complete |
+| Expense (Category Accordion) | ✅ Complete |
+| Budget (Monthly Tabs) | ✅ Complete |
+| Invoice Management | ✅ Complete |
+| Outstanding Revenue | ✅ Complete |
+| Custom Tabs (Notion-like) | ✅ Complete |
+| Excel Export on All Tabs | ✅ Complete |
 | Website Projects - All Views | ✅ Complete |
-| Pages Table (Status + Add URL) | ✅ Complete |
-| Google Calendar | 🟡 Pending (user to remind) |
 | SOP Works Board | ✅ Complete |
 | Drawlead AI | ✅ Complete |
 | Marketing Module | ✅ Complete |
 | Theme Toggle | ✅ Complete |
+| Google Calendar | 🟡 Pending |
+
+## 3rd Party Integrations
+- Emergent-managed Google Auth
+- Claude Sonnet 4.5
+- jsPDF & jspdf-autotable
+- Resend (placeholder keys)
+- react-split-pane
+- xlsx (Excel export)
