@@ -280,9 +280,29 @@ export default function HRPage() {
 }
 
 function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, onClockIn, onClockOut, formatTime, formatDate }) {
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [logoutTime, setLogoutTime] = useState('');
+  
   const isClockedIn = todayAttendance?.clock_in && !todayAttendance?.clock_out;
   const isClockedOut = todayAttendance?.clock_out;
   const notClockedIn = !todayAttendance?.clock_in;
+  
+  // Get current time in HH:MM format for default value
+  const getCurrentTimeString = () => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const handleOpenLogoutModal = () => {
+    setLogoutTime(getCurrentTimeString());
+    setShowLogoutModal(true);
+  };
+
+  const handleConfirmLogout = () => {
+    onClockOut(logoutTime);
+    setShowLogoutModal(false);
+    setLogoutTime('');
+  };
 
   return (
     <div className="space-y-6">
