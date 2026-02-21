@@ -674,3 +674,346 @@ async def initialize_expense_data(request: Request):
             })
     
     return {"message": "Expense data initialized", "accounts": len(default_accounts), "categories": len(default_categories)}
+
+# ============== OUTSTANDING REVENUE ==============
+
+class OutstandingRevenueCreate(BaseModel):
+    project_name: str
+    project_type: str  # WhatsApp Marketing, Website, Product, Shopify, SEO, Brochure, Meta
+    amount: float
+    revenue_type: str  # One-time, Monthly, Quarterly
+    expected_date: str  # YYYY-MM-DD
+    client_name: Optional[str] = None
+    remarks: Optional[str] = None
+    invoice_id: Optional[str] = None
+
+class OutstandingPaymentRecord(BaseModel):
+    outstanding_id: str
+    amount: float
+    payment_date: str
+    bank_account_id: str
+    payment_type: str  # Advance, Partial, Full
+    invoice_id: Optional[str] = None
+    notes: Optional[str] = None
+
+@expense_router.post("/outstanding")
+async def create_outstanding_revenue(data: OutstandingRevenueCreate, request: Request):
+    """Create outstanding revenue entry"""
+    user = await get_current_user(request)
+    
+    outstanding_id = f"out_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "outstanding_id": outstanding_id,
+        "project_name": data.project_name,
+        "project_type": data.project_type,
+        "amount": data.amount,
+        "revenue_type": data.revenue_type,
+        "expected_date": data.expected_date,
+        "client_name": data.client_name,
+        "remarks": data.remarks,
+        "invoice_id": data.invoice_id,
+        "received_amount": 0,
+        "balance": data.amount,
+        "status": "pending",  # pending, partial, received
+        "payments": [],
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user["user_id"]
+    }
+    
+    await db.outstanding_revenue.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@expense_router.get("/outstanding")
+async def get_outstanding_revenue(request: Request, status: Optional[str] = None, month: Optional[int] = None, year: Optional[int] = None):
+    """Get all outstanding revenue entries"""
+    await get_current_user(request)
+    
+    query = {}
+    if status:
+        query["status"] = status
+    if month and year:
+        # Filter by expected_date month/year
+        start_date = f"{year}-{str(month).zfill(2)}-01"
+        if month == 12:
+            end_date = f"{year + 1}-01-01"
+        else:
+            end_date = f"{year}-{str(month + 1).zfill(2)}-01"
+        query["expected_date"] = {"$gte": start_date, "$lt": end_date}
+    
+    outstanding = await db.outstanding_revenue.find(query, {"_id": 0}).sort("expected_date", 1).to_list(500)
+    return outstanding
+
+@expense_router.put("/outstanding/{outstanding_id}")
+async def update_outstanding_revenue(outstanding_id: str, data: OutstandingRevenueCreate, request: Request):
+    """Update outstanding revenue entry"""
+    user = await get_current_user(request)
+    
+    update_data = data.model_dump(exclude_unset=True)
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    update_data["updated_by"] = user["user_id"]
+    
+    # Recalculate balance
+    existing = await db.outstanding_revenue.find_one({"outstanding_id": outstanding_id})
+    if existing:
+        received = existing.get("received_amount", 0)
+        update_data["balance"] = data.amount - received
+    
+    await db.outstanding_revenue.update_one(
+        {"outstanding_id": outstanding_id},
+        {"$set": update_data}
+    )
+    
+    result = await db.outstanding_revenue.find_one({"outstanding_id": outstanding_id}, {"_id": 0})
+    return result
+
+@expense_router.delete("/outstanding/{outstanding_id}")
+async def delete_outstanding_revenue(outstanding_id: str, request: Request):
+    """Delete outstanding revenue entry"""
+    await get_current_user(request)
+    await db.outstanding_revenue.delete_one({"outstanding_id": outstanding_id})
+    return {"message": "Deleted"}
+
+@expense_router.post("/outstanding/{outstanding_id}/payment")
+async def record_outstanding_payment(outstanding_id: str, data: OutstandingPaymentRecord, request: Request):
+    """Record payment for outstanding revenue - connects to Cash In"""
+    user = await get_current_user(request)
+    
+    # Get outstanding entry
+    outstanding = await db.outstanding_revenue.find_one({"outstanding_id": outstanding_id})
+    if not outstanding:
+        raise HTTPException(status_code=404, detail="Outstanding entry not found")
+    
+    payment_id = f"outpay_{uuid.uuid4().hex[:12]}"
+    payment = {
+        "payment_id": payment_id,
+        "amount": data.amount,
+        "payment_date": data.payment_date,
+        "bank_account_id": data.bank_account_id,
+        "payment_type": data.payment_type,
+        "invoice_id": data.invoice_id,
+        "notes": data.notes,
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "recorded_by": user["user_id"]
+    }
+    
+    # Update outstanding entry
+    new_received = outstanding.get("received_amount", 0) + data.amount
+    new_balance = outstanding["amount"] - new_received
+    new_status = "received" if new_balance <= 0 else "partial" if new_received > 0 else "pending"
+    
+    await db.outstanding_revenue.update_one(
+        {"outstanding_id": outstanding_id},
+        {
+            "$push": {"payments": payment},
+            "$set": {
+                "received_amount": new_received,
+                "balance": max(0, new_balance),
+                "status": new_status
+            }
+        }
+    )
+    
+    # Also record as income entry (Cash In)
+    income_id = f"inc_{uuid.uuid4().hex[:12]}"
+    income_doc = {
+        "income_id": income_id,
+        "source": outstanding["project_name"],
+        "description": f"{data.payment_type} payment - {outstanding['project_type']}",
+        "amount": data.amount,
+        "invoice_number": data.invoice_id,
+        "payment_type": data.payment_type,
+        "payment_cycle": outstanding["revenue_type"],
+        "date": data.payment_date,
+        "bank_account_id": data.bank_account_id,
+        "outstanding_id": outstanding_id,
+        "tax_amount": 0,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user["user_id"]
+    }
+    await db.income_entries.insert_one(income_doc)
+    
+    # Update bank account balance
+    await db.bank_accounts.update_one(
+        {"account_id": data.bank_account_id},
+        {"$inc": {"current_balance": data.amount}}
+    )
+    
+    result = await db.outstanding_revenue.find_one({"outstanding_id": outstanding_id}, {"_id": 0})
+    return result
+
+# ============== DASHBOARD SUMMARY ==============
+
+@expense_router.get("/dashboard-summary")
+async def get_dashboard_summary(request: Request, month: Optional[int] = None, year: Optional[int] = None):
+    """Get dashboard summary with key financial metrics"""
+    await get_current_user(request)
+    
+    now = datetime.now(timezone.utc)
+    if not month:
+        month = now.month
+    if not year:
+        year = now.year
+    
+    # Date range for current month
+    start_date = f"{year}-{str(month).zfill(2)}-01"
+    if month == 12:
+        end_date = f"{year + 1}-01-01"
+    else:
+        end_date = f"{year}-{str(month + 1).zfill(2)}-01"
+    
+    # Total Revenue (income received this month)
+    income_pipeline = [
+        {"$match": {"date": {"$gte": start_date, "$lt": end_date}}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    income_result = await db.income_entries.aggregate(income_pipeline).to_list(1)
+    total_revenue = income_result[0]["total"] if income_result else 0
+    
+    # Total Expenses this month
+    expense_pipeline = [
+        {"$match": {"payment_date": {"$gte": start_date, "$lt": end_date}}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    expense_result = await db.expense_payments.aggregate(expense_pipeline).to_list(1)
+    total_expense = expense_result[0]["total"] if expense_result else 0
+    
+    # Outstanding Amount (pending + partial payments expected this month)
+    outstanding_pipeline = [
+        {"$match": {"status": {"$in": ["pending", "partial"]}}},
+        {"$group": {"_id": None, "total": {"$sum": "$balance"}}}
+    ]
+    outstanding_result = await db.outstanding_revenue.aggregate(outstanding_pipeline).to_list(1)
+    outstanding_amount = outstanding_result[0]["total"] if outstanding_result else 0
+    
+    # Payment Due this month (sum of expense entries for this month)
+    due_pipeline = [
+        {"$match": {"expected_date": {"$gte": start_date, "$lt": end_date}, "status": {"$ne": "received"}}},
+        {"$group": {"_id": None, "total": {"$sum": "$balance"}}}
+    ]
+    due_result = await db.outstanding_revenue.aggregate(due_pipeline).to_list(1)
+    payment_due = due_result[0]["total"] if due_result else 0
+    
+    # Profit
+    profit = total_revenue - total_expense
+    
+    # Bank account balances
+    accounts = await db.bank_accounts.find({}, {"_id": 0}).to_list(10)
+    total_bank_balance = sum(acc.get("current_balance", acc.get("initial_balance", 0)) for acc in accounts)
+    
+    return {
+        "month": month,
+        "year": year,
+        "total_revenue": total_revenue,
+        "total_expense": total_expense,
+        "outstanding_amount": outstanding_amount,
+        "payment_due": payment_due,
+        "profit": profit,
+        "total_bank_balance": total_bank_balance,
+        "accounts": accounts
+    }
+
+# ============== EXPENSE BUDGET MONTHLY VIEW ==============
+
+@expense_router.get("/budget-monthly")
+async def get_budget_monthly(request: Request, month: int, year: int, category_id: Optional[str] = None):
+    """Get expense budget for a specific month with detailed breakdown"""
+    await get_current_user(request)
+    
+    start_date = f"{year}-{str(month).zfill(2)}-01"
+    if month == 12:
+        end_date = f"{year + 1}-01-01"
+    else:
+        end_date = f"{year}-{str(month + 1).zfill(2)}-01"
+    
+    if category_id:
+        # Get specific category items for this month
+        entries = await db.expense_entries.find({"category_id": category_id}, {"_id": 0}).to_list(500)
+        
+        result_entries = []
+        for entry in entries:
+            # Get payments for this month
+            payments = await db.expense_payments.find({
+                "entry_id": entry["entry_id"],
+                "payment_date": {"$gte": start_date, "$lt": end_date}
+            }, {"_id": 0}).to_list(100)
+            
+            total_paid = sum(p["amount"] for p in payments)
+            balance = entry["total_amount"] - total_paid
+            
+            # Determine status
+            if total_paid >= entry["total_amount"]:
+                status = "Paid"
+            elif total_paid > 0:
+                status = "Partial"
+            else:
+                status = "Pending"
+            
+            result_entries.append({
+                "entry_id": entry["entry_id"],
+                "name": entry["name"],
+                "total_amount": entry["total_amount"],
+                "paid": total_paid,
+                "balance": balance,
+                "status": status,
+                "remarks": entry.get("description", ""),
+                "payments": payments,
+                "transaction_ids": [p.get("payment_id", "") for p in payments]
+            })
+        
+        return {
+            "month": month,
+            "year": year,
+            "category_id": category_id,
+            "entries": result_entries,
+            "summary": {
+                "total": sum(e["total_amount"] for e in result_entries),
+                "paid": sum(e["paid"] for e in result_entries),
+                "balance": sum(e["balance"] for e in result_entries)
+            }
+        }
+    else:
+        # Get all categories summary for this month
+        categories = await db.expense_categories.find({"category_type": "expense"}, {"_id": 0}).to_list(50)
+        
+        result_categories = []
+        grand_total = 0
+        grand_paid = 0
+        
+        for cat in categories:
+            entries = await db.expense_entries.find({"category_id": cat["category_id"]}, {"_id": 0}).to_list(100)
+            
+            cat_total = sum(e["total_amount"] for e in entries)
+            
+            # Get payments for this category this month
+            entry_ids = [e["entry_id"] for e in entries]
+            payments = await db.expense_payments.find({
+                "entry_id": {"$in": entry_ids},
+                "payment_date": {"$gte": start_date, "$lt": end_date}
+            }, {"_id": 0}).to_list(500)
+            
+            cat_paid = sum(p["amount"] for p in payments)
+            
+            result_categories.append({
+                "category_id": cat["category_id"],
+                "name": cat["name"],
+                "total": cat_total,
+                "paid": cat_paid,
+                "balance": cat_total - cat_paid,
+                "entry_count": len(entries)
+            })
+            
+            grand_total += cat_total
+            grand_paid += cat_paid
+        
+        return {
+            "month": month,
+            "year": year,
+            "categories": result_categories,
+            "summary": {
+                "total": grand_total,
+                "paid": grand_paid,
+                "balance": grand_total - grand_paid
+            }
+        }
+
