@@ -19,6 +19,8 @@ import HRAdminPage from './pages/HRAdminPage';
 import MarketingModule from './pages/MarketingModule';
 import SOPWorksBoard from './pages/SOPWorksBoard';
 import WebsiteProjectsPage from './pages/WebsiteProjectsPage';
+import SocialMediaPage from './pages/SocialMediaPage';
+import CreativeDesignBoard from './pages/CreativeDesignBoard';
 import './App.css';
 
 function AppRouter() {
