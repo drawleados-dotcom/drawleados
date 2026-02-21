@@ -114,7 +114,7 @@ const Dashboard = () => {
   // Fetch HR Data
   const fetchHRData = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/hr/dashboard-stats`, { headers });
+      const res = await axios.get(`${API}/api/hr/admin/dashboard-stats`, { headers });
       setHrData({
         present: res.data.present_today || 0,
         absent: res.data.absent_today || 0,
