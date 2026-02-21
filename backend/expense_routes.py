@@ -205,7 +205,13 @@ async def create_expense_category(request: Request, data: ExpenseCategoryCreate)
 # ============== EXPENSE ENTRIES ==============
 
 @expense_router.get("/entries")
-async def get_expense_entries(request: Request, category_id: Optional[str] = None, department: Optional[str] = None):
+async def get_expense_entries(
+    request: Request, 
+    category_id: Optional[str] = None, 
+    department: Optional[str] = None,
+    month: Optional[int] = None,
+    year: Optional[int] = None
+):
     """Get expense entries with filters"""
     user = await get_current_user(request)
     
@@ -214,6 +220,16 @@ async def get_expense_entries(request: Request, category_id: Optional[str] = Non
         query["category_id"] = category_id
     if department:
         query["department"] = department
+    
+    # Date filters for month/year
+    if month and year:
+        from datetime import datetime, timezone
+        start_date = datetime(year, month, 1, tzinfo=timezone.utc)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+        query["created_at"] = {"$gte": start_date.isoformat(), "$lt": end_date.isoformat()}
     
     entries = await db.expense_entries.find(query, {"_id": 0}).to_list(500)
     
