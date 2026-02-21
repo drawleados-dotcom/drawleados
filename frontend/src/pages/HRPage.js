@@ -158,10 +158,10 @@ export default function HRPage() {
     }
   };
 
-  const handleClockOut = async () => {
+  const handleClockOut = async (manualLogoutTime) => {
     try {
       await axios.post(`${API}/api/hr/attendance/clock-out`, 
-        { notes: '' }, 
+        { notes: '', manual_logout_time: manualLogoutTime || null }, 
         { headers }
       );
       toast.success('Clocked out successfully');
