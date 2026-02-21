@@ -28,6 +28,7 @@ from ai_routes import ai_router, init_ai_db
 from sop_routes import sop_router, init_sop_db
 from website_projects_routes import website_projects_router, init_website_projects_db
 from expense_routes import expense_router, set_expense_db
+from social_creative_routes import social_media_router, creative_router, init_social_creative_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -48,6 +49,7 @@ init_ai_db(db)
 init_sop_db(db)
 init_website_projects_db(db)
 set_expense_db(db)
+init_social_creative_db(db)
 
 # Create the main app
 app = FastAPI()
