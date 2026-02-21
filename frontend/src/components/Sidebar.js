@@ -264,15 +264,27 @@ const Sidebar = () => {
               </Link>
               
               <Link
-                to="/sop-works?service=social_media"
+                to="/social-media"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.search.includes('service=social_media')
+                  location.pathname === '/social-media'
                     ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
                 <span className="text-base">📱</span>
                 <span>Social Media</span>
+              </Link>
+              
+              <Link
+                to="/creative-board"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.pathname === '/creative-board'
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span className="text-base">🎨</span>
+                <span>Creative Design</span>
               </Link>
               
               <Link
