@@ -160,6 +160,9 @@ Comprehensive financial management system with Notion-like customization:
 
 | Feature | Status |
 |---------|--------|
+| Creative Design Board (2 tabs, stage tracking) | ✅ Complete |
+| HR Attendance (Manual logout time entry) | ✅ Complete |
+| Expense View Date Filter | ✅ Complete |
 | Finance Module - 7 Tabs | ✅ Complete |
 | Enhanced Add Cash In (3-step wizard) | ✅ Complete |
 | Create Invoice On-the-fly | ✅ Complete |
@@ -174,7 +177,25 @@ Comprehensive financial management system with Notion-like customization:
 | Custom Tabs (Notion-like) | ✅ Complete |
 | Website Projects - All Views | ✅ Complete |
 | SOP Works Board | ✅ Complete |
+| Social Media Module | ✅ Complete |
 | Google Calendar | 🟡 Pending |
+
+## Pending Tasks
+
+### High Priority
+- **Refactor Large Files:**
+  - `/app/frontend/src/pages/OperationsPage.js` (86KB+ monolith) - CRITICAL
+  - `/app/frontend/src/components/finance/ExpenseTab.js` (2394 lines) - CRITICAL
+  - `/app/frontend/src/pages/WebsiteProjectsPage.js` (~700 lines)
+
+### Medium Priority
+- Google Calendar Integration (postponed by user)
+- Configure Resend API key for email notifications
+
+### Future/Backlog
+- Sales Module CSV Import/Export
+- Chat Backend migration to MongoDB (currently in-memory)
+- Kanban drag-and-drop functionality
 
 ## 3rd Party Integrations
 - Emergent-managed Google Auth
