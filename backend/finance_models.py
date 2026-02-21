@@ -11,23 +11,65 @@ class Invoice(BaseModel):
     invoice_date: datetime
     due_date: datetime
     lead_id: Optional[str] = None
+    project_id: Optional[str] = None
+    # Client Information
     client_name: str
+    client_company: Optional[str] = None
     client_address: Optional[str] = None
+    client_city: Optional[str] = None
+    client_state: Optional[str] = None
+    client_pincode: Optional[str] = None
+    client_country: str = "India"
     client_gst_number: Optional[str] = None
+    client_pan: Optional[str] = None
     client_email: Optional[str] = None
     client_phone: Optional[str] = None
-    status: str  # draft, sent, paid, overdue, cancelled
+    # Billing Details
+    billing_address: Optional[str] = None
+    shipping_address: Optional[str] = None
+    po_number: Optional[str] = None  # Purchase Order
+    reference_number: Optional[str] = None
+    # Status and Type
+    status: str  # draft, sent, paid, partial, overdue, cancelled
+    invoice_type: str = "GST"  # GST, Non-GST, Proforma, Credit Note
+    payment_status: str = "unpaid"  # unpaid, partial, paid
+    # Amounts
     subtotal: float
     total_discount: float = 0.0
+    discount_type: str = "percentage"  # percentage, fixed
+    # Tax Details
     gst_type: str  # gst, non-gst
     gst_rate: float = 0.0  # 18, 12, 5, 28
     cgst: float = 0.0
     sgst: float = 0.0
     igst: float = 0.0
+    cess: float = 0.0
+    tds_rate: float = 0.0
+    tds_amount: float = 0.0
+    # Totals
+    total_tax: float = 0.0
     total_amount: float
+    paid_amount: float = 0.0
+    balance_due: float = 0.0
+    # Additional Info
+    currency: str = "INR"
     payment_terms: Optional[str] = None
+    payment_method: Optional[str] = None  # Bank Transfer, UPI, Cash, Cheque
+    bank_details: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
     notes: Optional[str] = None
-    template_type: str = "minimal"  # minimal, corporate, modern
+    internal_notes: Optional[str] = None
+    # Template
+    template_type: str = "minimal"  # minimal, corporate, modern, professional
+    # Recurring
+    is_recurring: bool = False
+    recurring_frequency: Optional[str] = None  # weekly, monthly, quarterly, yearly
+    next_invoice_date: Optional[datetime] = None
+    # Tracking
+    sent_date: Optional[datetime] = None
+    viewed_date: Optional[datetime] = None
+    payment_date: Optional[datetime] = None
+    # Meta
     created_by: str
     created_at: datetime
     updated_at: datetime
