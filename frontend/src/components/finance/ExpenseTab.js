@@ -26,6 +26,7 @@ import {
   ArrowUpCircle,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
   Wallet,
   LayoutGrid,
   TrendingUp,
@@ -44,7 +45,13 @@ import {
   Banknote,
   PiggyBank,
   Target,
+  Download,
+  Settings,
+  Trash2,
+  Edit2,
+  FileSpreadsheet,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -75,13 +82,32 @@ const PROJECT_TYPE_COLORS = {
   'Meta': { bg: '#cffafe', text: '#0891b2' },
 };
 
+// Default tabs
+const DEFAULT_TABS = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, isDefault: true },
+  { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
+  { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
+  { id: 'budget', label: 'Budget', icon: Receipt, isDefault: true },
+  { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
+  { id: 'outstanding', label: 'Outstanding', icon: Target, isDefault: true },
+];
+
 const ExpenseTab = () => {
   const { isDark } = useTheme();
   const token = localStorage.getItem('session_token');
 
-  // Main view state
+  // Tab management
+  const [tabs, setTabs] = useState(() => {
+    const saved = localStorage.getItem('finance_custom_tabs');
+    return saved ? [...DEFAULT_TABS, ...JSON.parse(saved)] : DEFAULT_TABS;
+  });
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [showAddTab, setShowAddTab] = useState(false);
+  const [newTabName, setNewTabName] = useState('');
+  
+  // Category view state
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [expandedCategories, setExpandedCategories] = useState({});
   const [selectedAccount, setSelectedAccount] = useState(null);
   
   // Data state
@@ -92,8 +118,9 @@ const ExpenseTab = () => {
   const [budgetData, setBudgetData] = useState(null);
   const [outstandingData, setOutstandingData] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [categoryItems, setCategoryItems] = useState([]);
+  const [categoryItems, setCategoryItems] = useState({});
   const [loading, setLoading] = useState(true);
+  const [customTabData, setCustomTabData] = useState({});
   
   // Filter state
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -104,7 +131,10 @@ const ExpenseTab = () => {
   const [showAddDebit, setShowAddDebit] = useState(false);
   const [showAddOutstanding, setShowAddOutstanding] = useState(false);
   const [showRecordPayment, setShowRecordPayment] = useState(false);
+  const [showAddExpenseToCategory, setShowAddExpenseToCategory] = useState(false);
+  const [showAddCategory, setShowAddCategory] = useState(false);
   const [selectedOutstanding, setSelectedOutstanding] = useState(null);
+  const [targetCategory, setTargetCategory] = useState(null);
   
   // Form states
   const [creditForm, setCreditForm] = useState({
@@ -130,6 +160,18 @@ const ExpenseTab = () => {
     tax_percent: 0,
     remarks: '',
     bank_account_id: '',
+  });
+  
+  const [expenseForm, setExpenseForm] = useState({
+    name: '',
+    total_amount: '',
+    description: '',
+    recurring: false,
+  });
+  
+  const [categoryForm, setCategoryForm] = useState({
+    name: '',
+    department: '',
   });
   
   const [outstandingForm, setOutstandingForm] = useState({
@@ -158,7 +200,8 @@ const ExpenseTab = () => {
     { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' },
   ];
 
-  // Load dashboard summary
+  // ============== DATA LOADING ==============
+  
   const loadDashboard = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/expense/dashboard-summary`, {
@@ -171,7 +214,6 @@ const ExpenseTab = () => {
     }
   }, [token, selectedMonth, selectedYear]);
 
-  // Load accounts
   const loadAccounts = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/expense/bank-accounts`, {
@@ -186,7 +228,6 @@ const ExpenseTab = () => {
     }
   }, [token, selectedAccount]);
 
-  // Load categories
   const loadCategories = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/expense/categories`, {
@@ -198,7 +239,6 @@ const ExpenseTab = () => {
     }
   }, [token]);
 
-  // Load cashbook
   const loadCashbook = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/expense/cashflow`, {
@@ -211,7 +251,6 @@ const ExpenseTab = () => {
     }
   }, [token, selectedMonth, selectedYear]);
 
-  // Load budget
   const loadBudget = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/expense/budget-monthly`, {
@@ -224,7 +263,6 @@ const ExpenseTab = () => {
     }
   }, [token, selectedMonth, selectedYear, selectedCategory]);
 
-  // Load outstanding
   const loadOutstanding = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/expense/outstanding`, {
@@ -236,12 +274,10 @@ const ExpenseTab = () => {
     }
   }, [token]);
 
-  // Load invoices
   const loadInvoices = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/invoices`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { status: 'pending' }
+      const res = await axios.get(`${API}/api/finance/invoices`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       setInvoices(res.data || []);
     } catch (error) {
@@ -249,21 +285,18 @@ const ExpenseTab = () => {
     }
   }, [token]);
 
-  // Load category items
   const loadCategoryItems = useCallback(async (categoryId) => {
     try {
       const res = await axios.get(`${API}/api/expense/entries`, {
         headers: { Authorization: `Bearer ${token}` },
         params: { category_id: categoryId }
       });
-      setCategoryItems(res.data || []);
+      setCategoryItems(prev => ({ ...prev, [categoryId]: res.data || [] }));
     } catch (error) {
       console.error('Error loading category items:', error);
-      setCategoryItems([]);
     }
   }, [token]);
 
-  // Initialize
   const initializeData = async () => {
     try {
       await axios.post(`${API}/api/expense/initialize`, {}, {
@@ -276,7 +309,6 @@ const ExpenseTab = () => {
     }
   };
 
-  // Load all data
   const loadAll = useCallback(async () => {
     setLoading(true);
     await Promise.all([
@@ -299,7 +331,8 @@ const ExpenseTab = () => {
     if (activeTab === 'cashbook') loadCashbook();
     if (activeTab === 'budget') loadBudget();
     if (activeTab === 'outstanding') loadOutstanding();
-  }, [activeTab, selectedMonth, selectedYear, loadDashboard, loadCashbook, loadBudget, loadOutstanding]);
+    if (activeTab === 'invoice') loadInvoices();
+  }, [activeTab, selectedMonth, selectedYear, loadDashboard, loadCashbook, loadBudget, loadOutstanding, loadInvoices]);
 
   useEffect(() => {
     if (selectedCategory) loadBudget();
@@ -309,7 +342,8 @@ const ExpenseTab = () => {
     if (debitForm.category_id) loadCategoryItems(debitForm.category_id);
   }, [debitForm.category_id, loadCategoryItems]);
 
-  // Format currency
+  // ============== UTILITIES ==============
+  
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -319,11 +353,145 @@ const ExpenseTab = () => {
     }).format(amount || 0);
   };
 
-  // Get category color
   const getCatColor = (name) => CATEGORY_COLORS[name] || { bg: '#f3f4f6', text: '#4b5563', dark: '#6b7280' };
   const getProjectColor = (type) => PROJECT_TYPE_COLORS[type] || { bg: '#f3f4f6', text: '#4b5563' };
 
-  // Add credit handler
+  // ============== EXCEL EXPORT ==============
+  
+  const exportToExcel = (data, filename, sheetName = 'Sheet1') => {
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, `${filename}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(`Exported ${filename}`);
+  };
+
+  const exportDashboard = () => {
+    const data = [
+      { Metric: 'Total Revenue', Value: dashboardData?.total_revenue || 0 },
+      { Metric: 'Total Expense', Value: dashboardData?.total_expense || 0 },
+      { Metric: 'Outstanding Amount', Value: dashboardData?.outstanding_amount || 0 },
+      { Metric: 'Payment Due', Value: dashboardData?.payment_due || 0 },
+      { Metric: 'Profit', Value: dashboardData?.profit || 0 },
+      { Metric: 'Total Bank Balance', Value: dashboardData?.total_bank_balance || 0 },
+    ];
+    accounts.forEach(acc => {
+      data.push({ Metric: `${acc.name} Balance`, Value: acc.current_balance || 0 });
+    });
+    exportToExcel(data, 'Finance_Dashboard', 'Dashboard');
+  };
+
+  const exportCashbook = () => {
+    const creditData = (cashbookData?.credit?.entries || []).map((e, i) => ({
+      'S.No': i + 1,
+      'Type': 'Credit',
+      'Date': e.date,
+      'From/To': e.source,
+      'Payment Type': e.payment_type || 'Payment',
+      'Amount': e.amount,
+      'Tax': e.tax_amount || 0,
+      'Total': e.amount + (e.tax_amount || 0),
+    }));
+    const debitData = (cashbookData?.debit?.entries || []).map((e, i) => ({
+      'S.No': i + 1,
+      'Type': 'Debit',
+      'Date': e.payment_date,
+      'From/To': e.entry_name || 'Expense',
+      'Category': e.category_name || 'General',
+      'Amount': e.amount,
+      'Tax': e.tax_amount || 0,
+      'Total': e.amount + (e.tax_amount || 0),
+      'Remarks': e.notes || '',
+    }));
+    exportToExcel([...creditData, ...debitData], 'Cashbook', 'Cashbook');
+  };
+
+  const exportExpense = () => {
+    const data = [];
+    categories.forEach(cat => {
+      const items = categoryItems[cat.category_id] || [];
+      items.forEach(item => {
+        data.push({
+          'Category': cat.name,
+          'Item Name': item.name,
+          'Total Amount': item.total_amount,
+          'Total Paid': item.total_paid || 0,
+          'Balance': item.balance || (item.total_amount - (item.total_paid || 0)),
+          'Description': item.description || '',
+        });
+      });
+    });
+    exportToExcel(data, 'Expense_Items', 'Expenses');
+  };
+
+  const exportBudget = () => {
+    const data = (budgetData?.categories || []).map(cat => ({
+      'Category': cat.name,
+      'Total Budget': cat.total || 0,
+      'Paid': cat.paid || 0,
+      'Balance': cat.balance || 0,
+      'Items Count': cat.entry_count || 0,
+    }));
+    exportToExcel(data, 'Budget', 'Budget');
+  };
+
+  const exportInvoices = () => {
+    const data = invoices.map(inv => ({
+      'Invoice Number': inv.invoice_number,
+      'Client': inv.client_name,
+      'Date': inv.invoice_date,
+      'Due Date': inv.due_date,
+      'Amount': inv.total_amount,
+      'Status': inv.status,
+    }));
+    exportToExcel(data, 'Invoices', 'Invoices');
+  };
+
+  const exportOutstanding = () => {
+    const data = outstandingData.map((item, i) => ({
+      'S.No': i + 1,
+      'Expected Date': item.expected_date,
+      'Project Name': item.project_name,
+      'Project Type': item.project_type,
+      'Amount': item.amount,
+      'Revenue Type': item.revenue_type,
+      'Received': item.received_amount || 0,
+      'Balance': item.balance || 0,
+      'Status': item.status,
+      'Remarks': item.remarks || '',
+    }));
+    exportToExcel(data, 'Outstanding_Revenue', 'Outstanding');
+  };
+
+  // ============== TAB MANAGEMENT ==============
+  
+  const addCustomTab = () => {
+    if (!newTabName.trim()) return;
+    const newTab = {
+      id: `custom_${Date.now()}`,
+      label: newTabName.trim(),
+      icon: FileSpreadsheet,
+      isCustom: true,
+    };
+    const updatedTabs = [...tabs, newTab];
+    setTabs(updatedTabs);
+    localStorage.setItem('finance_custom_tabs', JSON.stringify(updatedTabs.filter(t => t.isCustom)));
+    setNewTabName('');
+    setShowAddTab(false);
+    setActiveTab(newTab.id);
+    toast.success(`Tab "${newTab.label}" created`);
+  };
+
+  const deleteCustomTab = (tabId) => {
+    const updatedTabs = tabs.filter(t => t.id !== tabId);
+    setTabs(updatedTabs);
+    localStorage.setItem('finance_custom_tabs', JSON.stringify(updatedTabs.filter(t => t.isCustom)));
+    if (activeTab === tabId) setActiveTab('dashboard');
+    toast.success('Tab deleted');
+  };
+
+  // ============== HANDLERS ==============
+  
   const handleAddCredit = async () => {
     try {
       const taxAmount = (parseFloat(creditForm.amount) * creditForm.tax_percent / 100) || 0;
@@ -341,7 +509,6 @@ const ExpenseTab = () => {
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
       toast.success('Income recorded');
       setShowAddCredit(false);
       setCreditForm({
@@ -364,7 +531,6 @@ const ExpenseTab = () => {
     }
   };
 
-  // Add debit handler
   const handleAddDebit = async () => {
     try {
       let entryId = debitForm.existing_item_id;
@@ -411,12 +577,52 @@ const ExpenseTab = () => {
       loadDashboard();
       loadBudget();
       loadAccounts();
+      loadCategories();
     } catch (error) {
       toast.error('Failed to add expense');
     }
   };
 
-  // Add outstanding handler
+  const handleAddExpenseToCategory = async () => {
+    if (!targetCategory) return;
+    try {
+      await axios.post(`${API}/api/expense/entries`, {
+        category_id: targetCategory.category_id,
+        name: expenseForm.name,
+        description: expenseForm.description,
+        total_amount: parseFloat(expenseForm.total_amount),
+        recurring: expenseForm.recurring,
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Expense item added');
+      setShowAddExpenseToCategory(false);
+      setExpenseForm({ name: '', total_amount: '', description: '', recurring: false });
+      loadCategoryItems(targetCategory.category_id);
+      loadBudget();
+    } catch (error) {
+      toast.error('Failed to add expense item');
+    }
+  };
+
+  const handleAddCategory = async () => {
+    try {
+      await axios.post(`${API}/api/expense/categories`, {
+        name: categoryForm.name,
+        category_type: 'expense',
+        department: categoryForm.department,
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Category added');
+      setShowAddCategory(false);
+      setCategoryForm({ name: '', department: '' });
+      loadCategories();
+    } catch (error) {
+      toast.error('Failed to add category');
+    }
+  };
+
   const handleAddOutstanding = async () => {
     try {
       await axios.post(`${API}/api/expense/outstanding`, outstandingForm, {
@@ -440,7 +646,6 @@ const ExpenseTab = () => {
     }
   };
 
-  // Record payment for outstanding
   const handleRecordPayment = async () => {
     if (!selectedOutstanding) return;
     try {
@@ -472,15 +677,21 @@ const ExpenseTab = () => {
     }
   };
 
+  const toggleCategory = async (categoryId) => {
+    if (!expandedCategories[categoryId]) {
+      await loadCategoryItems(categoryId);
+    }
+    setExpandedCategories(prev => ({ ...prev, [categoryId]: !prev[categoryId] }));
+  };
+
   // ============ RENDER DASHBOARD ============
   const renderDashboard = () => (
     <div className="space-y-6">
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Total Revenue */}
         <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
           <div className="flex items-center justify-between mb-3">
-            <div className={`p-2.5 rounded-lg bg-[#22c55e]/20`}>
+            <div className="p-2.5 rounded-lg bg-[#22c55e]/20">
               <TrendingUp className="h-5 w-5 text-[#22c55e]" />
             </div>
           </div>
@@ -488,10 +699,9 @@ const ExpenseTab = () => {
           <p className="text-2xl font-bold text-[#22c55e]">{formatCurrency(dashboardData?.total_revenue)}</p>
         </div>
 
-        {/* Payment Due */}
         <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
           <div className="flex items-center justify-between mb-3">
-            <div className={`p-2.5 rounded-lg bg-[#f59e0b]/20`}>
+            <div className="p-2.5 rounded-lg bg-[#f59e0b]/20">
               <Clock className="h-5 w-5 text-[#f59e0b]" />
             </div>
           </div>
@@ -499,10 +709,9 @@ const ExpenseTab = () => {
           <p className="text-2xl font-bold text-[#f59e0b]">{formatCurrency(dashboardData?.payment_due)}</p>
         </div>
 
-        {/* Outstanding */}
         <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
           <div className="flex items-center justify-between mb-3">
-            <div className={`p-2.5 rounded-lg bg-[#6366f1]/20`}>
+            <div className="p-2.5 rounded-lg bg-[#6366f1]/20">
               <Target className="h-5 w-5 text-[#6366f1]" />
             </div>
           </div>
@@ -510,10 +719,9 @@ const ExpenseTab = () => {
           <p className="text-2xl font-bold text-[#6366f1]">{formatCurrency(dashboardData?.outstanding_amount)}</p>
         </div>
 
-        {/* Total Expense */}
         <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
           <div className="flex items-center justify-between mb-3">
-            <div className={`p-2.5 rounded-lg bg-[#ef4444]/20`}>
+            <div className="p-2.5 rounded-lg bg-[#ef4444]/20">
               <TrendingDown className="h-5 w-5 text-[#ef4444]" />
             </div>
           </div>
@@ -521,7 +729,6 @@ const ExpenseTab = () => {
           <p className="text-2xl font-bold text-[#ef4444]">{formatCurrency(dashboardData?.total_expense)}</p>
         </div>
 
-        {/* Profit */}
         <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
           <div className="flex items-center justify-between mb-3">
             <div className={`p-2.5 rounded-lg ${(dashboardData?.profit || 0) >= 0 ? 'bg-[#22c55e]/20' : 'bg-[#ef4444]/20'}`}>
@@ -540,10 +747,7 @@ const ExpenseTab = () => {
         <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>Bank Accounts</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {accounts.map(acc => (
-            <div
-              key={acc.account_id}
-              className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}
-            >
+            <div key={acc.account_id} className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
               <div className="flex items-center gap-2 mb-2">
                 <CreditCard className="h-4 w-4 text-[#6366f1]" />
                 <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{acc.name}</span>
@@ -583,6 +787,13 @@ const ExpenseTab = () => {
           </div>
         </Button>
       </div>
+
+      {/* Export Button */}
+      <div className="flex justify-end">
+        <Button onClick={exportDashboard} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+          <Download className="h-4 w-4 mr-2" /> Export Dashboard
+        </Button>
+      </div>
     </div>
   );
 
@@ -594,7 +805,6 @@ const ExpenseTab = () => {
 
     return (
       <div className="space-y-4">
-        {/* Header */}
         <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-6">
@@ -645,7 +855,6 @@ const ExpenseTab = () => {
           </div>
         </div>
 
-        {/* Split View */}
         <div className="grid grid-cols-2 gap-4">
           {/* Cash In */}
           <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
@@ -744,14 +953,144 @@ const ExpenseTab = () => {
             </div>
           </div>
         </div>
+
+        {/* Export Button */}
+        <div className="flex justify-end">
+          <Button onClick={exportCashbook} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+            <Download className="h-4 w-4 mr-2" /> Export Cashbook
+          </Button>
+        </div>
       </div>
     );
   };
 
-  // ============ RENDER EXPENSE BUDGET ============
+  // ============ RENDER EXPENSE (Category-based with accordion) ============
+  const renderExpense = () => (
+    <div className="space-y-4">
+      <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense Categories</h3>
+            <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Click on a category to view and add expenses</p>
+          </div>
+          <Button onClick={() => setShowAddCategory(true)} className="bg-[#6366f1] hover:bg-[#5855eb]">
+            <Plus className="h-4 w-4 mr-2" /> Add Category
+          </Button>
+        </div>
+      </div>
+
+      {/* Categories Accordion */}
+      <div className="space-y-2">
+        {categories.map(cat => {
+          const color = getCatColor(cat.name);
+          const isExpanded = expandedCategories[cat.category_id];
+          const items = categoryItems[cat.category_id] || [];
+          const totalAmount = items.reduce((sum, i) => sum + (i.total_amount || 0), 0);
+          const totalPaid = items.reduce((sum, i) => sum + (i.total_paid || 0), 0);
+          
+          return (
+            <div key={cat.category_id} className={`rounded-xl border overflow-hidden ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+              {/* Category Header */}
+              <div
+                onClick={() => toggleCategory(cat.category_id)}
+                className={`p-4 cursor-pointer flex items-center justify-between transition-all ${
+                  isDark ? 'bg-[#18181b] hover:bg-[#1f1f23]' : 'bg-white hover:bg-gray-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <ChevronDown className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''} ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`} />
+                  <Badge style={{ backgroundColor: color.bg, color: color.text }}>{cat.name}</Badge>
+                  <span className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                    {items.length} items
+                  </span>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <p className={`text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total</p>
+                    <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(totalAmount)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
+                    <p className="font-semibold text-[#22c55e]">{formatCurrency(totalPaid)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
+                    <p className="font-semibold text-[#ef4444]">{formatCurrency(totalAmount - totalPaid)}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTargetCategory(cat);
+                      setShowAddExpenseToCategory(true);
+                    }}
+                    className={isDark ? 'hover:bg-[#27272a]' : ''}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Expanded Items */}
+              {isExpanded && (
+                <div className={`border-t ${isDark ? 'border-[#27272a] bg-[#0f0f11]' : 'border-gray-100 bg-gray-50'}`}>
+                  {items.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className={isDark ? 'text-[#71717a]' : 'text-gray-500'}>
+                          <th className="p-3 text-left font-medium">Name</th>
+                          <th className="p-3 text-right font-medium">Total</th>
+                          <th className="p-3 text-right font-medium">Paid</th>
+                          <th className="p-3 text-right font-medium">Balance</th>
+                          <th className="p-3 text-left font-medium">Description</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${isDark ? 'divide-[#1f1f23]' : 'divide-gray-100'}`}>
+                        {items.map(item => (
+                          <tr key={item.entry_id} className={isDark ? 'hover:bg-[#18181b]' : 'hover:bg-white'}>
+                            <td className={`p-3 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.name}</td>
+                            <td className="p-3 text-right">{formatCurrency(item.total_amount)}</td>
+                            <td className="p-3 text-right text-[#22c55e]">{formatCurrency(item.total_paid || 0)}</td>
+                            <td className="p-3 text-right text-[#ef4444]">{formatCurrency(item.balance || (item.total_amount - (item.total_paid || 0)))}</td>
+                            <td className={`p-3 text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>{item.description}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>
+                      No items in this category.
+                      <button
+                        onClick={() => {
+                          setTargetCategory(cat);
+                          setShowAddExpenseToCategory(true);
+                        }}
+                        className="text-[#6366f1] ml-1 hover:underline"
+                      >
+                        Add one
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Export Button */}
+      <div className="flex justify-end">
+        <Button onClick={exportExpense} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+          <Download className="h-4 w-4 mr-2" /> Export Expenses
+        </Button>
+      </div>
+    </div>
+  );
+
+  // ============ RENDER BUDGET ============
   const renderBudget = () => {
     if (selectedCategory) {
-      // Category detail view
       return (
         <div className="space-y-4">
           <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
@@ -767,7 +1106,6 @@ const ExpenseTab = () => {
                   </p>
                 </div>
               </div>
-              {/* Summary */}
               <div className="flex gap-6 text-sm">
                 <div className="text-center">
                   <p className={isDark ? 'text-[#71717a]' : 'text-gray-500'}>Total</p>
@@ -785,7 +1123,6 @@ const ExpenseTab = () => {
             </div>
           </div>
 
-          {/* Items Table */}
           <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
             <table className="w-full text-sm">
               <thead className={isDark ? 'bg-[#27272a]' : 'bg-gray-100'}>
@@ -796,7 +1133,6 @@ const ExpenseTab = () => {
                   <th className="p-3 text-right">Balance</th>
                   <th className="p-3 text-center">Status</th>
                   <th className="p-3 text-left">Remarks</th>
-                  <th className="p-3 text-left">Transaction ID</th>
                 </tr>
               </thead>
               <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
@@ -816,13 +1152,10 @@ const ExpenseTab = () => {
                       </Badge>
                     </td>
                     <td className={`p-3 text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>{item.remarks}</td>
-                    <td className={`p-3 text-xs font-mono ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
-                      {item.transaction_ids?.join(', ') || '-'}
-                    </td>
                   </tr>
                 ))}
                 {(!budgetData?.entries?.length) && (
-                  <tr><td colSpan={7} className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No items in this category</td></tr>
+                  <tr><td colSpan={6} className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No items</td></tr>
                 )}
               </tbody>
             </table>
@@ -831,7 +1164,6 @@ const ExpenseTab = () => {
       );
     }
 
-    // Category list view
     return (
       <div className="space-y-4">
         <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
@@ -843,7 +1175,6 @@ const ExpenseTab = () => {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              {/* Month Tabs */}
               <div className="flex gap-1">
                 {months.slice(0, 6).map(m => (
                   <button
@@ -873,7 +1204,6 @@ const ExpenseTab = () => {
           </div>
         </div>
 
-        {/* Summary */}
         <div className="grid grid-cols-3 gap-4">
           <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
             <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total Budget</p>
@@ -889,7 +1219,6 @@ const ExpenseTab = () => {
           </div>
         </div>
 
-        {/* Categories */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           {(budgetData?.categories || categories).map(cat => {
             const color = getCatColor(cat.name);
@@ -923,11 +1252,104 @@ const ExpenseTab = () => {
             );
           })}
         </div>
+
+        {/* Export Button */}
+        <div className="flex justify-end">
+          <Button onClick={exportBudget} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+            <Download className="h-4 w-4 mr-2" /> Export Budget
+          </Button>
+        </div>
       </div>
     );
   };
 
-  // ============ RENDER OUTSTANDING REVENUE ============
+  // ============ RENDER INVOICE ============
+  const renderInvoice = () => (
+    <div className="space-y-4">
+      <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Invoices</h3>
+            <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Manage all invoices</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={exportInvoices} className={isDark ? 'border-[#3f3f46]' : ''}>
+              <Download className="h-4 w-4 mr-2" /> Export
+            </Button>
+            <Button className="bg-[#6366f1] hover:bg-[#5855eb]">
+              <Plus className="h-4 w-4 mr-2" /> Create Invoice
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-4 gap-4">
+        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total Invoices</p>
+          <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{invoices.length}</p>
+        </div>
+        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
+          <p className="text-2xl font-bold text-[#22c55e]">{invoices.filter(i => i.status === 'paid').length}</p>
+        </div>
+        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Pending</p>
+          <p className="text-2xl font-bold text-[#f59e0b]">{invoices.filter(i => i.status === 'pending').length}</p>
+        </div>
+        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Overdue</p>
+          <p className="text-2xl font-bold text-[#ef4444]">{invoices.filter(i => i.status === 'overdue').length}</p>
+        </div>
+      </div>
+
+      <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+        <table className="w-full text-sm">
+          <thead className={isDark ? 'bg-[#27272a]' : 'bg-gray-100'}>
+            <tr>
+              <th className="p-3 text-left">Invoice #</th>
+              <th className="p-3 text-left">Client</th>
+              <th className="p-3 text-left">Date</th>
+              <th className="p-3 text-left">Due Date</th>
+              <th className="p-3 text-right">Amount</th>
+              <th className="p-3 text-center">Status</th>
+              <th className="p-3 text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+            {invoices.map(inv => (
+              <tr key={inv.invoice_id} className={isDark ? 'hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
+                <td className={`p-3 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{inv.invoice_number}</td>
+                <td className="p-3">{inv.client_name}</td>
+                <td className="p-3">{inv.invoice_date}</td>
+                <td className="p-3">{inv.due_date}</td>
+                <td className="p-3 text-right font-medium">{formatCurrency(inv.total_amount)}</td>
+                <td className="p-3 text-center">
+                  <Badge className={`text-xs ${
+                    inv.status === 'paid' ? 'bg-green-100 text-green-700' :
+                    inv.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-700'
+                  }`}>
+                    {inv.status}
+                  </Badge>
+                </td>
+                <td className="p-3 text-center">
+                  <div className="flex justify-center gap-1">
+                    <Button size="sm" variant="ghost"><FileText className="h-4 w-4" /></Button>
+                    <Button size="sm" variant="ghost"><Download className="h-4 w-4" /></Button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {invoices.length === 0 && (
+              <tr><td colSpan={7} className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No invoices</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // ============ RENDER OUTSTANDING ============
   const renderOutstanding = () => (
     <div className="space-y-4">
       <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
@@ -942,7 +1364,6 @@ const ExpenseTab = () => {
         </div>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
           <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total Expected</p>
@@ -964,7 +1385,6 @@ const ExpenseTab = () => {
         </div>
       </div>
 
-      {/* Table */}
       <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
         <table className="w-full text-sm">
           <thead className={`${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
@@ -1035,34 +1455,95 @@ const ExpenseTab = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Export Button */}
+      <div className="flex justify-end">
+        <Button onClick={exportOutstanding} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+          <Download className="h-4 w-4 mr-2" /> Export Outstanding
+        </Button>
+      </div>
     </div>
   );
+
+  // ============ RENDER CUSTOM TAB ============
+  const renderCustomTab = (tab) => {
+    const data = customTabData[tab.id] || [];
+    
+    return (
+      <div className="space-y-4">
+        <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{tab.label}</h3>
+              <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Custom tab - add your data</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+                <Plus className="h-4 w-4 mr-2" /> Add Row
+              </Button>
+              <Button variant="outline" onClick={() => deleteCustomTab(tab.id)} className="text-red-500 hover:text-red-600">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className={`p-8 rounded-xl border-2 border-dashed text-center ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+          <FileSpreadsheet className={`h-12 w-12 mx-auto mb-4 ${isDark ? 'text-[#3f3f46]' : 'text-gray-300'}`} />
+          <p className={`text-lg font-medium ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Custom Tab: {tab.label}</p>
+          <p className={`text-sm ${isDark ? 'text-[#52525b]' : 'text-gray-400'}`}>This is a customizable tab. Add your data here.</p>
+          <Button className="mt-4 bg-[#6366f1] hover:bg-[#5855eb]">
+            <Plus className="h-4 w-4 mr-2" /> Add Data
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   // ============ MAIN RENDER ============
   return (
     <div className="space-y-6" data-testid="expense-tab">
       {/* Tab Navigation */}
       <div className="flex items-center justify-between">
-        <div className={`flex p-1 rounded-lg ${isDark ? 'bg-[#18181b]' : 'bg-gray-100'}`}>
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
-            { id: 'cashbook', label: 'CashBook', icon: Wallet },
-            { id: 'budget', label: 'Expense Budget', icon: Receipt },
-            { id: 'outstanding', label: 'Outstanding', icon: Target },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-all ${
-                activeTab === tab.id
-                  ? 'bg-[#6366f1] text-white'
-                  : isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          ))}
+        <div className={`flex p-1 rounded-lg overflow-x-auto ${isDark ? 'bg-[#18181b]' : 'bg-gray-100'}`}>
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                data-testid={`tab-${tab.id}`}
+                className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-all whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-[#6366f1] text-white'
+                    : isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+                {tab.isCustom && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteCustomTab(tab.id);
+                    }}
+                    className="ml-1 p-0.5 rounded hover:bg-white/20"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </button>
+            );
+          })}
+          {/* Add Custom Tab Button */}
+          <button
+            onClick={() => setShowAddTab(true)}
+            className={`px-3 py-2 text-sm font-medium rounded-md flex items-center gap-1 transition-all ${
+              isDark ? 'text-[#71717a] hover:text-[#a1a1aa]' : 'text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
         
         <div className="flex items-center gap-2">
@@ -1084,10 +1565,36 @@ const ExpenseTab = () => {
         <>
           {activeTab === 'dashboard' && renderDashboard()}
           {activeTab === 'cashbook' && renderCashbook()}
+          {activeTab === 'expense' && renderExpense()}
           {activeTab === 'budget' && renderBudget()}
+          {activeTab === 'invoice' && renderInvoice()}
           {activeTab === 'outstanding' && renderOutstanding()}
+          {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}
+
+      {/* Add Custom Tab Modal */}
+      <Dialog open={showAddTab} onOpenChange={setShowAddTab}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+          <DialogHeader>
+            <DialogTitle className={isDark ? 'text-white' : ''}>Add Custom Tab</DialogTitle>
+            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Create a new tab for custom data</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Tab Name</label>
+            <Input
+              placeholder="e.g., Q1 Budget, Project Expenses"
+              value={newTabName}
+              onChange={e => setNewTabName(e.target.value)}
+              className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddTab(false)}>Cancel</Button>
+            <Button onClick={addCustomTab} className="bg-[#6366f1] hover:bg-[#5855eb]">Create Tab</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Credit Modal */}
       <Dialog open={showAddCredit} onOpenChange={setShowAddCredit}>
@@ -1189,14 +1696,15 @@ const ExpenseTab = () => {
                 <Select value={debitForm.existing_item_id || 'new'} onValueChange={v => {
                   if (v === 'new') setDebitForm({...debitForm, existing_item_id: '', is_new_item: true});
                   else {
-                    const item = categoryItems.find(i => i.entry_id === v);
+                    const items = categoryItems[debitForm.category_id] || [];
+                    const item = items.find(i => i.entry_id === v);
                     setDebitForm({...debitForm, existing_item_id: v, expense_to: item?.name || '', is_new_item: false});
                   }
                 }}>
                   <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select or add new" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="new"><Plus className="h-3 w-3 inline mr-1" />Add New</SelectItem>
-                    {categoryItems.map(item => <SelectItem key={item.entry_id} value={item.entry_id}>{item.name}</SelectItem>)}
+                    {(categoryItems[debitForm.category_id] || []).map(item => <SelectItem key={item.entry_id} value={item.entry_id}>{item.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -1226,6 +1734,67 @@ const ExpenseTab = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowAddDebit(false)}>Cancel</Button>
             <Button onClick={handleAddDebit} className="bg-[#ef4444] hover:bg-[#dc2626]">Add Expense</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Expense to Category Modal */}
+      <Dialog open={showAddExpenseToCategory} onOpenChange={setShowAddExpenseToCategory}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+          <DialogHeader>
+            <DialogTitle className={isDark ? 'text-white' : ''}>Add Expense to {targetCategory?.name}</DialogTitle>
+            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Add a new expense item</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Name</label>
+              <Input placeholder="e.g., Office Rent, Employee Name" value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+            </div>
+            <div>
+              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Total Amount</label>
+              <Input type="number" placeholder="0.00" value={expenseForm.total_amount} onChange={e => setExpenseForm({...expenseForm, total_amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+            </div>
+            <div>
+              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Description</label>
+              <Input placeholder="Optional description" value={expenseForm.description} onChange={e => setExpenseForm({...expenseForm, description: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddExpenseToCategory(false)}>Cancel</Button>
+            <Button onClick={handleAddExpenseToCategory} className="bg-[#6366f1] hover:bg-[#5855eb]">Add Expense</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Category Modal */}
+      <Dialog open={showAddCategory} onOpenChange={setShowAddCategory}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+          <DialogHeader>
+            <DialogTitle className={isDark ? 'text-white' : ''}>Add Category</DialogTitle>
+            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Create a new expense category</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Category Name</label>
+              <Input placeholder="e.g., Travel, Utilities" value={categoryForm.name} onChange={e => setCategoryForm({...categoryForm, name: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+            </div>
+            <div>
+              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Department</label>
+              <Select value={categoryForm.department} onValueChange={v => setCategoryForm({...categoryForm, department: v})}>
+                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select department" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="HR">HR</SelectItem>
+                  <SelectItem value="Operations">Operations</SelectItem>
+                  <SelectItem value="Finance">Finance</SelectItem>
+                  <SelectItem value="Marketing">Marketing</SelectItem>
+                  <SelectItem value="Executive">Executive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddCategory(false)}>Cancel</Button>
+            <Button onClick={handleAddCategory} className="bg-[#6366f1] hover:bg-[#5855eb]">Add Category</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
