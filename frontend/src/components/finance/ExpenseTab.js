@@ -378,6 +378,12 @@ const ExpenseTab = () => {
     if (debitForm.category_id) loadCategoryItems(debitForm.category_id);
   }, [debitForm.category_id, loadCategoryItems]);
 
+  // Reload expanded category items when month/year filter changes
+  useEffect(() => {
+    const expandedIds = Object.keys(expandedCategories).filter(id => expandedCategories[id]);
+    expandedIds.forEach(categoryId => loadCategoryItems(categoryId));
+  }, [selectedMonth, selectedYear]);
+
   // ============== UTILITIES ==============
   
   const formatCurrency = (amount) => {
