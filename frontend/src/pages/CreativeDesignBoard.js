@@ -188,20 +188,20 @@ const CreativeDesignBoard = () => {
     } catch (error) { toast.error('Failed'); }
   };
 
-  const handleAddDesignType = () => {
+  const handleAddDesignType = async () => {
     if (!newDesignType.name) return;
-    const newType = {
-      id: newDesignType.name.toLowerCase().replace(/\s+/g, '_'),
-      name: newDesignType.name,
-      sizes: newDesignType.sizes.split(',').map(s => s.trim()).filter(Boolean),
-    };
-    const customTypes = JSON.parse(localStorage.getItem('custom_design_types') || '[]');
-    customTypes.push(newType);
-    localStorage.setItem('custom_design_types', JSON.stringify(customTypes));
-    setDesignTypes([...designTypes, newType]);
-    setNewDesignType({ name: '', sizes: '' });
-    setShowAddDesignType(false);
-    toast.success('Design type added');
+    try {
+      const newType = {
+        id: newDesignType.name.toLowerCase().replace(/\s+/g, '_'),
+        name: newDesignType.name,
+        sizes: newDesignType.sizes.split(',').map(s => s.trim()).filter(Boolean),
+      };
+      await axios.post(`${API}/api/creative/design-types`, newType, { headers });
+      setNewDesignType({ name: '', sizes: '' });
+      setShowAddDesignType(false);
+      toast.success('Design type added');
+      loadData();
+    } catch (error) { toast.error('Failed to add design type'); }
   };
 
   // Filter tasks
