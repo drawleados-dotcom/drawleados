@@ -944,7 +944,7 @@ const ExpenseTab = () => {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Button onClick={() => setShowAddCredit(true)} className="bg-[#22c55e] hover:bg-[#16a34a] h-auto py-4">
+        <Button onClick={openAddCreditModal} className="bg-[#22c55e] hover:bg-[#16a34a] h-auto py-4">
           <div className="flex flex-col items-center">
             <ArrowDownCircle className="h-6 w-6 mb-2" />
             <span>Add Cash In</span>
