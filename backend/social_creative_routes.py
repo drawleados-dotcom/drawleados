@@ -116,15 +116,21 @@ class CreativeProject(BaseModel):
     assigned_to: str = ""
     tag: str = "created"  # created, assigned
 
+class StageDetail(BaseModel):
+    due_date: str = ""
+    assignee: str = ""
+    link: str = ""
+    status: str = "To-Do"
+
 class CreativeTask(BaseModel):
     title: str
     description: str = ""
     project_id: str = ""
-    stage: str = "research"  # research, wireframe, design, design_file
-    assigned_to: str = ""
-    due_date: str = ""
-    status: str = "To-Do"  # To-Do, In Progress, Review, Completed, On Hold
-    link: str = ""
+    design_type: str = "poster"  # poster, story, brochure, social_post, banner, logo, etc.
+    design_size: str = ""
+    # Stage details for tracking progress
+    stages: dict = {}  # {design_content: {...}, design_file: {...}, review: {...}, final: {...}}
+    overall_status: str = "To-Do"  # To-Do, In Progress, Review, Completed, On Hold
     tag: str = "created"  # created, assigned
 
 # ============== CREATIVE DESIGN ROUTES ==============
