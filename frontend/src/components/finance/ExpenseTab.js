@@ -133,8 +133,11 @@ const ExpenseTab = () => {
   const [showRecordPayment, setShowRecordPayment] = useState(false);
   const [showAddExpenseToCategory, setShowAddExpenseToCategory] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showCreateInvoice, setShowCreateInvoice] = useState(false);
   const [selectedOutstanding, setSelectedOutstanding] = useState(null);
   const [targetCategory, setTargetCategory] = useState(null);
+  const [unpaidInvoices, setUnpaidInvoices] = useState([]);
+  const [creditStep, setCreditStep] = useState(1); // Step 1: Select type, Step 2: Select/Create invoice, Step 3: Enter amount
   
   // Form states
   const [creditForm, setCreditForm] = useState({
@@ -142,12 +145,24 @@ const ExpenseTab = () => {
     income_from: '',
     invoice_type: 'GST',
     invoice_id: '',
-    create_invoice: false,
+    selected_invoice: null,
+    create_new_invoice: false,
     payment_type: 'Full',
     payment_cycle: 'One-Time',
     amount: '',
     tax_percent: 18,
     bank_account_id: '',
+  });
+  
+  // Create Invoice Form
+  const [invoiceForm, setInvoiceForm] = useState({
+    client_name: '',
+    client_email: '',
+    client_address: '',
+    invoice_type: 'GST',
+    items: [{ description: '', quantity: 1, rate: 0 }],
+    tax_percent: 18,
+    due_date: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
   });
   
   const [debitForm, setDebitForm] = useState({
