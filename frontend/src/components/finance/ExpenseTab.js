@@ -289,6 +289,23 @@ const ExpenseTab = () => {
     }
   }, [token]);
 
+  const loadUnpaidInvoices = useCallback(async (invoiceType) => {
+    try {
+      const res = await axios.get(`${API}/api/finance/invoices`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { status: 'unpaid', invoice_type: invoiceType }
+      });
+      // Filter unpaid invoices (pending, draft, partial)
+      const unpaid = (res.data || []).filter(inv => 
+        ['pending', 'draft', 'partial', 'sent'].includes(inv.status?.toLowerCase())
+      );
+      setUnpaidInvoices(unpaid);
+    } catch (error) {
+      console.error('Error loading unpaid invoices:', error);
+      setUnpaidInvoices([]);
+    }
+  }, [token]);
+
   const loadInvoices = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/finance/invoices`, {
