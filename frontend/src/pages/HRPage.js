@@ -374,13 +374,62 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
 
           {isClockedIn && (
             <Button
-              onClick={onClockOut}
+              onClick={handleOpenLogoutModal}
               data-testid="clock-out"
               className="w-full bg-[#ef4444] hover:bg-[#dc2626] text-white py-6"
             >
               <Square className="mr-2 h-5 w-5" />
               Clock Out
             </Button>
+          )}
+
+          {/* Manual Logout Time Modal */}
+          {showLogoutModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="logout-modal">
+              <Card className="w-full max-w-md bg-[#18181b] border-[#27272a]">
+                <CardHeader>
+                  <CardTitle className="text-[#fafafa] flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-[#ef4444]" />
+                    Clock Out
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-sm text-[#a1a1aa] mb-2">Clock In Time</p>
+                    <p className="text-lg font-semibold text-[#10b981]">
+                      {formatTime(todayAttendance?.clock_in)}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-[#a1a1aa]">Logout Time</Label>
+                    <Input
+                      type="time"
+                      value={logoutTime}
+                      onChange={(e) => setLogoutTime(e.target.value)}
+                      className="bg-[#27272a] border-[#3f3f46] text-[#fafafa] mt-1"
+                      data-testid="logout-time-input"
+                    />
+                    <p className="text-xs text-[#a1a1aa] mt-1">Enter your actual logout time</p>
+                  </div>
+                  <div className="flex gap-3 pt-4">
+                    <Button
+                      onClick={() => setShowLogoutModal(false)}
+                      variant="outline"
+                      className="flex-1 border-[#3f3f46] text-[#a1a1aa]"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleConfirmLogout}
+                      className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                      data-testid="confirm-logout"
+                    >
+                      Confirm Logout
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {isClockedOut && (
