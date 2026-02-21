@@ -196,9 +196,18 @@ async def get_creative_tasks(project_id: str = None, stage: str = None):
 async def create_creative_task(task: CreativeTask):
     """Create a creative task"""
     try:
+        task_data = task.dict()
+        # Ensure stages is properly formatted
+        if not task_data.get("stages"):
+            task_data["stages"] = {
+                "design_content": {"due_date": "", "assignee": "", "link": "", "status": "To-Do"},
+                "design_file": {"due_date": "", "assignee": "", "link": "", "status": "To-Do"},
+                "review": {"due_date": "", "assignee": "", "link": "", "status": "To-Do"},
+                "final": {"due_date": "", "assignee": "", "link": "", "status": "To-Do"},
+            }
         task_doc = {
             "task_id": f"ctask_{uuid.uuid4().hex[:12]}",
-            **task.dict(),
+            **task_data,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.creative_tasks.insert_one(task_doc)
