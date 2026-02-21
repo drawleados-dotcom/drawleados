@@ -321,13 +321,17 @@ const ExpenseTab = () => {
     try {
       const res = await axios.get(`${API}/api/expense/entries`, {
         headers: { Authorization: `Bearer ${token}` },
-        params: { category_id: categoryId }
+        params: { 
+          category_id: categoryId,
+          month: selectedMonth,
+          year: selectedYear
+        }
       });
       setCategoryItems(prev => ({ ...prev, [categoryId]: res.data || [] }));
     } catch (error) {
       console.error('Error loading category items:', error);
     }
-  }, [token]);
+  }, [token, selectedMonth, selectedYear]);
 
   const initializeData = async () => {
     try {
