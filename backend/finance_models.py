@@ -93,16 +93,43 @@ class InvoiceCreate(BaseModel):
     invoice_date: datetime
     due_date: datetime
     lead_id: Optional[str] = None
+    project_id: Optional[str] = None
+    # Client Info
     client_name: str
+    client_company: Optional[str] = None
     client_address: Optional[str] = None
+    client_city: Optional[str] = None
+    client_state: Optional[str] = None
+    client_pincode: Optional[str] = None
+    client_country: str = "India"
     client_gst_number: Optional[str] = None
+    client_pan: Optional[str] = None
     client_email: Optional[str] = None
     client_phone: Optional[str] = None
-    gst_type: str
+    # Billing
+    billing_address: Optional[str] = None
+    shipping_address: Optional[str] = None
+    po_number: Optional[str] = None
+    reference_number: Optional[str] = None
+    # Type
+    invoice_type: str = "GST"
+    gst_type: str = "gst"
     gst_rate: float = 0.0
+    discount_type: str = "percentage"
+    total_discount: float = 0.0
+    tds_rate: float = 0.0
+    # Payment
     payment_terms: Optional[str] = None
+    payment_method: Optional[str] = None
+    bank_details: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
     notes: Optional[str] = None
+    internal_notes: Optional[str] = None
     template_type: str = "minimal"
+    # Recurring
+    is_recurring: bool = False
+    recurring_frequency: Optional[str] = None
+    # Items
     items: List[Dict[str, Any]]
 
 class InvoiceUpdate(BaseModel):
