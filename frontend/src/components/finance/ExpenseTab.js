@@ -524,6 +524,139 @@ const ExpenseTab = () => {
 
   // ============== HANDLERS ==============
   
+  // Open Add Credit Modal and reset
+  const openAddCreditModal = () => {
+    setCreditStep(1);
+    setCreditForm({
+      date: new Date().toISOString().split('T')[0],
+      income_from: '',
+      invoice_type: 'GST',
+      invoice_id: '',
+      selected_invoice: null,
+      create_new_invoice: false,
+      payment_type: 'Full',
+      payment_cycle: 'One-Time',
+      amount: '',
+      tax_percent: 18,
+      bank_account_id: '',
+    });
+    setUnpaidInvoices([]);
+    setShowAddCredit(true);
+  };
+
+  // Handle invoice type selection - load unpaid invoices
+  const handleInvoiceTypeSelect = async (type) => {
+    setCreditForm({ ...creditForm, invoice_type: type });
+    await loadUnpaidInvoices(type);
+    setCreditStep(2);
+  };
+
+  // Handle invoice selection
+  const handleInvoiceSelect = (invoice) => {
+    setCreditForm({
+      ...creditForm,
+      selected_invoice: invoice,
+      invoice_id: invoice.invoice_id,
+      income_from: invoice.client_name,
+      amount: (invoice.total_amount - (invoice.paid_amount || 0)).toString(),
+      tax_percent: invoice.tax_percent || 18,
+    });
+    setCreditStep(3);
+  };
+
+  // Open Create Invoice modal
+  const openCreateInvoiceModal = () => {
+    setInvoiceForm({
+      client_name: '',
+      client_email: '',
+      client_address: '',
+      invoice_type: creditForm.invoice_type,
+      items: [{ description: '', quantity: 1, rate: 0 }],
+      tax_percent: creditForm.invoice_type === 'GST' ? 18 : 0,
+      due_date: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0],
+    });
+    setShowCreateInvoice(true);
+  };
+
+  // Add item to invoice
+  const addInvoiceItem = () => {
+    setInvoiceForm({
+      ...invoiceForm,
+      items: [...invoiceForm.items, { description: '', quantity: 1, rate: 0 }]
+    });
+  };
+
+  // Remove item from invoice
+  const removeInvoiceItem = (index) => {
+    if (invoiceForm.items.length > 1) {
+      setInvoiceForm({
+        ...invoiceForm,
+        items: invoiceForm.items.filter((_, i) => i !== index)
+      });
+    }
+  };
+
+  // Update invoice item
+  const updateInvoiceItem = (index, field, value) => {
+    const newItems = [...invoiceForm.items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    setInvoiceForm({ ...invoiceForm, items: newItems });
+  };
+
+  // Calculate invoice totals
+  const calculateInvoiceTotal = () => {
+    const subtotal = invoiceForm.items.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
+    const taxAmount = (subtotal * invoiceForm.tax_percent) / 100;
+    return { subtotal, taxAmount, total: subtotal + taxAmount };
+  };
+
+  // Create new invoice
+  const handleCreateInvoice = async () => {
+    try {
+      const { subtotal, taxAmount, total } = calculateInvoiceTotal();
+      const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+      
+      const res = await axios.post(`${API}/api/finance/invoices`, {
+        invoice_number: invoiceNumber,
+        client_name: invoiceForm.client_name,
+        client_email: invoiceForm.client_email,
+        client_address: invoiceForm.client_address,
+        invoice_type: invoiceForm.invoice_type,
+        invoice_date: new Date().toISOString().split('T')[0],
+        due_date: invoiceForm.due_date,
+        items: invoiceForm.items,
+        subtotal: subtotal,
+        tax_percent: invoiceForm.tax_percent,
+        tax_amount: taxAmount,
+        total_amount: total,
+        status: 'pending',
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      toast.success('Invoice created');
+      setShowCreateInvoice(false);
+      
+      // Auto-select the new invoice
+      const newInvoice = res.data;
+      setCreditForm({
+        ...creditForm,
+        selected_invoice: newInvoice,
+        invoice_id: newInvoice.invoice_id,
+        income_from: newInvoice.client_name,
+        amount: total.toString(),
+        tax_percent: invoiceForm.tax_percent,
+      });
+      setCreditStep(3);
+      
+      // Refresh invoices list
+      loadInvoices();
+    } catch (error) {
+      toast.error('Failed to create invoice');
+    }
+  };
+
+  // Final submit - Add Income
   const handleAddCredit = async () => {
     try {
       const taxAmount = (parseFloat(creditForm.amount) * creditForm.tax_percent / 100) || 0;
@@ -531,7 +664,8 @@ const ExpenseTab = () => {
         source: creditForm.income_from,
         description: `${creditForm.payment_type} - ${creditForm.invoice_type}`,
         amount: parseFloat(creditForm.amount),
-        invoice_number: creditForm.invoice_id,
+        invoice_number: creditForm.invoice_id || creditForm.selected_invoice?.invoice_number,
+        invoice_id: creditForm.selected_invoice?.invoice_id,
         payment_type: creditForm.payment_type,
         payment_cycle: creditForm.payment_cycle,
         date: creditForm.date,
@@ -541,14 +675,29 @@ const ExpenseTab = () => {
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      // Update invoice status if linked
+      if (creditForm.selected_invoice) {
+        const paidAmount = (creditForm.selected_invoice.paid_amount || 0) + parseFloat(creditForm.amount);
+        const newStatus = paidAmount >= creditForm.selected_invoice.total_amount ? 'paid' : 'partial';
+        await axios.put(`${API}/api/finance/invoices/${creditForm.selected_invoice.invoice_id}`, {
+          paid_amount: paidAmount,
+          status: newStatus,
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(() => {}); // Ignore if update fails
+      }
+      
       toast.success('Income recorded');
       setShowAddCredit(false);
+      setCreditStep(1);
       setCreditForm({
         date: new Date().toISOString().split('T')[0],
         income_from: '',
         invoice_type: 'GST',
         invoice_id: '',
-        create_invoice: false,
+        selected_invoice: null,
+        create_new_invoice: false,
         payment_type: 'Full',
         payment_cycle: 'One-Time',
         amount: '',
@@ -558,6 +707,7 @@ const ExpenseTab = () => {
       loadCashbook();
       loadDashboard();
       loadAccounts();
+      loadInvoices();
     } catch (error) {
       toast.error('Failed to add income');
     }
