@@ -1371,7 +1371,7 @@ const ExpenseTab = () => {
     return (
       <div className="space-y-4">
         <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense Budget</h3>
               <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
@@ -1379,12 +1379,13 @@ const ExpenseTab = () => {
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex gap-1">
-                {months.slice(0, 6).map(m => (
+              {/* All 12 Month Tabs */}
+              <div className="flex gap-1 flex-wrap">
+                {months.map(m => (
                   <button
                     key={m.value}
                     onClick={() => setSelectedMonth(m.value)}
-                    className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                    className={`px-2.5 py-1.5 text-xs rounded-md transition-all ${
                       selectedMonth === m.value
                         ? 'bg-[#6366f1] text-white'
                         : isDark ? 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -1417,7 +1418,7 @@ const ExpenseTab = () => {
             <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
             <p className="text-2xl font-bold text-[#22c55e]">{formatCurrency(budgetData?.summary?.paid)}</p>
           </div>
-          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>>
             <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
             <p className="text-2xl font-bold text-[#ef4444]">{formatCurrency(budgetData?.summary?.balance)}</p>
           </div>
