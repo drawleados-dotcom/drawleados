@@ -1153,14 +1153,33 @@ const ExpenseTab = () => {
   const renderExpense = () => (
     <div className="space-y-4">
       <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense Categories</h3>
             <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Click on a category to view and add expenses</p>
           </div>
-          <Button onClick={() => setShowAddCategory(true)} className="bg-[#6366f1] hover:bg-[#5855eb]">
-            <Plus className="h-4 w-4 mr-2" /> Add Category
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* Date Filters */}
+            <Select value={selectedMonth.toString()} onValueChange={v => setSelectedMonth(parseInt(v))}>
+              <SelectTrigger className={`w-[120px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map(m => <SelectItem key={m.value} value={m.value.toString()}>{m.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={selectedYear.toString()} onValueChange={v => setSelectedYear(parseInt(v))}>
+              <SelectTrigger className={`w-[90px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[2024, 2025, 2026, 2027].map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button onClick={() => setShowAddCategory(true)} className="bg-[#6366f1] hover:bg-[#5855eb]">
+              <Plus className="h-4 w-4 mr-2" /> Add Category
+            </Button>
+          </div>
         </div>
       </div>
 
