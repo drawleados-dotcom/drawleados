@@ -444,6 +444,55 @@ async def duplicate_invoice(invoice_id: str, request: Request):
     
     return result
 
+
+@finance_router.get("/invoices/{invoice_id}/pdf-data")
+async def get_invoice_pdf_data(invoice_id: str, request: Request):
+    """Get invoice data formatted for PDF generation"""
+    try:
+        invoice = await db.invoices.find_one({"invoice_id": invoice_id, "is_deleted": False}, {"_id": 0})
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+        
+        # Get invoice items
+        items = await db.invoice_items.find({"invoice_id": invoice_id}, {"_id": 0}).to_list(100)
+        
+        # Get company details
+        settings = await db.settings.find_one({}, {"_id": 0})
+        company = {
+            "name": settings.get("company_name", "Drawlead") if settings else "Drawlead",
+            "address": settings.get("company_address", "") if settings else "",
+            "gst_number": settings.get("gst_number", "") if settings else "",
+            "pan": settings.get("pan_number", "") if settings else "",
+            "email": settings.get("company_email", "") if settings else "",
+            "phone": settings.get("company_phone", "") if settings else "",
+            "logo": settings.get("company_logo", "") if settings else "",
+        }
+        
+        # Format amounts
+        def format_amount(amt):
+            return f"₹{amt:,.2f}" if amt else "₹0.00"
+        
+        invoice_data = {
+            **invoice,
+            "items": items,
+            "company": company,
+            "formatted": {
+                "subtotal": format_amount(invoice.get("subtotal", 0)),
+                "discount": format_amount(invoice.get("total_discount", 0)),
+                "cgst": format_amount(invoice.get("cgst", 0)),
+                "sgst": format_amount(invoice.get("sgst", 0)),
+                "igst": format_amount(invoice.get("igst", 0)),
+                "total": format_amount(invoice.get("total_amount", 0)),
+                "paid": format_amount(invoice.get("paid_amount", 0)),
+                "balance": format_amount(invoice.get("balance_due", invoice.get("total_amount", 0) - invoice.get("paid_amount", 0))),
+            }
+        }
+        
+        return invoice_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============== REVENUE & STATS ==============
 
 @finance_router.get("/revenue-stats")
