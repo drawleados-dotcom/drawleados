@@ -118,6 +118,7 @@ class ClockInRequest(BaseModel):
 
 class ClockOutRequest(BaseModel):
     notes: Optional[str] = ""
+    manual_logout_time: Optional[str] = None  # Manual logout time in HH:MM format
 
 class LeaveRequest(BaseModel):
     leave_id: str
