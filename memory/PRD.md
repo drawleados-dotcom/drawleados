@@ -6,33 +6,38 @@
 
 ## Recent Changes (February 2026 - Latest)
 
-### Expense Module - Dashboard-First UX ✅
-Complete cashflow management system with modern dashboard experience:
+### Expense Module - Two Boards System ✅ (February 2026)
+Complete cashflow management system matching user's Excel workflow:
 
-**Dashboard View (Default):**
-- Summary Cards: Total Cash In, Total Cash Out, Current Balance, Pending Payments
-- Bank Accounts: 4 clickable account cards (Current, GST, Savings, Cash in Hand)
-- Expense by Category: Progress bars with percentages and amounts
-- Recent Transactions: List with IN/OUT icons, colored amounts
+**1. Expense Budget Board (Master View):**
+- Master Expense table with 12 categories (Salary, Office Exp, CEO, Vendor Payments, Loans & Debts, Tools & Subscriptions, BNI, Tax & Auditing, Mentorship, Events & Networking, Courses & Books, Marketing & Branding)
+- Grand Expenses columns: Total, Paid, Balance
+- Fiscal Year dropdown (2024-25, 2025-26, 2026-27)
+- Quarter dropdown (Q1-Q4) with monthly breakdown
+- Click category → Drill-down to see items inside (e.g., Salary → Anbarasan, Harini, Swathi)
+- Add Category / Add Item buttons
 
-**Table View Toggle:**
-- Excel-like detailed view when needed
-- Columns: Type, Date, Description, Category, Amount, Actions
-- IN/OUT badges with green/red coloring
+**2. Cashbook Board (Credit/Debit):**
+- Amount in Account balance header
+- 4 Bank Account tabs: Current, GST, Savings, Cash in Hand
+- Month/Year selector
+- **Credit/Inward (Green):** Sno, Date, Income From, Payment Type (Prepaid/Partial/One-Time), Payment Cycle (Monthly/Yearly/One-Time), Invoice Type (GST/NO GST), Invoice Number, Amount, Tax, Total
+- **Debit/Outward (Red):** Sno, Date, Expense To, Category (color-coded badge), Amount, Tax, Total, Remarks
 
-**Features:**
-- Add Income / Add Expense buttons with modal forms
-- Category dropdown for expenses (Salary, Office Exp, CEO, Vendor Payments, etc.)
-- Filter bar: Date range, Category filter, Search, Refresh
-- Real-time balance calculation per account
+**Key Flow:**
+When recording debit expense:
+1. Select Category → Shows existing items in that category
+2. Select existing item OR click "Add New Item"
+3. If existing: Payment reduces balance in Expense Budget
+4. If new: Creates entry in Expense Budget and records payment
 
 **API Endpoints:**
 - `/api/expense/bank-accounts` - CRUD for bank accounts
-- `/api/expense/categories` - Expense categories
-- `/api/expense/income` - Income entries
-- `/api/expense/payments` - Expense payments
+- `/api/expense/categories` - Expense categories (12 default)
+- `/api/expense/entries` - Items within categories
+- `/api/expense/income` - Credit/Income entries
+- `/api/expense/payments` - Debit/Expense payments
 - `/api/expense/cashflow` - Monthly cashflow view
-- `/api/expense/summary` - Cash In/Out/Balance summary
 - `/api/expense/master-view` - Fiscal year category breakdown
 
 ---
