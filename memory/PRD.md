@@ -6,6 +6,25 @@
 
 ## Recent Changes (February 2026 - Latest)
 
+### Invoice Module Enhancement ✅ (February 2026)
+Complete invoice management system with comprehensive attributes:
+
+**Features:**
+1. **Stats Dashboard**: Total Invoices, Paid, Pending, Overdue, Total Value
+2. **Invoice List**: Sortable table with all invoice details
+3. **Create Invoice** (4-tab wizard):
+   - **Client Tab**: Quick select from leads, Name, Company, Email, Phone, Address, City, State, Pincode, GST Number, PAN
+   - **Items Tab**: Add/remove items with Service Name, Qty, Rate, GST %, Discount %, auto-calculated totals
+   - **Payment Tab**: Invoice Date, Due Date, Payment Terms, Payment Method, PO Number, Reference, Bank Details
+   - **Settings Tab**: Invoice Type (GST/Non-GST/Proforma/Credit Note), Template, Notes, T&C
+4. **Download PDF**: jsPDF generation with professional formatting
+5. **Actions**: View, Download, Duplicate, Delete
+6. **Search & Filter**: By invoice number, client name, status
+
+**Invoice Types:** GST, Non-GST, Proforma, Credit Note
+**Payment Terms:** Due on Receipt, Net 7, Net 15, Net 30, Net 45, Net 60
+**GST Rates:** 0%, 5%, 12%, 18%, 28%
+
 ### Super Admin Dashboard Redesign ✅ (February 2026)
 Complete dashboard overhaul with comprehensive business overview:
 
