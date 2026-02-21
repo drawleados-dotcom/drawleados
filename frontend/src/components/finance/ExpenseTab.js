@@ -1044,7 +1044,7 @@ const ExpenseTab = () => {
               <h3 className="font-semibold">Cash In</h3>
               <div className="flex items-center gap-3">
                 <span className="text-lg font-bold">{formatCurrency(creditTotal)}</span>
-                <Button size="sm" variant="secondary" onClick={() => setShowAddCredit(true)} className="bg-white/20 hover:bg-white/30 text-white">
+                <Button size="sm" variant="secondary" onClick={openAddCreditModal} className="bg-white/20 hover:bg-white/30 text-white">
                   <Plus className="h-4 w-4 mr-1" /> Add
                 </Button>
               </div>
