@@ -614,22 +614,25 @@ const ExpenseTab = () => {
   const handleCreateInvoice = async () => {
     try {
       const { subtotal, taxAmount, total } = calculateInvoiceTotal();
-      const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
+      
+      // Format items with required fields for backend
+      const formattedItems = invoiceForm.items.map(item => ({
+        service_name: item.description,
+        description: item.description,
+        quantity: item.quantity,
+        rate: item.rate,
+        amount: item.quantity * item.rate
+      }));
       
       const res = await axios.post(`${API}/api/finance/invoices`, {
-        invoice_number: invoiceNumber,
         client_name: invoiceForm.client_name,
         client_email: invoiceForm.client_email,
-        client_address: invoiceForm.client_address,
-        invoice_type: invoiceForm.invoice_type,
-        invoice_date: new Date().toISOString().split('T')[0],
-        due_date: invoiceForm.due_date,
-        items: invoiceForm.items,
-        subtotal: subtotal,
-        tax_percent: invoiceForm.tax_percent,
-        tax_amount: taxAmount,
-        total_amount: total,
-        status: 'pending',
+        client_address: invoiceForm.client_address || '',
+        gst_type: invoiceForm.invoice_type === 'GST' ? 'gst' : 'non-gst',
+        gst_rate: invoiceForm.tax_percent,
+        invoice_date: new Date().toISOString(),
+        due_date: new Date(invoiceForm.due_date).toISOString(),
+        items: formattedItems,
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
