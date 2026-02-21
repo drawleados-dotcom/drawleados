@@ -130,6 +130,22 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/social-media"
+        element={
+          <ProtectedRoute>
+            <SocialMediaPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/creative-board"
+        element={
+          <ProtectedRoute>
+            <CreativeDesignBoard />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
