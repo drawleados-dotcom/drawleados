@@ -364,7 +364,17 @@ async def clock_out(clock_data: ClockOutRequest, request: Request):
     if existing.get("clock_out"):
         raise HTTPException(status_code=400, detail="Already clocked out today")
     
-    now = datetime.now(timezone.utc)
+    # Determine logout time - use manual time if provided, otherwise current time
+    if clock_data.manual_logout_time:
+        try:
+            # Parse manual time (HH:MM format) and combine with today's date
+            hours, minutes = map(int, clock_data.manual_logout_time.split(':'))
+            now = today.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM")
+    else:
+        now = datetime.now(timezone.utc)
+    
     clock_in_time = existing.get("clock_in")
     
     # Calculate total hours
