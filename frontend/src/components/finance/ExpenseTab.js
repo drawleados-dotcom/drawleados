@@ -5,6 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import InvoiceModule from './InvoiceModule';
 import {
   Select,
   SelectContent,
