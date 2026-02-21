@@ -7,8 +7,8 @@ from typing import List, Optional
 from datetime import datetime, timezone
 import uuid
 
-social_media_router = APIRouter(prefix="/api/social-media", tags=["social-media"])
-creative_router = APIRouter(prefix="/api/creative", tags=["creative"])
+social_media_router = APIRouter(prefix="/social-media", tags=["social-media"])
+creative_router = APIRouter(prefix="/creative", tags=["creative"])
 
 db = None
 
