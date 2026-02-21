@@ -1778,76 +1778,362 @@ const ExpenseTab = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Add Credit Modal */}
-      <Dialog open={showAddCredit} onOpenChange={setShowAddCredit}>
-        <DialogContent className={`max-w-xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+      {/* Add Credit Modal - Multi-Step Flow */}
+      <Dialog open={showAddCredit} onOpenChange={(open) => { if (!open) { setShowAddCredit(false); setCreditStep(1); } }}>
+        <DialogContent className={`max-w-2xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
-            <DialogTitle className={isDark ? 'text-white' : ''}>Add Cash In</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Record income received</DialogDescription>
+            <DialogTitle className={isDark ? 'text-white' : ''}>
+              Add Cash In {creditStep > 1 && `- Step ${creditStep}/3`}
+            </DialogTitle>
+            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>
+              {creditStep === 1 && 'Select invoice type'}
+              {creditStep === 2 && 'Select existing invoice or create new'}
+              {creditStep === 3 && 'Enter payment details'}
+            </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-4">
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Date</label>
-              <Input type="date" value={creditForm.date} onChange={e => setCreditForm({...creditForm, date: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+
+          {/* Step 1: Select Invoice Type */}
+          {creditStep === 1 && (
+            <div className="py-6">
+              <p className={`text-sm mb-4 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Select the type of invoice:</p>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleInvoiceTypeSelect('GST')}
+                  className={`p-6 rounded-xl border-2 transition-all hover:border-[#6366f1] ${
+                    isDark ? 'bg-[#27272a] border-[#3f3f46] hover:bg-[#2d2d32]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex flex-col items-center">
+                    <div className="p-3 rounded-full bg-[#22c55e]/20 mb-3">
+                      <Receipt className="h-8 w-8 text-[#22c55e]" />
+                    </div>
+                    <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>GST Invoice</span>
+                    <span className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>With 18% GST</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handleInvoiceTypeSelect('NO GST')}
+                  className={`p-6 rounded-xl border-2 transition-all hover:border-[#6366f1] ${
+                    isDark ? 'bg-[#27272a] border-[#3f3f46] hover:bg-[#2d2d32]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="flex flex-col items-center">
+                    <div className="p-3 rounded-full bg-[#f59e0b]/20 mb-3">
+                      <FileText className="h-8 w-8 text-[#f59e0b]" />
+                    </div>
+                    <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>NO GST Invoice</span>
+                    <span className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Without GST</span>
+                  </div>
+                </button>
+              </div>
             </div>
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Invoice Type</label>
-              <Select value={creditForm.invoice_type} onValueChange={v => setCreditForm({...creditForm, invoice_type: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GST">GST</SelectItem>
-                  <SelectItem value="NO GST">NO GST</SelectItem>
-                </SelectContent>
-              </Select>
+          )}
+
+          {/* Step 2: Select Invoice or Create New */}
+          {creditStep === 2 && (
+            <div className="py-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setCreditStep(1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Badge className={creditForm.invoice_type === 'GST' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+                    {creditForm.invoice_type}
+                  </Badge>
+                </div>
+                <Button onClick={openCreateInvoiceModal} className="bg-[#6366f1] hover:bg-[#5855eb]">
+                  <Plus className="h-4 w-4 mr-2" /> Create New Invoice
+                </Button>
+              </div>
+
+              {unpaidInvoices.length > 0 ? (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  <p className={`text-sm font-medium mb-2 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
+                    Select from unpaid invoices:
+                  </p>
+                  {unpaidInvoices.map(inv => (
+                    <button
+                      key={inv.invoice_id}
+                      onClick={() => handleInvoiceSelect(inv)}
+                      className={`w-full p-4 rounded-lg border text-left transition-all hover:border-[#6366f1] ${
+                        isDark ? 'bg-[#27272a] border-[#3f3f46] hover:bg-[#2d2d32]' : 'bg-white border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                              {inv.invoice_number}
+                            </span>
+                            <Badge className="text-xs bg-orange-100 text-orange-700">{inv.status}</Badge>
+                          </div>
+                          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                            {inv.client_name} • {inv.invoice_date}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {formatCurrency(inv.total_amount)}
+                          </p>
+                          <p className="text-sm text-[#ef4444]">
+                            Due: {formatCurrency(inv.total_amount - (inv.paid_amount || 0))}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className={`p-8 rounded-xl border-2 border-dashed text-center ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+                  <FileText className={`h-12 w-12 mx-auto mb-3 ${isDark ? 'text-[#3f3f46]' : 'text-gray-300'}`} />
+                  <p className={`text-lg font-medium ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                    No unpaid {creditForm.invoice_type} invoices
+                  </p>
+                  <p className={`text-sm ${isDark ? 'text-[#52525b]' : 'text-gray-400'}`}>
+                    Create a new invoice to record this income
+                  </p>
+                </div>
+              )}
             </div>
-            <div className="col-span-2">
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Income From</label>
-              <Input placeholder="Client/Source name" value={creditForm.income_from} onChange={e => setCreditForm({...creditForm, income_from: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+          )}
+
+          {/* Step 3: Enter Payment Details */}
+          {creditStep === 3 && (
+            <div className="py-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Button variant="ghost" size="sm" onClick={() => setCreditStep(2)}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {creditForm.selected_invoice && (
+                  <Badge className="bg-purple-100 text-purple-700">
+                    {creditForm.selected_invoice.invoice_number}
+                  </Badge>
+                )}
+              </div>
+
+              {creditForm.selected_invoice && (
+                <div className={`p-4 rounded-lg mb-4 ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {creditForm.selected_invoice.client_name}
+                      </p>
+                      <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                        Invoice: {creditForm.selected_invoice.invoice_number}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total: {formatCurrency(creditForm.selected_invoice.total_amount)}</p>
+                      <p className="font-semibold text-[#ef4444]">
+                        Due: {formatCurrency(creditForm.selected_invoice.total_amount - (creditForm.selected_invoice.paid_amount || 0))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Date</label>
+                  <Input type="date" value={creditForm.date} onChange={e => setCreditForm({...creditForm, date: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                </div>
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Type</label>
+                  <Select value={creditForm.payment_type} onValueChange={v => setCreditForm({...creditForm, payment_type: v})}>
+                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Advance">Advance</SelectItem>
+                      <SelectItem value="Partial">Partial</SelectItem>
+                      <SelectItem value="Full">Full</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Cycle</label>
+                  <Select value={creditForm.payment_cycle} onValueChange={v => setCreditForm({...creditForm, payment_cycle: v})}>
+                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="One-Time">One-Time</SelectItem>
+                      <SelectItem value="Monthly">Monthly</SelectItem>
+                      <SelectItem value="Quarterly">Quarterly</SelectItem>
+                      <SelectItem value="Half-Yearly">Half-Yearly</SelectItem>
+                      <SelectItem value="Yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
+                  <Select value={creditForm.bank_account_id || selectedAccount?.account_id} onValueChange={v => setCreditForm({...creditForm, bank_account_id: v})}>
+                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
+                    <SelectContent>
+                      {accounts.map(acc => <SelectItem key={acc.account_id} value={acc.account_id}>{acc.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Amount Received</label>
+                  <Input type="number" placeholder="0.00" value={creditForm.amount} onChange={e => setCreditForm({...creditForm, amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                </div>
+                <div>
+                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Tax % (if applicable)</label>
+                  <Select value={creditForm.tax_percent.toString()} onValueChange={v => setCreditForm({...creditForm, tax_percent: parseInt(v)})}>
+                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[0, 5, 12, 18, 28].map(t => <SelectItem key={t} value={t.toString()}>{t}%</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Type</label>
-              <Select value={creditForm.payment_type} onValueChange={v => setCreditForm({...creditForm, payment_type: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Advance">Advance</SelectItem>
-                  <SelectItem value="Partial">Partial</SelectItem>
-                  <SelectItem value="Full">Full</SelectItem>
-                </SelectContent>
-              </Select>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowAddCredit(false); setCreditStep(1); }}>Cancel</Button>
+            {creditStep === 3 && (
+              <Button onClick={handleAddCredit} className="bg-[#22c55e] hover:bg-[#16a34a]">Add Income</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Invoice Modal */}
+      <Dialog open={showCreateInvoice} onOpenChange={setShowCreateInvoice}>
+        <DialogContent className={`max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+          <DialogHeader>
+            <DialogTitle className={isDark ? 'text-white' : ''}>Create New Invoice</DialogTitle>
+            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>
+              Create a {creditForm.invoice_type} invoice
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Client Details */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Client Name *</label>
+                <Input 
+                  placeholder="Client/Company name" 
+                  value={invoiceForm.client_name} 
+                  onChange={e => setInvoiceForm({...invoiceForm, client_name: e.target.value})} 
+                  className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} 
+                />
+              </div>
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Client Email</label>
+                <Input 
+                  type="email"
+                  placeholder="client@example.com" 
+                  value={invoiceForm.client_email} 
+                  onChange={e => setInvoiceForm({...invoiceForm, client_email: e.target.value})} 
+                  className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} 
+                />
+              </div>
+              <div>
+                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Due Date</label>
+                <Input 
+                  type="date"
+                  value={invoiceForm.due_date} 
+                  onChange={e => setInvoiceForm({...invoiceForm, due_date: e.target.value})} 
+                  className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} 
+                />
+              </div>
             </div>
+
+            {/* Invoice Items */}
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
-              <Select value={creditForm.bank_account_id || selectedAccount?.account_id} onValueChange={v => setCreditForm({...creditForm, bank_account_id: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
-                <SelectContent>
-                  {accounts.map(acc => <SelectItem key={acc.account_id} value={acc.account_id}>{acc.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between mb-2">
+                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Invoice Items</label>
+                <Button size="sm" variant="outline" onClick={addInvoiceItem} className={isDark ? 'border-[#3f3f46]' : ''}>
+                  <Plus className="h-3 w-3 mr-1" /> Add Item
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {invoiceForm.items.map((item, index) => (
+                  <div key={index} className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
+                    <div className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-6">
+                        <Input 
+                          placeholder="Description" 
+                          value={item.description} 
+                          onChange={e => updateInvoiceItem(index, 'description', e.target.value)} 
+                          className={`text-sm ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`} 
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Input 
+                          type="number" 
+                          placeholder="Qty" 
+                          value={item.quantity} 
+                          onChange={e => updateInvoiceItem(index, 'quantity', parseInt(e.target.value) || 0)} 
+                          className={`text-sm ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`} 
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <Input 
+                          type="number" 
+                          placeholder="Rate" 
+                          value={item.rate} 
+                          onChange={e => updateInvoiceItem(index, 'rate', parseFloat(e.target.value) || 0)} 
+                          className={`text-sm ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`} 
+                        />
+                      </div>
+                      <div className="col-span-1 text-center">
+                        {invoiceForm.items.length > 1 && (
+                          <Button size="sm" variant="ghost" onClick={() => removeInvoiceItem(index)} className="text-red-500 hover:text-red-600 p-1">
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className={`text-right text-sm mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                      = {formatCurrency(item.quantity * item.rate)}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Amount</label>
-              <Input type="number" placeholder="0.00" value={creditForm.amount} onChange={e => setCreditForm({...creditForm, amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
-            </div>
-            <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Tax %</label>
-              <Select value={creditForm.tax_percent.toString()} onValueChange={v => setCreditForm({...creditForm, tax_percent: parseInt(v)})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {[0, 5, 12, 18, 28].map(t => <SelectItem key={t} value={t.toString()}>{t}%</SelectItem>)}
-                </SelectContent>
-              </Select>
+
+            {/* Tax & Total */}
+            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}>Subtotal</span>
+                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(calculateInvoiceTotal().subtotal)}</span>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}>Tax</span>
+                  <Select value={invoiceForm.tax_percent.toString()} onValueChange={v => setInvoiceForm({...invoiceForm, tax_percent: parseInt(v)})}>
+                    <SelectTrigger className={`w-20 h-8 ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[0, 5, 12, 18, 28].map(t => <SelectItem key={t} value={t.toString()}>{t}%</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(calculateInvoiceTotal().taxAmount)}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-dashed">
+                <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</span>
+                <span className="text-xl font-bold text-[#22c55e]">{formatCurrency(calculateInvoiceTotal().total)}</span>
+              </div>
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddCredit(false)}>Cancel</Button>
-            <Button onClick={handleAddCredit} className="bg-[#22c55e] hover:bg-[#16a34a]">Add Income</Button>
+            <Button variant="outline" onClick={() => setShowCreateInvoice(false)}>Cancel</Button>
+            <Button 
+              onClick={handleCreateInvoice} 
+              disabled={!invoiceForm.client_name || invoiceForm.items.every(i => !i.description)}
+              className="bg-[#6366f1] hover:bg-[#5855eb]"
+            >
+              Create Invoice
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Add Debit Modal */}
       <Dialog open={showAddDebit} onOpenChange={setShowAddDebit}>
-        <DialogContent className={`max-w-xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Add Cash Out</DialogTitle>
             <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Record expense payment</DialogDescription>
