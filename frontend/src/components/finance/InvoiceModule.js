@@ -252,6 +252,8 @@ const InvoiceModule = () => {
   // Download invoice as PDF
   const downloadInvoicePDF = async (invoice) => {
     try {
+      toast.info('Generating PDF...');
+      
       // Get full invoice data with items
       const res = await axios.get(`${API}/api/finance/invoices/${invoice.invoice_id}/pdf-data`, { headers });
       const data = res.data;
@@ -268,9 +270,9 @@ const InvoiceModule = () => {
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
       doc.text(`Invoice #: ${data.invoice_number}`, 14, 40);
-      doc.text(`Date: ${format(new Date(data.invoice_date), 'dd MMM yyyy')}`, 14, 47);
-      doc.text(`Due Date: ${format(new Date(data.due_date), 'dd MMM yyyy')}`, 14, 54);
-      doc.text(`Status: ${data.status?.toUpperCase()}`, 14, 61);
+      doc.text(`Date: ${data.invoice_date ? format(new Date(data.invoice_date), 'dd MMM yyyy') : '-'}`, 14, 47);
+      doc.text(`Due Date: ${data.due_date ? format(new Date(data.due_date), 'dd MMM yyyy') : '-'}`, 14, 54);
+      doc.text(`Status: ${(data.status || 'draft').toUpperCase()}`, 14, 61);
 
       // Company details (right side)
       doc.setFontSize(12);
@@ -297,15 +299,16 @@ const InvoiceModule = () => {
       const items = data.items || [];
       const tableData = items.map((item, idx) => [
         idx + 1,
-        item.service_name,
+        item.service_name || '',
         item.description || '-',
-        item.quantity,
-        `₹${item.rate.toLocaleString()}`,
-        `${item.gst_rate}%`,
-        `₹${(item.amount || (item.quantity * item.rate)).toLocaleString()}`
+        item.quantity || 1,
+        `Rs.${(item.rate || 0).toLocaleString()}`,
+        `${item.gst_rate || 0}%`,
+        `Rs.${(item.amount || (item.quantity * item.rate) || 0).toLocaleString()}`
       ]);
 
-      doc.autoTable({
+      // Use autoTable function
+      autoTable(doc, {
         startY: 125,
         head: [['#', 'Service', 'Description', 'Qty', 'Rate', 'GST', 'Amount']],
         body: tableData,
@@ -320,30 +323,37 @@ const InvoiceModule = () => {
       });
 
       // Totals
-      const finalY = doc.lastAutoTable.finalY + 10;
+      const finalY = (doc.lastAutoTable?.finalY || 150) + 10;
       doc.setFontSize(10);
-      doc.text(`Subtotal: ${data.formatted?.subtotal || '₹0.00'}`, pageWidth - 14, finalY, { align: 'right' });
+      doc.setFont(undefined, 'normal');
+      doc.text(`Subtotal: ${data.formatted?.subtotal || 'Rs.0.00'}`, pageWidth - 14, finalY, { align: 'right' });
+      
+      let yOffset = 7;
       if (data.total_discount > 0) {
-        doc.text(`Discount: -${data.formatted?.discount || '₹0.00'}`, pageWidth - 14, finalY + 7, { align: 'right' });
+        doc.text(`Discount: -${data.formatted?.discount || 'Rs.0.00'}`, pageWidth - 14, finalY + yOffset, { align: 'right' });
+        yOffset += 7;
       }
       if (data.cgst > 0) {
-        doc.text(`CGST: ${data.formatted?.cgst || '₹0.00'}`, pageWidth - 14, finalY + 14, { align: 'right' });
-        doc.text(`SGST: ${data.formatted?.sgst || '₹0.00'}`, pageWidth - 14, finalY + 21, { align: 'right' });
+        doc.text(`CGST: ${data.formatted?.cgst || 'Rs.0.00'}`, pageWidth - 14, finalY + yOffset, { align: 'right' });
+        yOffset += 7;
+        doc.text(`SGST: ${data.formatted?.sgst || 'Rs.0.00'}`, pageWidth - 14, finalY + yOffset, { align: 'right' });
+        yOffset += 7;
       }
       if (data.igst > 0) {
-        doc.text(`IGST: ${data.formatted?.igst || '₹0.00'}`, pageWidth - 14, finalY + 14, { align: 'right' });
+        doc.text(`IGST: ${data.formatted?.igst || 'Rs.0.00'}`, pageWidth - 14, finalY + yOffset, { align: 'right' });
+        yOffset += 7;
       }
       
       doc.setFontSize(12);
       doc.setFont(undefined, 'bold');
-      doc.text(`Total: ${data.formatted?.total || '₹0.00'}`, pageWidth - 14, finalY + 35, { align: 'right' });
+      doc.text(`Total: ${data.formatted?.total || 'Rs.0.00'}`, pageWidth - 14, finalY + yOffset + 7, { align: 'right' });
 
       // Notes
       if (data.notes) {
         doc.setFontSize(9);
         doc.setFont(undefined, 'normal');
-        doc.text('Notes:', 14, finalY + 50);
-        doc.text(data.notes, 14, finalY + 57);
+        doc.text('Notes:', 14, finalY + yOffset + 25);
+        doc.text(data.notes, 14, finalY + yOffset + 32);
       }
 
       // Footer
@@ -352,10 +362,10 @@ const InvoiceModule = () => {
       doc.text('Thank you for your business!', pageWidth / 2, doc.internal.pageSize.height - 20, { align: 'center' });
 
       doc.save(`Invoice_${data.invoice_number}.pdf`);
-      toast.success('Invoice downloaded');
+      toast.success('Invoice downloaded successfully');
     } catch (error) {
       console.error('Error downloading invoice:', error);
-      toast.error('Failed to download invoice');
+      toast.error('Failed to download invoice: ' + (error.message || 'Unknown error'));
     }
   };
 
