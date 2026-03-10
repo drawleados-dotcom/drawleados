@@ -40,6 +40,7 @@ const Sidebar = () => {
   const [databases, setDatabases] = useState([]);
   const [operationsExpanded, setOperationsExpanded] = useState(true);
   const [websiteExpanded, setWebsiteExpanded] = useState(false);
+  const [metaAdsExpanded, setMetaAdsExpanded] = useState(false);
   const [websiteProjects, setWebsiteProjects] = useState([]);
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -159,6 +160,7 @@ const Sidebar = () => {
           onClick={() => setIsCollapsed(!isCollapsed)}
           className={`p-2 ${isDark ? 'hover:bg-[#27272a]' : 'hover:bg-gray-100'}`}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          data-testid="sidebar-toggle"
         >
           {isCollapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
         </Button>
@@ -316,17 +318,50 @@ const Sidebar = () => {
                 <span>Creative Design</span>
               </Link>
               
-              <Link
-                to="/meta-ads"
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.pathname === '/meta-ads'
-                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                <span className="text-base">📊</span>
-                <span>Meta Ads</span>
-              </Link>
+              {/* Meta Ads - Expandable */}
+              <div>
+                <button
+                  onClick={() => setMetaAdsExpanded(!metaAdsExpanded)}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                    location.pathname.startsWith('/meta-ads') || location.pathname === '/sop-works' && location.search.includes('service=meta_ads')
+                      ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                      : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">📊</span>
+                    <span>Meta Ads</span>
+                  </div>
+                  {metaAdsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                
+                {metaAdsExpanded && (
+                  <div className="ml-4 pl-2 border-l border-[#27272a] mt-1 space-y-1">
+                    <Link
+                      to="/meta-ads"
+                      className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                        location.pathname === '/meta-ads'
+                          ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                          : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="text-base">📈</span>
+                      <span>Meta Ads Board</span>
+                    </Link>
+                    <Link
+                      to="/sop-works?service=meta_ads"
+                      className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                        location.search.includes('service=meta_ads')
+                          ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                          : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className="text-base">📋</span>
+                      <span>SOP Works</span>
+                    </Link>
+                  </div>
+                )}
+              </div>
 
               {/* Add Custom Service */}
               <Link
