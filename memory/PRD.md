@@ -6,6 +6,26 @@
 
 ## Recent Changes (February 2026 - Latest)
 
+### Website Projects Enhancement ✅ (February 2026)
+Comprehensive project details for website development tracking:
+
+**5-Tab Create/Edit Project Modal:**
+1. **Basic Tab**: Project Name, Status, Onboarding Date, Deadline, Platform (8 options), Website Type (8 options), Product Details, Onboarding Form Notes
+2. **Client Tab**: Client Name, Location, Email, Phone
+3. **Credentials Tab**: 
+   - Domain: URL, Username, Password (show/hide), 2FA, Email DNS
+   - Server: Details, Username, Password (show/hide), 2FA
+4. **Team Tab**: Developer, Designer, Content Writer, Project Manager
+5. **Links Tab**: Client Drive (new tab), Documents (in-app popup), Communication
+
+**Project Detail View:**
+- Row 1: Domain, Developer, Onboarding, Deadline, Platform, Type
+- Row 2: Client, Location, Client Drive, Documents, Server
+- Phase Stats: Wireframe, UI Design, Content, Development progress
+
+**Default Pages Feature:**
+Quick add buttons: Home Page, About Us, Services, Contact Us, Privacy Policy, Terms & Conditions
+
 ### Invoice Module Enhancement ✅ (February 2026)
 Complete invoice management system with comprehensive attributes:
 
