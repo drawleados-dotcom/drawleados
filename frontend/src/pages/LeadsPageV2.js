@@ -1066,17 +1066,69 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
 
 // ============== KANBAN VIEW ==============
 const KanbanView = ({ stages, getLeadsByStage, onEdit, onDelete, onStageChange, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+  const [draggedLead, setDraggedLead] = useState(null);
+  const [dragOverStage, setDragOverStage] = useState(null);
+
+  const handleDragStart = (e, lead) => {
+    setDraggedLead(lead);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', lead.lead_id);
+    // Add visual feedback
+    e.currentTarget.style.opacity = '0.5';
+  };
+
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1';
+    setDraggedLead(null);
+    setDragOverStage(null);
+  };
+
+  const handleDragOver = (e, stageId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverStage(stageId);
+  };
+
+  const handleDragLeave = (e) => {
+    // Only clear if leaving the column entirely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverStage(null);
+    }
+  };
+
+  const handleDrop = (e, stageId) => {
+    e.preventDefault();
+    setDragOverStage(null);
+    
+    if (draggedLead && draggedLead.stage_id !== stageId) {
+      onStageChange(draggedLead.lead_id, stageId);
+    }
+    setDraggedLead(null);
+  };
+
   return (
     <div className="flex gap-4 overflow-x-auto pb-4" data-testid="kanban-view">
       {stages.map(stage => {
         const stageLeads = getLeadsByStage(stage.stage_id);
+        const isDropTarget = dragOverStage === stage.stage_id;
+        
         return (
           <div
             key={stage.stage_id}
-            className={`flex-shrink-0 w-72 ${isDark ? 'bg-[#18181b]' : 'bg-white'} rounded-lg border ${borderColor}`}
+            className={`flex-shrink-0 w-72 ${isDark ? 'bg-[#18181b]' : 'bg-white'} rounded-lg border-2 transition-all duration-200 ${
+              isDropTarget 
+                ? 'border-[#3b82f6] bg-[#3b82f6]/5 scale-[1.02]' 
+                : borderColor
+            }`}
+            onDragOver={(e) => handleDragOver(e, stage.stage_id)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, stage.stage_id)}
           >
             {/* Column Header */}
-            <div className="p-3 border-b border-[#27272a] flex items-center gap-2">
+            <div 
+              className="p-3 border-b border-[#27272a] flex items-center gap-2"
+              style={{ borderBottomColor: isDropTarget ? stage.color : undefined }}
+            >
               <div className="w-3 h-3 rounded" style={{ backgroundColor: stage.color }} />
               <span className={`text-sm font-medium ${textPrimary}`}>{stage.name}</span>
               <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">
@@ -1085,7 +1137,9 @@ const KanbanView = ({ stages, getLeadsByStage, onEdit, onDelete, onStageChange, 
             </div>
 
             {/* Cards */}
-            <div className="p-2 space-y-2 max-h-[calc(100vh-400px)] overflow-y-auto">
+            <div className={`p-2 space-y-2 max-h-[calc(100vh-400px)] overflow-y-auto min-h-[100px] ${
+              isDropTarget ? 'bg-[#3b82f6]/5' : ''
+            }`}>
               {stageLeads.map(lead => (
                 <LeadCard
                   key={lead.lead_id}
@@ -1099,10 +1153,15 @@ const KanbanView = ({ stages, getLeadsByStage, onEdit, onDelete, onStageChange, 
                   textPrimary={textPrimary}
                   textSecondary={textSecondary}
                   borderColor={borderColor}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  isDragging={draggedLead?.lead_id === lead.lead_id}
                 />
               ))}
               {stageLeads.length === 0 && (
-                <p className={`text-center py-4 text-xs ${textSecondary}`}>No leads</p>
+                <div className={`text-center py-8 text-xs ${textSecondary} ${isDropTarget ? 'text-[#3b82f6]' : ''}`}>
+                  {isDropTarget ? 'Drop here' : 'No leads'}
+                </div>
               )}
             </div>
           </div>
@@ -1233,24 +1292,32 @@ const PreviewBoard = ({ leads, stages, selectedLead, setSelectedLead, onEdit, on
 };
 
 // ============== LEAD CARD ==============
-const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, formatDate, isDark, textPrimary, textSecondary, borderColor }) => {
+const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, formatDate, isDark, textPrimary, textSecondary, borderColor, onDragStart, onDragEnd, isDragging }) => {
   return (
     <div
-      className={`p-3 ${isDark ? 'bg-[#0c0a09]' : 'bg-gray-50'} rounded-lg border ${borderColor} hover:border-[#3f3f46] group`}
+      draggable
+      onDragStart={(e) => onDragStart && onDragStart(e, lead)}
+      onDragEnd={onDragEnd}
+      className={`p-3 ${isDark ? 'bg-[#0c0a09]' : 'bg-gray-50'} rounded-lg border ${borderColor} hover:border-[#3f3f46] group cursor-grab active:cursor-grabbing transition-all duration-200 ${
+        isDragging ? 'opacity-50 scale-95 rotate-2' : 'opacity-100'
+      }`}
       data-testid={`lead-card-${lead.lead_id}`}
     >
       <div className="flex items-start justify-between mb-2">
-        <span className={`font-medium ${textPrimary}`}>{lead.name}</span>
+        <div className="flex items-center gap-2">
+          <GripVertical className={`h-4 w-4 ${textSecondary} opacity-0 group-hover:opacity-100 transition-opacity cursor-grab`} />
+          <span className={`font-medium ${textPrimary}`}>{lead.name}</span>
+        </div>
         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => onEdit(lead)}>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); onEdit(lead); }}>
             <Edit2 className="h-3 w-3" />
           </Button>
-          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400" onClick={() => onDelete(lead.lead_id)}>
+          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400" onClick={(e) => { e.stopPropagation(); onDelete(lead.lead_id); }}>
             <Trash2 className="h-3 w-3" />
           </Button>
         </div>
       </div>
-      <div className={`text-xs ${textSecondary} space-y-1`}>
+      <div className={`text-xs ${textSecondary} space-y-1 ml-6`}>
         {lead.phone && (
           <div className="flex items-center gap-1">
             <Phone className="h-3 w-3" /> {lead.phone}
