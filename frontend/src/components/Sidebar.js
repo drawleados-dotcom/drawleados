@@ -14,6 +14,7 @@ import {
   Shield,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Plus,
   Database,
   MessageSquare,
@@ -21,6 +22,8 @@ import {
   ClipboardList,
   Globe,
   FolderOpen,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -40,6 +43,17 @@ const Sidebar = () => {
   const [websiteProjects, setWebsiteProjects] = useState([]);
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  
+  // Sidebar collapsed state - default to collapsed
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const saved = localStorage.getItem('sidebar_collapsed');
+    return saved === null ? true : saved === 'true';
+  });
+
+  // Save collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem('sidebar_collapsed', isCollapsed.toString());
+  }, [isCollapsed]);
 
   const token = localStorage.getItem('session_token');
 
@@ -124,29 +138,42 @@ const Sidebar = () => {
 
   return (
     <div
-      className={`h-screen w-64 border-r flex flex-col ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}
+      className={`h-screen ${isCollapsed ? 'w-16' : 'w-64'} border-r flex flex-col transition-all duration-300 ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}
       data-testid="sidebar"
     >
-      <div className="p-6">
-        <h1
-          className="text-2xl font-bold tracking-tight"
-          style={{ fontFamily: 'Plus Jakarta Sans' }}
+      {/* Toggle Button */}
+      <div className={`p-2 flex ${isCollapsed ? 'justify-center' : 'justify-between items-center px-4'}`}>
+        {!isCollapsed && (
+          <h1
+            className="text-xl font-bold tracking-tight"
+            style={{ fontFamily: 'Plus Jakarta Sans' }}
+          >
+            <span className="bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
+              Drawlead OS
+            </span>
+          </h1>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className={`p-2 ${isDark ? 'hover:bg-[#27272a]' : 'hover:bg-gray-100'}`}
+          title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <span className="bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
-            Drawlead OS
-          </span>
-        </h1>
+          {isCollapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+        </Button>
       </div>
 
-      <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
+      <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto`}>
         {/* Dashboard */}
         <Link
           to="/dashboard"
           data-testid="nav-dashboard"
-          className={`${navItemBase} ${location.pathname === '/dashboard' ? navItemActive : navItemInactive}`}
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/dashboard' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Dashboard' : ''}
         >
           <LayoutDashboard className="h-5 w-5" strokeWidth={2} />
-          Dashboard
+          {!isCollapsed && 'Dashboard'}
         </Link>
 
         {/* Leads - NOT for employees */}
@@ -154,31 +181,33 @@ const Sidebar = () => {
           <Link
             to="/leads"
             data-testid="nav-leads"
-            className={`${navItemBase} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Leads' : ''}
           >
             <Users className="h-5 w-5" strokeWidth={2} />
-            Leads
+            {!isCollapsed && 'Leads'}
           </Link>
         )}
 
         {/* Operations with Service Types */}
         <div>
           <button
-            onClick={() => setOperationsExpanded(!operationsExpanded)}
+            onClick={() => !isCollapsed && setOperationsExpanded(!operationsExpanded)}
             data-testid="nav-operations"
-            className={`w-full ${navItemBase} ${isOperationsActive ? navItemActive : navItemInactive}`}
+            className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${isOperationsActive ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Operations' : ''}
           >
-            {operationsExpanded ? (
+            {!isCollapsed && (operationsExpanded ? (
               <ChevronDown className="h-4 w-4" />
             ) : (
               <ChevronRight className="h-4 w-4" />
-            )}
+            ))}
             <Package className="h-5 w-5" strokeWidth={2} />
-            <span className="flex-1 text-left">Operations</span>
+            {!isCollapsed && <span className="flex-1 text-left">Operations</span>}
           </button>
 
           {/* Service Types */}
-          {operationsExpanded && (
+          {!isCollapsed && operationsExpanded && (
             <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
               {/* Website Development with submenu */}
               <div>
@@ -315,10 +344,11 @@ const Sidebar = () => {
         <Link
           to="/hr"
           data-testid="nav-hr"
-          className={`${navItemBase} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'HR' : ''}
         >
           <UserCircle className="h-5 w-5" strokeWidth={2} />
-          HR
+          {!isCollapsed && 'HR'}
         </Link>
 
         {/* Marketing - Admin only */}
@@ -326,10 +356,11 @@ const Sidebar = () => {
           <Link
             to="/marketing"
             data-testid="nav-marketing"
-            className={`${navItemBase} ${location.pathname === '/marketing' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/marketing' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Marketing' : ''}
           >
             <Megaphone className="h-5 w-5" strokeWidth={2} />
-            Marketing
+            {!isCollapsed && 'Marketing'}
           </Link>
         )}
 
@@ -337,11 +368,17 @@ const Sidebar = () => {
         <button
           onClick={() => setChatOpen(true)}
           data-testid="nav-chat"
-          className={`w-full ${navItemBase} ${navItemInactive}`}
+          className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${navItemInactive}`}
+          title={isCollapsed ? 'Team Chat' : ''}
         >
-          <MessageSquare className="h-5 w-5" strokeWidth={2} />
-          <span className="flex-1 text-left">Team Chat</span>
-          {unreadCount > 0 && (
+          <div className="relative">
+            <MessageSquare className="h-5 w-5" strokeWidth={2} />
+            {isCollapsed && unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#ef4444] rounded-full"></span>
+            )}
+          </div>
+          {!isCollapsed && <span className="flex-1 text-left">Team Chat</span>}
+          {!isCollapsed && unreadCount > 0 && (
             <Badge className="bg-[#ef4444] text-white text-xs px-1.5 py-0 min-w-[20px]">
               {unreadCount > 99 ? '99+' : unreadCount}
             </Badge>
@@ -353,10 +390,11 @@ const Sidebar = () => {
           <Link
             to="/hr-admin"
             data-testid="nav-hr-admin"
-            className={`${navItemBase} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'HR Admin' : ''}
           >
             <Shield className="h-5 w-5" strokeWidth={2} />
-            HR Admin
+            {!isCollapsed && 'HR Admin'}
           </Link>
         )}
 
@@ -365,10 +403,11 @@ const Sidebar = () => {
           <Link
             to="/reports"
             data-testid="nav-reports"
-            className={`${navItemBase} ${location.pathname === '/reports' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/reports' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Reports' : ''}
           >
             <TrendingUp className="h-5 w-5" strokeWidth={2} />
-            Reports
+            {!isCollapsed && 'Reports'}
           </Link>
         )}
 
@@ -377,10 +416,11 @@ const Sidebar = () => {
           <Link
             to="/finance"
             data-testid="nav-finance"
-            className={`${navItemBase} ${location.pathname === '/finance' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/finance' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Finance' : ''}
           >
             <DollarSign className="h-5 w-5" strokeWidth={2} />
-            Finance
+            {!isCollapsed && 'Finance'}
           </Link>
         )}
 
@@ -389,10 +429,11 @@ const Sidebar = () => {
           <Link
             to="/services"
             data-testid="nav-services"
-            className={`${navItemBase} ${location.pathname === '/services' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/services' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Services' : ''}
           >
             <Package className="h-5 w-5" strokeWidth={2} />
-            Services
+            {!isCollapsed && 'Services'}
           </Link>
         )}
 
@@ -401,32 +442,53 @@ const Sidebar = () => {
           <Link
             to="/settings"
             data-testid="nav-settings"
-            className={`${navItemBase} ${location.pathname === '/settings' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/settings' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Settings' : ''}
           >
             <Settings className="h-5 w-5" strokeWidth={2} />
-            Settings
+            {!isCollapsed && 'Settings'}
           </Link>
         )}
       </nav>
 
       <div className={`p-4 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-        <div className="flex items-center gap-3 px-4 py-3 mb-2">
-          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-semibold">
-            {user?.name?.charAt(0).toUpperCase()}
+        {!isCollapsed ? (
+          <>
+            <div className="flex items-center gap-3 px-4 py-3 mb-2">
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-semibold">
+                {user?.name?.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-semibold truncate ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{user?.name}</p>
+                <p className={`text-xs capitalize ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{user?.role}</p>
+              </div>
+            </div>
+            <Button
+              onClick={handleLogout}
+              data-testid="logout-button"
+              className="w-full bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] font-medium py-2 rounded-lg border border-[#3f3f46] transition-all duration-300 flex items-center justify-center gap-2"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </Button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-semibold">
+              {user?.name?.charAt(0).toUpperCase()}
+            </div>
+            <Button
+              onClick={handleLogout}
+              data-testid="logout-button"
+              variant="ghost"
+              size="icon"
+              className="text-[#ef4444]"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-semibold truncate ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{user?.name}</p>
-            <p className={`text-xs capitalize ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{user?.role}</p>
-          </div>
-        </div>
-        <Button
-          onClick={handleLogout}
-          data-testid="logout-button"
-          className="w-full bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] font-medium py-2 rounded-lg border border-[#3f3f46] transition-all duration-300 flex items-center justify-center gap-2"
-        >
-          <LogOut className="h-4 w-4" />
-          Logout
-        </Button>
+        )}
       </div>
 
       {/* Chat Panel */}

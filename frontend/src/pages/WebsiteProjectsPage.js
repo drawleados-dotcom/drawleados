@@ -16,7 +16,7 @@ import {
   Plus, Globe, Calendar, Clock, User, ExternalLink, Link2, Folder, Server,
   ChevronDown, ChevronUp, Search, Filter, Edit2, Trash2, CheckCircle, Circle, X,
   Image, FileText, ListTodo, LayoutGrid, Send, Check, ArrowLeft, Percent,
-  Users, CalendarDays, Code, Palette, FileEdit, Box
+  Users, CalendarDays, Code, Palette, FileEdit, Box, Mail, PanelLeftClose, PanelLeft
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -111,6 +111,14 @@ const WebsiteProjectsPage = () => {
     domain_password: '',
     domain_2fa: '',
     domain_email_dns: '',
+    // WordPress
+    wp_username: '',
+    wp_password: '',
+    wp_backup: '',
+    // Email
+    email_address: '',
+    email_password: '',
+    email_2fa: '',
     // Server
     server_details: '', 
     server_username: '',
@@ -775,18 +783,30 @@ const WebsiteProjectsPage = () => {
 
   // ==================== PROJECT DETAIL VIEW ====================
   if (currentView === 'project-detail' && projectDetail) {
+    // Status color mapping
+    const statusColors = {
+      'active': { bg: 'bg-[#22c55e]', text: 'text-white' },
+      'completed': { bg: 'bg-[#6366f1]', text: 'text-white' },
+      'on-hold': { bg: 'bg-[#f59e0b]', text: 'text-white' },
+      'cancelled': { bg: 'bg-[#ef4444]', text: 'text-white' },
+    };
+    const statusStyle = statusColors[projectDetail.status] || statusColors['active'];
+
     return (
       <Layout>
         <div className="flex flex-col h-full" data-testid="project-detail-view">
-          {/* Header */}
-          <div className={`p-4 border-b ${borderColor}`}>
-            <div className="flex items-center justify-between">
+          {/* Sticky Header Bar */}
+          <div className={`sticky top-0 z-20 border-b ${borderColor} ${bgCard} shadow-sm`}>
+            {/* Top Row - Back button, title, actions */}
+            <div className={`p-3 flex items-center justify-between`}>
               <div className="flex items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={goBackToAllProjects} className={textSecondary}>
-                  <ArrowLeft className="h-4 w-4 mr-1" /> All Projects
+                  <ArrowLeft className="h-4 w-4 mr-1" /> Back
                 </Button>
-                <h1 className={`text-xl font-bold ${textPrimary}`}>{projectDetail.name}</h1>
-                <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{projectDetail.stats?.total_pages || 0} Pages</Badge>
+                <h1 className={`text-lg font-bold ${textPrimary}`}>{projectDetail.name}</h1>
+                <Badge className={`${statusStyle.bg} ${statusStyle.text} px-3 py-1 font-semibold`}>
+                  {(projectDetail.status || 'Active').toUpperCase()}
+                </Badge>
               </div>
               <div className="flex items-center gap-2">
                 {canEdit && (
@@ -794,23 +814,68 @@ const WebsiteProjectsPage = () => {
                     <Button variant="outline" size="sm" onClick={() => { setNewProject(projectDetail); setIsEditProjectModalOpen(true); }}>
                       <Edit2 className="h-4 w-4 mr-1" /> Edit
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handleDeleteProject} className="text-red-400 border-red-400/30">
-                      <Trash2 className="h-4 w-4 mr-1" /> Delete
-                    </Button>
                   </>
                 )}
               </div>
             </div>
+
+            {/* Quick Links Bar - Docs, Drive, Deadline, Onboarding */}
+            <div className={`px-3 pb-3 flex items-center gap-4 flex-wrap`}>
+              {/* Documents - Opens Popup */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => projectDetail.documents_url && setDocPopupUrl(projectDetail.documents_url)}
+                className={`gap-2 ${projectDetail.documents_url ? 'text-[#6366f1] border-[#6366f1]/30' : `${textSecondary} opacity-50`}`}
+                disabled={!projectDetail.documents_url}
+              >
+                <FileText className="h-4 w-4" />
+                Docs
+              </Button>
+
+              {/* Drive - Opens Popup */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => projectDetail.client_drive_url && setDocPopupUrl(projectDetail.client_drive_url)}
+                className={`gap-2 ${projectDetail.client_drive_url ? 'text-[#22c55e] border-[#22c55e]/30' : `${textSecondary} opacity-50`}`}
+                disabled={!projectDetail.client_drive_url}
+              >
+                <Folder className="h-4 w-4" />
+                Drive
+              </Button>
+
+              {/* Deadline */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+                <Clock className="h-4 w-4 text-[#f59e0b]" />
+                <span className={`text-sm ${textSecondary}`}>Deadline:</span>
+                <span className={`text-sm font-medium ${projectDetail.deadline ? textPrimary : 'text-red-400'}`}>
+                  {projectDetail.deadline || 'Not Set'}
+                </span>
+              </div>
+
+              {/* Onboarding */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+                <Calendar className="h-4 w-4 text-[#6366f1]" />
+                <span className={`text-sm ${textSecondary}`}>Onboarding:</span>
+                <span className={`text-sm font-medium ${textPrimary}`}>
+                  {projectDetail.onboarding_date || 'Not Set'}
+                </span>
+              </div>
+
+              {/* Progress */}
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+                <Progress value={projectDetail.stats?.overall_completed / projectDetail.stats?.total_pages * 100 || 0} className="w-24 h-2" />
+                <span className={`text-sm ${textSecondary}`}>{projectDetail.stats?.overall_completed || 0}/{projectDetail.stats?.total_pages || 0}</span>
+              </div>
+            </div>
           </div>
 
-          {/* Project Header - Collapsible */}
+          {/* Expandable Details Section */}
           <div className={`border-b ${borderColor} ${bgCard}`}>
-            <div className={`flex items-center justify-between p-4 cursor-pointer`} onClick={() => setExpandedHeader(!expandedHeader)}>
-              <div className="flex items-center gap-4">
-                <Progress value={projectDetail.stats?.overall_completed / projectDetail.stats?.total_pages * 100 || 0} className="w-32 h-2" />
-                <span className={`text-sm ${textSecondary}`}>{projectDetail.stats?.overall_completed || 0}/{projectDetail.stats?.total_pages || 0} Completed</span>
-              </div>
-              {expandedHeader ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+            <div className={`flex items-center justify-between px-4 py-2 cursor-pointer`} onClick={() => setExpandedHeader(!expandedHeader)}>
+              <span className={`text-sm font-medium ${textSecondary}`}>{expandedHeader ? 'Hide' : 'Show'} Project Details</span>
+              {expandedHeader ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </div>
 
             {expandedHeader && (
@@ -819,19 +884,10 @@ const WebsiteProjectsPage = () => {
                 <div className={`px-4 pb-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3`}>
                   <MetadataCard icon={Globe} label="Domain" value={projectDetail.domain_url} link isDark={isDark} />
                   <MetadataCard icon={User} label="Developer" value={projectDetail.developer} isDark={isDark} />
-                  <MetadataCard icon={Calendar} label="Onboarding" value={projectDetail.onboarding_date} isDark={isDark} />
-                  <MetadataCard icon={Clock} label="Deadline" value={projectDetail.deadline} isDark={isDark} />
                   <MetadataCard icon={Server} label="Platform" value={projectDetail.platform} isDark={isDark} />
                   <MetadataCard icon={Code} label="Type" value={projectDetail.website_type} isDark={isDark} />
-                </div>
-
-                {/* Row 2: Client & Links */}
-                <div className={`px-4 pb-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3`}>
                   <MetadataCard icon={User} label="Client" value={projectDetail.client_name} isDark={isDark} />
                   <MetadataCard icon={Globe} label="Location" value={projectDetail.client_location} isDark={isDark} />
-                  <MetadataCard icon={Folder} label="Client Drive" value={projectDetail.client_drive_url} link isDark={isDark} />
-                  <MetadataCard icon={FileText} label="Documents" value={projectDetail.documents_url} link onClick={() => projectDetail.documents_url && setDocPopupUrl(projectDetail.documents_url)} isDark={isDark} />
-                  <MetadataCard icon={Server} label="Server" value={projectDetail.server_details} isDark={isDark} />
                 </div>
 
                 {/* Phase Stats */}
@@ -1358,6 +1414,12 @@ const PhaseTableCell = ({ task, phase, onUpdate, teamMembers, isDark }) => {
 const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, options, teamMembers, isDark, isEdit }) => {
   const [activeTab, setActiveTab] = useState('basic');
   const [showPassword, setShowPassword] = useState({});
+  const [showAddTypeInput, setShowAddTypeInput] = useState(false);
+  const [newWebsiteType, setNewWebsiteType] = useState('');
+  const [customWebsiteTypes, setCustomWebsiteTypes] = useState(() => {
+    const saved = localStorage.getItem('custom_website_types');
+    return saved ? JSON.parse(saved) : [];
+  });
   
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -1366,11 +1428,22 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
   const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
 
   const PLATFORMS = options?.platforms || ['Website', 'Shopify', 'WordPress', 'Wix', 'Webflow', 'Custom', 'React', 'Next.js'];
-  const WEBSITE_TYPES = options?.website_types || ['Business Website', 'E-commerce', 'Portfolio', 'Landing Page', 'Blog', 'SaaS', 'Corporate', 'Educational'];
+  const WEBSITE_TYPES = [...(options?.website_types || ['Business Website', 'E-commerce', 'Portfolio', 'Landing Page', 'Blog', 'SaaS', 'Corporate', 'Educational']), ...customWebsiteTypes];
   const PROJECT_STATUS = ['active', 'completed', 'on-hold', 'cancelled'];
 
   const togglePassword = (field) => {
     setShowPassword(prev => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const addNewWebsiteType = () => {
+    if (newWebsiteType.trim()) {
+      const updated = [...customWebsiteTypes, newWebsiteType.trim()];
+      setCustomWebsiteTypes(updated);
+      localStorage.setItem('custom_website_types', JSON.stringify(updated));
+      setProject({ ...project, website_type: newWebsiteType.trim() });
+      setNewWebsiteType('');
+      setShowAddTypeInput(false);
+    }
   };
 
   return (
@@ -1420,10 +1493,33 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
               </div>
               <div>
                 <label className={`text-sm ${textSecondary} block mb-1`}>Website Type</label>
-                <Select value={project.website_type} onValueChange={(v) => setProject({...project, website_type: v})}>
-                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
-                  <SelectContent>{WEBSITE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                </Select>
+                {!showAddTypeInput ? (
+                  <div className="flex gap-2">
+                    <Select value={project.website_type} onValueChange={(v) => setProject({...project, website_type: v})}>
+                      <SelectTrigger className={`flex-1 ${bgSecondary}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>{WEBSITE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" size="icon" onClick={() => setShowAddTypeInput(true)} className={bgSecondary} title="Add New Type">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input 
+                      value={newWebsiteType} 
+                      onChange={(e) => setNewWebsiteType(e.target.value)} 
+                      placeholder="Enter new type..." 
+                      className={`flex-1 ${bgSecondary}`}
+                      onKeyDown={(e) => e.key === 'Enter' && addNewWebsiteType()}
+                    />
+                    <Button type="button" size="icon" onClick={addNewWebsiteType} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="outline" size="icon" onClick={() => { setShowAddTypeInput(false); setNewWebsiteType(''); }} className={bgSecondary}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="col-span-2">
                 <label className={`text-sm ${textSecondary} block mb-1`}>Product Details</label>
@@ -1459,7 +1555,7 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
           </TabsContent>
 
           {/* Credentials Tab */}
-          <TabsContent value="credentials" className="space-y-4">
+          <TabsContent value="credentials" className="space-y-4 max-h-[50vh] overflow-y-auto">
             {/* Domain Credentials */}
             <div className={`p-4 rounded-lg border ${borderColor}`}>
               <h4 className={`font-semibold mb-3 ${textPrimary}`}>Domain Credentials</h4>
@@ -1486,6 +1582,56 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
                 <div className="col-span-2">
                   <label className={`text-sm ${textSecondary} block mb-1`}>Domain Email DNS</label>
                   <Input value={project.domain_email_dns} onChange={(e) => setProject({...project, domain_email_dns: e.target.value})} placeholder="DNS records for email configuration" className={bgSecondary} />
+                </div>
+              </div>
+            </div>
+
+            {/* WordPress Credentials */}
+            <div className={`p-4 rounded-lg border ${borderColor}`}>
+              <h4 className={`font-semibold mb-3 ${textPrimary} flex items-center gap-2`}>
+                <span className="w-6 h-6 rounded bg-[#21759b] flex items-center justify-center text-white text-xs font-bold">W</span>
+                WordPress Credentials
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Username</label>
+                  <Input value={project.wp_username} onChange={(e) => setProject({...project, wp_username: e.target.value})} placeholder="wp_admin" className={bgSecondary} />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Password</label>
+                  <div className="relative">
+                    <Input type={showPassword.wp ? 'text' : 'password'} value={project.wp_password} onChange={(e) => setProject({...project, wp_password: e.target.value})} placeholder="••••••••" className={bgSecondary} />
+                    <button type="button" onClick={() => togglePassword('wp')} className={`absolute right-2 top-1/2 -translate-y-1/2 text-xs ${textSecondary}`}>{showPassword.wp ? 'Hide' : 'Show'}</button>
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Backup Codes / Notes</label>
+                  <Input value={project.wp_backup} onChange={(e) => setProject({...project, wp_backup: e.target.value})} placeholder="Backup codes or admin notes" className={bgSecondary} />
+                </div>
+              </div>
+            </div>
+
+            {/* Email Credentials */}
+            <div className={`p-4 rounded-lg border ${borderColor}`}>
+              <h4 className={`font-semibold mb-3 ${textPrimary} flex items-center gap-2`}>
+                <Mail className="w-5 h-5 text-[#ea4335]" />
+                Email Credentials
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Email Address</label>
+                  <Input type="email" value={project.email_address} onChange={(e) => setProject({...project, email_address: e.target.value})} placeholder="admin@domain.com" className={bgSecondary} />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Password</label>
+                  <div className="relative">
+                    <Input type={showPassword.email ? 'text' : 'password'} value={project.email_password} onChange={(e) => setProject({...project, email_password: e.target.value})} placeholder="••••••••" className={bgSecondary} />
+                    <button type="button" onClick={() => togglePassword('email')} className={`absolute right-2 top-1/2 -translate-y-1/2 text-xs ${textSecondary}`}>{showPassword.email ? 'Hide' : 'Show'}</button>
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>2FA / Backup Codes</label>
+                  <Input value={project.email_2fa} onChange={(e) => setProject({...project, email_2fa: e.target.value})} placeholder="2FA backup codes" className={bgSecondary} />
                 </div>
               </div>
             </div>

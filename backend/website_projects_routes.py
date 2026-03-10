@@ -34,6 +34,14 @@ class ProjectCreate(BaseModel):
     domain_password: Optional[str] = None
     domain_2fa: Optional[str] = None
     domain_email_dns: Optional[str] = None
+    # WordPress Credentials
+    wp_username: Optional[str] = None
+    wp_password: Optional[str] = None
+    wp_backup: Optional[str] = None
+    # Email Credentials
+    email_address: Optional[str] = None
+    email_password: Optional[str] = None
+    email_2fa: Optional[str] = None
     # Server Details
     server_details: Optional[str] = None
     server_username: Optional[str] = None
@@ -74,6 +82,14 @@ class ProjectUpdate(BaseModel):
     domain_password: Optional[str] = None
     domain_2fa: Optional[str] = None
     domain_email_dns: Optional[str] = None
+    # WordPress Credentials
+    wp_username: Optional[str] = None
+    wp_password: Optional[str] = None
+    wp_backup: Optional[str] = None
+    # Email Credentials
+    email_address: Optional[str] = None
+    email_password: Optional[str] = None
+    email_2fa: Optional[str] = None
     # Server Details
     server_details: Optional[str] = None
     server_username: Optional[str] = None
