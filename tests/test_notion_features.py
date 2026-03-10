@@ -7,7 +7,7 @@ import requests
 import os
 from datetime import datetime
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://design-kanban-hub.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://drawlead-os-v2.preview.emergentagent.com').rstrip('/')
 SESSION_TOKEN = os.environ.get('SESSION_TOKEN', 'session_8a6198bf3e284b40a5ebd4bae372e0ca')
 
 class TestNotionDatabases:

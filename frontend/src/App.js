@@ -21,6 +21,7 @@ import SOPWorksBoard from './pages/SOPWorksBoard';
 import WebsiteProjectsPage from './pages/WebsiteProjectsPage';
 import SocialMediaPage from './pages/SocialMediaPage';
 import CreativeDesignBoard from './pages/CreativeDesignBoard';
+import MetaAdsBoard from './pages/Operations/MetaAdsBoard';
 import './App.css';
 
 function AppRouter() {
@@ -143,6 +144,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <CreativeDesignBoard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/meta-ads"
+        element={
+          <ProtectedRoute>
+            <MetaAdsBoard />
           </ProtectedRoute>
         }
       />

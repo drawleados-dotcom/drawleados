@@ -29,6 +29,7 @@ from sop_routes import sop_router, init_sop_db
 from website_projects_routes import website_projects_router, init_website_projects_db
 from expense_routes import expense_router, set_expense_db
 from social_creative_routes import social_media_router, creative_router, init_social_creative_db
+from meta_ads_routes import meta_ads_router, init_meta_ads_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -50,6 +51,7 @@ init_sop_db(db)
 init_website_projects_db(db)
 set_expense_db(db)
 init_social_creative_db(db)
+init_meta_ads_db(db)
 
 # Create the main app
 app = FastAPI()
@@ -1555,6 +1557,7 @@ api_router.include_router(website_projects_router)
 api_router.include_router(expense_router)
 api_router.include_router(social_media_router)
 api_router.include_router(creative_router)
+api_router.include_router(meta_ads_router)
 
 # Include router in main app
 app.include_router(api_router)

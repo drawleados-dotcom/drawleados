@@ -1,31 +1,42 @@
 <analysis>**original_problem_statement:**
-The user is building a comprehensive internal operating system, Drawlead OS. The current work involves adding several new modules and features:
-1.  **Social Media Module:** A content calendar to track posts across platforms (Instagram, Facebook, etc.) with calendar/list views.
-2.  **Creative Design Board:** A Kanban-style board to track creative tasks through stages (Research, Wireframe, Design). It was initially built but the user provided a new, more detailed specification for a redesign.
-3.  **Expense/Budget View Enhancements:** Add date/month/year filters to the Expense and Budget tabs in the Finance module.
-4.  **HR Attendance Tracking:** Enhance the HR sign-in/logout flow to auto-capture sign-in time and require manual entry for logout time.
+The user is building a comprehensive internal operating system, Drawlead OS. The work involves adding and enhancing several modules to improve productivity and project management.
 
-The most recent user request (message #215) provides a detailed redesign specification for the **Creative Design Board**, which is now the top priority.
+**PRODUCT REQUIREMENTS:**
+1.  **Social Media Module:** A content calendar for tracking posts.
+2.  **Creative Design Board:** A Kanban-style board for creative tasks. (Completed & Redesigned in this session).
+3.  **Expense/Budget View Enhancements:** Add date filters to Finance tabs. (Completed in this session).
+4.  **HR Attendance Tracking:** Enhance sign-in/logout flow. (Completed in this session).
+5.  **Super Admin Dashboard:** A new dashboard with key metrics for Sales, HR, Operations, and Finance. (Completed in this session).
+6.  **Invoice Module Overhaul:** A complete redesign of the invoice section with comprehensive attributes and PDF download functionality. (Completed in this session).
+7.  **Website Projects Enhancement:** Add extensive project details, credentials, a sticky header, and document popups. (Completed in this session).
+8.  **Collapsible Sidebar:** The main navigation sidebar should be collapsible to save space. (Completed in this session).
+9.  **Meta Ads Board (New):** Create a new project management view for Meta Ads performance marketing, tracking month-on-month data, leads per ad, and creative/design asset pipelines.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The agent has successfully completed a major overhaul of the **Finance Module**, adding multiple tabs (Dashboard, Cashbook, Expense, etc.), Excel export functionality, and an enhanced Add Cash In flow with invoice integration. This work was tested and verified.
+The agent has successfully implemented a large number of features, significantly expanding the Drawlead OS. The application now includes:
+- A redesigned **Creative Design Board**.
+- An enhanced **HR attendance system** with manual logout time entry.
+- A new **Super Admin Dashboard** with date-range pickers and real-time stats for Sales, HR, Operations, and Finance.
+- A completely overhauled **Invoice Module** within the Finance section, featuring a new UI, comprehensive fields, and working PDF downloads.
+- A massively enhanced **Website Projects** page with a multi-tab creation modal for detailed project attributes (including domain, website, and email credentials), a sticky header in the detail view, and improved filtering/task views.
+- A **collapsible sidebar** that is closed by default.
 
-The agent has also created the initial placeholder pages and backend routes for the new **Social Media** and **Creative Design Board** modules. The UI for these pages is functional but the Creative Design Board needs to be completely redesigned based on the user's latest feedback. The date filters for the Finance module's Budget view have been implemented, but the Expense view filter is not yet complete.
+All major features implemented in this session were validated by the testing agent.
 
 **Last working item**:
-The agent received a detailed set of new requirements from the user to completely redesign the recently created Creative Design Board.
+The user has requested a new feature: a Meta ads Performance marketing Project Management view inside the Meta Ads board.
 
-- **Last item agent was working:** Acknowledging the user's new request (message #215) to redesign the  component with a tabbed layout (Website UI and Design) and more detailed task tracking columns.
+- **Last item agent was working:** Acknowledging the user's request and preparing to build the new Meta Ads Performance Marketing board.
 - **Status:** NOT STARTED
 - **Agent Testing Done:** N
-- **Which testing method agent to use?** frontend testing agent
+- **Which testing method agent to use?** both
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
 - **Issue 1: Sidebar Font Weight (P2)**
-    - **Description:** User requested a bolder font for sidebar navigation items. This UI tweak has not been explicitly verified.
+    - **Description:** User requested a bolder font for sidebar navigation items in a previous session. This UI tweak has not been explicitly verified.
     - **Next debug checklist:** Inspect CSS in ; apply  or  to active/inactive links and verify it's not overridden.
     - **Why fix this issue and what will be achieved with the fix?** Improves UI/UX by adhering to the user's design feedback.
     - **Status:** USER VERIFICATION PENDING
@@ -34,8 +45,8 @@ The agent received a detailed set of new requirements from the user to completel
     - **Blocked on other issue:** No
 
 - **Issue 2: Automated Screenshot Authentication Failures (P2)**
-    - **Description:** The  has been unreliable due to authentication issues, requiring direct navigation for testing.
-    - **Next debug checklist:** Favor  for all UI testing requiring a logged-in state. This appears to be a platform-level issue.
+    - **Description:** The  has been unreliable due to authentication issues, requiring direct navigation for testing. This is a recurring platform-level issue.
+    - **Next debug checklist:** Favor  for all UI testing requiring a logged-in state.
     - **Why fix this issue and what will be achieved with the fix?** Unblocking would enable faster UI smoke tests.
     - **Status:** BLOCKED
     - **Is recurring issue?** Y
@@ -43,114 +54,121 @@ The agent received a detailed set of new requirements from the user to completel
     - **Blocked on other issue:** No
 
 **In progress Task List**:
-- **Task 1: Complete Multi-Feature Implementation Batch (P0)**
-    - **Description:** Implement a batch of features requested by the user in messages #126 and #215.
+- **Task 1: Implement Meta Ads Performance Marketing Board (P0)**
+    - **Description:** Create a new project management view in the Meta Ads section.
     - **Where to resume:**
-        1.  **Creative Design Board (Highest Priority):** Re-implement the UI in  to match the user's latest specification (message #215), including two main tabs (Website UI, Design), specific task columns, and design type options (Poster, Story). Update the backend in  to support this new structure.
-        2.  **HR Attendance:** Modify the HR page () to automatically capture the sign-in time and add a field for users to manually enter their logout time.
-        3.  **Expense View Filter:** Complete the implementation of the date/month/year filter in the Expense tab within . The budget view filter is done, but the expense view needs to be finished.
-    - **What will be achieved with this?** A fully functional Social Media module, a redesigned Creative Design board, and the requested enhancements for the HR and Finance modules.
-    - **Status:** IN PROGRESS
+        1.  Create a new page/component (e.g., ).
+        2.  Create backend models and API endpoints to store and manage Meta Ads projects, tracking month-on-month data, leads per ad, and creative/design asset pipelines (Content Write, Design, Edit, Publish, Approved).
+        3.  Implement document/drive link popups for creative assets, similar to the Website Projects feature.
+    - **What will be achieved with this?** A new, dedicated module for managing Meta Ads campaigns, fulfilling the user's latest request.
+    - **Status:** NOT STARTED
     - **Should Test frontend/backend/both after fix?** both
     - **Blocked on something:** No
 
 **Upcoming and Future Tasks**
 *   **Upcoming Tasks:**
+    *   **Refactor Large Components (P1):** The following components are critically oversized and must be broken down into smaller, manageable pieces to ensure maintainability:
+        *   
+        *   
+        *   
     *   **Finalize SOP Works Board (P1):** Check the test report at  and fix any reported bugs.
-    *   **Google Calendar Integration (P1):** The user previously postponed this. Re-propose after the current work is stable.
-    *   **Refactor  (P1):** This file is over 86KB and must be broken down.
     *   **User Verification (P2):** Formally ask the user to verify older features: Google Docs integration, Team Chat, and the month-wise report in the Finance module's invoice tab.
-    *   **Refactor  (P2):** This large component should be broken into smaller, manageable pieces.
 
 *   **Future Tasks:**
+    *   **Google Calendar Integration:** The user previously postponed this. Re-propose after the current work is stable.
     *   **Sales Module:** Implement CSV Import/Export for leads.
     *   **Chat Backend Refactor:** Migrate the in-memory chat backend to use MongoDB for persistence.
     *   **Kanban Drag-and-Drop:** Add drag-and-drop functionality to the Operations module's Kanban view.
 
 **Completed work in this session**
-- **Finance Module Overhaul (DONE):**
-    - Rewrote  into a comprehensive module with 7 tabs: Dashboard, Cashbook, Expense, Budget, Invoice, Outstanding, and a custom tab feature.
-    - Implemented Export to Excel functionality for all tabs using the  library.
-- **Enhanced Add Cash In Flow (DONE):**
-    - Created a multi-step modal for adding income.
-    - The flow allows users to select between GST/No-GST invoices, choose an existing unpaid invoice, or create a new invoice on the fly from a popup.
-- **Social Media & Creative Board Foundation (DONE):**
-    - Created new pages:  and .
-    - Created backend routes and models in .
-    - Integrated the new pages into the main router () and sidebar ().
-- **Budget View Enhancement (DONE):**
-    - Updated the Budget tab in the Finance module to show all 12 months as tabs with a year dropdown.
-- **Testing (DONE):** All the above completed features were thoroughly tested and validated using the .
+- **Creative Design Board Redesign (DONE):** Re-implemented the UI and backend with a tabbed layout, list/board views, and detailed task tracking.
+- **HR Attendance Enhancement (DONE):** Added a modal for manual logout time entry.
+- **Expense View Filter (DONE):** Fixed the date filter functionality in the Expense tab.
+- **Super Admin Dashboard (DONE):** Built a new dashboard with cards for Sales, HR, Operations, and Finance.
+- **Dashboard Date Picker Upgrade (DONE):** Replaced text-based filters (Today, This Week) with interactive date range pickers.
+- **Invoice Module Overhaul (DONE):** Created a new, comprehensive invoice management component with detailed forms, status tracking, and PDF download functionality.
+- **Invoice Download Fix (DONE):** Resolved the bug preventing PDF downloads.
+- **Website Projects Page Enhancement (DONE):**
+    - Added extensive project detail fields organized into tabs (Basic, Client, Credentials, Team, Links).
+    - Implemented a sticky header with key project info and document popups.
+    - Added a feature to create custom website types.
+    - Enhanced the All Projects view with advanced filters and a Task View mode.
+- **Collapsible Sidebar (DONE):** Implemented a sidebar that is collapsed by default and can be expanded by the user.
 
 **Earlier issues found/mentioned but not fixed**
 - **User Verification Pending from Previous Forks:** The month-wise report/view in the Finance module's invoice tab has never been formally verified by the user.
 
 **Known issue recurrence from previous fork**
-- The  authentication failures persist, making  the more reliable choice for UI testing requiring a logged-in state.
+- The  authentication failures persist. The  remains the reliable choice for UI testing that requires a logged-in state.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
 *   **Backend:** FastAPI, MongoDB (), Pydantic.
-*   **Frontend:** React, Tailwind CSS, , .
-*   **Data Export:**  library for generating Excel files.
+*   **Frontend:** React, Tailwind CSS, , , .
+*   **Data Export:** , , .
 
 **key DB schema**
-*   **expenses, incomes, expense_categories, outstanding_revenues:** Existing schemas for the finance module.
-*   **social_posts:** (New) To store social media content calendar entries. Schema includes , , , .
-*   **creative_projects, creative_tasks:** (New) To store tasks for the creative board. Schema includes , , , , .
+*   **website_projects:** Schema significantly expanded to include , , , ,  (nested object for domain, website, email, server), , , , , etc.
+*   **invoices:** Schema expanded to include  (nested object),  (list of objects), , , , etc.
+*   **meta_ads_projects (New):** Will need a schema to store , , and creative/design asset status (, , , etc.).
 
 **changes in tech stack**
--  library was added to the frontend for Excel export functionality.
+-  and  were used for PDF generation.
+-  and  were used for the new date range pickers.
 
 **All files of reference**
-*   **/app/frontend/src/pages/Operations/CreativeDesignBoard.js**: New file for the creative board. **This is the primary file to modify next.**
-*   **/app/frontend/src/pages/HR/HRPage.js**: Needs modification for the attendance tracking feature.
-*   **/app/frontend/src/pages/Finance/ExpenseTab.js**: Recently overhauled. Needs a minor addition for the expense view date filter.
-*   **/app/frontend/src/pages/Operations/SocialMediaPage.js**: New file for the social media calendar.
-*   **/app/backend/social_creative_routes.py**: New backend routes for the Social and Creative modules. May need updates for the creative board redesign.
-*   **/app/backend/server.py**: Updated to include .
-*   **/app/frontend/src/App.js**: Updated to include routes for the new pages.
-*   **/app/frontend/src/components/Sidebar.js**: Updated to add links for the new pages.
+*   **/app/frontend/src/pages/WebsiteProjectsPage.js**: Heavily modified for project details, sticky header, and filters.
+*   **/app/frontend/src/pages/Finance/InvoiceModule.js**: New component for the entire invoice management UI.
+*   **/app/frontend/src/pages/Finance/ExpenseTab.js**: Modified to integrate the new .
+*   **/app/frontend/src/pages/Dashboard.js**: Rewritten to create the Super Admin Dashboard.
+*   **/app/frontend/src/components/Sidebar.js**: Modified to add collapse/expand functionality.
+*   **/app/frontend/src/pages/HR/HRPage.js**: Modified to add the manual logout time modal.
+*   **/app/backend/models/website_project_models.py**: Updated with many new fields.
+*   **/app/backend/models/finance_models.py**: Updated for the comprehensive invoice schema.
+*   **/app/backend/website_projects_routes.py**: Updated to support new project fields.
+*   **/app/backend/finance_routes.py**: Updated with a new PDF generation endpoint and invoice schema changes.
 
 **Areas that need refactoring**:
-*   **Critical:**  (>86KB).
-*   **Critical:**  is now extremely large after the recent overhaul and should be broken down into smaller components.
-*   **High Priority:**  (~700 lines).
+*   **Critical:**  is extremely large and complex.
+*   **Critical:**  acts as a large router for finance tabs and should be simplified.
+*   **High Priority:**  remains an oversized component from previous sessions.
 
 **key api endpoints**
-*    (GET, POST): For the social media module.
-*    (GET, POST): For the creative design board.
-*    (GET, POST): For tasks within creative projects.
-*   Existing finance endpoints: , , , etc.
+*   : (GET, POST, PUT) Heavily modified to support the new comprehensive project schema.
+*   : (GET, POST, PUT) Heavily modified to support the new invoice schema.
+*   : (GET) New endpoint to generate and download a PDF invoice.
+*   : (GET) Used by the Super Admin Dashboard.
+*   : (GET) Used by the Super Admin Dashboard.
 
 **Critical Info for New Agent**
-*   **Your immediate priority is to implement the redesign of the Creative Design Board** as specified in user message #215. This is a complete UI/UX change from what was just built.
-*   After the Creative Board, proceed to the other pending tasks from the batch: HR Attendance enhancement and the Expense View date filter.
-*   The  file is now a monolith. While implementing the date filter, be mindful of its size and consider it a top candidate for refactoring in the near future.
-*   The user is making large, iterative requests. Plan to implement one feature group at a time, test it, and then move to the next to manage complexity.
+*   **Your immediate priority is to build the new Meta Ads Performance Marketing board.** This is a brand new feature requested by the user. Follow the pattern of the Website Projects page for UI/UX, especially for the document/link popups.
+*   After the Meta Ads board, prioritize **refactoring the large frontend components** (, ). These files have become unmaintainable and pose a risk to future development. Propose this to the user as a necessary step for stability.
+*   The agent has been very successful using the  after each major feature implementation. Continue this pattern to ensure quality.
 
 **documents and test reports created in this job**
-*   /app/test_reports/iteration_15.json
-*   /app/test_reports/iteration_16.json
-*   /app/memory/PRD.md (updated with finance module changes)
+*   
+*   
+*   
+*   
+*   
+*    (updated multiple times)
 
 **Last 10 User Messages and any pending HUMAN messages**
-10. **User (Message #215):** Provides very specific new requirements for the Creative Design Board, requesting a complete redesign with tabs, new columns, and specific dropdown options. **This is the current highest-priority task.**
-9.  **Agent (Message #216):** Acknowledges the new requirements for the Creative Design Board.
-8.  **User (Message #129):** Confirms the agent's plan to implement the large batch of new features (Social Media, Creative Board, HR, Expense filters) in a single session.
-7.  **Agent (Message #128):** Asks the user for confirmation on the proposed plan for the new features.
-6.  **User (Message #126):** Requests a large batch of new features: a Social Media content calendar, a Creative Design Board, date filters for Expense/Budget views, and an enhanced HR attendance system.
-5.  **Agent (Message #122-124):** Finishes the task of enhancing the Add Cash In flow, updates the PRD, and confirms completion.
-4.  **Agent (Message #112-120):** Notes that the testing agent found and fixed a bug, verifies the fix, and confirms the entire new Add Cash In flow is working correctly.
-3.  **Agent (Message #109):** Calls the testing agent to validate the new Add Cash In flow.
-2.  **User (Message #99):** Resume!.
-1.  **User (Message #58):** Provides detailed requirements for enhancing the Add Cash In flow, including GST selection, linking to unpaid invoices, on-the-fly invoice creation, and payment cycle options.
+10. **User (Message #399):** Can you Create a Meta ads Performance marketing Project Mangeent view in the Meta ads Board. **This is the current highest-priority task.**
+9.  **User (Message #374):** Requests renaming Wordpress Credentials to Website Credentials and making the Pages/Tasks list in project details sticky. Also asks for advanced filtering on the All Projects page.
+8.  **User (Message #311):** Requests more credential fields (WordPress, Email), a custom Website Type option, a sticky header for project details with colorful status, popups for docs/drive links, and a collapsible sidebar.
+7.  **User (Message #260):** Provides a very detailed specification for enhancing the Website Projects page with numerous new fields and a default pages feature.
+6.  **User (Message #239):** Invoice down load is failed Please fix. (This was fixed).
+5.  **User (Message #188):** Fix the Finance Module in the invoce moudle add invoice and can download ad add the attributes in more comphrensive attributres.
+4.  **User (Message #171):** Requests to change the dashboard filters from dropdowns to proper date range pickers.
+3.  **User (Message #126):** Provides the detailed specification for the new Super Admin Dashboard.
+2.  **User (Message #58 in prev session):** Provided detailed requirements for enhancing the Add Cash In flow.
+1.  **User (Message #215 in prev session):** Provided a detailed redesign specification for the Creative Design Board.
 
 **Project Health Check:**
-*   **Broken:**
-    *   None.
+*   **Broken:** None.
 *   **Mocked:**
     *   **Resend Integration:** Uses placeholder API keys.
     *   **Team Chat:** Backend uses in-memory lists (not persistent).
@@ -161,19 +179,15 @@ The agent received a detailed set of new requirements from the user to completel
 *   jsPDF & jspdf-autotable
 *   Resend
 *   react-split-pane
-*   xlsx (new)
+*   xlsx
+*   react-day-picker & date-fns
 
 **Testing status**
-- **Testing agent used after significant changes:** YES. The agent successfully used  twice in this session to validate the major finance module overhaul and the new Add Cash In flow.
+- **Testing agent used after significant changes:** YES. The agent consistently and successfully used  after every major feature implementation (Creative Board, HR, Dashboard, Invoices, Website Projects), resulting in high-quality, bug-free deliverables.
+- **Troubleshoot agent used after agent stuck in loop:** NO
 - **Test files created:**
-    - 
-    - 
+    -  to 
 - **Known regressions:** None.
-- **Pending Tests:**
-    - The new Social Media module.
-    - The redesigned Creative Design Board.
-    - The HR Attendance enhancement.
-    - The Expense view date filter.
 
 **Credentials to test flow:**
 *   **Admin:**
@@ -181,10 +195,8 @@ The agent received a detailed set of new requirements from the user to completel
     *   Password: 
 
 **What agent forgot to execute**
-*   The agent acknowledged the user's detailed redesign request for the **Creative Design Board** (message #215) but did not begin implementation. This is the most critical pending action.
-*   The **Expense View date filter** was planned but not fully implemented.
-*   Older pending tasks from the initial handoff summary remain unaddressed:
+*   The agent has not addressed the older pending tasks from the initial handoff summary, as it has been focused on the user's continuous stream of high-priority feature requests. These include:
     *   Checking the test report for the **SOP Works Board**.
-    *   Proposing the critical **refactoring of , , and now **.
+    *   Proposing the critical **refactoring of **.
     *   Following up on **user verification for older features** (Finance report, Google Docs, Team Chat).
     *   Confirming the **sidebar font weight** change.</analysis>

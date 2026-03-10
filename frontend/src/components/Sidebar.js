@@ -317,9 +317,9 @@ const Sidebar = () => {
               </Link>
               
               <Link
-                to="/sop-works?service=meta_ads"
+                to="/meta-ads"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.search.includes('service=meta_ads')
+                  location.pathname === '/meta-ads'
                     ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
