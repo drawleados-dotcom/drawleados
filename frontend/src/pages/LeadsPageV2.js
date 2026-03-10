@@ -873,73 +873,193 @@ const LeadsPageV2 = () => {
 
 // ============== LIST VIEW ==============
 const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+  const [activeTab, setActiveTab] = useState('all');
   const getStage = (stageId) => stages.find(s => s.stage_id === stageId);
 
-  if (leads.length === 0) {
-    return (
-      <div className={`text-center py-12 ${textSecondary}`}>
-        <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-        <p>No leads found. Add your first lead!</p>
-      </div>
-    );
-  }
+  // Get counts per stage
+  const stageCounts = stages.reduce((acc, stage) => {
+    acc[stage.stage_id] = leads.filter(l => l.stage_id === stage.stage_id).length;
+    return acc;
+  }, {});
+
+  // Filter leads based on active tab
+  const filteredLeads = activeTab === 'all' 
+    ? leads 
+    : leads.filter(l => l.stage_id === activeTab);
+
+  // Get initials from name
+  const getInitials = (name) => {
+    if (!name) return '?';
+    const parts = name.split(' ');
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 1).toUpperCase();
+  };
+
+  // Get avatar color based on first letter
+  const getAvatarColor = (name) => {
+    const colors = [
+      '#3b82f6', '#8b5cf6', '#ec4899', '#ef4444', '#f59e0b', 
+      '#10b981', '#06b6d4', '#6366f1', '#84cc16', '#f97316'
+    ];
+    const index = (name?.charCodeAt(0) || 0) % colors.length;
+    return colors[index];
+  };
+
+  // Format date with time
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { 
+      day: '2-digit',
+      month: '2-digit', 
+      year: 'numeric'
+    }) + ' ' + date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }).toLowerCase();
+  };
 
   return (
-    <div className={`rounded-xl border ${borderColor} overflow-hidden`}>
-      <table className="w-full text-sm">
-        <thead className={isDark ? 'bg-[#1f1f23]' : 'bg-gray-50'}>
-          <tr className={`text-xs ${textSecondary} uppercase`}>
-            <th className="px-4 py-3 text-left">Name</th>
-            <th className="px-4 py-3 text-left">Phone</th>
-            <th className="px-4 py-3 text-left">Email</th>
-            <th className="px-4 py-3 text-left">Stage</th>
-            <th className="px-4 py-3 text-left">Source</th>
-            <th className="px-4 py-3 text-left">Date</th>
-            <th className="px-4 py-3 text-center">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leads.map(lead => {
-            const stage = getStage(lead.stage_id);
-            return (
-              <tr key={lead.lead_id} className={`border-t ${borderColor} hover:${bgSecondary}`}>
-                <td className={`px-4 py-3 ${textPrimary} font-medium`}>{lead.name}</td>
-                <td className={`px-4 py-3 ${textSecondary}`}>{lead.phone || '-'}</td>
-                <td className={`px-4 py-3 ${textSecondary}`}>{lead.email || '-'}</td>
-                <td className="px-4 py-3">
-                  <Select value={lead.stage_id} onValueChange={(v) => onStageChange(lead.lead_id, v)}>
-                    <SelectTrigger className="h-7 w-32" style={{ backgroundColor: `${stage?.color}20`, color: stage?.color }}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stages.map(s => (
-                        <SelectItem key={s.stage_id} value={s.stage_id}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded" style={{ backgroundColor: s.color }} />
-                            {s.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </td>
-                <td className={`px-4 py-3 ${textSecondary}`}>{lead.source || '-'}</td>
-                <td className={`px-4 py-3 ${textSecondary}`}>{formatDate(lead.created_at)}</td>
-                <td className="px-4 py-3 text-center">
-                  <div className="flex justify-center gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => onEdit(lead)}>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-red-400" onClick={() => onDelete(lead.lead_id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </td>
+    <div className="space-y-4">
+      {/* Tab Filters */}
+      <div className={`flex items-center gap-6 pb-3 border-b-2 ${borderColor} overflow-x-auto`}>
+        <button
+          onClick={() => setActiveTab('all')}
+          className={`flex items-center gap-2 pb-2 border-b-2 transition-all ${
+            activeTab === 'all' 
+              ? 'border-[#3b82f6] text-[#3b82f6]' 
+              : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+          }`}
+        >
+          <span className="font-medium">All ({leads.length})</span>
+        </button>
+        {stages.map(stage => (
+          <button
+            key={stage.stage_id}
+            onClick={() => setActiveTab(stage.stage_id)}
+            className={`flex items-center gap-2 pb-2 border-b-2 transition-all whitespace-nowrap ${
+              activeTab === stage.stage_id 
+                ? `border-current`
+                : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+            }`}
+            style={{ color: activeTab === stage.stage_id ? stage.color : undefined }}
+          >
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
+            <span>{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      {filteredLeads.length === 0 ? (
+        <div className={`text-center py-12 ${textSecondary}`}>
+          <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>No leads found in this category</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden">
+          <table className="w-full">
+            {/* Table Header */}
+            <thead>
+              <tr className={`text-xs ${textSecondary} uppercase border-b ${borderColor}`}>
+                <th className="px-4 py-3 text-left font-medium">Lead</th>
+                <th className="px-4 py-3 text-left font-medium">Contact</th>
+                <th className="px-4 py-3 text-left font-medium">Source</th>
+                <th className="px-4 py-3 text-left font-medium">Stage</th>
+                <th className="px-4 py-3 text-left font-medium">Created</th>
+                <th className="px-4 py-3 text-center font-medium">Actions</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {filteredLeads.map(lead => {
+                const stage = getStage(lead.stage_id);
+                const avatarColor = getAvatarColor(lead.name);
+                return (
+                  <tr 
+                    key={lead.lead_id} 
+                    className={`border-b ${borderColor} hover:bg-[#27272a]/30 transition-colors`}
+                  >
+                    {/* Lead Column - Avatar + Name + Location */}
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm"
+                          style={{ backgroundColor: avatarColor }}
+                        >
+                          {getInitials(lead.name)}
+                        </div>
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{lead.name}</p>
+                          {lead.service && (
+                            <p className={`text-xs ${textSecondary}`}>{lead.service}</p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Contact Column - Phone + Email */}
+                    <td className="px-4 py-4">
+                      <div className="space-y-1">
+                        <p className={textPrimary}>{lead.phone || '-'}</p>
+                        {lead.email && (
+                          <p className={`text-sm ${textSecondary}`}>{lead.email}</p>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Source Column */}
+                    <td className="px-4 py-4">
+                      {lead.source ? (
+                        <span className={`px-3 py-1 rounded text-sm ${isDark ? 'bg-[#27272a] text-[#a1a1aa]' : 'bg-gray-100 text-gray-600'}`}>
+                          {lead.source}
+                        </span>
+                      ) : (
+                        <span className={textSecondary}>-</span>
+                      )}
+                    </td>
+
+                    {/* Stage Column */}
+                    <td className="px-4 py-4">
+                      <span 
+                        className="px-3 py-1 rounded text-sm border-2 font-medium"
+                        style={{ 
+                          borderColor: stage?.color || '#71717a',
+                          color: stage?.color || '#71717a',
+                          backgroundColor: 'transparent'
+                        }}
+                      >
+                        {stage?.name || 'Unknown'}
+                      </span>
+                    </td>
+
+                    {/* Created Column */}
+                    <td className={`px-4 py-4 ${textSecondary}`}>
+                      {formatDateTime(lead.created_at)}
+                    </td>
+
+                    {/* Actions Column */}
+                    <td className="px-4 py-4 text-center">
+                      <div className="flex justify-center gap-1">
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => onEdit(lead)}
+                          className="h-8 w-8 p-0 rounded-full"
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };
