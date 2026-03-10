@@ -13,7 +13,6 @@ import axios from 'axios';
 import {
   Plus,
   Search,
-  Filter,
   Calendar,
   Target,
   FileText,
@@ -26,14 +25,16 @@ import {
   ChevronRight,
   TrendingUp,
   Users,
-  Eye,
-  Download,
   BarChart3,
-  X,
   Table2,
   LayoutGrid,
   Settings,
-  Palette,
+  Building2,
+  Phone,
+  Mail,
+  MapPin,
+  FolderOpen,
+  ArrowLeft,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -50,7 +51,25 @@ const MetaAdsBoard = () => {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
-  // State
+  // View state - 'clients', 'client-detail', 'all-campaigns'
+  const [mainView, setMainView] = useState('clients');
+  const [selectedClient, setSelectedClient] = useState(null);
+
+  // Clients
+  const [clients, setClients] = useState([]);
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [editingClient, setEditingClient] = useState(null);
+  const [clientForm, setClientForm] = useState({
+    name: '',
+    area: '',
+    contact_person: '',
+    email: '',
+    phone: '',
+    drive_url: '',
+    notes: '',
+  });
+
+  // Campaigns & Ads
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddCampaignModal, setShowAddCampaignModal] = useState(false);
@@ -60,8 +79,8 @@ const MetaAdsBoard = () => {
   const [popupUrl, setPopupUrl] = useState(null);
   const [popupTitle, setPopupTitle] = useState('');
   
-  // View mode
-  const [viewMode, setViewMode] = useState('table'); // 'table' or 'kanban'
+  // View mode for campaigns
+  const [viewMode, setViewMode] = useState('table');
   
   // Custom attributes
   const [customAttributes, setCustomAttributes] = useState([]);
@@ -71,11 +90,11 @@ const MetaAdsBoard = () => {
   
   // Filters
   const [monthFilter, setMonthFilter] = useState('all');
-  const [areaFilter, setAreaFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Form states
+  // Campaign Form
   const [campaignForm, setCampaignForm] = useState({
+    client_id: '',
     client_name: '',
     area: '',
     mode: 'Online',
@@ -84,6 +103,7 @@ const MetaAdsBoard = () => {
     service_angle: '',
   });
 
+  // Ad Form
   const [adForm, setAdForm] = useState({
     ad_number: 1,
     ad_title: '',
@@ -107,10 +127,24 @@ const MetaAdsBoard = () => {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
 
-  // Load campaigns
-  const loadCampaigns = useCallback(async () => {
+  // ============== DATA LOADING ==============
+  
+  const loadClients = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/meta-ads/campaigns`, { headers });
+      const res = await axios.get(`${API}/api/meta-ads/clients`, { headers });
+      setClients(res.data || []);
+    } catch (error) {
+      console.error('Error loading clients:', error);
+      setClients([]);
+    }
+  }, []);
+
+  const loadCampaigns = useCallback(async (clientId = null) => {
+    try {
+      const url = clientId 
+        ? `${API}/api/meta-ads/campaigns?client_id=${clientId}`
+        : `${API}/api/meta-ads/campaigns`;
+      const res = await axios.get(url, { headers });
       setCampaigns(res.data || []);
     } catch (error) {
       console.error('Error loading campaigns:', error);
@@ -118,9 +152,8 @@ const MetaAdsBoard = () => {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, []);
 
-  // Load custom attributes
   const loadCustomAttributes = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/meta-ads/custom-attributes`, { headers });
@@ -128,122 +161,186 @@ const MetaAdsBoard = () => {
     } catch (error) {
       console.error('Error loading custom attributes:', error);
     }
-  }, [token]);
+  }, []);
+
+  const loadClientDetail = useCallback(async (clientId) => {
+    try {
+      const res = await axios.get(`${API}/api/meta-ads/clients/${clientId}`, { headers });
+      setSelectedClient(res.data);
+      setCampaigns(res.data.campaigns || []);
+    } catch (error) {
+      console.error('Error loading client:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    loadCampaigns();
+    loadClients();
     loadCustomAttributes();
-  }, [loadCampaigns, loadCustomAttributes]);
+    setLoading(false);
+  }, [loadClients, loadCustomAttributes]);
 
-  // Create campaign
-  const createCampaign = async () => {
+  // ============== CLIENT ACTIONS ==============
+
+  const createClient = async () => {
+    if (!clientForm.name.trim()) {
+      toast.error('Client name is required');
+      return;
+    }
     try {
-      if (!campaignForm.client_name || !campaignForm.target_name) {
-        toast.error('Client name and target name are required');
-        return;
+      await axios.post(`${API}/api/meta-ads/clients`, clientForm, { headers });
+      toast.success('Client created');
+      setShowAddClientModal(false);
+      resetClientForm();
+      loadClients();
+    } catch (error) {
+      toast.error('Failed to create client');
+    }
+  };
+
+  const updateClient = async () => {
+    if (!editingClient) return;
+    try {
+      await axios.put(`${API}/api/meta-ads/clients/${editingClient.client_id}`, clientForm, { headers });
+      toast.success('Client updated');
+      setEditingClient(null);
+      setShowAddClientModal(false);
+      resetClientForm();
+      loadClients();
+      if (selectedClient?.client_id === editingClient.client_id) {
+        loadClientDetail(editingClient.client_id);
       }
-      await axios.post(`${API}/api/meta-ads/campaigns`, campaignForm, { headers });
+    } catch (error) {
+      toast.error('Failed to update client');
+    }
+  };
+
+  const deleteClient = async (clientId) => {
+    if (!window.confirm('Delete this client? This will not delete campaigns.')) return;
+    try {
+      await axios.delete(`${API}/api/meta-ads/clients/${clientId}`, { headers });
+      toast.success('Client deleted');
+      loadClients();
+      if (selectedClient?.client_id === clientId) {
+        setMainView('clients');
+        setSelectedClient(null);
+      }
+    } catch (error) {
+      toast.error('Failed to delete client');
+    }
+  };
+
+  const openEditClient = (client) => {
+    setEditingClient(client);
+    setClientForm({
+      name: client.name || '',
+      area: client.area || '',
+      contact_person: client.contact_person || '',
+      email: client.email || '',
+      phone: client.phone || '',
+      drive_url: client.drive_url || '',
+      notes: client.notes || '',
+    });
+    setShowAddClientModal(true);
+  };
+
+  const resetClientForm = () => {
+    setClientForm({
+      name: '',
+      area: '',
+      contact_person: '',
+      email: '',
+      phone: '',
+      drive_url: '',
+      notes: '',
+    });
+    setEditingClient(null);
+  };
+
+  // ============== CAMPAIGN ACTIONS ==============
+
+  const createCampaign = async () => {
+    if (!campaignForm.target_name) {
+      toast.error('Target name is required');
+      return;
+    }
+    try {
+      const formData = { ...campaignForm };
+      if (selectedClient) {
+        formData.client_id = selectedClient.client_id;
+        formData.client_name = selectedClient.name;
+        formData.area = selectedClient.area || formData.area;
+      }
+      await axios.post(`${API}/api/meta-ads/campaigns`, formData, { headers });
       toast.success('Campaign created');
       setShowAddCampaignModal(false);
       resetCampaignForm();
-      loadCampaigns();
+      if (selectedClient) {
+        loadClientDetail(selectedClient.client_id);
+      } else {
+        loadCampaigns();
+      }
     } catch (error) {
       toast.error('Failed to create campaign');
     }
   };
 
-  // Add ad to campaign
-  const addAd = async () => {
-    try {
-      if (!selectedCampaign) return;
-      await axios.post(`${API}/api/meta-ads/campaigns/${selectedCampaign.campaign_id}/ads`, adForm, { headers });
-      toast.success('Ad added');
-      setShowAddAdModal(false);
-      resetAdForm();
-      loadCampaigns();
-    } catch (error) {
-      toast.error('Failed to add ad');
-    }
-  };
-
-  // Update ad
-  const updateAd = async (campaignId, adId, updates) => {
-    try {
-      await axios.put(`${API}/api/meta-ads/campaigns/${campaignId}/ads/${adId}`, updates, { headers });
-      loadCampaigns();
-    } catch (error) {
-      toast.error('Failed to update ad');
-    }
-  };
-
-  // Delete campaign
   const deleteCampaign = async (campaignId) => {
     if (!window.confirm('Delete this campaign and all its ads?')) return;
     try {
       await axios.delete(`${API}/api/meta-ads/campaigns/${campaignId}`, { headers });
       toast.success('Campaign deleted');
-      loadCampaigns();
+      if (selectedClient) {
+        loadClientDetail(selectedClient.client_id);
+      } else {
+        loadCampaigns();
+      }
     } catch (error) {
       toast.error('Failed to delete campaign');
     }
   };
 
-  // Create custom attribute
-  const createCustomAttribute = async () => {
-    if (!newAttrName.trim()) {
-      toast.error('Attribute name is required');
-      return;
-    }
-    try {
-      await axios.post(`${API}/api/meta-ads/custom-attributes`, {
-        name: newAttrName,
-        attr_type: newAttrType
-      }, { headers });
-      toast.success('Custom attribute created');
-      setShowAddAttributeModal(false);
-      setNewAttrName('');
-      setNewAttrType('select');
-      loadCustomAttributes();
-    } catch (error) {
-      toast.error('Failed to create attribute');
-    }
-  };
-
-  // Add option to custom attribute
-  const addAttributeOption = async (attrId, optionName, color = '#71717a') => {
-    try {
-      await axios.post(`${API}/api/meta-ads/custom-attributes/${attrId}/options`, {
-        name: optionName,
-        color
-      }, { headers });
-      loadCustomAttributes();
-    } catch (error) {
-      toast.error('Failed to add option');
-    }
-  };
-
-  // Delete custom attribute
-  const deleteCustomAttribute = async (attrId) => {
-    if (!window.confirm('Delete this custom attribute?')) return;
-    try {
-      await axios.delete(`${API}/api/meta-ads/custom-attributes/${attrId}`, { headers });
-      toast.success('Attribute deleted');
-      loadCustomAttributes();
-    } catch (error) {
-      toast.error('Failed to delete attribute');
-    }
-  };
-
-  // Reset forms
   const resetCampaignForm = () => {
     setCampaignForm({
-      client_name: '',
-      area: '',
+      client_id: selectedClient?.client_id || '',
+      client_name: selectedClient?.name || '',
+      area: selectedClient?.area || '',
       mode: 'Online',
       month: new Date().toISOString().slice(0, 7),
       target_name: '',
       service_angle: '',
     });
+  };
+
+  // ============== AD ACTIONS ==============
+
+  const addAd = async () => {
+    if (!selectedCampaign) return;
+    try {
+      await axios.post(`${API}/api/meta-ads/campaigns/${selectedCampaign.campaign_id}/ads`, adForm, { headers });
+      toast.success('Ad added');
+      setShowAddAdModal(false);
+      resetAdForm();
+      if (selectedClient) {
+        loadClientDetail(selectedClient.client_id);
+      } else {
+        loadCampaigns();
+      }
+    } catch (error) {
+      toast.error('Failed to add ad');
+    }
+  };
+
+  const updateAd = async (campaignId, adId, updates) => {
+    try {
+      await axios.put(`${API}/api/meta-ads/campaigns/${campaignId}/ads/${adId}`, updates, { headers });
+      if (selectedClient) {
+        loadClientDetail(selectedClient.client_id);
+      } else {
+        loadCampaigns();
+      }
+    } catch (error) {
+      toast.error('Failed to update ad');
+    }
   };
 
   const resetAdForm = () => {
@@ -264,7 +361,41 @@ const MetaAdsBoard = () => {
     });
   };
 
-  // Open popup
+  // ============== CUSTOM ATTRIBUTES ==============
+
+  const createCustomAttribute = async () => {
+    if (!newAttrName.trim()) {
+      toast.error('Attribute name is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/meta-ads/custom-attributes`, {
+        name: newAttrName,
+        attr_type: newAttrType
+      }, { headers });
+      toast.success('Custom attribute created');
+      setShowAddAttributeModal(false);
+      setNewAttrName('');
+      setNewAttrType('select');
+      loadCustomAttributes();
+    } catch (error) {
+      toast.error('Failed to create attribute');
+    }
+  };
+
+  const deleteCustomAttribute = async (attrId) => {
+    if (!window.confirm('Delete this custom attribute?')) return;
+    try {
+      await axios.delete(`${API}/api/meta-ads/custom-attributes/${attrId}`, { headers });
+      toast.success('Attribute deleted');
+      loadCustomAttributes();
+    } catch (error) {
+      toast.error('Failed to delete attribute');
+    }
+  };
+
+  // ============== HELPERS ==============
+
   const openPopup = (url, title) => {
     if (url) {
       setPopupUrl(url);
@@ -272,7 +403,6 @@ const MetaAdsBoard = () => {
     }
   };
 
-  // Toggle campaign expansion
   const toggleCampaign = (campaignId) => {
     setExpandedCampaigns(prev => ({
       ...prev,
@@ -280,22 +410,38 @@ const MetaAdsBoard = () => {
     }));
   };
 
-  // Get unique months and areas for filters
-  const months = [...new Set(campaigns.map(c => c.month))].sort().reverse();
-  const areas = [...new Set(campaigns.map(c => c.area).filter(Boolean))];
+  const viewClientDetail = (client) => {
+    setSelectedClient(client);
+    loadClientDetail(client.client_id);
+    setMainView('client-detail');
+  };
+
+  const backToClients = () => {
+    setMainView('clients');
+    setSelectedClient(null);
+    setCampaigns([]);
+  };
+
+  const viewAllCampaigns = () => {
+    setMainView('all-campaigns');
+    setSelectedClient(null);
+    loadCampaigns();
+  };
 
   // Filter campaigns
   const filteredCampaigns = campaigns.filter(c => {
     const matchesMonth = monthFilter === 'all' || c.month === monthFilter;
-    const matchesArea = areaFilter === 'all' || c.area === areaFilter;
     const matchesSearch = !searchTerm || 
       c.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.target_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.service_angle?.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesMonth && matchesArea && matchesSearch;
+    return matchesMonth && matchesSearch;
   });
 
-  // Group campaigns by month for month-on-month view
+  // Get unique months
+  const months = [...new Set(campaigns.map(c => c.month))].sort().reverse();
+
+  // Group campaigns by month
   const campaignsByMonth = filteredCampaigns.reduce((acc, c) => {
     const month = c.month || 'Unknown';
     if (!acc[month]) acc[month] = [];
@@ -303,35 +449,7 @@ const MetaAdsBoard = () => {
     return acc;
   }, {});
 
-  // Get all ads for kanban view
-  const getAllAds = () => {
-    const ads = [];
-    filteredCampaigns.forEach(campaign => {
-      (campaign.ads || []).forEach(ad => {
-        ads.push({ ...ad, campaign });
-      });
-    });
-    return ads;
-  };
-
-  // Group ads by creative status for kanban
-  const getAdsByCreativeStatus = () => {
-    const grouped = {};
-    CREATIVE_STATUS.forEach(status => { grouped[status] = []; });
-    
-    getAllAds().forEach(ad => {
-      const status = ad.creative_status || 'Yet to Start';
-      if (grouped[status]) {
-        grouped[status].push(ad);
-      } else {
-        grouped['Yet to Start'].push(ad);
-      }
-    });
-    
-    return grouped;
-  };
-
-  // Calculate stats
+  // Stats
   const totalLeads = campaigns.reduce((sum, c) => 
     sum + (c.ads || []).reduce((s, ad) => s + (ad.leads_count || 0), 0), 0
   );
@@ -340,7 +458,13 @@ const MetaAdsBoard = () => {
   );
   const totalAds = campaigns.reduce((sum, c) => sum + (c.ads?.length || 0), 0);
 
-  // Status color helper
+  const formatMonth = (monthStr) => {
+    if (!monthStr) return 'Unknown';
+    const [year, month] = monthStr.split('-');
+    const date = new Date(year, month - 1);
+    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+  };
+
   const getStatusColor = (status, type) => {
     if (type === 'content') {
       switch (status) {
@@ -361,26 +485,7 @@ const MetaAdsBoard = () => {
     return 'bg-gray-500/20 text-gray-400';
   };
 
-  // Get kanban column color
-  const getKanbanColumnColor = (status) => {
-    switch (status) {
-      case 'Yet to Start': return '#71717a';
-      case 'Design': return '#3b82f6';
-      case 'Edit': return '#8b5cf6';
-      case 'Review': return '#f59e0b';
-      case 'Published': return '#10b981';
-      case 'Approved': return '#22c55e';
-      default: return '#71717a';
-    }
-  };
-
-  // Format month
-  const formatMonth = (monthStr) => {
-    if (!monthStr) return 'Unknown';
-    const [year, month] = monthStr.split('-');
-    const date = new Date(year, month - 1);
-    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-  };
+  // ============== RENDER ==============
 
   return (
     <Layout>
@@ -389,194 +494,298 @@ const MetaAdsBoard = () => {
         <div className={`p-4 border-b ${borderColor}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
+              {mainView !== 'clients' && (
+                <Button variant="ghost" size="sm" onClick={backToClients} className="mr-2">
+                  <ArrowLeft className="h-4 w-4 mr-1" /> Back
+                </Button>
+              )}
               <div className="p-2 rounded-lg bg-[#1877f2]/20">
                 <Target className="h-6 w-6 text-[#1877f2]" />
               </div>
               <div>
-                <h1 className={`text-xl font-bold ${textPrimary}`}>Meta Ads Board</h1>
-                <p className={`text-sm ${textSecondary}`}>Performance Marketing Management</p>
+                <h1 className={`text-xl font-bold ${textPrimary}`}>
+                  {mainView === 'clients' ? 'Meta Ads Board' : 
+                   mainView === 'client-detail' ? selectedClient?.name : 'All Campaigns'}
+                </h1>
+                <p className={`text-sm ${textSecondary}`}>
+                  {mainView === 'clients' ? 'Performance Marketing Management' : 
+                   mainView === 'client-detail' ? `${selectedClient?.area || 'Client'} • ${campaigns.length} Campaigns` : 
+                   `${campaigns.length} Total Campaigns`}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* View Mode Toggle */}
-              <div className="flex items-center bg-[#18181b] rounded-lg p-1 border border-[#27272a]">
-                <button
-                  onClick={() => setViewMode('table')}
-                  data-testid="view-table-btn"
-                  className={`p-2 rounded ${viewMode === 'table' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
-                  title="Table View"
-                >
-                  <Table2 className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('kanban')}
-                  data-testid="view-kanban-btn"
-                  className={`p-2 rounded ${viewMode === 'kanban' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
-                  title="Kanban View"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
-              
-              <Button 
-                onClick={() => setShowAddAttributeModal(true)}
-                variant="outline"
-                className="border-[#27272a] bg-[#18181b] text-[#a1a1aa] hover:text-[#fafafa]"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Custom Fields
-              </Button>
-              
-              <Button 
-                onClick={() => setShowAddCampaignModal(true)} 
-                data-testid="new-campaign-btn"
-                className="bg-[#1877f2] hover:bg-[#166fe5]"
-              >
-                <Plus className="h-4 w-4 mr-2" /> New Campaign
-              </Button>
+              {mainView === 'clients' && (
+                <>
+                  <Button 
+                    onClick={viewAllCampaigns}
+                    variant="outline"
+                    className="border-[#27272a] bg-[#18181b] text-[#a1a1aa] hover:text-[#fafafa]"
+                  >
+                    <BarChart3 className="h-4 w-4 mr-2" /> All Campaigns
+                  </Button>
+                  <Button 
+                    onClick={() => { resetClientForm(); setShowAddClientModal(true); }}
+                    data-testid="new-client-btn"
+                    className="bg-[#1877f2] hover:bg-[#166fe5]"
+                  >
+                    <Plus className="h-4 w-4 mr-2" /> New Client
+                  </Button>
+                </>
+              )}
+              {(mainView === 'client-detail' || mainView === 'all-campaigns') && (
+                <>
+                  <div className="flex items-center bg-[#18181b] rounded-lg p-1 border border-[#27272a]">
+                    <button
+                      onClick={() => setViewMode('table')}
+                      data-testid="view-table-btn"
+                      className={`p-2 rounded ${viewMode === 'table' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                    >
+                      <Table2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setViewMode('kanban')}
+                      data-testid="view-kanban-btn"
+                      className={`p-2 rounded ${viewMode === 'kanban' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                    >
+                      <LayoutGrid className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <Button 
+                    onClick={() => setShowAddAttributeModal(true)}
+                    variant="outline"
+                    className="border-[#27272a] bg-[#18181b] text-[#a1a1aa] hover:text-[#fafafa]"
+                  >
+                    <Settings className="h-4 w-4 mr-2" /> Custom Fields
+                  </Button>
+                  <Button 
+                    onClick={() => { resetCampaignForm(); setShowAddCampaignModal(true); }}
+                    data-testid="new-campaign-btn"
+                    className="bg-[#1877f2] hover:bg-[#166fe5]"
+                  >
+                    <Plus className="h-4 w-4 mr-2" /> New Campaign
+                  </Button>
+                </>
+              )}
             </div>
           </div>
-        </div>
-
-        {/* Stats */}
-        <div className={`p-4 border-b ${borderColor} grid grid-cols-4 gap-4`}>
-          <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
-            <BarChart3 className="h-6 w-6 mx-auto mb-2 text-[#1877f2]" />
-            <p className={`text-2xl font-bold ${textPrimary}`}>{campaigns.length}</p>
-            <p className={`text-xs ${textSecondary}`}>Campaigns</p>
-          </div>
-          <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
-            <FileText className="h-6 w-6 mx-auto mb-2 text-[#6366f1]" />
-            <p className={`text-2xl font-bold ${textPrimary}`}>{totalAds}</p>
-            <p className={`text-xs ${textSecondary}`}>Total Ads</p>
-          </div>
-          <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
-            <Users className="h-6 w-6 mx-auto mb-2 text-[#22c55e]" />
-            <p className={`text-2xl font-bold text-[#22c55e]`}>{totalLeads}</p>
-            <p className={`text-xs ${textSecondary}`}>Total Leads</p>
-          </div>
-          <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
-            <TrendingUp className="h-6 w-6 mx-auto mb-2 text-[#f59e0b]" />
-            <p className={`text-2xl font-bold ${textPrimary}`}>₹{totalSpend.toLocaleString()}</p>
-            <p className={`text-xs ${textSecondary}`}>Total Spend</p>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className={`p-4 border-b ${borderColor} flex flex-wrap items-center gap-3`}>
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input 
-              placeholder="Search campaigns..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              data-testid="search-input"
-              className={`pl-10 ${bgSecondary} border-none`}
-            />
-          </div>
-          
-          <Select value={monthFilter} onValueChange={setMonthFilter}>
-            <SelectTrigger className={`w-36 ${bgSecondary} border-none`} data-testid="month-filter">
-              <Calendar className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Month" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Months</SelectItem>
-              {months.map(m => (
-                <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={areaFilter} onValueChange={setAreaFilter}>
-            <SelectTrigger className={`w-36 ${bgSecondary} border-none`} data-testid="area-filter">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Area" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Areas</SelectItem>
-              {areas.map(a => (
-                <SelectItem key={a} value={a}>{a}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
         {/* Main Content */}
         <div className="flex-1 overflow-auto p-4">
-          {viewMode === 'table' ? (
-            // TABLE VIEW - Month on Month
-            <TableView
-              campaignsByMonth={campaignsByMonth}
-              expandedCampaigns={expandedCampaigns}
-              toggleCampaign={toggleCampaign}
-              setSelectedCampaign={setSelectedCampaign}
-              setShowAddAdModal={setShowAddAdModal}
-              deleteCampaign={deleteCampaign}
-              updateAd={updateAd}
-              openPopup={openPopup}
-              customAttributes={customAttributes}
-              formatMonth={formatMonth}
-              getStatusColor={getStatusColor}
+          {mainView === 'clients' ? (
+            // ============== CLIENTS VIEW ==============
+            <ClientsView
+              clients={clients}
+              viewClientDetail={viewClientDetail}
+              openEditClient={openEditClient}
+              deleteClient={deleteClient}
               isDark={isDark}
               textPrimary={textPrimary}
               textSecondary={textSecondary}
               borderColor={borderColor}
               bgSecondary={bgSecondary}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
             />
           ) : (
-            // KANBAN VIEW - By Creative Status
-            <KanbanView
-              adsByStatus={getAdsByCreativeStatus()}
-              updateAd={updateAd}
-              openPopup={openPopup}
-              customAttributes={customAttributes}
-              getKanbanColumnColor={getKanbanColumnColor}
-              getStatusColor={getStatusColor}
-              isDark={isDark}
-              textPrimary={textPrimary}
-              textSecondary={textSecondary}
-              borderColor={borderColor}
-              bgSecondary={bgSecondary}
-            />
+            // ============== CAMPAIGNS VIEW (Detail or All) ==============
+            <>
+              {/* Stats */}
+              <div className={`mb-4 grid grid-cols-4 gap-4`}>
+                <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
+                  <BarChart3 className="h-6 w-6 mx-auto mb-2 text-[#1877f2]" />
+                  <p className={`text-2xl font-bold ${textPrimary}`}>{campaigns.length}</p>
+                  <p className={`text-xs ${textSecondary}`}>Campaigns</p>
+                </div>
+                <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
+                  <FileText className="h-6 w-6 mx-auto mb-2 text-[#6366f1]" />
+                  <p className={`text-2xl font-bold ${textPrimary}`}>{totalAds}</p>
+                  <p className={`text-xs ${textSecondary}`}>Total Ads</p>
+                </div>
+                <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
+                  <Users className="h-6 w-6 mx-auto mb-2 text-[#22c55e]" />
+                  <p className={`text-2xl font-bold text-[#22c55e]`}>{totalLeads}</p>
+                  <p className={`text-xs ${textSecondary}`}>Total Leads</p>
+                </div>
+                <div className={`p-4 rounded-xl ${bgSecondary} text-center`}>
+                  <TrendingUp className="h-6 w-6 mx-auto mb-2 text-[#f59e0b]" />
+                  <p className={`text-2xl font-bold ${textPrimary}`}>₹{totalSpend.toLocaleString()}</p>
+                  <p className={`text-xs ${textSecondary}`}>Total Spend</p>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className={`mb-4 flex flex-wrap items-center gap-3`}>
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input 
+                    placeholder="Search campaigns..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={`pl-10 ${bgSecondary} border-none`}
+                  />
+                </div>
+                <Select value={monthFilter} onValueChange={setMonthFilter}>
+                  <SelectTrigger className={`w-36 ${bgSecondary} border-none`}>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Months</SelectItem>
+                    {months.map(m => (
+                      <SelectItem key={m} value={m}>{formatMonth(m)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Campaigns Table */}
+              {viewMode === 'table' ? (
+                <TableView
+                  campaignsByMonth={campaignsByMonth}
+                  expandedCampaigns={expandedCampaigns}
+                  toggleCampaign={toggleCampaign}
+                  setSelectedCampaign={setSelectedCampaign}
+                  setShowAddAdModal={setShowAddAdModal}
+                  deleteCampaign={deleteCampaign}
+                  updateAd={updateAd}
+                  openPopup={openPopup}
+                  customAttributes={customAttributes}
+                  formatMonth={formatMonth}
+                  getStatusColor={getStatusColor}
+                  isDark={isDark}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  borderColor={borderColor}
+                  bgSecondary={bgSecondary}
+                  showClientColumn={mainView === 'all-campaigns'}
+                />
+              ) : (
+                <KanbanView
+                  campaigns={filteredCampaigns}
+                  updateAd={updateAd}
+                  openPopup={openPopup}
+                  customAttributes={customAttributes}
+                  getStatusColor={getStatusColor}
+                  isDark={isDark}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  borderColor={borderColor}
+                  bgSecondary={bgSecondary}
+                />
+              )}
+            </>
           )}
         </div>
 
-        {/* Add Campaign Modal */}
-        <Dialog open={showAddCampaignModal} onOpenChange={setShowAddCampaignModal}>
+        {/* ============== MODALS ============== */}
+
+        {/* Add/Edit Client Modal */}
+        <Dialog open={showAddClientModal} onOpenChange={setShowAddClientModal}>
           <DialogContent className={`${bgCard} ${textPrimary} max-w-lg`}>
             <DialogHeader>
-              <DialogTitle>Create New Campaign</DialogTitle>
+              <DialogTitle>{editingClient ? 'Edit Client' : 'Add New Client'}</DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className={`text-sm ${textSecondary} block mb-1`}>Client/Brand Name *</label>
                 <Input 
-                  value={campaignForm.client_name}
-                  onChange={(e) => setCampaignForm({ ...campaignForm, client_name: e.target.value })}
-                  placeholder="e.g., Fitsiomax"
-                  data-testid="campaign-client-name"
+                  value={clientForm.name}
+                  onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+                  placeholder="e.g., Fitsiomax Gym"
+                  data-testid="client-name-input"
                   className={bgSecondary}
                 />
               </div>
               <div>
                 <label className={`text-sm ${textSecondary} block mb-1`}>Area/Location</label>
                 <Input 
-                  value={campaignForm.area}
-                  onChange={(e) => setCampaignForm({ ...campaignForm, area: e.target.value })}
-                  placeholder="e.g., Fitness, Anna Nagar"
+                  value={clientForm.area}
+                  onChange={(e) => setClientForm({ ...clientForm, area: e.target.value })}
+                  placeholder="e.g., Anna Nagar, Chennai"
                   className={bgSecondary}
                 />
               </div>
               <div>
-                <label className={`text-sm ${textSecondary} block mb-1`}>Mode</label>
-                <Select value={campaignForm.mode} onValueChange={(v) => setCampaignForm({ ...campaignForm, mode: v })}>
-                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Contact Person</label>
+                <Input 
+                  value={clientForm.contact_person}
+                  onChange={(e) => setClientForm({ ...clientForm, contact_person: e.target.value })}
+                  placeholder="e.g., John Doe"
+                  className={bgSecondary}
+                />
               </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Email</label>
+                <Input 
+                  type="email"
+                  value={clientForm.email}
+                  onChange={(e) => setClientForm({ ...clientForm, email: e.target.value })}
+                  placeholder="client@example.com"
+                  className={bgSecondary}
+                />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Phone</label>
+                <Input 
+                  value={clientForm.phone}
+                  onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
+                  placeholder="+91 98765 43210"
+                  className={bgSecondary}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className={`text-sm ${textSecondary} block mb-1`}>Client Drive URL</label>
+                <Input 
+                  value={clientForm.drive_url}
+                  onChange={(e) => setClientForm({ ...clientForm, drive_url: e.target.value })}
+                  placeholder="Google Drive link for client assets"
+                  className={bgSecondary}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className={`text-sm ${textSecondary} block mb-1`}>Notes</label>
+                <Textarea 
+                  value={clientForm.notes}
+                  onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
+                  placeholder="Any additional notes about the client..."
+                  className={bgSecondary}
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => { setShowAddClientModal(false); resetClientForm(); }}>Cancel</Button>
+              <Button 
+                onClick={editingClient ? updateClient : createClient} 
+                data-testid="save-client-btn"
+                className="bg-[#1877f2] hover:bg-[#166fe5]"
+              >
+                {editingClient ? 'Update Client' : 'Create Client'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Campaign Modal */}
+        <Dialog open={showAddCampaignModal} onOpenChange={setShowAddCampaignModal}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-lg`}>
+            <DialogHeader>
+              <DialogTitle>Create New Campaign {selectedClient && `for ${selectedClient.name}`}</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4">
+              {!selectedClient && (
+                <div className="col-span-2">
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Client/Brand Name</label>
+                  <Input 
+                    value={campaignForm.client_name}
+                    onChange={(e) => setCampaignForm({ ...campaignForm, client_name: e.target.value })}
+                    placeholder="e.g., Fitsiomax"
+                    className={bgSecondary}
+                  />
+                </div>
+              )}
               <div>
                 <label className={`text-sm ${textSecondary} block mb-1`}>Month *</label>
                 <Input 
@@ -593,6 +802,24 @@ const MetaAdsBoard = () => {
                   onChange={(e) => setCampaignForm({ ...campaignForm, target_name: e.target.value })}
                   placeholder="e.g., Target 01"
                   data-testid="campaign-target-name"
+                  className={bgSecondary}
+                />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Mode</label>
+                <Select value={campaignForm.mode} onValueChange={(v) => setCampaignForm({ ...campaignForm, mode: v })}>
+                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Area</label>
+                <Input 
+                  value={campaignForm.area}
+                  onChange={(e) => setCampaignForm({ ...campaignForm, area: e.target.value })}
+                  placeholder="e.g., Anna Nagar"
                   className={bgSecondary}
                 />
               </div>
@@ -685,7 +912,6 @@ const MetaAdsBoard = () => {
                 </Select>
               </div>
               
-              {/* Custom Attributes */}
               {customAttributes.length > 0 && (
                 <div className="col-span-2 border-t border-[#3f3f46] pt-4 mt-2">
                   <h4 className={`text-sm font-medium ${textPrimary} mb-3`}>Custom Fields</h4>
@@ -732,14 +958,12 @@ const MetaAdsBoard = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Custom Attributes Management Modal */}
+        {/* Custom Attributes Modal */}
         <Dialog open={showAddAttributeModal} onOpenChange={setShowAddAttributeModal}>
           <DialogContent className={`${bgCard} ${textPrimary} max-w-md`}>
             <DialogHeader>
               <DialogTitle>Manage Custom Fields</DialogTitle>
             </DialogHeader>
-            
-            {/* Existing Attributes */}
             <div className="space-y-3 mb-4">
               {customAttributes.length === 0 ? (
                 <p className={`text-sm ${textSecondary} text-center py-4`}>No custom fields yet</p>
@@ -749,76 +973,44 @@ const MetaAdsBoard = () => {
                     <div>
                       <p className={`font-medium ${textPrimary}`}>{attr.name}</p>
                       <p className={`text-xs ${textSecondary}`}>Type: {attr.attr_type}</p>
-                      {attr.attr_type === 'select' && attr.options && (
-                        <div className="flex gap-1 mt-1 flex-wrap">
-                          {attr.options.map(opt => (
-                            <Badge 
-                              key={opt.id} 
-                              style={{ backgroundColor: `${opt.color}20`, color: opt.color }}
-                              className="text-xs"
-                            >
-                              {opt.name}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => deleteCustomAttribute(attr.attr_id)}
-                      className="text-red-400 hover:text-red-300"
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => deleteCustomAttribute(attr.attr_id)} className="text-red-400">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))
               )}
             </div>
-            
-            {/* Add New Attribute */}
             <div className={`p-4 rounded-lg border ${borderColor}`}>
               <h4 className={`text-sm font-medium ${textPrimary} mb-3`}>Add New Field</h4>
               <div className="space-y-3">
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Field Name</label>
-                  <Input 
-                    value={newAttrName}
-                    onChange={(e) => setNewAttrName(e.target.value)}
-                    placeholder="e.g., Priority, Assigned To"
-                    data-testid="new-attr-name"
-                    className={bgSecondary}
-                  />
-                </div>
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Field Type</label>
-                  <Select value={newAttrType} onValueChange={setNewAttrType}>
-                    <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="select">Select (Dropdown)</SelectItem>
-                      <SelectItem value="text">Text</SelectItem>
-                      <SelectItem value="number">Number</SelectItem>
-                      <SelectItem value="url">URL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button 
-                  onClick={createCustomAttribute} 
-                  data-testid="create-attr-btn"
-                  className="w-full bg-[#10b981] hover:bg-[#059669]"
-                >
+                <Input 
+                  value={newAttrName}
+                  onChange={(e) => setNewAttrName(e.target.value)}
+                  placeholder="e.g., Priority, Assigned To"
+                  className={bgSecondary}
+                />
+                <Select value={newAttrType} onValueChange={setNewAttrType}>
+                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="select">Select (Dropdown)</SelectItem>
+                    <SelectItem value="text">Text</SelectItem>
+                    <SelectItem value="number">Number</SelectItem>
+                    <SelectItem value="url">URL</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={createCustomAttribute} className="w-full bg-[#10b981] hover:bg-[#059669]">
                   <Plus className="h-4 w-4 mr-2" /> Add Field
                 </Button>
               </div>
             </div>
-            
             <DialogFooter>
               <Button onClick={() => setShowAddAttributeModal(false)}>Done</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Popup for Docs/Drive Links */}
+        {/* Document Popup */}
         <Dialog open={!!popupUrl} onOpenChange={() => setPopupUrl(null)}>
           <DialogContent className={`${bgCard} ${textPrimary} max-w-5xl h-[80vh]`}>
             <DialogHeader>
@@ -830,12 +1022,7 @@ const MetaAdsBoard = () => {
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 h-full min-h-[60vh]">
-              <iframe 
-                src={popupUrl} 
-                className="w-full h-full rounded-lg border"
-                title={popupTitle}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              />
+              <iframe src={popupUrl} className="w-full h-full rounded-lg border" title={popupTitle} />
             </div>
           </DialogContent>
         </Dialog>
@@ -844,7 +1031,91 @@ const MetaAdsBoard = () => {
   );
 };
 
-// ============== TABLE VIEW COMPONENT ==============
+// ============== CLIENTS VIEW ==============
+const ClientsView = ({
+  clients,
+  viewClientDetail,
+  openEditClient,
+  deleteClient,
+  isDark,
+  textPrimary,
+  textSecondary,
+  borderColor,
+  bgSecondary,
+  searchTerm,
+  setSearchTerm
+}) => {
+  const filteredClients = clients.filter(c => 
+    !searchTerm || c.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.area?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div>
+      {/* Search */}
+      <div className="mb-4">
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input 
+            placeholder="Search clients..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={`pl-10 ${bgSecondary} border-none`}
+          />
+        </div>
+      </div>
+
+      {/* Clients Grid */}
+      {filteredClients.length === 0 ? (
+        <div className={`text-center py-12 ${textSecondary}`}>
+          <Building2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>No clients found. Create your first client!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredClients.map(client => (
+            <div 
+              key={client.client_id}
+              className={`p-4 rounded-xl border ${borderColor} ${isDark ? 'bg-[#18181b] hover:bg-[#1f1f23]' : 'bg-white hover:bg-gray-50'} cursor-pointer transition-all group`}
+              onClick={() => viewClientDetail(client)}
+              data-testid={`client-card-${client.client_id}`}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="p-2 rounded-lg bg-[#1877f2]/20">
+                  <Building2 className="h-5 w-5 text-[#1877f2]" />
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                  <Button size="sm" variant="ghost" onClick={() => openEditClient(client)}>
+                    <Edit2 className="h-3 w-3" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteClient(client.client_id)}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+              <h3 className={`font-semibold ${textPrimary} mb-1 truncate`}>{client.name}</h3>
+              {client.area && (
+                <p className={`text-sm ${textSecondary} flex items-center gap-1 mb-2`}>
+                  <MapPin className="h-3 w-3" /> {client.area}
+                </p>
+              )}
+              <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#27272a]">
+                <Badge className="bg-[#1877f2]/20 text-[#1877f2]">
+                  {client.campaign_count || 0} Campaigns
+                </Badge>
+                {client.contact_person && (
+                  <span className={`text-xs ${textSecondary}`}>{client.contact_person}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============== TABLE VIEW ==============
 const TableView = ({
   campaignsByMonth,
   expandedCampaigns,
@@ -861,7 +1132,8 @@ const TableView = ({
   textPrimary,
   textSecondary,
   borderColor,
-  bgSecondary
+  bgSecondary,
+  showClientColumn
 }) => {
   if (Object.keys(campaignsByMonth).length === 0) {
     return (
@@ -876,7 +1148,6 @@ const TableView = ({
     <div className="space-y-6">
       {Object.entries(campaignsByMonth).sort((a, b) => b[0].localeCompare(a[0])).map(([month, monthCampaigns]) => (
         <div key={month} className={`rounded-xl border ${borderColor} overflow-hidden`}>
-          {/* Month Header */}
           <div className={`p-4 ${bgSecondary} flex items-center justify-between`}>
             <div className="flex items-center gap-3">
               <Calendar className="h-5 w-5 text-[#1877f2]" />
@@ -889,21 +1160,16 @@ const TableView = ({
                   {monthCampaigns.reduce((sum, c) => sum + (c.ads || []).reduce((s, ad) => s + (ad.leads_count || 0), 0), 0)}
                 </span>
               </span>
-              <span className={textSecondary}>
-                Spend: <span className={`font-semibold ${textPrimary}`}>
-                  ₹{monthCampaigns.reduce((sum, c) => sum + (c.ads || []).reduce((s, ad) => s + (ad.spend || 0), 0), 0).toLocaleString()}
-                </span>
-              </span>
             </div>
           </div>
 
-          {/* Campaigns Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className={isDark ? 'bg-[#1f1f23]' : 'bg-gray-50'}>
                 <tr className={`text-xs ${textSecondary} uppercase`}>
                   <th className="px-3 py-2 text-left w-8"></th>
                   <th className="px-3 py-2 text-left">Sno</th>
+                  {showClientColumn && <th className="px-3 py-2 text-left">Client</th>}
                   <th className="px-3 py-2 text-left">Area</th>
                   <th className="px-3 py-2 text-left">Mode</th>
                   <th className="px-3 py-2 text-left">Target</th>
@@ -916,11 +1182,9 @@ const TableView = ({
               <tbody>
                 {monthCampaigns.map((campaign, idx) => (
                   <React.Fragment key={campaign.campaign_id}>
-                    {/* Campaign Row */}
                     <tr 
                       className={`border-t ${borderColor} cursor-pointer hover:${bgSecondary}`}
                       onClick={() => toggleCampaign(campaign.campaign_id)}
-                      data-testid={`campaign-row-${campaign.campaign_id}`}
                     >
                       <td className="px-3 py-3">
                         {expandedCampaigns[campaign.campaign_id] ? 
@@ -929,14 +1193,17 @@ const TableView = ({
                         }
                       </td>
                       <td className={`px-3 py-3 font-medium ${textPrimary}`}>{idx + 1}</td>
-                      <td className={`px-3 py-3 ${textPrimary}`}>{campaign.area || campaign.client_name}</td>
+                      {showClientColumn && (
+                        <td className={`px-3 py-3 ${textPrimary}`}>{campaign.client_name || campaign.client?.name || '-'}</td>
+                      )}
+                      <td className={`px-3 py-3 ${textPrimary}`}>{campaign.area || '-'}</td>
                       <td className="px-3 py-3">
                         <Badge className={campaign.mode === 'Online' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}>
                           {campaign.mode}
                         </Badge>
                       </td>
                       <td className={`px-3 py-3 ${textPrimary}`}>{campaign.target_name}</td>
-                      <td className={`px-3 py-3 ${textSecondary}`}>{campaign.service_angle}</td>
+                      <td className={`px-3 py-3 ${textSecondary}`}>{campaign.service_angle || '-'}</td>
                       <td className="px-3 py-3 text-center">
                         <Badge variant="outline">{campaign.ads?.length || 0}</Badge>
                       </td>
@@ -947,30 +1214,19 @@ const TableView = ({
                       </td>
                       <td className="px-3 py-3 text-center">
                         <div className="flex justify-center gap-1" onClick={e => e.stopPropagation()}>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            data-testid={`add-ad-btn-${campaign.campaign_id}`}
-                            onClick={() => { setSelectedCampaign(campaign); setShowAddAdModal(true); }}
-                          >
+                          <Button size="sm" variant="ghost" onClick={() => { setSelectedCampaign(campaign); setShowAddAdModal(true); }}>
                             <Plus className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost"
-                            className="text-red-400"
-                            onClick={() => deleteCampaign(campaign.campaign_id)}
-                          >
+                          <Button size="sm" variant="ghost" className="text-red-400" onClick={() => deleteCampaign(campaign.campaign_id)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </td>
                     </tr>
 
-                    {/* Expanded Ads */}
                     {expandedCampaigns[campaign.campaign_id] && (
                       <tr>
-                        <td colSpan={9} className={`p-0 ${isDark ? 'bg-[#0f0f11]' : 'bg-gray-50'}`}>
+                        <td colSpan={showClientColumn ? 11 : 10} className={`p-0 ${isDark ? 'bg-[#0f0f11]' : 'bg-gray-50'}`}>
                           <AdTable
                             campaign={campaign}
                             updateAd={updateAd}
@@ -996,18 +1252,8 @@ const TableView = ({
   );
 };
 
-// ============== AD TABLE COMPONENT ==============
-const AdTable = ({
-  campaign,
-  updateAd,
-  openPopup,
-  customAttributes,
-  getStatusColor,
-  isDark,
-  textPrimary,
-  textSecondary,
-  borderColor
-}) => {
+// ============== AD TABLE ==============
+const AdTable = ({ campaign, updateAd, openPopup, customAttributes, getStatusColor, isDark, textPrimary, textSecondary, borderColor }) => {
   const CONTENT_STATUS = ['Not Started', 'Writing', 'Review', 'Approved', 'Rejected'];
   const CREATIVE_STATUS = ['Yet to Start', 'Design', 'Edit', 'Review', 'Published', 'Approved'];
   const AD_STATUS = ['Draft', 'Active', 'Paused', 'Completed'];
@@ -1025,7 +1271,6 @@ const AdTable = ({
           <th className="px-4 py-2 text-center">Creative Status</th>
           <th className="px-4 py-2 text-center">Ad Status</th>
           <th className="px-4 py-2 text-center">Leads</th>
-          {/* Custom attribute columns */}
           {customAttributes.map(attr => (
             <th key={attr.attr_id} className="px-4 py-2 text-center">{attr.name}</th>
           ))}
@@ -1033,7 +1278,7 @@ const AdTable = ({
       </thead>
       <tbody>
         {(campaign.ads || []).map((ad, adIdx) => (
-          <tr key={ad.ad_id} className={`border-t ${borderColor}`} data-testid={`ad-row-${ad.ad_id}`}>
+          <tr key={ad.ad_id} className={`border-t ${borderColor}`}>
             <td className={`px-4 py-2 ${textSecondary}`}>{adIdx + 1}</td>
             <td className={`px-4 py-2 ${textPrimary}`}>
               <div className="flex items-center gap-2">
@@ -1045,78 +1290,45 @@ const AdTable = ({
               </div>
             </td>
             <td className="px-4 py-2 text-center">
-              <Badge variant="outline" className="text-xs">
-                {ad.ad_type}
-              </Badge>
+              <Badge variant="outline" className="text-xs">{ad.ad_type}</Badge>
             </td>
             <td className="px-4 py-2 text-center">
               {ad.content_doc_url ? (
-                <Button 
-                  size="sm" 
-                  variant="ghost"
-                  onClick={() => openPopup(ad.content_doc_url, 'Content Document')}
-                  className="text-[#6366f1]"
-                >
-                  <FileText className="h-4 w-4 mr-1" />
-                  Doc
+                <Button size="sm" variant="ghost" onClick={() => openPopup(ad.content_doc_url, 'Content Document')} className="text-[#6366f1]">
+                  <FileText className="h-4 w-4 mr-1" /> Doc
                 </Button>
-              ) : (
-                <span className={textSecondary}>-</span>
-              )}
+              ) : <span className={textSecondary}>-</span>}
             </td>
             <td className="px-4 py-2 text-center">
-              <Select 
-                value={ad.content_status} 
-                onValueChange={(v) => updateAd(campaign.campaign_id, ad.ad_id, { content_status: v })}
-              >
+              <Select value={ad.content_status} onValueChange={(v) => updateAd(campaign.campaign_id, ad.ad_id, { content_status: v })}>
                 <SelectTrigger className={`h-7 text-xs w-28 ${getStatusColor(ad.content_status, 'content')}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CONTENT_STATUS.map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
+                  {CONTENT_STATUS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </td>
             <td className="px-4 py-2 text-center">
               {ad.creative_drive_url ? (
-                <Button 
-                  size="sm" 
-                  variant="ghost"
-                  onClick={() => openPopup(ad.creative_drive_url, ad.ad_type === 'Video' || ad.ad_type === 'Reel' ? 'Reel/Video' : 'Design')}
-                  className="text-[#22c55e]"
-                >
-                  {ad.ad_type === 'Video' || ad.ad_type === 'Reel' ? 
-                    <Video className="h-4 w-4 mr-1" /> : 
-                    <Image className="h-4 w-4 mr-1" />
-                  }
+                <Button size="sm" variant="ghost" onClick={() => openPopup(ad.creative_drive_url, 'Creative')} className="text-[#22c55e]">
+                  {ad.ad_type === 'Video' || ad.ad_type === 'Reel' ? <Video className="h-4 w-4 mr-1" /> : <Image className="h-4 w-4 mr-1" />}
                   {ad.creative_platform || 'View'}
                 </Button>
-              ) : (
-                <span className={textSecondary}>-</span>
-              )}
+              ) : <span className={textSecondary}>-</span>}
             </td>
             <td className="px-4 py-2 text-center">
-              <Select 
-                value={ad.creative_status} 
-                onValueChange={(v) => updateAd(campaign.campaign_id, ad.ad_id, { creative_status: v })}
-              >
+              <Select value={ad.creative_status} onValueChange={(v) => updateAd(campaign.campaign_id, ad.ad_id, { creative_status: v })}>
                 <SelectTrigger className={`h-7 text-xs w-28 ${getStatusColor(ad.creative_status, 'creative')}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CREATIVE_STATUS.map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
+                  {CREATIVE_STATUS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </td>
             <td className="px-4 py-2 text-center">
-              <Select 
-                value={ad.ad_status} 
-                onValueChange={(v) => updateAd(campaign.campaign_id, ad.ad_id, { ad_status: v })}
-              >
+              <Select value={ad.ad_status} onValueChange={(v) => updateAd(campaign.campaign_id, ad.ad_id, { ad_status: v })}>
                 <SelectTrigger className={`h-7 text-xs w-24 ${
                   ad.ad_status === 'Active' ? 'bg-green-500/20 text-green-400' :
                   ad.ad_status === 'Paused' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -1126,16 +1338,13 @@ const AdTable = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {AD_STATUS.map(s => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
+                  {AD_STATUS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </td>
             <td className={`px-4 py-2 text-center font-semibold ${ad.leads_count > 0 ? 'text-[#22c55e]' : textSecondary}`}>
               {ad.leads_count || 0}
             </td>
-            {/* Custom attribute values */}
             {customAttributes.map(attr => (
               <td key={attr.attr_id} className="px-4 py-2 text-center">
                 {attr.attr_type === 'select' ? (
@@ -1149,15 +1358,11 @@ const AdTable = ({
                       <SelectValue placeholder="-" />
                     </SelectTrigger>
                     <SelectContent>
-                      {attr.options?.map(opt => (
-                        <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>
-                      ))}
+                      {attr.options?.map(opt => <SelectItem key={opt.id} value={opt.id}>{opt.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <span className={textSecondary}>
-                    {ad.custom_attributes?.[attr.attr_id] || '-'}
-                  </span>
+                  <span className={textSecondary}>{ad.custom_attributes?.[attr.attr_id] || '-'}</span>
                 )}
               </td>
             ))}
@@ -1175,191 +1380,88 @@ const AdTable = ({
   );
 };
 
-// ============== KANBAN VIEW COMPONENT ==============
-const KanbanView = ({
-  adsByStatus,
-  updateAd,
-  openPopup,
-  customAttributes,
-  getKanbanColumnColor,
-  getStatusColor,
-  isDark,
-  textPrimary,
-  textSecondary,
-  borderColor,
-  bgSecondary
-}) => {
+// ============== KANBAN VIEW ==============
+const KanbanView = ({ campaigns, updateAd, openPopup, customAttributes, getStatusColor, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
   const CREATIVE_STATUS = ['Yet to Start', 'Design', 'Edit', 'Review', 'Published', 'Approved'];
+
+  const getAllAds = () => {
+    const ads = [];
+    campaigns.forEach(campaign => {
+      (campaign.ads || []).forEach(ad => {
+        ads.push({ ...ad, campaign });
+      });
+    });
+    return ads;
+  };
+
+  const getAdsByStatus = () => {
+    const grouped = {};
+    CREATIVE_STATUS.forEach(status => { grouped[status] = []; });
+    getAllAds().forEach(ad => {
+      const status = ad.creative_status || 'Yet to Start';
+      if (grouped[status]) {
+        grouped[status].push(ad);
+      } else {
+        grouped['Yet to Start'].push(ad);
+      }
+    });
+    return grouped;
+  };
+
+  const adsByStatus = getAdsByStatus();
+  const columnColors = {
+    'Yet to Start': '#71717a',
+    'Design': '#3b82f6',
+    'Edit': '#8b5cf6',
+    'Review': '#f59e0b',
+    'Published': '#10b981',
+    'Approved': '#22c55e'
+  };
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-4" data-testid="kanban-view">
-      {CREATIVE_STATUS.map(status => {
-        const ads = adsByStatus[status] || [];
-        const columnColor = getKanbanColumnColor(status);
-        
-        return (
-          <div 
-            key={status} 
-            className={`flex-shrink-0 w-72 ${isDark ? 'bg-[#18181b]' : 'bg-white'} rounded-lg border ${borderColor}`}
-          >
-            {/* Column Header */}
-            <div className="p-3 border-b border-[#27272a] flex items-center gap-2">
-              <div className="w-3 h-3 rounded" style={{ backgroundColor: columnColor }} />
-              <span className={`text-sm font-medium ${textPrimary}`}>{status}</span>
-              <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">
-                {ads.length}
-              </Badge>
-            </div>
-            
-            {/* Cards */}
-            <div className="p-2 space-y-2 max-h-[calc(100vh-400px)] overflow-y-auto">
-              {ads.map(ad => (
-                <KanbanCard
-                  key={ad.ad_id}
-                  ad={ad}
-                  updateAd={updateAd}
-                  openPopup={openPopup}
-                  customAttributes={customAttributes}
-                  getStatusColor={getStatusColor}
-                  isDark={isDark}
-                  textPrimary={textPrimary}
-                  textSecondary={textSecondary}
-                  borderColor={borderColor}
-                />
-              ))}
-              {ads.length === 0 && (
-                <p className={`text-center py-4 text-xs ${textSecondary}`}>No ads</p>
-              )}
-            </div>
+      {CREATIVE_STATUS.map(status => (
+        <div key={status} className={`flex-shrink-0 w-72 ${isDark ? 'bg-[#18181b]' : 'bg-white'} rounded-lg border ${borderColor}`}>
+          <div className="p-3 border-b border-[#27272a] flex items-center gap-2">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: columnColors[status] }} />
+            <span className={`text-sm font-medium ${textPrimary}`}>{status}</span>
+            <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">{adsByStatus[status].length}</Badge>
           </div>
-        );
-      })}
-    </div>
-  );
-};
-
-// ============== KANBAN CARD COMPONENT ==============
-const KanbanCard = ({
-  ad,
-  updateAd,
-  openPopup,
-  customAttributes,
-  getStatusColor,
-  isDark,
-  textPrimary,
-  textSecondary,
-  borderColor
-}) => {
-  const CREATIVE_STATUS = ['Yet to Start', 'Design', 'Edit', 'Review', 'Published', 'Approved'];
-  
-  return (
-    <div 
-      className={`p-3 ${isDark ? 'bg-[#0c0a09]' : 'bg-gray-50'} rounded-lg border ${borderColor} hover:border-[#3f3f46] group`}
-      data-testid={`kanban-card-${ad.ad_id}`}
-    >
-      {/* Title and Campaign Info */}
-      <div className="mb-2">
-        <div className="flex items-center gap-2 mb-1">
-          {ad.ad_type === 'Video' || ad.ad_type === 'Reel' ? 
-            <Video className="h-4 w-4 text-purple-400" /> : 
-            <Image className="h-4 w-4 text-blue-400" />
-          }
-          <span className={`text-sm font-medium ${textPrimary} truncate`}>
-            {ad.ad_title || 'Untitled Ad'}
-          </span>
-        </div>
-        <p className={`text-xs ${textSecondary}`}>
-          {ad.campaign?.client_name} • {ad.campaign?.target_name}
-        </p>
-      </div>
-      
-      {/* Status Pills */}
-      <div className="flex flex-wrap gap-1 mb-2">
-        <Badge variant="outline" className="text-xs">{ad.ad_type}</Badge>
-        <Badge className={`text-xs ${getStatusColor(ad.content_status, 'content')}`}>
-          {ad.content_status}
-        </Badge>
-      </div>
-      
-      {/* Links */}
-      <div className="flex gap-2 mb-2">
-        {ad.content_doc_url && (
-          <Button 
-            size="sm" 
-            variant="ghost"
-            onClick={() => openPopup(ad.content_doc_url, 'Content Document')}
-            className="h-6 px-2 text-xs text-[#6366f1]"
-          >
-            <FileText className="h-3 w-3 mr-1" /> Doc
-          </Button>
-        )}
-        {ad.creative_drive_url && (
-          <Button 
-            size="sm" 
-            variant="ghost"
-            onClick={() => openPopup(ad.creative_drive_url, 'Creative')}
-            className="h-6 px-2 text-xs text-[#22c55e]"
-          >
-            <Image className="h-3 w-3 mr-1" /> Creative
-          </Button>
-        )}
-      </div>
-      
-      {/* Leads Count */}
-      <div className="flex items-center justify-between">
-        <span className={`text-xs ${textSecondary}`}>Leads:</span>
-        <span className={`font-semibold ${ad.leads_count > 0 ? 'text-[#22c55e]' : textSecondary}`}>
-          {ad.leads_count || 0}
-        </span>
-      </div>
-      
-      {/* Custom Attributes Summary */}
-      {customAttributes.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-[#27272a]">
-          <div className="flex flex-wrap gap-1">
-            {customAttributes.slice(0, 2).map(attr => {
-              const value = ad.custom_attributes?.[attr.attr_id];
-              if (!value) return null;
-              
-              if (attr.attr_type === 'select') {
-                const opt = attr.options?.find(o => o.id === value);
-                if (!opt) return null;
-                return (
-                  <Badge 
-                    key={attr.attr_id}
-                    style={{ backgroundColor: `${opt.color}20`, color: opt.color }}
-                    className="text-xs"
-                  >
-                    {opt.name}
-                  </Badge>
-                );
-              }
-              return (
-                <span key={attr.attr_id} className={`text-xs ${textSecondary}`}>
-                  {attr.name}: {value}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      
-      {/* Quick Status Update */}
-      <div className="mt-2 pt-2 border-t border-[#27272a]">
-        <Select 
-          value={ad.creative_status} 
-          onValueChange={(v) => updateAd(ad.campaign?.campaign_id, ad.ad_id, { creative_status: v })}
-        >
-          <SelectTrigger className="h-7 text-xs w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CREATIVE_STATUS.map(s => (
-              <SelectItem key={s} value={s}>{s}</SelectItem>
+          <div className="p-2 space-y-2 max-h-[calc(100vh-400px)] overflow-y-auto">
+            {adsByStatus[status].map(ad => (
+              <div key={ad.ad_id} className={`p-3 ${isDark ? 'bg-[#0c0a09]' : 'bg-gray-50'} rounded-lg border ${borderColor}`}>
+                <div className="flex items-center gap-2 mb-1">
+                  {ad.ad_type === 'Video' || ad.ad_type === 'Reel' ? 
+                    <Video className="h-4 w-4 text-purple-400" /> : 
+                    <Image className="h-4 w-4 text-blue-400" />
+                  }
+                  <span className={`text-sm font-medium ${textPrimary} truncate`}>{ad.ad_title || 'Untitled Ad'}</span>
+                </div>
+                <p className={`text-xs ${textSecondary} mb-2`}>{ad.campaign?.client_name} • {ad.campaign?.target_name}</p>
+                <div className="flex gap-1 mb-2">
+                  <Badge variant="outline" className="text-xs">{ad.ad_type}</Badge>
+                  <Badge className={`text-xs ${getStatusColor(ad.content_status, 'content')}`}>{ad.content_status}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs ${textSecondary}`}>Leads:</span>
+                  <span className={`font-semibold ${ad.leads_count > 0 ? 'text-[#22c55e]' : textSecondary}`}>{ad.leads_count || 0}</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-[#27272a]">
+                  <Select value={ad.creative_status} onValueChange={(v) => updateAd(ad.campaign?.campaign_id, ad.ad_id, { creative_status: v })}>
+                    <SelectTrigger className="h-7 text-xs w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CREATIVE_STATUS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
+            {adsByStatus[status].length === 0 && (
+              <p className={`text-center py-4 text-xs ${textSecondary}`}>No ads</p>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 };

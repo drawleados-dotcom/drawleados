@@ -25,8 +25,28 @@ class CustomAttributeCreate(BaseModel):
     attr_type: str = 'select'
     options: List[Dict[str, str]] = []
 
+# Client Model
+class ClientCreate(BaseModel):
+    name: str
+    area: str = ''
+    contact_person: str = ''
+    email: str = ''
+    phone: str = ''
+    drive_url: str = ''
+    notes: str = ''
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = None
+    area: Optional[str] = None
+    contact_person: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    drive_url: Optional[str] = None
+    notes: Optional[str] = None
+
 class CampaignCreate(BaseModel):
-    client_name: str
+    client_id: str = ''  # Reference to client
+    client_name: str = ''  # For backward compatibility
     area: str = ''
     mode: str = 'Online'
     month: str  # YYYY-MM format
@@ -114,6 +134,115 @@ async def get_current_user_from_request(request: Request) -> dict:
     
     return user_doc
 
+# ============== CLIENT ROUTES ==============
+
+@meta_ads_router.get("/clients")
+async def get_clients(request: Request):
+    """Get all clients"""
+    await get_current_user_from_request(request)
+    
+    clients = await db.meta_ads_clients.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(1000)
+    
+    # Get campaign count for each client
+    for client in clients:
+        campaign_count = await db.meta_ads_campaigns.count_documents({
+            "client_id": client["client_id"],
+            "is_deleted": {"$ne": True}
+        })
+        client["campaign_count"] = campaign_count
+    
+    return clients
+
+@meta_ads_router.post("/clients")
+async def create_client(client_data: ClientCreate, request: Request):
+    """Create a new client"""
+    user = await get_current_user_from_request(request)
+    
+    client_id = f"client_{uuid.uuid4().hex[:12]}"
+    client_doc = {
+        "client_id": client_id,
+        **client_data.model_dump(),
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "is_deleted": False
+    }
+    
+    await db.meta_ads_clients.insert_one(client_doc)
+    
+    result = await db.meta_ads_clients.find_one({"client_id": client_id}, {"_id": 0})
+    result["campaign_count"] = 0
+    return result
+
+@meta_ads_router.get("/clients/{client_id}")
+async def get_client(client_id: str, request: Request):
+    """Get a single client with its campaigns"""
+    await get_current_user_from_request(request)
+    
+    client = await db.meta_ads_clients.find_one(
+        {"client_id": client_id, "is_deleted": {"$ne": True}},
+        {"_id": 0}
+    )
+    
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    # Get all campaigns for this client
+    campaigns = await db.meta_ads_campaigns.find(
+        {"client_id": client_id, "is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Attach ads to each campaign
+    for campaign in campaigns:
+        ads = await db.meta_ads.find(
+            {"campaign_id": campaign["campaign_id"], "is_deleted": {"$ne": True}},
+            {"_id": 0}
+        ).sort("ad_number", 1).to_list(100)
+        campaign["ads"] = ads
+    
+    client["campaigns"] = campaigns
+    client["campaign_count"] = len(campaigns)
+    return client
+
+@meta_ads_router.put("/clients/{client_id}")
+async def update_client(client_id: str, update_data: ClientUpdate, request: Request):
+    """Update a client"""
+    await get_current_user_from_request(request)
+    
+    client = await db.meta_ads_clients.find_one(
+        {"client_id": client_id, "is_deleted": {"$ne": True}}
+    )
+    
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    
+    update_dict = update_data.model_dump(exclude_unset=True)
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.meta_ads_clients.update_one(
+        {"client_id": client_id},
+        {"$set": update_dict}
+    )
+    
+    result = await db.meta_ads_clients.find_one({"client_id": client_id}, {"_id": 0})
+    return result
+
+@meta_ads_router.delete("/clients/{client_id}")
+async def delete_client(client_id: str, request: Request):
+    """Soft delete a client"""
+    await get_current_user_from_request(request)
+    
+    await db.meta_ads_clients.update_one(
+        {"client_id": client_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}}
+    )
+    
+    return {"message": "Client deleted"}
+
 # ============== CAMPAIGN ROUTES ==============
 
 @meta_ads_router.get("/campaigns")
@@ -121,7 +250,8 @@ async def get_campaigns(
     request: Request,
     month: Optional[str] = None,
     area: Optional[str] = None,
-    mode: Optional[str] = None
+    mode: Optional[str] = None,
+    client_id: Optional[str] = None
 ):
     """Get all campaigns with optional filters"""
     await get_current_user_from_request(request)
@@ -134,16 +264,26 @@ async def get_campaigns(
         query["area"] = area
     if mode:
         query["mode"] = mode
+    if client_id:
+        query["client_id"] = client_id
     
     campaigns = await db.meta_ads_campaigns.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     
-    # Attach ads to each campaign
+    # Attach ads and client info to each campaign
     for campaign in campaigns:
         ads = await db.meta_ads.find(
             {"campaign_id": campaign["campaign_id"], "is_deleted": {"$ne": True}},
             {"_id": 0}
         ).sort("ad_number", 1).to_list(100)
         campaign["ads"] = ads
+        
+        # Get client info if client_id exists
+        if campaign.get("client_id"):
+            client = await db.meta_ads_clients.find_one(
+                {"client_id": campaign["client_id"]},
+                {"_id": 0, "client_id": 1, "name": 1, "area": 1}
+            )
+            campaign["client"] = client
     
     return campaigns
 
