@@ -167,17 +167,6 @@ const Sidebar = () => {
       </div>
 
       <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto`}>
-        {/* Dashboard */}
-        <Link
-          to="/dashboard"
-          data-testid="nav-dashboard"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/dashboard' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'Dashboard' : ''}
-        >
-          <LayoutDashboard className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'Dashboard'}
-        </Link>
-
         {/* Leads - NOT for employees */}
         {!isEmployee && (
           <Link
@@ -375,40 +364,6 @@ const Sidebar = () => {
           {!isCollapsed && 'HR'}
         </Link>
 
-        {/* Marketing - Admin only */}
-        {isAdmin && (
-          <Link
-            to="/marketing"
-            data-testid="nav-marketing"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/marketing' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Marketing' : ''}
-          >
-            <Megaphone className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Marketing'}
-          </Link>
-        )}
-
-        {/* Team Chat */}
-        <button
-          onClick={() => setChatOpen(true)}
-          data-testid="nav-chat"
-          className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${navItemInactive}`}
-          title={isCollapsed ? 'Team Chat' : ''}
-        >
-          <div className="relative">
-            <MessageSquare className="h-5 w-5" strokeWidth={2} />
-            {isCollapsed && unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-[#ef4444] rounded-full"></span>
-            )}
-          </div>
-          {!isCollapsed && <span className="flex-1 text-left">Team Chat</span>}
-          {!isCollapsed && unreadCount > 0 && (
-            <Badge className="bg-[#ef4444] text-white text-xs px-1.5 py-0 min-w-[20px]">
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </Badge>
-          )}
-        </button>
-
         {/* HR Admin - Admin/Manager only */}
         {canManageHR && (
           <Link
@@ -422,19 +377,6 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Reports - NOT for employees */}
-        {!isEmployee && (
-          <Link
-            to="/reports"
-            data-testid="nav-reports"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/reports' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Reports' : ''}
-          >
-            <TrendingUp className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Reports'}
-          </Link>
-        )}
-
         {/* Finance - Admin only */}
         {isAdmin && (
           <Link
@@ -445,19 +387,6 @@ const Sidebar = () => {
           >
             <DollarSign className="h-5 w-5" strokeWidth={2} />
             {!isCollapsed && 'Finance'}
-          </Link>
-        )}
-
-        {/* Services - NOT for employees */}
-        {!isEmployee && (
-          <Link
-            to="/services"
-            data-testid="nav-services"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/services' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Services' : ''}
-          >
-            <Package className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Services'}
           </Link>
         )}
 

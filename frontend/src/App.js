@@ -7,7 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
-import LeadsPage from './pages/LeadsPage';
+import LeadsPageV2 from './pages/LeadsPageV2';
 import ReportsPage from './pages/ReportsPage';
 import FinancePage from './pages/FinancePage';
 import FinanceModule from './pages/FinanceModule';
@@ -47,7 +47,7 @@ function AppRouter() {
         path="/leads"
         element={
           <ProtectedRoute>
-            <LeadsPage />
+            <LeadsPageV2 />
           </ProtectedRoute>
         }
       />
@@ -155,7 +155,7 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/leads" replace />} />
     </Routes>
   );
 }
