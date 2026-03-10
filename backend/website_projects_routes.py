@@ -19,31 +19,81 @@ def init_website_projects_db(database):
 
 class ProjectCreate(BaseModel):
     name: str  # Client/Project name
+    # Basic Details
     onboarding_date: Optional[str] = None
     deadline: Optional[str] = None
+    status: str = "active"  # active, completed, on-hold, cancelled
+    # Client Information
+    client_name: Optional[str] = None
+    client_location: Optional[str] = None
+    client_email: Optional[str] = None
+    client_phone: Optional[str] = None
+    # Domain & Hosting
     domain_url: Optional[str] = None
-    platform: str = "Website"  # Website, Shopify, WordPress, etc.
-    website_type: str = "Business Website"  # Business, E-commerce, Portfolio, etc.
-    developer: Optional[str] = None
+    domain_username: Optional[str] = None
+    domain_password: Optional[str] = None
+    domain_2fa: Optional[str] = None
+    domain_email_dns: Optional[str] = None
+    # Server Details
     server_details: Optional[str] = None
+    server_username: Optional[str] = None
+    server_password: Optional[str] = None
+    server_2fa: Optional[str] = None
+    # Platform & Type
+    platform: str = "Website"  # Website, Shopify, WordPress, Wix, Custom, etc.
+    website_type: str = "Business Website"  # Business, E-commerce, Portfolio, Landing Page, Blog, etc.
+    # Team
+    developer: Optional[str] = None
+    designer: Optional[str] = None
+    content_writer: Optional[str] = None
+    project_manager: Optional[str] = None
+    # Product Details
+    product_details: Optional[str] = None
+    onboarding_form: Optional[str] = None
+    # Links
     client_drive_url: Optional[str] = None
     documents_url: Optional[str] = None
     communication_url: Optional[str] = None
+    # Lead Link
     client_id: Optional[str] = None  # Link to lead
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
+    # Basic Details
     onboarding_date: Optional[str] = None
     deadline: Optional[str] = None
+    status: Optional[str] = None
+    # Client Information
+    client_name: Optional[str] = None
+    client_location: Optional[str] = None
+    client_email: Optional[str] = None
+    client_phone: Optional[str] = None
+    # Domain & Hosting
     domain_url: Optional[str] = None
+    domain_username: Optional[str] = None
+    domain_password: Optional[str] = None
+    domain_2fa: Optional[str] = None
+    domain_email_dns: Optional[str] = None
+    # Server Details
+    server_details: Optional[str] = None
+    server_username: Optional[str] = None
+    server_password: Optional[str] = None
+    server_2fa: Optional[str] = None
+    # Platform & Type
     platform: Optional[str] = None
     website_type: Optional[str] = None
+    # Team
     developer: Optional[str] = None
-    server_details: Optional[str] = None
+    designer: Optional[str] = None
+    content_writer: Optional[str] = None
+    project_manager: Optional[str] = None
+    # Product Details
+    product_details: Optional[str] = None
+    onboarding_form: Optional[str] = None
+    # Links
     client_drive_url: Optional[str] = None
     documents_url: Optional[str] = None
     communication_url: Optional[str] = None
-    status: Optional[str] = None
 
 class PageTaskCreate(BaseModel):
     page_name: str  # Home Page, About Us, etc.

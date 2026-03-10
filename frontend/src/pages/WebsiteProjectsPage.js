@@ -81,12 +81,56 @@ const WebsiteProjectsPage = () => {
   const [sectionFeedback, setSectionFeedback] = useState([]);
   const [isSectionSidebarOpen, setIsSectionSidebarOpen] = useState(false);
   const [sectionActiveTab, setSectionActiveTab] = useState('wireframe');
+  const [docPopupUrl, setDocPopupUrl] = useState(null);
+  
+  // Default pages for new projects
+  const DEFAULT_PAGES = [
+    'Home Page',
+    'About Us',
+    'Services',
+    'Contact Us',
+    'Privacy Policy',
+    'Terms & Conditions'
+  ];
   
   // Form states
   const [newProject, setNewProject] = useState({
-    name: '', domain_url: '', platform: 'Website', website_type: 'Business Website',
-    developer: '', onboarding_date: new Date().toISOString().split('T')[0], deadline: '',
-    server_details: '', client_drive_url: '', documents_url: '', communication_url: ''
+    name: '', 
+    // Basic Details
+    onboarding_date: new Date().toISOString().split('T')[0], 
+    deadline: '',
+    status: 'active',
+    // Client Info
+    client_name: '',
+    client_location: '',
+    client_email: '',
+    client_phone: '',
+    // Domain & Hosting
+    domain_url: '', 
+    domain_username: '',
+    domain_password: '',
+    domain_2fa: '',
+    domain_email_dns: '',
+    // Server
+    server_details: '', 
+    server_username: '',
+    server_password: '',
+    server_2fa: '',
+    // Platform
+    platform: 'Website', 
+    website_type: 'Business Website',
+    // Team
+    developer: '', 
+    designer: '',
+    content_writer: '',
+    project_manager: '',
+    // Product
+    product_details: '',
+    onboarding_form: '',
+    // Links
+    client_drive_url: '', 
+    documents_url: '', 
+    communication_url: ''
   });
   const [newPage, setNewPage] = useState({ page_name: '' });
   const [newTask, setNewTask] = useState({ title: '', description: '', assigned_to: '', due_date: '', priority: 'medium' });
@@ -771,15 +815,26 @@ const WebsiteProjectsPage = () => {
 
             {expandedHeader && (
               <>
-                <div className={`px-4 pb-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3`}>
+                {/* Row 1: Basic Info */}
+                <div className={`px-4 pb-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3`}>
                   <MetadataCard icon={Globe} label="Domain" value={projectDetail.domain_url} link isDark={isDark} />
                   <MetadataCard icon={User} label="Developer" value={projectDetail.developer} isDark={isDark} />
                   <MetadataCard icon={Calendar} label="Onboarding" value={projectDetail.onboarding_date} isDark={isDark} />
                   <MetadataCard icon={Clock} label="Deadline" value={projectDetail.deadline} isDark={isDark} />
+                  <MetadataCard icon={Server} label="Platform" value={projectDetail.platform} isDark={isDark} />
+                  <MetadataCard icon={Code} label="Type" value={projectDetail.website_type} isDark={isDark} />
+                </div>
+
+                {/* Row 2: Client & Links */}
+                <div className={`px-4 pb-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3`}>
+                  <MetadataCard icon={User} label="Client" value={projectDetail.client_name} isDark={isDark} />
+                  <MetadataCard icon={Globe} label="Location" value={projectDetail.client_location} isDark={isDark} />
                   <MetadataCard icon={Folder} label="Client Drive" value={projectDetail.client_drive_url} link isDark={isDark} />
+                  <MetadataCard icon={FileText} label="Documents" value={projectDetail.documents_url} link onClick={() => projectDetail.documents_url && setDocPopupUrl(projectDetail.documents_url)} isDark={isDark} />
                   <MetadataCard icon={Server} label="Server" value={projectDetail.server_details} isDark={isDark} />
                 </div>
 
+                {/* Phase Stats */}
                 <div className={`px-4 pb-4 grid grid-cols-4 gap-2`}>
                   <PhaseStatCard label="Wireframe" completed={projectDetail.stats?.wireframe?.completed || 0} total={projectDetail.stats?.total_pages} color="#6366f1" isDark={isDark} />
                   <PhaseStatCard label="UI Design" completed={projectDetail.stats?.ui?.completed || 0} total={projectDetail.stats?.total_pages} color="#8b5cf6" isDark={isDark} />
@@ -883,13 +938,59 @@ const WebsiteProjectsPage = () => {
           </Tabs>
 
           <Dialog open={isAddPageModalOpen} onOpenChange={setIsAddPageModalOpen}>
-            <DialogContent className={`${bgCard} ${textPrimary}`}>
+            <DialogContent className={`${bgCard} ${textPrimary} max-w-md`}>
               <DialogHeader><DialogTitle>Add New Page</DialogTitle></DialogHeader>
-              <Input value={newPage.page_name} onChange={(e) => setNewPage({ page_name: e.target.value })} placeholder="e.g., Gallery Page" className={bgSecondary} />
+              <div className="space-y-4">
+                {/* Custom page name */}
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Page Name</label>
+                  <Input value={newPage.page_name} onChange={(e) => setNewPage({ ...newPage, page_name: e.target.value })} placeholder="e.g., Gallery Page" className={bgSecondary} />
+                </div>
+                
+                {/* Default pages quick add */}
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-2`}>Or add from defaults:</label>
+                  <div className="flex flex-wrap gap-2">
+                    {DEFAULT_PAGES.map(pageName => (
+                      <Button 
+                        key={pageName} 
+                        variant="outline" 
+                        size="sm" 
+                        className={`text-xs ${bgSecondary}`}
+                        onClick={() => setNewPage({ ...newPage, page_name: pageName })}
+                      >
+                        {pageName}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setIsAddPageModalOpen(false)}>Cancel</Button>
                 <Button onClick={handleAddPage} className="bg-[#6366f1]">Add Page</Button>
               </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Document Popup */}
+          <Dialog open={!!docPopupUrl} onOpenChange={() => setDocPopupUrl(null)}>
+            <DialogContent className={`${bgCard} ${textPrimary} max-w-5xl h-[80vh]`}>
+              <DialogHeader>
+                <DialogTitle className="flex items-center justify-between">
+                  <span>Website Documents</span>
+                  <Button variant="ghost" size="sm" onClick={() => window.open(docPopupUrl, '_blank')}>
+                    <ExternalLink className="h-4 w-4 mr-1" /> Open in New Tab
+                  </Button>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 h-full min-h-[60vh]">
+                <iframe 
+                  src={docPopupUrl} 
+                  className="w-full h-full rounded-lg border"
+                  title="Website Documents"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                />
+              </div>
             </DialogContent>
           </Dialog>
 
@@ -1255,27 +1356,226 @@ const PhaseTableCell = ({ task, phase, onUpdate, teamMembers, isDark }) => {
 };
 
 const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, options, teamMembers, isDark, isEdit }) => {
+  const [activeTab, setActiveTab] = useState('basic');
+  const [showPassword, setShowPassword] = useState({});
+  
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
+  const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
+
+  const PLATFORMS = options?.platforms || ['Website', 'Shopify', 'WordPress', 'Wix', 'Webflow', 'Custom', 'React', 'Next.js'];
+  const WEBSITE_TYPES = options?.website_types || ['Business Website', 'E-commerce', 'Portfolio', 'Landing Page', 'Blog', 'SaaS', 'Corporate', 'Educational'];
+  const PROJECT_STATUS = ['active', 'completed', 'on-hold', 'cancelled'];
+
+  const togglePassword = (field) => {
+    setShowPassword(prev => ({ ...prev, [field]: !prev[field] }));
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`${bgCard} ${textPrimary} max-w-2xl`}>
-        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-        <div className="grid grid-cols-2 gap-4">
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Project/Client Name *</label><Input value={project.name} onChange={(e) => setProject({...project, name: e.target.value})} placeholder="Client Company Name" className={bgSecondary} /></div>
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Domain URL</label><Input value={project.domain_url} onChange={(e) => setProject({...project, domain_url: e.target.value})} placeholder="www.example.com" className={bgSecondary} /></div>
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Platform</label><Select value={project.platform} onValueChange={(v) => setProject({...project, platform: v})}><SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger><SelectContent>{(options?.platforms || ['Website', 'Shopify', 'WordPress', 'Custom']).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Website Type</label><Select value={project.website_type} onValueChange={(v) => setProject({...project, website_type: v})}><SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger><SelectContent>{(options?.website_types || ['Business Website', 'E-commerce', 'Portfolio']).map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent></Select></div>
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Developer</label><Select value={project.developer} onValueChange={(v) => setProject({...project, developer: v})}><SelectTrigger className={bgSecondary}><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}</SelectContent></Select></div>
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Server Details</label><Input value={project.server_details} onChange={(e) => setProject({...project, server_details: e.target.value})} placeholder="Hosting" className={bgSecondary} /></div>
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Onboarding Date</label><Input type="date" value={project.onboarding_date} onChange={(e) => setProject({...project, onboarding_date: e.target.value})} className={bgSecondary} /></div>
-          <div><label className={`text-sm ${textSecondary} block mb-1`}>Deadline</label><Input type="date" value={project.deadline} onChange={(e) => setProject({...project, deadline: e.target.value})} className={bgSecondary} /></div>
-          <div className="col-span-2"><label className={`text-sm ${textSecondary} block mb-1`}>Client Drive URL</label><Input value={project.client_drive_url} onChange={(e) => setProject({...project, client_drive_url: e.target.value})} placeholder="Google Drive / Dropbox link" className={bgSecondary} /></div>
-        </div>
-        <DialogFooter><Button variant="ghost" onClick={onClose}>Cancel</Button><Button onClick={onSubmit} className="bg-[#6366f1]">{isEdit ? 'Update' : 'Create'} Project</Button></DialogFooter>
+      <DialogContent className={`${bgCard} ${textPrimary} max-w-4xl max-h-[85vh] overflow-y-auto`}>
+        <DialogHeader><DialogTitle className="text-xl">{title}</DialogTitle></DialogHeader>
+        
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-5 mb-4">
+            <TabsTrigger value="basic">Basic</TabsTrigger>
+            <TabsTrigger value="client">Client</TabsTrigger>
+            <TabsTrigger value="credentials">Credentials</TabsTrigger>
+            <TabsTrigger value="team">Team</TabsTrigger>
+            <TabsTrigger value="links">Links</TabsTrigger>
+          </TabsList>
+
+          {/* Basic Tab */}
+          <TabsContent value="basic" className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Project Name *</label>
+                <Input value={project.name} onChange={(e) => setProject({...project, name: e.target.value})} placeholder="Client/Project Name" className={bgSecondary} />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Status</label>
+                <Select value={project.status || 'active'} onValueChange={(v) => setProject({...project, status: v})}>
+                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PROJECT_STATUS.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Onboarding Date</label>
+                <Input type="date" value={project.onboarding_date} onChange={(e) => setProject({...project, onboarding_date: e.target.value})} className={bgSecondary} />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Project Deadline</label>
+                <Input type="date" value={project.deadline} onChange={(e) => setProject({...project, deadline: e.target.value})} className={bgSecondary} />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Platform</label>
+                <Select value={project.platform} onValueChange={(v) => setProject({...project, platform: v})}>
+                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                  <SelectContent>{PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Website Type</label>
+                <Select value={project.website_type} onValueChange={(v) => setProject({...project, website_type: v})}>
+                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                  <SelectContent>{WEBSITE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <label className={`text-sm ${textSecondary} block mb-1`}>Product Details</label>
+                <Textarea value={project.product_details} onChange={(e) => setProject({...project, product_details: e.target.value})} placeholder="Describe the product/service details..." className={bgSecondary} rows={3} />
+              </div>
+              <div className="col-span-2">
+                <label className={`text-sm ${textSecondary} block mb-1`}>Onboarding Form Notes</label>
+                <Textarea value={project.onboarding_form} onChange={(e) => setProject({...project, onboarding_form: e.target.value})} placeholder="Notes from client onboarding..." className={bgSecondary} rows={2} />
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Client Tab */}
+          <TabsContent value="client" className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Client Name</label>
+                <Input value={project.client_name} onChange={(e) => setProject({...project, client_name: e.target.value})} placeholder="John Doe" className={bgSecondary} />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Location</label>
+                <Input value={project.client_location} onChange={(e) => setProject({...project, client_location: e.target.value})} placeholder="Chennai, India" className={bgSecondary} />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Client Email</label>
+                <Input type="email" value={project.client_email} onChange={(e) => setProject({...project, client_email: e.target.value})} placeholder="client@example.com" className={bgSecondary} />
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Client Phone</label>
+                <Input value={project.client_phone} onChange={(e) => setProject({...project, client_phone: e.target.value})} placeholder="+91 98765 43210" className={bgSecondary} />
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Credentials Tab */}
+          <TabsContent value="credentials" className="space-y-4">
+            {/* Domain Credentials */}
+            <div className={`p-4 rounded-lg border ${borderColor}`}>
+              <h4 className={`font-semibold mb-3 ${textPrimary}`}>Domain Credentials</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Domain URL</label>
+                  <Input value={project.domain_url} onChange={(e) => setProject({...project, domain_url: e.target.value})} placeholder="www.example.com" className={bgSecondary} />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Username</label>
+                  <Input value={project.domain_username} onChange={(e) => setProject({...project, domain_username: e.target.value})} placeholder="admin" className={bgSecondary} />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Password</label>
+                  <div className="relative">
+                    <Input type={showPassword.domain ? 'text' : 'password'} value={project.domain_password} onChange={(e) => setProject({...project, domain_password: e.target.value})} placeholder="••••••••" className={bgSecondary} />
+                    <button type="button" onClick={() => togglePassword('domain')} className={`absolute right-2 top-1/2 -translate-y-1/2 text-xs ${textSecondary}`}>{showPassword.domain ? 'Hide' : 'Show'}</button>
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>2FA / Backup Codes</label>
+                  <Input value={project.domain_2fa} onChange={(e) => setProject({...project, domain_2fa: e.target.value})} placeholder="2FA backup codes" className={bgSecondary} />
+                </div>
+                <div className="col-span-2">
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Domain Email DNS</label>
+                  <Input value={project.domain_email_dns} onChange={(e) => setProject({...project, domain_email_dns: e.target.value})} placeholder="DNS records for email configuration" className={bgSecondary} />
+                </div>
+              </div>
+            </div>
+
+            {/* Server Credentials */}
+            <div className={`p-4 rounded-lg border ${borderColor}`}>
+              <h4 className={`font-semibold mb-3 ${textPrimary}`}>Server Credentials</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Server Details</label>
+                  <Input value={project.server_details} onChange={(e) => setProject({...project, server_details: e.target.value})} placeholder="Hosting provider, server IP, etc." className={bgSecondary} />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Username</label>
+                  <Input value={project.server_username} onChange={(e) => setProject({...project, server_username: e.target.value})} placeholder="Server username" className={bgSecondary} />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Password</label>
+                  <div className="relative">
+                    <Input type={showPassword.server ? 'text' : 'password'} value={project.server_password} onChange={(e) => setProject({...project, server_password: e.target.value})} placeholder="••••••••" className={bgSecondary} />
+                    <button type="button" onClick={() => togglePassword('server')} className={`absolute right-2 top-1/2 -translate-y-1/2 text-xs ${textSecondary}`}>{showPassword.server ? 'Hide' : 'Show'}</button>
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>2FA / Backup Codes</label>
+                  <Input value={project.server_2fa} onChange={(e) => setProject({...project, server_2fa: e.target.value})} placeholder="2FA backup codes" className={bgSecondary} />
+                </div>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Team Tab */}
+          <TabsContent value="team" className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Developer</label>
+                <Select value={project.developer} onValueChange={(v) => setProject({...project, developer: v})}>
+                  <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select Developer" /></SelectTrigger>
+                  <SelectContent>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Designer</label>
+                <Select value={project.designer} onValueChange={(v) => setProject({...project, designer: v})}>
+                  <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select Designer" /></SelectTrigger>
+                  <SelectContent>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Content Writer</label>
+                <Select value={project.content_writer} onValueChange={(v) => setProject({...project, content_writer: v})}>
+                  <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select Content Writer" /></SelectTrigger>
+                  <SelectContent>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Project Manager</label>
+                <Select value={project.project_manager} onValueChange={(v) => setProject({...project, project_manager: v})}>
+                  <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select PM" /></SelectTrigger>
+                  <SelectContent>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* Links Tab */}
+          <TabsContent value="links" className="space-y-4">
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Client Drive URL</label>
+                <Input value={project.client_drive_url} onChange={(e) => setProject({...project, client_drive_url: e.target.value})} placeholder="Google Drive / Dropbox link for client assets" className={bgSecondary} />
+                <p className={`text-xs ${textSecondary} mt-1`}>Opens in new tab</p>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Website Documents URL</label>
+                <Input value={project.documents_url} onChange={(e) => setProject({...project, documents_url: e.target.value})} placeholder="Google Docs link for website content" className={bgSecondary} />
+                <p className={`text-xs ${textSecondary} mt-1`}>Opens in popup within app</p>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Communication Link</label>
+                <Input value={project.communication_url} onChange={(e) => setProject({...project, communication_url: e.target.value})} placeholder="Slack channel, WhatsApp group, etc." className={bgSecondary} />
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        <DialogFooter className="mt-4">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={onSubmit} className="bg-[#6366f1] hover:bg-[#5855eb]">{isEdit ? 'Update' : 'Create'} Project</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
