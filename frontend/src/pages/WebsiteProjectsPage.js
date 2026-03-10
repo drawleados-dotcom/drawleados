@@ -67,6 +67,8 @@ const WebsiteProjectsPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [dueDateFilter, setDueDateFilter] = useState('');
   const [developerFilter, setDeveloperFilter] = useState('all');
+  const [phaseFil, setPhaseFil] = useState('all'); // wireframe, ui, content, dev
+  const [viewMode, setViewMode] = useState('projects'); // projects, tasks, timeline
   
   // UI States
   const [activeTab, setActiveTab] = useState('pages');
@@ -644,6 +646,48 @@ const WebsiteProjectsPage = () => {
 
   // ==================== ALL PROJECTS VIEW ====================
   if (currentView === 'all-projects') {
+    // Calculate task-wise data across all projects
+    const allTasks = [];
+    allProjectsSummary.forEach(project => {
+      (project.pages || []).forEach(page => {
+        ['wireframe', 'ui', 'content', 'dev'].forEach(phase => {
+          if (page[phase]) {
+            allTasks.push({
+              project_id: project.project_id,
+              project_name: project.name,
+              page_id: page.page_id,
+              page_name: page.page_name,
+              phase,
+              status: page[phase].status,
+              assignee: page[phase].assignee,
+              due_date: page[phase].due_date,
+              url: page[phase].url,
+              developer: project.developer,
+              deadline: project.deadline
+            });
+          }
+        });
+      });
+    });
+
+    // Filter tasks
+    const filteredTasks = allTasks.filter(task => {
+      const matchesDev = developerFilter === 'all' || task.assignee === developerFilter || task.developer === developerFilter;
+      const matchesDate = !dueDateFilter || task.due_date === dueDateFilter;
+      const matchesPhase = phaseFil === 'all' || task.phase === phaseFil;
+      const matchesSearch = !searchTerm || task.project_name.toLowerCase().includes(searchTerm.toLowerCase()) || task.page_name.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesDev && matchesDate && matchesPhase && matchesSearch;
+    });
+
+    // Group tasks by project for task view
+    const tasksByProject = filteredTasks.reduce((acc, task) => {
+      if (!acc[task.project_id]) {
+        acc[task.project_id] = { project_name: task.project_name, developer: task.developer, tasks: [] };
+      }
+      acc[task.project_id].tasks.push(task);
+      return acc;
+    }, {});
+
     return (
       <Layout>
         <div className="flex flex-col h-full" data-testid="website-projects-page">
@@ -661,91 +705,265 @@ const WebsiteProjectsPage = () => {
             </div>
           </div>
 
-          {/* Filters */}
-          <div className={`p-4 border-b ${borderColor} flex flex-wrap items-center gap-4`}>
-            <div className="relative flex-1 max-w-xs">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input placeholder="Search projects..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`pl-10 ${bgSecondary} border-none`} />
+          {/* View Mode Toggle & Filters */}
+          <div className={`p-4 border-b ${borderColor}`}>
+            {/* View Mode Toggle */}
+            <div className="flex items-center gap-4 mb-4">
+              <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
+                <Button 
+                  size="sm" 
+                  variant={viewMode === 'projects' ? 'default' : 'ghost'}
+                  onClick={() => setViewMode('projects')}
+                  className={viewMode === 'projects' ? 'bg-[#6366f1]' : ''}
+                >
+                  <LayoutGrid className="h-4 w-4 mr-1" /> Projects
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant={viewMode === 'tasks' ? 'default' : 'ghost'}
+                  onClick={() => setViewMode('tasks')}
+                  className={viewMode === 'tasks' ? 'bg-[#6366f1]' : ''}
+                >
+                  <ListTodo className="h-4 w-4 mr-1" /> Task View
+                </Button>
+              </div>
+              {viewMode === 'tasks' && (
+                <Badge className="bg-[#22c55e]/20 text-[#22c55e]">{filteredTasks.length} Tasks</Badge>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-gray-400" />
-              <Input type="date" value={dueDateFilter} onChange={(e) => setDueDateFilter(e.target.value)} className={`w-40 ${bgSecondary} border-none`} placeholder="Due Date" />
-              {dueDateFilter && (
-                <Button variant="ghost" size="sm" onClick={() => setDueDateFilter('')} className="h-8 w-8 p-0">
-                  <X className="h-4 w-4" />
+
+            {/* Filters Row */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input placeholder="Search projects/pages..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`pl-10 ${bgSecondary} border-none`} />
+              </div>
+
+              {/* Date Filter */}
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-gray-400" />
+                <Input 
+                  type="date" 
+                  value={dueDateFilter} 
+                  onChange={(e) => setDueDateFilter(e.target.value)} 
+                  className={`w-40 ${bgSecondary} border-none`} 
+                  placeholder="Due Date" 
+                />
+                {dueDateFilter && (
+                  <Button variant="ghost" size="sm" onClick={() => setDueDateFilter('')} className="h-8 w-8 p-0">
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+
+              {/* Developer Filter */}
+              <Select value={developerFilter} onValueChange={setDeveloperFilter}>
+                <SelectTrigger className={`w-48 ${bgSecondary} border-none`}>
+                  <Users className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="All Developers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Developers</SelectItem>
+                  {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+
+              {/* Phase Filter (for task view) */}
+              {viewMode === 'tasks' && (
+                <Select value={phaseFil} onValueChange={setPhaseFil}>
+                  <SelectTrigger className={`w-40 ${bgSecondary} border-none`}>
+                    <SelectValue placeholder="All Phases" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Phases</SelectItem>
+                    <SelectItem value="wireframe">Wireframe</SelectItem>
+                    <SelectItem value="ui">UI Design</SelectItem>
+                    <SelectItem value="content">Content</SelectItem>
+                    <SelectItem value="dev">Development</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* Status Filter */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className={`w-36 ${bgSecondary} border-none`}>
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Clear All Filters */}
+              {(dueDateFilter || developerFilter !== 'all' || phaseFil !== 'all' || statusFilter !== 'all' || searchTerm) && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => {
+                    setDueDateFilter('');
+                    setDeveloperFilter('all');
+                    setPhaseFil('all');
+                    setStatusFilter('all');
+                    setSearchTerm('');
+                  }}
+                  className="text-red-400"
+                >
+                  <X className="h-4 w-4 mr-1" /> Clear Filters
                 </Button>
               )}
             </div>
-            <Select value={developerFilter} onValueChange={setDeveloperFilter}>
-              <SelectTrigger className={`w-48 ${bgSecondary} border-none`}>
-                <Users className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="All Developers" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Developers</SelectItem>
-                {teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
           </div>
 
           <div className="flex flex-1 overflow-hidden">
-            {/* Projects List */}
-            <div className="flex-1 overflow-auto">
-              <table className="w-full">
-                <thead className={`${bgSecondary} sticky top-0 z-10`}>
-                  <tr className={`text-xs ${textSecondary} uppercase`}>
-                    <th className="px-4 py-3 text-left font-semibold">Project</th>
-                    <th className="px-4 py-3 text-center font-semibold">Dev %</th>
-                    <th className="px-4 py-3 text-center font-semibold">Overall %</th>
-                    <th className="px-4 py-3 text-center font-semibold">Developer</th>
-                    <th className="px-4 py-3 text-center font-semibold">Onboarding</th>
-                    <th className="px-4 py-3 text-center font-semibold">Deadline</th>
-                    <th className="px-4 py-3 text-center font-semibold">Pages</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProjectsSummary.map(project => (
-                    <tr key={project.project_id} onClick={() => openProject(project.project_id)} 
-                        className={`border-b ${borderColor} hover:${bgSecondary} transition-colors cursor-pointer`}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <Globe className="h-5 w-5 text-[#6366f1]" />
-                          <div>
-                            <p className={`font-medium ${textPrimary}`}>{project.name}</p>
-                            <p className={`text-xs ${textSecondary}`}>{project.domain_url || project.platform}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Progress value={project.dev_percent} className="w-16 h-2" />
-                          <span className={`text-sm font-medium ${textPrimary}`}>{project.dev_percent}%</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge className={project.overall_percent >= 80 ? 'bg-green-500/20 text-green-400' : project.overall_percent >= 50 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'}>
-                          {project.overall_percent}%
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-sm ${textSecondary}`}>{project.developer || '-'}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-sm ${textSecondary}`}>{project.onboarding_date || '-'}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`text-sm font-medium ${project.deadline && new Date(project.deadline) < new Date() ? 'text-red-400' : textPrimary}`}>
-                          {project.deadline || '-'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant="outline">{project.total_pages}</Badge>
-                      </td>
+            {/* Projects List View */}
+            {viewMode === 'projects' && (
+              <div className="flex-1 overflow-auto">
+                <table className="w-full">
+                  <thead className={`${bgSecondary} sticky top-0 z-10`}>
+                    <tr className={`text-xs ${textSecondary} uppercase`}>
+                      <th className="px-4 py-3 text-left font-semibold">Project</th>
+                      <th className="px-4 py-3 text-center font-semibold">Status</th>
+                      <th className="px-4 py-3 text-center font-semibold">Dev %</th>
+                      <th className="px-4 py-3 text-center font-semibold">Overall %</th>
+                      <th className="px-4 py-3 text-center font-semibold">Developer</th>
+                      <th className="px-4 py-3 text-center font-semibold">Onboarding</th>
+                      <th className="px-4 py-3 text-center font-semibold">Deadline</th>
+                      <th className="px-4 py-3 text-center font-semibold">Pages</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredProjectsSummary.map(project => (
+                      <tr key={project.project_id} onClick={() => openProject(project.project_id)} 
+                          className={`border-b ${borderColor} hover:${bgSecondary} transition-colors cursor-pointer`}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Globe className="h-5 w-5 text-[#6366f1]" />
+                            <div>
+                              <p className={`font-medium ${textPrimary}`}>{project.name}</p>
+                              <p className={`text-xs ${textSecondary}`}>{project.domain_url || project.platform}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge className={`text-xs ${
+                            project.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                            project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
+                            project.status === 'on-hold' ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {project.status || 'active'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <Progress value={project.dev_percent} className="w-16 h-2" />
+                            <span className={`text-sm font-medium ${textPrimary}`}>{project.dev_percent}%</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge className={project.overall_percent >= 80 ? 'bg-green-500/20 text-green-400' : project.overall_percent >= 50 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'}>
+                            {project.overall_percent}%
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-sm ${textSecondary}`}>{project.developer || '-'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-sm ${textSecondary}`}>{project.onboarding_date || '-'}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-sm font-medium ${project.deadline && new Date(project.deadline) < new Date() ? 'text-red-400' : textPrimary}`}>
+                            {project.deadline || '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge variant="outline">{project.total_pages}</Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Task View */}
+            {viewMode === 'tasks' && (
+              <div className="flex-1 overflow-auto p-4">
+                {Object.keys(tasksByProject).length === 0 ? (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>No tasks found with current filters</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {Object.entries(tasksByProject).map(([projectId, projectData]) => (
+                      <div key={projectId} className={`rounded-xl border ${borderColor} overflow-hidden`}>
+                        {/* Project Header */}
+                        <div 
+                          className={`p-4 ${bgSecondary} cursor-pointer flex items-center justify-between`}
+                          onClick={() => openProject(projectId)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Globe className="h-5 w-5 text-[#6366f1]" />
+                            <div>
+                              <p className={`font-semibold ${textPrimary}`}>{projectData.project_name}</p>
+                              <p className={`text-xs ${textSecondary}`}>Developer: {projectData.developer || 'Unassigned'}</p>
+                            </div>
+                          </div>
+                          <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{projectData.tasks.length} Tasks</Badge>
+                        </div>
+                        
+                        {/* Tasks Table */}
+                        <table className="w-full">
+                          <thead className={`text-xs ${textSecondary} uppercase`}>
+                            <tr className={`border-b ${borderColor}`}>
+                              <th className="px-4 py-2 text-left">Page</th>
+                              <th className="px-4 py-2 text-center">Phase</th>
+                              <th className="px-4 py-2 text-center">Status</th>
+                              <th className="px-4 py-2 text-center">Assignee</th>
+                              <th className="px-4 py-2 text-center">Due Date</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {projectData.tasks.map((task, idx) => (
+                              <tr key={idx} className={`border-b ${borderColor} hover:${bgSecondary}`}>
+                                <td className={`px-4 py-2 ${textPrimary}`}>{task.page_name}</td>
+                                <td className="px-4 py-2 text-center">
+                                  <Badge className={`text-xs ${
+                                    task.phase === 'wireframe' ? 'bg-[#6366f1]/20 text-[#6366f1]' :
+                                    task.phase === 'ui' ? 'bg-[#8b5cf6]/20 text-[#8b5cf6]' :
+                                    task.phase === 'content' ? 'bg-[#10b981]/20 text-[#10b981]' :
+                                    'bg-[#f59e0b]/20 text-[#f59e0b]'
+                                  }`}>
+                                    {task.phase === 'dev' ? 'Development' : task.phase.charAt(0).toUpperCase() + task.phase.slice(1)}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  <Badge className={`text-xs ${
+                                    task.status === 'Completed' ? 'bg-green-500/20 text-green-400' :
+                                    task.status === 'In Progress' ? 'bg-yellow-500/20 text-yellow-400' :
+                                    'bg-gray-500/20 text-gray-400'
+                                  }`}>
+                                    {task.status || 'Not Started'}
+                                  </Badge>
+                                </td>
+                                <td className={`px-4 py-2 text-center ${textSecondary}`}>{task.assignee || '-'}</td>
+                                <td className={`px-4 py-2 text-center ${task.due_date && new Date(task.due_date) < new Date() ? 'text-red-400 font-medium' : textSecondary}`}>
+                                  {task.due_date || '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Cross-Project Tasks Panel */}
             {(dueDateFilter || (developerFilter && developerFilter !== 'all')) && (
@@ -901,9 +1119,9 @@ const WebsiteProjectsPage = () => {
             )}
           </div>
 
-          {/* Tabs */}
+          {/* Tabs - Sticky */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-            <div className={`border-b ${borderColor} px-4 pt-2 flex items-center justify-between`}>
+            <div className={`sticky top-0 z-10 border-b ${borderColor} ${bgCard} px-4 pt-2 pb-2 flex items-center justify-between`}>
               <TabsList className={bgSecondary}>
                 <TabsTrigger value="pages"><LayoutGrid className="h-4 w-4 mr-1" /> Pages</TabsTrigger>
                 <TabsTrigger value="tasks"><ListTodo className="h-4 w-4 mr-1" /> Tasks <Badge className="ml-1 bg-[#6366f1]/20 text-[#6366f1]">{projectTasks.length}</Badge></TabsTrigger>
@@ -1586,16 +1804,16 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
               </div>
             </div>
 
-            {/* WordPress Credentials */}
+            {/* Website Credentials */}
             <div className={`p-4 rounded-lg border ${borderColor}`}>
               <h4 className={`font-semibold mb-3 ${textPrimary} flex items-center gap-2`}>
-                <span className="w-6 h-6 rounded bg-[#21759b] flex items-center justify-center text-white text-xs font-bold">W</span>
-                WordPress Credentials
+                <Globe className="w-5 h-5 text-[#6366f1]" />
+                Website Credentials
               </h4>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={`text-sm ${textSecondary} block mb-1`}>Username</label>
-                  <Input value={project.wp_username} onChange={(e) => setProject({...project, wp_username: e.target.value})} placeholder="wp_admin" className={bgSecondary} />
+                  <Input value={project.wp_username} onChange={(e) => setProject({...project, wp_username: e.target.value})} placeholder="admin_user" className={bgSecondary} />
                 </div>
                 <div>
                   <label className={`text-sm ${textSecondary} block mb-1`}>Password</label>
