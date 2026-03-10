@@ -1,10 +1,42 @@
 # Drawlead OS - Product Requirements Document
 
-## Last Updated: February 2026
+## Last Updated: March 2026
 
 ---
 
-## Recent Changes (February 2026 - Latest)
+## Recent Changes (March 2026 - Latest)
+
+### Meta Ads Performance Marketing Board ✅ (March 2026)
+Complete performance marketing project management view with dual views and custom fields:
+
+**Features:**
+1. **Stats Dashboard**: Total Campaigns, Total Ads, Total Leads, Total Spend
+2. **View Toggle**: Table View and Kanban View with one-click switch
+3. **Table View (Month-on-Month)**: 
+   - Campaigns grouped by month with summary stats (leads, spend)
+   - Expandable rows showing ads for each campaign
+   - Inline status dropdowns for quick updates
+4. **Kanban View (Creative Pipeline)**: 
+   - 6 columns: Yet to Start → Design → Edit → Review → Published → Approved
+   - Drag-style ad cards with quick status update
+   - Visual campaign/ad context per card
+5. **Campaign Management**: Create/Edit/Delete campaigns with client, area, mode, month, target, service angle
+6. **Ad Management**: Create/Edit/Delete ads with type, content doc URL, creative drive URL, status tracking
+7. **Custom Fields**: Add unlimited custom attributes with types: Select (dropdown), Text, Number, URL
+8. **Document Popups**: In-app iframe preview for Google Docs/Drive links
+9. **Filters**: Search, Month filter, Area filter
+
+**API Endpoints:**
+- `/api/meta-ads/campaigns` - Campaign CRUD
+- `/api/meta-ads/campaigns/{id}/ads` - Ad CRUD
+- `/api/meta-ads/custom-attributes` - Custom attributes CRUD
+- `/api/meta-ads/stats` - Stats and analytics
+
+**Database Collections:** `meta_ads_campaigns`, `meta_ads`, `meta_ads_custom_attributes`
+
+---
+
+## Previous Updates (February 2026)
 
 ### Website Projects Enhancement ✅ (February 2026)
 Comprehensive project details for website development tracking:
