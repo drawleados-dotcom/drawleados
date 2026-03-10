@@ -31,8 +31,13 @@ import {
   FileSpreadsheet,
   X,
   ChevronDown,
+  ChevronUp,
   GripVertical,
   ExternalLink,
+  Clock,
+  MessageSquare,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -79,6 +84,15 @@ const LeadsPageV2 = () => {
 
   const [sheetId, setSheetId] = useState('');
   const [sheetName, setSheetName] = useState('Sheet1');
+
+  // Follow-up modal state
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [followUpLead, setFollowUpLead] = useState(null);
+  const [followUpForm, setFollowUpForm] = useState({
+    date: '',
+    time: '',
+    notes: '',
+  });
 
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -268,6 +282,91 @@ const LeadsPageV2 = () => {
       loadStats();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to delete stage');
+    }
+  };
+
+  const moveStageUp = async (index) => {
+    if (index === 0) return;
+    const newStages = [...stages];
+    [newStages[index - 1], newStages[index]] = [newStages[index], newStages[index - 1]];
+    
+    // Update orders
+    const stageOrders = newStages.map((stage, i) => ({
+      stage_id: stage.stage_id,
+      order: i
+    }));
+    
+    try {
+      await axios.put(`${API}/api/leads-v2/stages/reorder`, stageOrders, { headers });
+      setStages(newStages);
+      toast.success('Stage order updated');
+    } catch (error) {
+      toast.error('Failed to reorder stages');
+    }
+  };
+
+  const moveStageDown = async (index) => {
+    if (index === stages.length - 1) return;
+    const newStages = [...stages];
+    [newStages[index], newStages[index + 1]] = [newStages[index + 1], newStages[index]];
+    
+    // Update orders
+    const stageOrders = newStages.map((stage, i) => ({
+      stage_id: stage.stage_id,
+      order: i
+    }));
+    
+    try {
+      await axios.put(`${API}/api/leads-v2/stages/reorder`, stageOrders, { headers });
+      setStages(newStages);
+      toast.success('Stage order updated');
+    } catch (error) {
+      toast.error('Failed to reorder stages');
+    }
+  };
+
+  // ============== FOLLOW-UP ACTIONS ==============
+
+  const openFollowUpModal = (lead) => {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toTimeString().slice(0, 5);
+    
+    setFollowUpLead(lead);
+    setFollowUpForm({
+      date: dateStr,
+      time: timeStr,
+      notes: '',
+    });
+    setShowFollowUpModal(true);
+  };
+
+  const submitFollowUp = async () => {
+    if (!followUpLead) return;
+    
+    try {
+      const followUpEntry = {
+        date: followUpForm.date,
+        time: followUpForm.time,
+        notes: followUpForm.notes,
+        created_at: new Date().toISOString(),
+      };
+      
+      // Get existing follow-ups or create empty array
+      const existingFollowUps = followUpLead.follow_ups || [];
+      
+      // Add new follow-up to the lead
+      await axios.put(`${API}/api/leads-v2/leads/${followUpLead.lead_id}`, {
+        follow_ups: [...existingFollowUps, followUpEntry]
+      }, { headers });
+      
+      toast.success('Follow-up added');
+      setShowFollowUpModal(false);
+      setFollowUpLead(null);
+      setFollowUpForm({ date: '', time: '', notes: '' });
+      loadLeads();
+    } catch (error) {
+      toast.error('Failed to add follow-up');
     }
   };
 
@@ -534,6 +633,7 @@ const LeadsPageV2 = () => {
               onEdit={openEditLead}
               onDelete={deleteLead}
               onStageChange={updateLeadStage}
+              onFollowUp={openFollowUpModal}
               customFields={customFields}
               formatDate={formatDate}
               isDark={isDark}
@@ -549,6 +649,7 @@ const LeadsPageV2 = () => {
               onEdit={openEditLead}
               onDelete={deleteLead}
               onStageChange={updateLeadStage}
+              onFollowUp={openFollowUpModal}
               formatDate={formatDate}
               isDark={isDark}
               textPrimary={textPrimary}
@@ -718,14 +819,32 @@ const LeadsPageV2 = () => {
             <DialogHeader>
               <DialogTitle>Manage Stages</DialogTitle>
             </DialogHeader>
-            <div className="space-y-3 mb-4 max-h-[300px] overflow-y-auto">
-              {stages.map(stage => (
-                <div key={stage.stage_id} className={`p-3 rounded-lg ${bgSecondary} flex items-center justify-between`}>
-                  <div className="flex items-center gap-2">
+            <p className={`text-xs ${textSecondary} mb-2`}>Drag stages to reorder or use arrows</p>
+            <div className="space-y-2 mb-4 max-h-[300px] overflow-y-auto">
+              {stages.map((stage, index) => (
+                <div key={stage.stage_id} className={`p-3 rounded-lg ${bgSecondary} flex items-center justify-between gap-2`}>
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        onClick={() => moveStageUp(index)}
+                        disabled={index === 0}
+                        className={`p-0.5 rounded hover:bg-[#3f3f46] ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                      >
+                        <ArrowUp className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={() => moveStageDown(index)}
+                        disabled={index === stages.length - 1}
+                        className={`p-0.5 rounded hover:bg-[#3f3f46] ${index === stages.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                      >
+                        <ArrowDown className="h-3 w-3" />
+                      </button>
+                    </div>
                     <div className="w-4 h-4 rounded" style={{ backgroundColor: stage.color }} />
                     <span className={textPrimary}>{stage.name}</span>
+                    <span className={`text-xs ${textSecondary}`}>#{index + 1}</span>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => deleteStage(stage.stage_id)} className="text-red-400">
+                  <Button variant="ghost" size="sm" onClick={() => deleteStage(stage.stage_id)} className="text-red-400 h-7 w-7 p-0">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -862,6 +981,74 @@ const LeadsPageV2 = () => {
               <Button variant="ghost" onClick={() => setShowSheetsModal(false)}>Cancel</Button>
               <Button onClick={connectGoogleSheets} className="bg-[#22c55e] hover:bg-[#16a34a]">
                 <Link2 className="h-4 w-4 mr-2" /> Connect
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Follow-up Modal */}
+        <Dialog open={showFollowUpModal} onOpenChange={setShowFollowUpModal}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-[#f59e0b]" />
+                Add Follow-up for {followUpLead?.name}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Date</label>
+                  <Input
+                    type="date"
+                    value={followUpForm.date}
+                    onChange={(e) => setFollowUpForm({ ...followUpForm, date: e.target.value })}
+                    className={bgSecondary}
+                  />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Time</label>
+                  <Input
+                    type="time"
+                    value={followUpForm.time}
+                    onChange={(e) => setFollowUpForm({ ...followUpForm, time: e.target.value })}
+                    className={bgSecondary}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Notes</label>
+                <Textarea
+                  value={followUpForm.notes}
+                  onChange={(e) => setFollowUpForm({ ...followUpForm, notes: e.target.value })}
+                  placeholder="Follow-up notes..."
+                  className={bgSecondary}
+                  rows={3}
+                />
+              </div>
+              
+              {/* Previous follow-ups */}
+              {followUpLead?.follow_ups && followUpLead.follow_ups.length > 0 && (
+                <div className="border-t border-[#3f3f46] pt-4">
+                  <h4 className={`text-sm font-medium ${textPrimary} mb-2`}>Previous Follow-ups</h4>
+                  <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                    {followUpLead.follow_ups.map((fu, idx) => (
+                      <div key={idx} className={`p-2 rounded ${bgSecondary} text-sm`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Calendar className="h-3 w-3 text-[#f59e0b]" />
+                          <span className={textPrimary}>{fu.date} {fu.time}</span>
+                        </div>
+                        {fu.notes && <p className={`text-xs ${textSecondary}`}>{fu.notes}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => { setShowFollowUpModal(false); setFollowUpLead(null); }}>Cancel</Button>
+              <Button onClick={submitFollowUp} className="bg-[#f59e0b] hover:bg-[#d97706]">
+                <MessageSquare className="h-4 w-4 mr-2" /> Add Follow-up
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1065,7 +1252,7 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
 };
 
 // ============== KANBAN VIEW ==============
-const KanbanView = ({ stages, getLeadsByStage, onEdit, onDelete, onStageChange, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+const KanbanView = ({ stages, getLeadsByStage, onEdit, onDelete, onStageChange, onFollowUp, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
   const [draggedLead, setDraggedLead] = useState(null);
   const [dragOverStage, setDragOverStage] = useState(null);
 
@@ -1148,6 +1335,7 @@ const KanbanView = ({ stages, getLeadsByStage, onEdit, onDelete, onStageChange, 
                   onEdit={onEdit}
                   onDelete={onDelete}
                   onStageChange={onStageChange}
+                  onFollowUp={onFollowUp}
                   formatDate={formatDate}
                   isDark={isDark}
                   textPrimary={textPrimary}
@@ -1292,7 +1480,7 @@ const PreviewBoard = ({ leads, stages, selectedLead, setSelectedLead, onEdit, on
 };
 
 // ============== LEAD CARD ==============
-const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, formatDate, isDark, textPrimary, textSecondary, borderColor, onDragStart, onDragEnd, isDragging }) => {
+const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, onFollowUp, formatDate, isDark, textPrimary, textSecondary, borderColor, onDragStart, onDragEnd, isDragging }) => {
   return (
     <div
       draggable
@@ -1331,6 +1519,24 @@ const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, formatDate, i
         <div className="flex items-center gap-1">
           <Calendar className="h-3 w-3" /> {formatDate(lead.created_at)}
         </div>
+      </div>
+      
+      {/* Follow-up Button */}
+      <div className="mt-2 pt-2 border-t border-[#27272a]">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={(e) => { e.stopPropagation(); onFollowUp && onFollowUp(lead); }}
+          className="w-full h-7 text-xs text-[#f59e0b] hover:bg-[#f59e0b]/10 justify-start"
+        >
+          <Clock className="h-3 w-3 mr-1" />
+          Follow-up
+          {lead.follow_ups?.length > 0 && (
+            <Badge className="ml-auto bg-[#f59e0b]/20 text-[#f59e0b] text-xs px-1">
+              {lead.follow_ups.length}
+            </Badge>
+          )}
+        </Button>
       </div>
     </div>
   );
