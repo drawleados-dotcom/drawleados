@@ -72,7 +72,8 @@ const Sidebar = () => {
   const isEmployee = userRole === 'employee';
   const isBDE = userRole === 'business_development' || userRole === 'bde';
   const isProjectManager = userRole === 'project_manager';
-  const canManageHR = isAdmin || isProjectManager || hasAccess('hr');
+  // HR Admin access: Only for admins and project managers, NOT for BDE
+  const canManageHR = isAdmin || isProjectManager;
   const canManageUsers = user?.can_manage_users || false;
 
   // Load databases for operations submenu
@@ -357,8 +358,8 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Settings - visible if user has settings access */}
-        {hasAccess('settings') && (
+        {/* Settings - visible only for admins (not BDE) */}
+        {hasAccess('settings') && !isBDE && (
           <Link
             to="/settings"
             data-testid="nav-settings"
