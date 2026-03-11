@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import api from '../../utils/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -29,6 +30,13 @@ const colorOptions = [
 ];
 
 const WorkspacesTab = ({ users = [] }) => {
+  const { isDark } = useTheme();
+  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
+  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
+  const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
+  
   const [workspaces, setWorkspaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -108,7 +116,7 @@ const WorkspacesTab = ({ users = [] }) => {
   };
 
   if (loading) {
-    return <div className="text-[#a1a1aa]">Loading workspaces...</div>;
+    return <div className="${textSecondary}">Loading workspaces...</div>;
   }
 
   return (
@@ -116,8 +124,8 @@ const WorkspacesTab = ({ users = [] }) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-[#fafafa]">Workspaces</h2>
-          <p className="text-sm text-[#a1a1aa]">
+          <h2 className="text-xl font-semibold ${textPrimary}">Workspaces</h2>
+          <p className="text-sm ${textSecondary}">
             Manage internal workspaces for different departments
           </p>
         </div>
@@ -138,7 +146,7 @@ const WorkspacesTab = ({ users = [] }) => {
           return (
             <Card
               key={workspace.workspace_id}
-              className="bg-[#18181b] border-[#27272a] hover:border-[#3f3f46] transition-all"
+              className="${bgCard} ${borderColor} hover:${borderColor} transition-all"
               data-testid={`workspace-card-${workspace.workspace_id}`}
             >
               <CardHeader className="pb-2">
@@ -151,22 +159,22 @@ const WorkspacesTab = ({ users = [] }) => {
                       <IconComponent className="h-5 w-5" style={{ color: workspace.color }} />
                     </div>
                     <div>
-                      <CardTitle className="text-[#fafafa] text-lg">{workspace.name}</CardTitle>
-                      <p className="text-xs text-[#a1a1aa]">{workspace.members?.length || 0} members</p>
+                      <CardTitle className="${textPrimary} text-lg">{workspace.name}</CardTitle>
+                      <p className="text-xs ${textSecondary}">{workspace.members?.length || 0} members</p>
                     </div>
                   </div>
                   <div className="flex gap-1">
                     <Button
                       size="sm"
                       onClick={() => handleEdit(workspace)}
-                      className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8 w-8 p-0"
+                      className="${bgSecondary} hover:bg-[#3f3f46] ${textPrimary} h-8 w-8 p-0"
                     >
                       <Edit className="h-3 w-3" />
                     </Button>
                     <Button
                       size="sm"
                       onClick={() => handleDelete(workspace.workspace_id)}
-                      className="bg-[#27272a] hover:bg-[#ef4444] text-[#fafafa] h-8 w-8 p-0"
+                      className="${bgSecondary} hover:bg-[#ef4444] ${textPrimary} h-8 w-8 p-0"
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -174,12 +182,12 @@ const WorkspacesTab = ({ users = [] }) => {
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-[#a1a1aa] mb-4">{workspace.description}</p>
+                <p className="text-sm ${textSecondary} mb-4">{workspace.description}</p>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleManageMembers(workspace)}
-                  className="w-full border-[#27272a] text-[#fafafa] hover:bg-[#27272a]"
+                  className="w-full ${borderColor} ${textPrimary} hover:${bgSecondary}"
                 >
                   <UserCheck className="h-4 w-4 mr-2" />
                   Manage Members
@@ -231,7 +239,7 @@ const WorkspaceFormModal = ({ workspace, onClose, onSave }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+      <DialogContent className="${bgCard} ${borderColor} ${textPrimary}">
         <DialogHeader>
           <DialogTitle>{workspace ? 'Edit Workspace' : 'Create Workspace'}</DialogTitle>
         </DialogHeader>
@@ -242,7 +250,7 @@ const WorkspaceFormModal = ({ workspace, onClose, onSave }) => {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g., Marketing"
-              className="bg-[#09090b] border-[#27272a]"
+              className="bg-[#09090b] ${borderColor}"
               data-testid="workspace-name-input"
             />
           </div>
@@ -252,7 +260,7 @@ const WorkspaceFormModal = ({ workspace, onClose, onSave }) => {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="What is this workspace for?"
-              className="bg-[#09090b] border-[#27272a]"
+              className="bg-[#09090b] ${borderColor}"
             />
           </div>
           <div className="space-y-2">
@@ -273,7 +281,7 @@ const WorkspaceFormModal = ({ workspace, onClose, onSave }) => {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="border-[#27272a] text-[#a1a1aa]">
+          <Button variant="outline" onClick={onClose} className="${borderColor} ${textSecondary}">
             Cancel
           </Button>
           <Button onClick={handleSubmit} className="bg-[#6366f1] hover:bg-[#4f46e5]">
@@ -291,7 +299,7 @@ const MembersModal = ({ workspace, users, onClose, onToggleMember }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border-[#27272a] text-[#fafafa] max-w-lg">
+      <DialogContent className="${bgCard} ${borderColor} ${textPrimary} max-w-lg">
         <DialogHeader>
           <DialogTitle>
             <span style={{ color: workspace.color }}>{workspace.name}</span> - Members
@@ -304,7 +312,7 @@ const MembersModal = ({ workspace, users, onClose, onToggleMember }) => {
               <div
                 key={user.user_id}
                 className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
-                  isMember ? 'border-[#6366f1] bg-[#6366f1]/10' : 'border-[#27272a] bg-[#09090b]'
+                  isMember ? 'border-[#6366f1] bg-[#6366f1]/10' : '${borderColor} bg-[#09090b]'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -312,8 +320,8 @@ const MembersModal = ({ workspace, users, onClose, onToggleMember }) => {
                     {user.name?.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-[#fafafa]">{user.name}</p>
-                    <p className="text-xs text-[#a1a1aa]">{user.role}</p>
+                    <p className="text-sm font-medium ${textPrimary}">{user.name}</p>
+                    <p className="text-xs ${textSecondary}">{user.role}</p>
                   </div>
                 </div>
                 <Button
@@ -332,7 +340,7 @@ const MembersModal = ({ workspace, users, onClose, onToggleMember }) => {
           })}
         </div>
         <DialogFooter>
-          <Button onClick={onClose} className="bg-[#27272a] hover:bg-[#3f3f46]">
+          <Button onClick={onClose} className="${bgSecondary} hover:bg-[#3f3f46]">
             Done
           </Button>
         </DialogFooter>

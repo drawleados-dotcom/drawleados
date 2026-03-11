@@ -38,6 +38,8 @@ import {
   MessageSquare,
   ArrowUp,
   ArrowDown,
+  Download,
+  Upload,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -77,6 +79,12 @@ const LeadsPageV2 = () => {
   const [showAddIndustryModal, setShowAddIndustryModal] = useState(false);
   const [newServiceName, setNewServiceName] = useState('');
   const [newIndustryName, setNewIndustryName] = useState('');
+  
+  // Import/Export state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState([]);
+  const [importTemplate, setImportTemplate] = useState(null);
+  const [importing, setImporting] = useState(false);
 
   // Form state - comprehensive lead form
   const [leadForm, setLeadForm] = useState({
@@ -540,6 +548,178 @@ const LeadsPageV2 = () => {
     }
   };
 
+  // ============== IMPORT/EXPORT ACTIONS ==============
+
+  const downloadTemplate = async () => {
+    try {
+      const res = await axios.get(`${API}/api/leads-v2/template`, { headers });
+      setImportTemplate(res.data);
+      
+      // Generate CSV content
+      const columns = res.data.columns.map(c => c.field);
+      const headers_row = res.data.columns.map(c => c.label);
+      const sample = res.data.sample_row;
+      const sample_row = columns.map(col => sample[col] || '');
+      
+      const csvContent = [
+        headers_row.join(','),
+        sample_row.map(v => `"${v}"`).join(',')
+      ].join('\n');
+      
+      // Download file
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'leads_import_template.csv';
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Template downloaded');
+    } catch (error) {
+      toast.error('Failed to download template');
+    }
+  };
+
+  const exportLeads = async () => {
+    try {
+      const res = await axios.get(`${API}/api/leads-v2/export`, { headers });
+      const data = res.data;
+      
+      if (data.length === 0) {
+        toast.info('No leads to export');
+        return;
+      }
+      
+      // Generate CSV
+      const columns = Object.keys(data[0]);
+      const csvRows = [
+        columns.join(','),
+        ...data.map(row => columns.map(col => `"${row[col] || ''}"`).join(','))
+      ];
+      
+      const csvContent = csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leads_export_${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success(`Exported ${data.length} leads`);
+    } catch (error) {
+      toast.error('Failed to export leads');
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result;
+        const lines = text.split('\n').filter(line => line.trim());
+        
+        if (lines.length < 2) {
+          toast.error('CSV file is empty or has only headers');
+          return;
+        }
+        
+        // Parse CSV
+        const parseCSVLine = (line) => {
+          const result = [];
+          let current = '';
+          let inQuotes = false;
+          
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim());
+              current = '';
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim());
+          return result;
+        };
+        
+        const headers = parseCSVLine(lines[0]);
+        const rows = lines.slice(1).map(line => {
+          const values = parseCSVLine(line);
+          const row = {};
+          headers.forEach((header, idx) => {
+            // Map common header names to field names
+            const fieldMap = {
+              'Name': 'name',
+              'Email': 'email',
+              'Phone': 'phone',
+              'Location': 'location',
+              'Website': 'website',
+              'Social Media': 'social_media',
+              'Source': 'source',
+              'Lead Owner': 'lead_owner',
+              'Service': 'service',
+              'Priority': 'priority',
+              'Lead Type': 'lead_type',
+              'Date of Lead': 'date_of_lead',
+              'Industry': 'industry',
+              'Estimation (Amount)': 'estimation',
+              'Quotation Link': 'quotation_link',
+              'Proposal Link': 'proposal_link',
+              'Notes': 'notes',
+              'Stage': 'stage',
+            };
+            const field = fieldMap[header] || header.toLowerCase().replace(/\s+/g, '_');
+            row[field] = values[idx] || '';
+          });
+          return row;
+        }).filter(row => row.name); // Filter out empty rows
+        
+        setImportData(rows);
+        setShowImportModal(true);
+        toast.success(`Parsed ${rows.length} leads from CSV`);
+      } catch (error) {
+        toast.error('Failed to parse CSV file');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = ''; // Reset file input
+  };
+
+  const importLeads = async () => {
+    if (importData.length === 0) {
+      toast.error('No leads to import');
+      return;
+    }
+    
+    setImporting(true);
+    try {
+      const res = await axios.post(`${API}/api/leads-v2/import`, {
+        leads: importData
+      }, { headers });
+      
+      toast.success(`Imported ${res.data.imported} of ${res.data.total} leads`);
+      if (res.data.errors?.length > 0) {
+        console.error('Import errors:', res.data.errors);
+      }
+      
+      setShowImportModal(false);
+      setImportData([]);
+      loadLeads();
+      loadStats();
+    } catch (error) {
+      toast.error('Failed to import leads');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   // ============== HELPERS ==============
 
   const filteredLeads = leads.filter(lead => {
@@ -664,6 +844,45 @@ const LeadsPageV2 = () => {
                 <Plus className="h-4 w-4 mr-2" />
                 Fields
               </Button>
+
+              {/* Import/Export */}
+              <div className={`flex items-center ${bgSecondary} rounded-lg p-1 border ${borderColor}`}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={downloadTemplate}
+                  title="Download Import Template"
+                  className={textSecondary}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Import Leads from CSV"
+                    className={textSecondary}
+                    asChild
+                  >
+                    <span><Upload className="h-4 w-4" /></span>
+                  </Button>
+                </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={exportLeads}
+                  title="Export All Leads"
+                  className={textSecondary}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                </Button>
+              </div>
 
               <Button
                 onClick={() => { resetLeadForm(); setEditingLead(null); setShowAddLeadModal(true); }}
@@ -1187,6 +1406,75 @@ const LeadsPageV2 = () => {
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowAddIndustryModal(false)}>Cancel</Button>
               <Button onClick={addNewIndustry} className="bg-[#3b82f6] hover:bg-[#2563eb]">Add</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Leads Modal */}
+        <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-4xl max-h-[85vh] overflow-y-auto`}>
+            <DialogHeader>
+              <DialogTitle>Import Leads Preview</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className={`p-3 rounded-lg ${bgSecondary} flex items-center justify-between`}>
+                <div>
+                  <p className={textPrimary}><strong>{importData.length}</strong> leads ready to import</p>
+                  <p className={`text-xs ${textSecondary}`}>Review the data below before importing</p>
+                </div>
+                <Badge className="bg-blue-500/20 text-blue-400">{importData.length} rows</Badge>
+              </div>
+              
+              {/* Preview Table */}
+              <div className={`rounded-lg border ${borderColor} overflow-hidden`}>
+                <div className="overflow-x-auto max-h-[400px]">
+                  <table className="w-full text-sm">
+                    <thead className={`${bgSecondary} sticky top-0`}>
+                      <tr>
+                        <th className={`px-3 py-2 text-left ${textSecondary} font-medium`}>#</th>
+                        <th className={`px-3 py-2 text-left ${textSecondary} font-medium`}>Name</th>
+                        <th className={`px-3 py-2 text-left ${textSecondary} font-medium`}>Email</th>
+                        <th className={`px-3 py-2 text-left ${textSecondary} font-medium`}>Phone</th>
+                        <th className={`px-3 py-2 text-left ${textSecondary} font-medium`}>Stage</th>
+                        <th className={`px-3 py-2 text-left ${textSecondary} font-medium`}>Lead Owner</th>
+                        <th className={`px-3 py-2 text-left ${textSecondary} font-medium`}>Service</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importData.slice(0, 50).map((lead, idx) => (
+                        <tr key={idx} className={`border-t ${borderColor}`}>
+                          <td className={`px-3 py-2 ${textSecondary}`}>{idx + 1}</td>
+                          <td className={`px-3 py-2 ${textPrimary} font-medium`}>{lead.name}</td>
+                          <td className={`px-3 py-2 ${textSecondary}`}>{lead.email}</td>
+                          <td className={`px-3 py-2 ${textSecondary}`}>{lead.phone}</td>
+                          <td className={`px-3 py-2`}>
+                            <Badge className="text-xs" style={{ backgroundColor: stages.find(s => s.name.toLowerCase() === lead.stage?.toLowerCase())?.color + '40' || '#3b82f640' }}>
+                              {lead.stage || 'Default'}
+                            </Badge>
+                          </td>
+                          <td className={`px-3 py-2 ${textSecondary}`}>{lead.lead_owner}</td>
+                          <td className={`px-3 py-2 ${textSecondary}`}>{lead.service}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {importData.length > 50 && (
+                  <div className={`p-2 text-center ${bgSecondary} ${textSecondary} text-xs`}>
+                    Showing 50 of {importData.length} rows
+                  </div>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => { setShowImportModal(false); setImportData([]); }}>Cancel</Button>
+              <Button 
+                onClick={importLeads} 
+                disabled={importing}
+                className="bg-[#22c55e] hover:bg-[#16a34a]"
+              >
+                {importing ? 'Importing...' : `Import ${importData.length} Leads`}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

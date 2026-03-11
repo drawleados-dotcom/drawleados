@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTheme } from '../../contexts/ThemeContext';
 import api from '../../utils/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -36,32 +37,32 @@ const StatusItem = ({ status, index, moveStatus, onEdit, onDelete }) => {
   return (
     <div
       ref={(node) => drag(drop(node))}
-      className={`flex items-center justify-between p-3 rounded-lg border border-[#27272a] bg-[#09090b] transition-all ${
+      className={`flex items-center justify-between p-3 rounded-lg border ${borderColor} bg-[#09090b] transition-all ${
         isDragging ? 'opacity-50' : 'opacity-100'
       }`}
       data-testid={`status-item-${status.status_id}`}
     >
       <div className="flex items-center gap-3">
-        <GripVertical className="h-4 w-4 text-[#a1a1aa] cursor-grab" />
+        <GripVertical className="h-4 w-4 ${textSecondary} cursor-grab" />
         <div
           className="h-4 w-4 rounded-full"
           style={{ backgroundColor: status.color }}
         />
-        <span className="text-sm font-medium text-[#fafafa]">{status.name}</span>
+        <span className="text-sm font-medium ${textPrimary}">{status.name}</span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-[#a1a1aa]">Order: {status.order}</span>
+        <span className="text-xs ${textSecondary}">Order: {status.order}</span>
         <Button
           size="sm"
           onClick={() => onEdit(status)}
-          className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-7 w-7 p-0"
+          className="${bgSecondary} hover:bg-[#3f3f46] ${textPrimary} h-7 w-7 p-0"
         >
           <Edit className="h-3 w-3" />
         </Button>
         <Button
           size="sm"
           onClick={() => onDelete(status.status_id)}
-          className="bg-[#27272a] hover:bg-[#ef4444] text-[#fafafa] h-7 w-7 p-0"
+          className="${bgSecondary} hover:bg-[#ef4444] ${textPrimary} h-7 w-7 p-0"
         >
           <Trash2 className="h-3 w-3" />
         </Button>
@@ -71,6 +72,13 @@ const StatusItem = ({ status, index, moveStatus, onEdit, onDelete }) => {
 };
 
 const StatusManagementTab = () => {
+  const { isDark } = useTheme();
+  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
+  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
+  const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
+  
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -163,7 +171,7 @@ const StatusManagementTab = () => {
   };
 
   if (loading) {
-    return <div className="text-[#a1a1aa]">Loading statuses...</div>;
+    return <div className="${textSecondary}">Loading statuses...</div>;
   }
 
   return (
@@ -172,8 +180,8 @@ const StatusManagementTab = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-[#fafafa]">Status Management</h2>
-            <p className="text-sm text-[#a1a1aa]">
+            <h2 className="text-xl font-semibold ${textPrimary}">Status Management</h2>
+            <p className="text-sm ${textSecondary}">
               Create, edit, and reorder statuses. Drag to change order.
             </p>
           </div>
@@ -212,7 +220,7 @@ const StatusManagementTab = () => {
             />
           ))}
           {statuses.length === 0 && (
-            <div className="text-center py-8 text-[#a1a1aa]">
+            <div className="text-center py-8 ${textSecondary}">
               No statuses found. Create your first status!
             </div>
           )}
@@ -248,7 +256,7 @@ const StatusFormModal = ({ status, onClose, onSave }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+      <DialogContent className="${bgCard} ${borderColor} ${textPrimary}">
         <DialogHeader>
           <DialogTitle>{status ? 'Edit Status' : 'Create Status'}</DialogTitle>
         </DialogHeader>
@@ -259,7 +267,7 @@ const StatusFormModal = ({ status, onClose, onSave }) => {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g., In Progress"
-              className="bg-[#09090b] border-[#27272a]"
+              className="bg-[#09090b] ${borderColor}"
               data-testid="status-name-input"
             />
           </div>
@@ -279,7 +287,7 @@ const StatusFormModal = ({ status, onClose, onSave }) => {
             </div>
           </div>
           <div className="p-3 bg-[#09090b] rounded-lg">
-            <p className="text-xs text-[#a1a1aa] mb-2">Preview:</p>
+            <p className="text-xs ${textSecondary} mb-2">Preview:</p>
             <span
               className="px-3 py-1 rounded-full text-sm font-medium text-white"
               style={{ backgroundColor: formData.color }}
@@ -289,7 +297,7 @@ const StatusFormModal = ({ status, onClose, onSave }) => {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="border-[#27272a] text-[#a1a1aa]">
+          <Button variant="outline" onClick={onClose} className="${borderColor} ${textSecondary}">
             Cancel
           </Button>
           <Button onClick={handleSubmit} className="bg-[#6366f1] hover:bg-[#4f46e5]">

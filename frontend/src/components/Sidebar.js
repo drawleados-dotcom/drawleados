@@ -194,7 +194,15 @@ const Sidebar = () => {
         {hasAccess('operations') && (
         <div>
           <button
-            onClick={() => !isCollapsed && setOperationsExpanded(!operationsExpanded)}
+            onClick={() => {
+              if (isCollapsed) {
+                // Expand sidebar and open operations menu
+                setIsCollapsed(false);
+                setOperationsExpanded(true);
+              } else {
+                setOperationsExpanded(!operationsExpanded);
+              }
+            }}
             data-testid="nav-operations"
             className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${isOperationsActive ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'Operations' : ''}

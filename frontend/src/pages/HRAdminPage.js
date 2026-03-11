@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
+import { useTheme } from '../contexts/ThemeContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -16,8 +17,16 @@ import axios from 'axios';
 const API = process.env.REACT_APP_BACKEND_URL;
 
 export default function HRAdminPage() {
+  const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState('dashboard');
   const token = localStorage.getItem('session_token');
+  
+  // Theme classes
+  const bgCard = isDark ? '${bgCard}' : 'bg-white';
+  const bgSecondary = isDark ? '${bgSecondary}' : 'bg-gray-100';
+  const textPrimary = isDark ? '${textPrimary}' : 'text-gray-900';
+  const textSecondary = isDark ? '${textSecondary}' : 'text-gray-600';
+  const borderColor = isDark ? '${borderColor}' : 'border-gray-200';
   
   // Dashboard stats
   const [stats, setStats] = useState({});
@@ -167,7 +176,7 @@ export default function HRAdminPage() {
               HR Admin
             </span>
           </h1>
-          <p className="text-[#a1a1aa]">Manage employees, leave requests, and attendance</p>
+          <p className="${textSecondary}">Manage employees, leave requests, and attendance</p>
         </div>
 
         {/* Tabs */}
@@ -182,7 +191,7 @@ export default function HRAdminPage() {
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                   activeTab === tab.id
                     ? 'bg-[#6366f1] text-white'
-                    : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'
+                    : '${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -249,66 +258,66 @@ function DashboardTab({ stats, attendanceOverview }) {
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <Card className="bg-[#18181b] border-[#27272a]">
+        <Card className="${bgCard} ${borderColor}">
           <CardContent className="p-4 text-center">
             <Users className="h-8 w-8 text-[#6366f1] mx-auto mb-2" />
-            <p className="text-2xl font-bold text-[#fafafa]">{stats.total_employees || 0}</p>
-            <p className="text-xs text-[#a1a1aa]">Total Employees</p>
+            <p className="text-2xl font-bold ${textPrimary}">{stats.total_employees || 0}</p>
+            <p className="text-xs ${textSecondary}">Total Employees</p>
           </CardContent>
         </Card>
-        <Card className="bg-[#18181b] border-[#27272a]">
+        <Card className="${bgCard} ${borderColor}">
           <CardContent className="p-4 text-center">
             <CheckCircle className="h-8 w-8 text-[#10b981] mx-auto mb-2" />
             <p className="text-2xl font-bold text-[#10b981]">{stats.present_today || presentCount}</p>
-            <p className="text-xs text-[#a1a1aa]">Present Today</p>
+            <p className="text-xs ${textSecondary}">Present Today</p>
           </CardContent>
         </Card>
-        <Card className="bg-[#18181b] border-[#27272a]">
+        <Card className="${bgCard} ${borderColor}">
           <CardContent className="p-4 text-center">
             <XCircle className="h-8 w-8 text-[#ef4444] mx-auto mb-2" />
             <p className="text-2xl font-bold text-[#ef4444]">{stats.absent_today || 0}</p>
-            <p className="text-xs text-[#a1a1aa]">Absent Today</p>
+            <p className="text-xs ${textSecondary}">Absent Today</p>
           </CardContent>
         </Card>
-        <Card className="bg-[#18181b] border-[#27272a]">
+        <Card className="${bgCard} ${borderColor}">
           <CardContent className="p-4 text-center">
             <Home className="h-8 w-8 text-[#8b5cf6] mx-auto mb-2" />
             <p className="text-2xl font-bold text-[#8b5cf6]">{stats.wfh_today || wfhCount}</p>
-            <p className="text-xs text-[#a1a1aa]">WFH Today</p>
+            <p className="text-xs ${textSecondary}">WFH Today</p>
           </CardContent>
         </Card>
-        <Card className="bg-[#18181b] border-[#27272a]">
+        <Card className="${bgCard} ${borderColor}">
           <CardContent className="p-4 text-center">
             <Building className="h-8 w-8 text-[#f59e0b] mx-auto mb-2" />
             <p className="text-2xl font-bold text-[#f59e0b]">{stats.wfo_today || 0}</p>
-            <p className="text-xs text-[#a1a1aa]">In Office</p>
+            <p className="text-xs ${textSecondary}">In Office</p>
           </CardContent>
         </Card>
-        <Card className="bg-[#18181b] border-[#27272a]">
+        <Card className="${bgCard} ${borderColor}">
           <CardContent className="p-4 text-center">
             <AlertCircle className="h-8 w-8 text-[#ec4899] mx-auto mb-2" />
             <p className="text-2xl font-bold text-[#ec4899]">{stats.pending_leaves || 0}</p>
-            <p className="text-xs text-[#a1a1aa]">Pending Leaves</p>
+            <p className="text-xs ${textSecondary}">Pending Leaves</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Today's Attendance Overview */}
-      <Card className="bg-[#18181b] border-[#27272a]">
+      <Card className="${bgCard} ${borderColor}">
         <CardHeader>
-          <CardTitle className="text-[#fafafa]">Today&apos;s Team Status</CardTitle>
+          <CardTitle className="${textPrimary}">Today&apos;s Team Status</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {attendanceOverview.slice(0, 9).map((emp) => (
-              <div key={emp.user_id} className="flex items-center gap-3 p-3 bg-[#27272a] rounded-lg">
+              <div key={emp.user_id} className="flex items-center gap-3 p-3 ${bgSecondary} rounded-lg">
                 <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white font-bold ${
                   emp.status === 'present' ? 'bg-[#10b981]' : 'bg-[#71717a]'
                 }`}>
                   {emp.name?.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-[#fafafa]">{emp.name}</p>
+                  <p className="text-sm font-medium ${textPrimary}">{emp.name}</p>
                   <div className="flex items-center gap-2">
                     <Badge className={`text-xs ${
                       emp.status === 'present' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
@@ -340,12 +349,12 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit }) {
       {/* Search */}
       <div className="flex gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#71717a]" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}" />
           <Input
             placeholder="Search employees..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+            className="pl-10 ${bgSecondary} ${borderColor} ${textPrimary}"
           />
         </div>
       </div>
@@ -353,7 +362,7 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit }) {
       {/* Employee Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {employees.map((emp) => (
-          <Card key={emp.user_id} className="bg-[#18181b] border-[#27272a]">
+          <Card key={emp.user_id} className="${bgCard} ${borderColor}">
             <CardContent className="p-4">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -361,14 +370,14 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit }) {
                     {emp.name?.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-semibold text-[#fafafa]">{emp.name}</p>
-                    <p className="text-xs text-[#a1a1aa]">{emp.email}</p>
+                    <p className="font-semibold ${textPrimary}">{emp.name}</p>
+                    <p className="text-xs ${textSecondary}">{emp.email}</p>
                   </div>
                 </div>
                 <Button
                   size="sm"
                   onClick={() => onEdit(emp)}
-                  className="bg-[#27272a] hover:bg-[#3f3f46]"
+                  className="${bgSecondary} hover:bg-[#3f3f46]"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
@@ -376,19 +385,19 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit }) {
               
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-[#a1a1aa]">Role</span>
+                  <span className="${textSecondary}">Role</span>
                   <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{emp.role}</Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#a1a1aa]">Department</span>
-                  <span className="text-[#fafafa]">{emp.profile?.department || '-'}</span>
+                  <span className="${textSecondary}">Department</span>
+                  <span className="${textPrimary}">{emp.profile?.department || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#a1a1aa]">Designation</span>
-                  <span className="text-[#fafafa]">{emp.profile?.designation || '-'}</span>
+                  <span className="${textSecondary}">Designation</span>
+                  <span className="${textPrimary}">{emp.profile?.designation || '-'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#a1a1aa]">Today</span>
+                  <span className="${textSecondary}">Today</span>
                   {emp.today_attendance ? (
                     <Badge className={emp.today_attendance.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}>
                       {emp.today_attendance.work_location === 'home' ? 'WFH' : 'Office'}
@@ -419,7 +428,7 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
             className={`${
               filter === f
                 ? 'bg-[#6366f1] text-white'
-                : 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]'
+                : '${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]'
             }`}
           >
             {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -430,7 +439,7 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
       {/* Requests List */}
       <div className="space-y-4">
         {requests.map((req) => (
-          <Card key={req.leave_id} className="bg-[#18181b] border-[#27272a]">
+          <Card key={req.leave_id} className="${bgCard} ${borderColor}">
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -439,14 +448,14 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
                       {req.user_name?.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-semibold text-[#fafafa]">{req.user_name}</p>
-                      <p className="text-xs text-[#a1a1aa]">{req.user_email}</p>
+                      <p className="font-semibold ${textPrimary}">{req.user_name}</p>
+                      <p className="text-xs ${textSecondary}">{req.user_email}</p>
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                     <div>
-                      <p className="text-xs text-[#a1a1aa]">Type</p>
+                      <p className="text-xs ${textSecondary}">Type</p>
                       <Badge className={`${
                         req.leave_type === 'wfh' ? 'bg-purple-500/20 text-purple-400' :
                         req.leave_type === 'casual' ? 'bg-blue-500/20 text-blue-400' :
@@ -457,15 +466,15 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
                       </Badge>
                     </div>
                     <div>
-                      <p className="text-xs text-[#a1a1aa]">Duration</p>
-                      <p className="text-sm text-[#fafafa]">{formatDate(req.start_date)} - {formatDate(req.end_date)}</p>
+                      <p className="text-xs ${textSecondary}">Duration</p>
+                      <p className="text-sm ${textPrimary}">{formatDate(req.start_date)} - {formatDate(req.end_date)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-[#a1a1aa]">Reason</p>
-                      <p className="text-sm text-[#fafafa]">{req.reason}</p>
+                      <p className="text-xs ${textSecondary}">Reason</p>
+                      <p className="text-sm ${textPrimary}">{req.reason}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-[#a1a1aa]">Status</p>
+                      <p className="text-xs ${textSecondary}">Status</p>
                       <Badge className={`${
                         req.status === 'approved' ? 'bg-green-500/20 text-green-400' :
                         req.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
@@ -505,7 +514,7 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
         {requests.length === 0 && (
           <div className="text-center py-12">
             <Calendar className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
-            <p className="text-[#a1a1aa]">No {filter !== 'all' ? filter : ''} leave requests</p>
+            <p className="${textSecondary}">No {filter !== 'all' ? filter : ''} leave requests</p>
           </div>
         )}
       </div>
@@ -516,25 +525,25 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
 // ============== ATTENDANCE TAB ==============
 function AttendanceTab({ overview, formatTime }) {
   return (
-    <Card className="bg-[#18181b] border-[#27272a]">
+    <Card className="${bgCard} ${borderColor}">
       <CardHeader>
-        <CardTitle className="text-[#fafafa]">Today&apos;s Attendance</CardTitle>
+        <CardTitle className="${textPrimary}">Today&apos;s Attendance</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-[#27272a]">
-                <th className="text-left py-3 px-4 text-xs font-medium text-[#a1a1aa]">EMPLOYEE</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-[#a1a1aa]">STATUS</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-[#a1a1aa]">CLOCK IN</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-[#a1a1aa]">CLOCK OUT</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-[#a1a1aa]">LOCATION</th>
+              <tr className="border-b ${borderColor}">
+                <th className="text-left py-3 px-4 text-xs font-medium ${textSecondary}">EMPLOYEE</th>
+                <th className="text-left py-3 px-4 text-xs font-medium ${textSecondary}">STATUS</th>
+                <th className="text-left py-3 px-4 text-xs font-medium ${textSecondary}">CLOCK IN</th>
+                <th className="text-left py-3 px-4 text-xs font-medium ${textSecondary}">CLOCK OUT</th>
+                <th className="text-left py-3 px-4 text-xs font-medium ${textSecondary}">LOCATION</th>
               </tr>
             </thead>
             <tbody>
               {overview.map((emp) => (
-                <tr key={emp.user_id} className="border-b border-[#27272a]/50">
+                <tr key={emp.user_id} className="border-b ${borderColor}/50">
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-2">
                       <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
@@ -542,7 +551,7 @@ function AttendanceTab({ overview, formatTime }) {
                       }`}>
                         {emp.name?.charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-[#fafafa]">{emp.name}</span>
+                      <span className="${textPrimary}">{emp.name}</span>
                     </div>
                   </td>
                   <td className="py-3 px-4">
@@ -550,15 +559,15 @@ function AttendanceTab({ overview, formatTime }) {
                       {emp.status === 'present' ? 'Present' : 'Absent'}
                     </Badge>
                   </td>
-                  <td className="py-3 px-4 text-sm text-[#fafafa]">{formatTime(emp.clock_in)}</td>
-                  <td className="py-3 px-4 text-sm text-[#fafafa]">{formatTime(emp.clock_out)}</td>
+                  <td className="py-3 px-4 text-sm ${textPrimary}">{formatTime(emp.clock_in)}</td>
+                  <td className="py-3 px-4 text-sm ${textPrimary}">{formatTime(emp.clock_out)}</td>
                   <td className="py-3 px-4">
                     {emp.work_location ? (
                       <Badge className={emp.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}>
                         {emp.work_location === 'home' ? 'WFH' : 'Office'}
                       </Badge>
                     ) : (
-                      <span className="text-[#71717a]">-</span>
+                      <span className="${textSecondary}">-</span>
                     )}
                   </td>
                 </tr>
@@ -606,10 +615,10 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="bg-[#18181b] border-[#27272a] w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Card className="${bgCard} ${borderColor} w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-[#fafafa]">Edit Employee Profile</CardTitle>
-          <Button variant="ghost" onClick={onClose} className="text-[#a1a1aa]">
+          <CardTitle className="${textPrimary}">Edit Employee Profile</CardTitle>
+          <Button variant="ghost" onClick={onClose} className="${textSecondary}">
             <X className="h-5 w-5" />
           </Button>
         </CardHeader>
@@ -617,30 +626,30 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Personal Info */}
             <div>
-              <h3 className="text-sm font-medium text-[#a1a1aa] mb-3">Personal Information</h3>
+              <h3 className="text-sm font-medium ${textSecondary} mb-3">Personal Information</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-[#fafafa]">Full Name</Label>
+                  <Label className="${textPrimary}">Full Name</Label>
                   <Input
                     value={formData.full_name}
                     onChange={(e) => handleChange('full_name', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Email</Label>
+                  <Label className="${textPrimary}">Email</Label>
                   <Input
                     value={formData.email}
                     onChange={(e) => handleChange('email', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Phone</Label>
+                  <Label className="${textPrimary}">Phone</Label>
                   <Input
                     value={formData.phone}
                     onChange={(e) => handleChange('phone', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
               </div>
@@ -648,30 +657,30 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
 
             {/* Employment Info */}
             <div>
-              <h3 className="text-sm font-medium text-[#a1a1aa] mb-3">Employment Details</h3>
+              <h3 className="text-sm font-medium ${textSecondary} mb-3">Employment Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-[#fafafa]">Designation</Label>
+                  <Label className="${textPrimary}">Designation</Label>
                   <Input
                     value={formData.designation}
                     onChange={(e) => handleChange('designation', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Department</Label>
+                  <Label className="${textPrimary}">Department</Label>
                   <Input
                     value={formData.department}
                     onChange={(e) => handleChange('department', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Employment Type</Label>
+                  <Label className="${textPrimary}">Employment Type</Label>
                   <select
                     value={formData.employment_type}
                     onChange={(e) => handleChange('employment_type', e.target.value)}
-                    className="w-full p-2 bg-[#27272a] border border-[#3f3f46] rounded-lg text-[#fafafa]"
+                    className="w-full p-2 ${bgSecondary} border ${borderColor} rounded-lg ${textPrimary}"
                   >
                     <option value="full-time">Full-time</option>
                     <option value="part-time">Part-time</option>
@@ -679,20 +688,20 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
                   </select>
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Joining Date</Label>
+                  <Label className="${textPrimary}">Joining Date</Label>
                   <Input
                     type="date"
                     value={formData.joining_date}
                     onChange={(e) => handleChange('joining_date', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div className="col-span-2">
-                  <Label className="text-[#fafafa]">Reporting Manager</Label>
+                  <Label className="${textPrimary}">Reporting Manager</Label>
                   <Input
                     value={formData.reporting_manager}
                     onChange={(e) => handleChange('reporting_manager', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
               </div>
@@ -700,38 +709,38 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
 
             {/* Address */}
             <div>
-              <h3 className="text-sm font-medium text-[#a1a1aa] mb-3">Address</h3>
+              <h3 className="text-sm font-medium ${textSecondary} mb-3">Address</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Label className="text-[#fafafa]">Address</Label>
+                  <Label className="${textPrimary}">Address</Label>
                   <Input
                     value={formData.address}
                     onChange={(e) => handleChange('address', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">City</Label>
+                  <Label className="${textPrimary}">City</Label>
                   <Input
                     value={formData.city}
                     onChange={(e) => handleChange('city', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">State</Label>
+                  <Label className="${textPrimary}">State</Label>
                   <Input
                     value={formData.state}
                     onChange={(e) => handleChange('state', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Pincode</Label>
+                  <Label className="${textPrimary}">Pincode</Label>
                   <Input
                     value={formData.pincode}
                     onChange={(e) => handleChange('pincode', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
               </div>
@@ -739,38 +748,38 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
 
             {/* Bank Details */}
             <div>
-              <h3 className="text-sm font-medium text-[#a1a1aa] mb-3">Bank Details</h3>
+              <h3 className="text-sm font-medium ${textSecondary} mb-3">Bank Details</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-[#fafafa]">Bank Name</Label>
+                  <Label className="${textPrimary}">Bank Name</Label>
                   <Input
                     value={formData.bank_name}
                     onChange={(e) => handleChange('bank_name', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Account Number</Label>
+                  <Label className="${textPrimary}">Account Number</Label>
                   <Input
                     value={formData.account_number}
                     onChange={(e) => handleChange('account_number', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">IFSC Code</Label>
+                  <Label className="${textPrimary}">IFSC Code</Label>
                   <Input
                     value={formData.ifsc_code}
                     onChange={(e) => handleChange('ifsc_code', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">PAN Number</Label>
+                  <Label className="${textPrimary}">PAN Number</Label>
                   <Input
                     value={formData.pan_number}
                     onChange={(e) => handleChange('pan_number', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
               </div>
@@ -778,30 +787,30 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
 
             {/* Emergency Contact */}
             <div>
-              <h3 className="text-sm font-medium text-[#a1a1aa] mb-3">Emergency Contact</h3>
+              <h3 className="text-sm font-medium ${textSecondary} mb-3">Emergency Contact</h3>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label className="text-[#fafafa]">Name</Label>
+                  <Label className="${textPrimary}">Name</Label>
                   <Input
                     value={formData.emergency_contact_name}
                     onChange={(e) => handleChange('emergency_contact_name', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Phone</Label>
+                  <Label className="${textPrimary}">Phone</Label>
                   <Input
                     value={formData.emergency_contact_phone}
                     onChange={(e) => handleChange('emergency_contact_phone', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
                 <div>
-                  <Label className="text-[#fafafa]">Relation</Label>
+                  <Label className="${textPrimary}">Relation</Label>
                   <Input
                     value={formData.emergency_contact_relation}
                     onChange={(e) => handleChange('emergency_contact_relation', e.target.value)}
-                    className="bg-[#27272a] border-[#3f3f46] text-[#fafafa]"
+                    className="${bgSecondary} ${borderColor} ${textPrimary}"
                   />
                 </div>
               </div>
@@ -812,7 +821,7 @@ function EditEmployeeModal({ employee, onClose, onSave }) {
               <Button
                 type="button"
                 onClick={onClose}
-                className="flex-1 bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
+                className="flex-1 ${bgSecondary} hover:bg-[#3f3f46] ${textPrimary}"
               >
                 Cancel
               </Button>

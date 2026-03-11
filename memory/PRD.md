@@ -6,6 +6,15 @@
 
 ## Recent Changes (March 2026 - Latest)
 
+### Import/Export Leads Feature ✅ (March 11, 2026)
+- **Download Template:** Download CSV template with all lead fields
+- **Import Leads:** Upload CSV, preview data mapping, import to respective stages
+- **Export Leads:** Export all leads to CSV file
+- **New API endpoints:** `/api/leads-v2/template`, `/api/leads-v2/import`, `/api/leads-v2/export`
+
+### Sidebar Operations Button Fix ✅ (March 11, 2026)
+- When sidebar is collapsed, clicking Operations now expands sidebar AND opens the Operations submenu
+
 ### Role-Based Access Control & User Management ✅ (March 11, 2026)
 Implemented comprehensive RBAC system:
 
@@ -367,12 +376,8 @@ Comprehensive financial management system with Notion-like customization:
 ## Pending Tasks
 
 ### High Priority
-- **Google Sheets Integration (P0):** Implement "Connect Sheets" functionality in Leads module to automatically sync leads from Google Sheets
-- **Refactor Large Files:**
-  - `/app/frontend/src/pages/LeadsPageV2.js` (~1800+ lines) - CRITICAL, break into smaller components
-  - `/app/frontend/src/pages/OperationsPage.js` (86KB+ monolith) - CRITICAL
-  - `/app/frontend/src/components/finance/ExpenseTab.js` (2394 lines) - CRITICAL
-  - `/app/frontend/src/pages/WebsiteProjectsPage.js` (~700 lines)
+- **Light Mode Theme Fix (P0):** Settings, HR, HR Admin pages still use hardcoded dark colors - need proper theme support
+- **Google Sheets Integration (P1):** Auto-sync leads from spreadsheet
 
 ### Medium Priority
 - Google Calendar Integration (postponed by user)

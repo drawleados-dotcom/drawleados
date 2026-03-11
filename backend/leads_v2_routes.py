@@ -672,3 +672,218 @@ async def get_followups(lead_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Lead not found")
     
     return lead.get("followups", [])
+
+
+# ============== IMPORT/EXPORT ROUTES ==============
+
+@leads_v2_router.get("/export")
+async def export_leads(request: Request):
+    """Export all leads as CSV data"""
+    await get_current_user_from_request(request)
+    
+    leads = await db.leads_v2.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).to_list(10000)
+    
+    # Get stages for mapping
+    stages = await db.lead_stages.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).to_list(100)
+    stage_map = {s["stage_id"]: s["name"] for s in stages}
+    
+    # Get users for lead_owner mapping
+    user_ids = list(set([lead.get("lead_owner") for lead in leads if lead.get("lead_owner")]))
+    users_map = {}
+    if user_ids:
+        users = await db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1}).to_list(100)
+        users_map = {u["user_id"]: u["name"] for u in users}
+    
+    # Format leads for export
+    export_data = []
+    for lead in leads:
+        export_data.append({
+            "name": lead.get("name", ""),
+            "email": lead.get("email", ""),
+            "phone": lead.get("phone", ""),
+            "location": lead.get("location", ""),
+            "website": lead.get("website", ""),
+            "social_media": lead.get("social_media", ""),
+            "source": lead.get("source", ""),
+            "lead_owner": users_map.get(lead.get("lead_owner"), ""),
+            "service": lead.get("service", ""),
+            "priority": lead.get("priority", "Medium"),
+            "lead_type": lead.get("lead_type", ""),
+            "date_of_lead": lead.get("date_of_lead", ""),
+            "industry": lead.get("industry", ""),
+            "estimation": lead.get("estimation", ""),
+            "quotation_link": lead.get("quotation_link", ""),
+            "proposal_link": lead.get("proposal_link", ""),
+            "notes": lead.get("notes", ""),
+            "stage": stage_map.get(lead.get("stage_id"), ""),
+            "created_at": lead.get("created_at", "").isoformat() if lead.get("created_at") else "",
+        })
+    
+    return export_data
+
+@leads_v2_router.get("/template")
+async def get_import_template(request: Request):
+    """Get CSV template fields for import"""
+    await get_current_user_from_request(request)
+    
+    # Get stages for dropdown options
+    stages = await db.lead_stages.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0, "name": 1}
+    ).sort("order", 1).to_list(100)
+    stage_names = [s["name"] for s in stages]
+    
+    # Get services
+    services = await db.lead_services.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0, "name": 1}
+    ).to_list(100)
+    service_names = [s["name"] for s in services]
+    
+    # Get industries
+    industries = await db.lead_industries.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0, "name": 1}
+    ).to_list(100)
+    industry_names = [i["name"] for i in industries]
+    
+    # Get team members
+    users = await db.users.find(
+        {"is_active": True},
+        {"_id": 0, "name": 1}
+    ).to_list(100)
+    user_names = [u["name"] for u in users]
+    
+    template = {
+        "columns": [
+            {"field": "name", "label": "Name", "required": True, "type": "text"},
+            {"field": "email", "label": "Email", "required": False, "type": "email"},
+            {"field": "phone", "label": "Phone", "required": False, "type": "text"},
+            {"field": "location", "label": "Location", "required": False, "type": "text"},
+            {"field": "website", "label": "Website", "required": False, "type": "url"},
+            {"field": "social_media", "label": "Social Media", "required": False, "type": "text"},
+            {"field": "source", "label": "Source", "required": False, "type": "text"},
+            {"field": "lead_owner", "label": "Lead Owner", "required": False, "type": "dropdown", "options": user_names},
+            {"field": "service", "label": "Service", "required": False, "type": "dropdown", "options": service_names},
+            {"field": "priority", "label": "Priority", "required": False, "type": "dropdown", "options": ["High", "Medium", "Low"]},
+            {"field": "lead_type", "label": "Lead Type", "required": False, "type": "dropdown", "options": ["Inbound", "Outbound"]},
+            {"field": "date_of_lead", "label": "Date of Lead", "required": False, "type": "date"},
+            {"field": "industry", "label": "Industry", "required": False, "type": "dropdown", "options": industry_names},
+            {"field": "estimation", "label": "Estimation (Amount)", "required": False, "type": "number"},
+            {"field": "quotation_link", "label": "Quotation Link", "required": False, "type": "url"},
+            {"field": "proposal_link", "label": "Proposal Link", "required": False, "type": "url"},
+            {"field": "notes", "label": "Notes", "required": False, "type": "textarea"},
+            {"field": "stage", "label": "Stage", "required": False, "type": "dropdown", "options": stage_names},
+        ],
+        "sample_row": {
+            "name": "John Doe",
+            "email": "john@example.com",
+            "phone": "+91 98765 43210",
+            "location": "Mumbai",
+            "website": "https://example.com",
+            "social_media": "@johndoe",
+            "source": "Website",
+            "lead_owner": user_names[0] if user_names else "",
+            "service": service_names[0] if service_names else "",
+            "priority": "Medium",
+            "lead_type": "Inbound",
+            "date_of_lead": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "industry": industry_names[0] if industry_names else "",
+            "estimation": "50000",
+            "quotation_link": "",
+            "proposal_link": "",
+            "notes": "Sample lead",
+            "stage": stage_names[0] if stage_names else "",
+        }
+    }
+    
+    return template
+
+@leads_v2_router.post("/import")
+async def import_leads(request: Request):
+    """Import leads from CSV data"""
+    user = await get_current_user_from_request(request)
+    body = await request.json()
+    
+    leads_data = body.get("leads", [])
+    if not leads_data:
+        raise HTTPException(status_code=400, detail="No leads data provided")
+    
+    # Get stages for mapping
+    stages = await db.lead_stages.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).to_list(100)
+    stage_map = {s["name"].lower(): s["stage_id"] for s in stages}
+    default_stage = stages[0]["stage_id"] if stages else None
+    
+    # Get users for lead_owner mapping
+    users = await db.users.find(
+        {"is_active": True},
+        {"_id": 0, "user_id": 1, "name": 1}
+    ).to_list(100)
+    users_map = {u["name"].lower(): u["user_id"] for u in users}
+    
+    imported_count = 0
+    errors = []
+    
+    for idx, lead_data in enumerate(leads_data):
+        try:
+            # Skip empty rows
+            if not lead_data.get("name"):
+                continue
+            
+            # Map stage name to stage_id
+            stage_name = lead_data.get("stage", "").lower().strip()
+            stage_id = stage_map.get(stage_name, default_stage)
+            
+            # Map lead_owner name to user_id
+            owner_name = lead_data.get("lead_owner", "").lower().strip()
+            lead_owner = users_map.get(owner_name, user["user_id"])
+            
+            lead_id = f"lead_{uuid.uuid4().hex[:12]}"
+            lead_doc = {
+                "lead_id": lead_id,
+                "name": lead_data.get("name", ""),
+                "email": lead_data.get("email", ""),
+                "phone": lead_data.get("phone", ""),
+                "location": lead_data.get("location", ""),
+                "website": lead_data.get("website", ""),
+                "social_media": lead_data.get("social_media", ""),
+                "source": lead_data.get("source", ""),
+                "lead_owner": lead_owner,
+                "service": lead_data.get("service", ""),
+                "priority": lead_data.get("priority", "Medium"),
+                "lead_type": lead_data.get("lead_type", ""),
+                "date_of_lead": lead_data.get("date_of_lead", ""),
+                "industry": lead_data.get("industry", ""),
+                "estimation": float(lead_data.get("estimation", 0)) if lead_data.get("estimation") else 0,
+                "quotation_link": lead_data.get("quotation_link", ""),
+                "proposal_link": lead_data.get("proposal_link", ""),
+                "notes": lead_data.get("notes", ""),
+                "stage_id": stage_id,
+                "custom_fields": {},
+                "followups": [],
+                "created_by": user["user_id"],
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
+                "is_deleted": False,
+            }
+            
+            await db.leads_v2.insert_one(lead_doc)
+            imported_count += 1
+            
+        except Exception as e:
+            errors.append(f"Row {idx + 1}: {str(e)}")
+    
+    return {
+        "imported": imported_count,
+        "total": len(leads_data),
+        "errors": errors
+    }
