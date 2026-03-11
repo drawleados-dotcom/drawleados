@@ -63,6 +63,7 @@ const LeadsPageV2 = () => {
   // UI state
   const [viewMode, setViewMode] = useState('kanban'); // 'list', 'kanban', 'preview'
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showStagesModal, setShowStagesModal] = useState(false);
   const [showFieldsModal, setShowFieldsModal] = useState(false);
@@ -541,6 +542,10 @@ const LeadsPageV2 = () => {
   // ============== HELPERS ==============
 
   const filteredLeads = leads.filter(lead => {
+    // Filter by stage if filterStage is set
+    if (filterStage && lead.stage_id !== filterStage) return false;
+    
+    // Filter by search term
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -628,7 +633,7 @@ const LeadsPageV2 = () => {
                   <Columns3 className="h-4 w-4" />
                 </button>
                 <button
-                  onClick={() => setViewMode('kanban')}
+                  onClick={() => { setViewMode('kanban'); setFilterStage(null); }}
                   data-testid="view-kanban-btn"
                   className={`p-2 rounded ${viewMode === 'kanban' ? `${isDark ? 'bg-[#3f3f46]' : 'bg-white shadow-sm'} ${textPrimary}` : textSecondary}`}
                   title="Kanban View"
@@ -668,15 +673,19 @@ const LeadsPageV2 = () => {
 
         {/* Stats Cards */}
         <div className={`p-4 border-b ${borderColor} flex gap-2 overflow-x-auto no-scrollbar`}>
-          <div className={`p-2 sm:p-3 rounded-xl ${bgSecondary} min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0`}>
+          <div 
+            onClick={() => { setViewMode('list'); setFilterStage(null); }}
+            className={`p-2 sm:p-3 rounded-xl ${bgSecondary} min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0 cursor-pointer hover:scale-105 transition-transform`}
+          >
             <p className={`text-lg sm:text-2xl font-bold ${textPrimary}`}>{stats.total}</p>
             <p className={`text-[10px] sm:text-xs ${textSecondary}`}>Total Leads</p>
           </div>
           {stages.map(stage => (
             <div
               key={stage.stage_id}
-              className={`p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0`}
-              style={{ backgroundColor: `${stage.color}20` }}
+              onClick={() => { setViewMode('list'); setFilterStage(stage.stage_id); }}
+              className={`p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0 cursor-pointer hover:scale-105 transition-transform ${filterStage === stage.stage_id ? 'ring-2 ring-offset-2' : ''}`}
+              style={{ backgroundColor: `${stage.color}20`, ringColor: stage.color }}
             >
               <p className="text-lg sm:text-2xl font-bold" style={{ color: stage.color }}>
                 {stats.by_stage?.[stage.stage_id]?.count || 0}
@@ -686,17 +695,32 @@ const LeadsPageV2 = () => {
           ))}
         </div>
 
-        {/* Search */}
+        {/* Search + Active Filter */}
         <div className={`p-4 border-b ${borderColor}`}>
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search leads..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              data-testid="search-input"
-              className={`pl-10 ${bgSecondary} border-none`}
-            />
+          <div className="flex items-center gap-3">
+            <div className="relative max-w-md flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Search leads..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                data-testid="search-input"
+                className={`pl-10 ${bgSecondary} border-none`}
+              />
+            </div>
+            {filterStage && (
+              <div className="flex items-center gap-2">
+                <span className={`text-sm ${textSecondary}`}>Filtered by:</span>
+                <Badge 
+                  className="flex items-center gap-1 cursor-pointer hover:opacity-80"
+                  style={{ backgroundColor: stages.find(s => s.stage_id === filterStage)?.color || '#3b82f6' }}
+                  onClick={() => setFilterStage(null)}
+                >
+                  {stages.find(s => s.stage_id === filterStage)?.name}
+                  <X className="h-3 w-3" />
+                </Badge>
+              </div>
+            )}
           </div>
         </div>
 
