@@ -667,21 +667,21 @@ const LeadsPageV2 = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className={`p-4 border-b ${borderColor} flex gap-3 overflow-x-auto`}>
-          <div className={`p-3 rounded-xl ${bgSecondary} min-w-[120px] text-center`}>
-            <p className={`text-2xl font-bold ${textPrimary}`}>{stats.total}</p>
-            <p className={`text-xs ${textSecondary}`}>Total Leads</p>
+        <div className={`p-4 border-b ${borderColor} flex gap-2 overflow-x-auto no-scrollbar`}>
+          <div className={`p-2 sm:p-3 rounded-xl ${bgSecondary} min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0`}>
+            <p className={`text-lg sm:text-2xl font-bold ${textPrimary}`}>{stats.total}</p>
+            <p className={`text-[10px] sm:text-xs ${textSecondary}`}>Total Leads</p>
           </div>
           {stages.map(stage => (
             <div
               key={stage.stage_id}
-              className={`p-3 rounded-xl min-w-[120px] text-center`}
+              className={`p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0`}
               style={{ backgroundColor: `${stage.color}20` }}
             >
-              <p className="text-2xl font-bold" style={{ color: stage.color }}>
+              <p className="text-lg sm:text-2xl font-bold" style={{ color: stage.color }}>
                 {stats.by_stage?.[stage.stage_id]?.count || 0}
               </p>
-              <p className={`text-xs ${textSecondary}`}>{stage.name}</p>
+              <p className={`text-[10px] sm:text-xs ${textSecondary} truncate`}>{stage.name}</p>
             </div>
           ))}
         </div>
@@ -1424,31 +1424,31 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
 
   return (
     <div className="space-y-4">
-      {/* Tab Filters */}
-      <div className={`flex items-center gap-6 pb-3 border-b-2 ${borderColor} overflow-x-auto`}>
+      {/* Tab Filters - Scrollable */}
+      <div className={`flex items-center gap-3 sm:gap-6 pb-3 border-b-2 ${borderColor} overflow-x-auto no-scrollbar`}>
         <button
           onClick={() => setActiveTab('all')}
-          className={`flex items-center gap-2 pb-2 border-b-2 transition-all ${
+          className={`flex items-center gap-1.5 sm:gap-2 pb-2 border-b-2 transition-all flex-shrink-0 ${
             activeTab === 'all' 
               ? 'border-[#3b82f6] text-[#3b82f6]' 
               : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
           }`}
         >
-          <span className="font-medium">All ({leads.length})</span>
+          <span className="font-medium text-xs sm:text-sm">All ({leads.length})</span>
         </button>
         {stages.map(stage => (
           <button
             key={stage.stage_id}
             onClick={() => setActiveTab(stage.stage_id)}
-            className={`flex items-center gap-2 pb-2 border-b-2 transition-all whitespace-nowrap ${
+            className={`flex items-center gap-1 sm:gap-2 pb-2 border-b-2 transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === stage.stage_id 
                 ? `border-current`
                 : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
             }`}
             style={{ color: activeTab === stage.stage_id ? stage.color : undefined }}
           >
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
-            <span>{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
+            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+            <span className="text-xs sm:text-sm">{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
           </button>
         ))}
       </div>
