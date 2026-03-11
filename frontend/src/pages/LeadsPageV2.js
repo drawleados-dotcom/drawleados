@@ -64,6 +64,7 @@ const LeadsPageV2 = () => {
   const [viewMode, setViewMode] = useState('kanban'); // 'list', 'kanban', 'preview'
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
+  const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showStagesModal, setShowStagesModal] = useState(false);
   const [showFieldsModal, setShowFieldsModal] = useState(false);
@@ -545,13 +546,17 @@ const LeadsPageV2 = () => {
     // Filter by stage if filterStage is set
     if (filterStage && lead.stage_id !== filterStage) return false;
     
+    // Filter by lead owner if filterLeadOwner is set
+    if (filterLeadOwner && lead.lead_owner !== filterLeadOwner) return false;
+    
     // Filter by search term
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
       lead.name?.toLowerCase().includes(term) ||
       lead.email?.toLowerCase().includes(term) ||
-      lead.phone?.includes(term)
+      lead.phone?.includes(term) ||
+      lead.lead_owner_name?.toLowerCase().includes(term)
     );
   });
 
@@ -708,17 +713,46 @@ const LeadsPageV2 = () => {
                 className={`pl-10 ${bgSecondary} border-none`}
               />
             </div>
-            {filterStage && (
+            
+            {/* Lead Owner Filter */}
+            <Select
+              value={filterLeadOwner || ''}
+              onValueChange={(v) => setFilterLeadOwner(v === 'all' ? null : v)}
+            >
+              <SelectTrigger className={`w-[180px] ${bgSecondary}`}>
+                <SelectValue placeholder="All Lead Owners" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Lead Owners</SelectItem>
+                {teamMembers.map(m => (
+                  <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Active Filters */}
+            {(filterStage || filterLeadOwner) && (
               <div className="flex items-center gap-2">
-                <span className={`text-sm ${textSecondary}`}>Filtered by:</span>
-                <Badge 
-                  className="flex items-center gap-1 cursor-pointer hover:opacity-80"
-                  style={{ backgroundColor: stages.find(s => s.stage_id === filterStage)?.color || '#3b82f6' }}
-                  onClick={() => setFilterStage(null)}
-                >
-                  {stages.find(s => s.stage_id === filterStage)?.name}
-                  <X className="h-3 w-3" />
-                </Badge>
+                <span className={`text-sm ${textSecondary}`}>Filters:</span>
+                {filterStage && (
+                  <Badge 
+                    className="flex items-center gap-1 cursor-pointer hover:opacity-80"
+                    style={{ backgroundColor: stages.find(s => s.stage_id === filterStage)?.color || '#3b82f6' }}
+                    onClick={() => setFilterStage(null)}
+                  >
+                    {stages.find(s => s.stage_id === filterStage)?.name}
+                    <X className="h-3 w-3" />
+                  </Badge>
+                )}
+                {filterLeadOwner && (
+                  <Badge 
+                    className="flex items-center gap-1 cursor-pointer hover:opacity-80 bg-purple-500"
+                    onClick={() => setFilterLeadOwner(null)}
+                  >
+                    {teamMembers.find(m => m.user_id === filterLeadOwner)?.name || 'Owner'}
+                    <X className="h-3 w-3" />
+                  </Badge>
+                )}
               </div>
             )}
           </div>

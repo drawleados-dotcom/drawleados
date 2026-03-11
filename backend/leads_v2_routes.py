@@ -297,15 +297,19 @@ async def delete_custom_field(field_id: str, request: Request):
 async def get_leads(
     request: Request,
     stage_id: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    lead_owner: Optional[str] = None
 ):
-    """Get all leads"""
+    """Get all leads with optional filters"""
     await get_current_user_from_request(request)
     
     query = {"is_deleted": {"$ne": True}}
     
     if stage_id:
         query["stage_id"] = stage_id
+    
+    if lead_owner:
+        query["lead_owner"] = lead_owner
     
     if search:
         query["$or"] = [
@@ -315,17 +319,34 @@ async def get_leads(
         ]
     
     leads = await db.leads_v2.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    
+    # Enrich leads with lead_owner_name
+    user_ids = list(set([lead.get("lead_owner") for lead in leads if lead.get("lead_owner")]))
+    users_map = {}
+    if user_ids:
+        users = await db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1}).to_list(100)
+        users_map = {u["user_id"]: u["name"] for u in users}
+    
+    for lead in leads:
+        lead["lead_owner_name"] = users_map.get(lead.get("lead_owner"), "")
+    
     return leads
 
 @leads_v2_router.post("/leads")
 async def create_lead(lead_data: LeadCreate, request: Request):
-    """Create a new lead"""
+    """Create a new lead - auto-assigns current user as lead_owner if not specified"""
     user = await get_current_user_from_request(request)
     
     lead_id = f"lead_{uuid.uuid4().hex[:12]}"
+    lead_dict = lead_data.model_dump()
+    
+    # Auto-assign lead_owner to current user if not specified
+    if not lead_dict.get("lead_owner"):
+        lead_dict["lead_owner"] = user["user_id"]
+    
     lead_doc = {
         "lead_id": lead_id,
-        **lead_data.model_dump(),
+        **lead_dict,
         "created_by": user["user_id"],
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
@@ -333,7 +354,14 @@ async def create_lead(lead_data: LeadCreate, request: Request):
     }
     
     await db.leads_v2.insert_one(lead_doc)
-    return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    # Return lead with lead_owner_name
+    lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+    if lead.get("lead_owner"):
+        owner = await db.users.find_one({"user_id": lead["lead_owner"]}, {"_id": 0, "name": 1})
+        lead["lead_owner_name"] = owner.get("name", "") if owner else ""
+    
+    return lead
 
 @leads_v2_router.put("/leads/{lead_id}")
 async def update_lead(lead_id: str, update_data: Dict[str, Any], request: Request):

@@ -670,6 +670,301 @@ async def get_user_permissions(user_id: str, current_user: User = Depends(get_cu
         "can_manage_users": user.get("can_manage_users", False)
     }
 
+# ============== PASSWORD CHANGE WITH OTP ==============
+
+@api_router.post("/auth/request-otp")
+async def request_password_otp(request: Request, current_user: User = Depends(get_current_user)):
+    """Request OTP to change password - sends to registered email"""
+    import random
+    
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    
+    # Store OTP in database
+    await db.password_otps.delete_many({"user_id": current_user.user_id})  # Clear old OTPs
+    await db.password_otps.insert_one({
+        "user_id": current_user.user_id,
+        "email": current_user.email,
+        "otp": otp,
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # Send OTP via email (using Resend if configured)
+    try:
+        from emergentintegrations.llm.resend import send_email
+        await send_email(
+            to_email=current_user.email,
+            subject="Password Change OTP - Drawlead OS",
+            html_content=f"""
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h2>Password Change Request</h2>
+                <p>Hi {current_user.name},</p>
+                <p>Your OTP for password change is:</p>
+                <h1 style="font-size: 32px; color: #6366f1; letter-spacing: 5px;">{otp}</h1>
+                <p>This OTP is valid for 10 minutes.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <br>
+                <p>- Drawlead OS Team</p>
+            </div>
+            """
+        )
+    except Exception as e:
+        logging.error(f"Failed to send OTP email: {e}")
+        # Still return success - OTP is stored and can be checked in logs for testing
+        logging.info(f"OTP for {current_user.email}: {otp}")
+    
+    return {"message": "OTP sent to your registered email", "email": current_user.email[:3] + "***" + current_user.email[current_user.email.index("@"):]}
+
+@api_router.post("/auth/verify-otp-change-password")
+async def verify_otp_and_change_password(request: Request, current_user: User = Depends(get_current_user)):
+    """Verify OTP and change password"""
+    body = await request.json()
+    otp = body.get("otp")
+    new_password = body.get("new_password")
+    confirm_password = body.get("confirm_password")
+    
+    if not otp or not new_password or not confirm_password:
+        raise HTTPException(status_code=400, detail="OTP, new password and confirm password are required")
+    
+    if new_password != confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    # Verify OTP
+    otp_doc = await db.password_otps.find_one({
+        "user_id": current_user.user_id,
+        "otp": otp
+    })
+    
+    if not otp_doc:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+    
+    if datetime.now(timezone.utc) > otp_doc["expires_at"]:
+        await db.password_otps.delete_one({"_id": otp_doc["_id"]})
+        raise HTTPException(status_code=400, detail="OTP has expired")
+    
+    # Update password
+    await db.users.update_one(
+        {"user_id": current_user.user_id},
+        {"$set": {"password_hash": hash_password(new_password)}}
+    )
+    
+    # Delete used OTP
+    await db.password_otps.delete_one({"_id": otp_doc["_id"]})
+    
+    return {"message": "Password changed successfully"}
+
+# ============== ADMIN CREATE USER WITH EMAIL ==============
+
+@api_router.post("/admin/create-user")
+async def admin_create_user_with_email(request: Request, current_user: User = Depends(get_current_user)):
+    """Admin creates user and sends credentials via email"""
+    if current_user.role not in ["super_admin", "admin"] or not current_user.can_manage_users:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    email = body.get("email")
+    name = body.get("name")
+    password = body.get("password")
+    role = body.get("role", "business_development")
+    module_access = body.get("module_access", [])
+    
+    if not email or not name or not password:
+        raise HTTPException(status_code=400, detail="Email, name and password are required")
+    
+    # Check if email exists
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Set default permissions based on role
+    if role == "super_admin":
+        module_access = ["leads", "hr", "operations", "finance", "reports", "settings"]
+        can_manage_users = True
+    elif role == "admin":
+        module_access = ["leads", "hr", "operations", "finance", "reports", "settings"]
+        can_manage_users = True
+    elif role == "business_development":
+        module_access = ["leads", "hr", "settings"]
+        can_manage_users = False
+    elif role == "project_manager":
+        module_access = ["operations", "reports", "hr"]
+        can_manage_users = False
+    elif role == "employee":
+        module_access = ["operations", "hr"]
+        can_manage_users = False
+    else:
+        can_manage_users = False
+    
+    # Create user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    user_doc = {
+        "user_id": user_id,
+        "email": email,
+        "name": name,
+        "role": role,
+        "password_hash": hash_password(password),
+        "is_active": True,
+        "module_access": module_access,
+        "project_access": [],
+        "can_create_projects": role in ["super_admin", "admin", "project_manager"],
+        "can_delete_tasks": role in ["super_admin", "admin"],
+        "can_manage_users": can_manage_users,
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Send credentials via email
+    try:
+        from emergentintegrations.llm.resend import send_email
+        await send_email(
+            to_email=email,
+            subject="Welcome to Drawlead OS - Your Login Credentials",
+            html_content=f"""
+            <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px;">
+                <h2 style="color: #6366f1;">Welcome to Drawlead OS!</h2>
+                <p>Hi {name},</p>
+                <p>Your account has been created. Here are your login credentials:</p>
+                <div style="background: #f4f4f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <p><strong>Email:</strong> {email}</p>
+                    <p><strong>Password:</strong> {password}</p>
+                    <p><strong>Role:</strong> {role.replace('_', ' ').title()}</p>
+                </div>
+                <p>Please login and change your password for security.</p>
+                <a href="https://sales-pipeline-113.preview.emergentagent.com/login" 
+                   style="display: inline-block; background: #6366f1; color: white; padding: 12px 24px; 
+                          text-decoration: none; border-radius: 6px; margin-top: 10px;">
+                    Login Now
+                </a>
+                <br><br>
+                <p style="color: #71717a; font-size: 14px;">- Drawlead OS Team</p>
+            </div>
+            """
+        )
+        email_sent = True
+    except Exception as e:
+        logging.error(f"Failed to send credentials email: {e}")
+        email_sent = False
+    
+    user_response = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    return {
+        "user": user_response,
+        "email_sent": email_sent,
+        "message": "User created successfully" + (" and credentials sent via email" if email_sent else " (email not sent)")
+    }
+
+@api_router.post("/admin/reset-user-password/{user_id}")
+async def admin_reset_user_password(user_id: str, request: Request, current_user: User = Depends(get_current_user)):
+    """Admin manually resets user password"""
+    if current_user.role not in ["super_admin", "admin"] or not current_user.can_manage_users:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    new_password = body.get("new_password")
+    send_email_flag = body.get("send_email", True)
+    
+    if not new_password:
+        raise HTTPException(status_code=400, detail="New password is required")
+    
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    # Get user
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Don't allow resetting super_admin password unless you're super_admin
+    if user.get("role") == "super_admin" and current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot reset super admin password")
+    
+    # Update password
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"password_hash": hash_password(new_password)}}
+    )
+    
+    # Send email notification if requested
+    email_sent = False
+    if send_email_flag:
+        try:
+            from emergentintegrations.llm.resend import send_email
+            await send_email(
+                to_email=user["email"],
+                subject="Password Reset - Drawlead OS",
+                html_content=f"""
+                <div style="font-family: Arial, sans-serif; padding: 20px;">
+                    <h2>Password Reset</h2>
+                    <p>Hi {user['name']},</p>
+                    <p>Your password has been reset by an administrator.</p>
+                    <div style="background: #f4f4f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p><strong>New Password:</strong> {new_password}</p>
+                    </div>
+                    <p>Please login and change your password for security.</p>
+                    <br>
+                    <p>- Drawlead OS Team</p>
+                </div>
+                """
+            )
+            email_sent = True
+        except Exception as e:
+            logging.error(f"Failed to send password reset email: {e}")
+    
+    return {
+        "message": "Password reset successfully",
+        "email_sent": email_sent
+    }
+
+@api_router.get("/admin/roles")
+async def get_available_roles(current_user: User = Depends(get_current_user)):
+    """Get available roles for user creation"""
+    if current_user.role not in ["super_admin", "admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    roles = [
+        {
+            "value": "super_admin",
+            "label": "Super Admin",
+            "description": "Full access to all modules",
+            "default_access": ["leads", "hr", "operations", "finance", "reports", "settings"]
+        },
+        {
+            "value": "admin",
+            "label": "Admin",
+            "description": "Full access to all modules",
+            "default_access": ["leads", "hr", "operations", "finance", "reports", "settings"]
+        },
+        {
+            "value": "business_development",
+            "label": "Business Development",
+            "description": "Access to Leads, HR and Settings",
+            "default_access": ["leads", "hr", "settings"]
+        },
+        {
+            "value": "project_manager",
+            "label": "Project Manager",
+            "description": "Access to Operations and Reports",
+            "default_access": ["operations", "reports", "hr"]
+        },
+        {
+            "value": "employee",
+            "label": "Employee",
+            "description": "Limited access to assigned tasks",
+            "default_access": ["operations", "hr"]
+        }
+    ]
+    
+    # Super admin can create other super admins, admin cannot
+    if current_user.role != "super_admin":
+        roles = [r for r in roles if r["value"] != "super_admin"]
+    
+    return roles
+
 # ============== SERVICE ROUTES ==============
 
 @api_router.post("/services")

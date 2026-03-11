@@ -34,12 +34,13 @@ const SettingsPage = () => {
     { value: 'super_admin', label: 'Super Admin', color: '#ef4444' },
     { value: 'admin', label: 'Admin', color: '#f59e0b' },
     { value: 'project_manager', label: 'Project Manager', color: '#8b5cf6' },
-    { value: 'bde', label: 'Business Development', color: '#3b82f6' },
+    { value: 'business_development', label: 'Business Development', color: '#3b82f6' },
     { value: 'employee', label: 'Employee', color: '#10b981' },
   ];
 
   const modules = [
     { value: 'leads', label: 'Leads' },
+    { value: 'hr', label: 'HR' },
     { value: 'operations', label: 'Operations' },
     { value: 'finance', label: 'Finance' },
     { value: 'reports', label: 'Reports' },
@@ -79,11 +80,17 @@ const SettingsPage = () => {
   const handleSaveUser = async (userData) => {
     try {
       if (selectedUser) {
+        // Update existing user
         await api.put(`/users/${selectedUser.user_id}`, userData);
         toast.success('User updated successfully');
       } else {
-        await api.post('/users', userData);
-        toast.success('User created successfully');
+        // Create new user with email notification
+        const response = await api.post('/admin/create-user', userData);
+        if (response.data.email_sent) {
+          toast.success('User created and credentials sent via email');
+        } else {
+          toast.success('User created (email notification failed - please share credentials manually)');
+        }
       }
       await fetchData();
       setShowUserModal(false);

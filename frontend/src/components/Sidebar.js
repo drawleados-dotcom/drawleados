@@ -57,10 +57,22 @@ const Sidebar = () => {
 
   const token = localStorage.getItem('session_token');
 
-  // Check if user is employee or BDE (restricted access)
-  const isEmployee = user?.role === 'employee' || user?.role === 'bde';
-  const isProjectManager = user?.role === 'project_manager';
-  const canManageHR = isAdmin || isProjectManager;
+  // Role-based access control
+  const userRole = user?.role || 'employee';
+  const moduleAccess = user?.module_access || [];
+  
+  // Check access permissions
+  const hasAccess = (module) => {
+    if (userRole === 'super_admin' || userRole === 'admin') return true;
+    return moduleAccess.includes(module);
+  };
+  
+  // Legacy checks (for backward compatibility)
+  const isEmployee = userRole === 'employee';
+  const isBDE = userRole === 'business_development' || userRole === 'bde';
+  const isProjectManager = userRole === 'project_manager';
+  const canManageHR = isAdmin || isProjectManager || hasAccess('hr');
+  const canManageUsers = user?.can_manage_users || false;
 
   // Load databases for operations submenu
   const loadDatabases = useCallback(async () => {
@@ -165,8 +177,8 @@ const Sidebar = () => {
       </div>
 
       <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto`}>
-        {/* Leads - NOT for employees */}
-        {!isEmployee && (
+        {/* Leads - visible if user has leads access */}
+        {hasAccess('leads') && (
           <Link
             to="/leads"
             data-testid="nav-leads"
@@ -178,7 +190,8 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Operations with Service Types */}
+        {/* Operations with Service Types - visible if user has operations access */}
+        {hasAccess('operations') && (
         <div>
           <button
             onClick={() => !isCollapsed && setOperationsExpanded(!operationsExpanded)}
@@ -294,8 +307,10 @@ const Sidebar = () => {
             </div>
           )}
         </div>
+        )}
 
-        {/* HR - for everyone */}
+        {/* HR - visible if user has hr access */}
+        {hasAccess('hr') && (
         <Link
           to="/hr"
           data-testid="nav-hr"
@@ -305,6 +320,7 @@ const Sidebar = () => {
           <UserCircle className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'HR'}
         </Link>
+        )}
 
         {/* HR Admin - Admin/Manager only */}
         {canManageHR && (
@@ -319,8 +335,8 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Finance - Admin only */}
-        {isAdmin && (
+        {/* Finance - visible if user has finance access */}
+        {hasAccess('finance') && (
           <Link
             to="/finance"
             data-testid="nav-finance"
@@ -332,8 +348,8 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Settings - Admin only */}
-        {isAdmin && (
+        {/* Settings - visible if user has settings access */}
+        {hasAccess('settings') && (
           <Link
             to="/settings"
             data-testid="nav-settings"
