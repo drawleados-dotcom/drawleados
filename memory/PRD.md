@@ -1,398 +1,185 @@
 # Drawlead OS - Product Requirements Document
 
-## Last Updated: March 11, 2026
+## Original Problem Statement
+Build a comprehensive internal operating system called "Drawlead OS" for managing leads, HR, operations, and documentation. The system should support role-based access control (RBAC) with different user types having different module access.
 
----
+## Core Requirements
+1. **Leads Module** - Lead management with stages, Kanban view, custom fields, CSV import/export
+2. **HR Module** - Attendance tracking, leave management, payslips, performance reviews
+3. **Operations Module** - Project and task management with Kanban view
+4. **Documentation Module** - Google Sheets and Docs link management for Business Dev users
+5. **Settings** - User management, role management, services, company profile
+6. **Role-Based Access Control** - Different roles (Admin, BDE, Employee, etc.) with granular permissions
 
-## Recent Changes (March 2026 - Latest)
+## User Personas
+- **Super Admin**: Full access to all modules, user management, system configuration
+- **Admin**: Most module access, limited settings
+- **Business Development**: Leads, HR, Documentations
+- **Project Manager**: Operations, Reports
+- **Employee**: HR (self-service), Operations (assigned tasks)
 
-### Import/Export Leads Feature ✅ (March 11, 2026)
-- **Download Template:** Download CSV template with all lead fields
-- **Import Leads:** Upload CSV, preview data mapping, import to respective stages
-- **Export Leads:** Export all leads to CSV file
-- **New API endpoints:** `/api/leads-v2/template`, `/api/leads-v2/import`, `/api/leads-v2/export`
-
-### Sidebar Operations Button Fix ✅ (March 11, 2026)
-- When sidebar is collapsed, clicking Operations now expands sidebar AND opens the Operations submenu
-
-### Role-Based Access Control & User Management ✅ (March 11, 2026)
-Implemented comprehensive RBAC system:
-
-**New Roles:**
-- `super_admin` - Full access to all modules
-- `admin` - Full access to all modules
-- `business_development` - Limited access: Leads, HR, Settings only
-- `project_manager` - Operations, Reports, HR
-- `employee` - Operations, HR
-
-**User Management Features:**
-- Admin can create users with manual password
-- Credentials sent via email (Resend integration)
-- Password change with email OTP verification
-- Role-based sidebar menu filtering
-
-**Lead Owner Features:**
-- Auto-assignment: Creator becomes lead owner
-- Lead Owner filter dropdown in search area
-- Lead owner displayed on lead cards
-- Filter by lead owner in API and UI
-
-**Testing Results:**
-- Backend: 100% (12/12 tests passed)
-- Frontend: 100% (all UI features verified)
-
-### Leads Module V2 - Complete Overhaul ✅ (March 11, 2026)
-Completely redesigned Leads module with new stages, comprehensive lead form, and follow-up feature:
-
-**New 8 Stages:**
-1. Prospect
-2. Lead
-3. Qualified
-4. Proposal
-5. Negotiation
-6. Followup
-7. Payment Stage
-8. Deal Closed
-
-**Comprehensive Lead Form (3 Tabs):**
-- **Basic Details Tab:** Name, Email, Phone, Location, Website, Social Media
-- **Lead Details Tab:**
-  - Stage (dropdown)
-  - Source (text)
-  - Lead Owner (dropdown from team members)
-  - Services (dropdown with "+ Add New Service" option)
-  - Priority (High/Medium/Low)
-  - Lead Type (Inbound/Outbound)
-  - Date of Lead (auto-filled, editable)
-  - Industry (dropdown with "+ Add New Industry" option)
-  - Estimation Amount (₹)
-  - Quotation Link (URL)
-  - Proposal Link (URL)
-  - Notes
-- **Follow-up Tab:** Add follow-ups with auto-date capture, view history
-
-**New API Endpoints:**
-- `/api/leads-v2/services` - GET/POST services with duplicate detection
-- `/api/leads-v2/industries` - GET/POST industries with duplicate detection
-- `/api/leads-v2/team-members` - GET team members for Lead Owner dropdown
-- `/api/leads-v2/leads/{lead_id}/followups` - POST/GET follow-ups
-
-**Testing Results:**
-- Backend: 100% (20/20 tests passed)
-- Frontend: 100% (all UI features verified)
-
-### Leads Module V2 - Stage Reordering Bug Fix ✅ (March 11, 2026)
-Fixed critical bug in the Leads module where stage reordering was failing:
-
-**Root Cause:**
-- FastAPI route ordering conflict - static route `/stages/reorder` was placed AFTER dynamic routes like `/stages/{stage_id}`
-- FastAPI was interpreting "reorder" as a `stage_id` parameter
-
-**Fix Applied:**
-- Moved `@leads_v2_router.put('/stages/reorder')` endpoint to line 155, BEFORE the dynamic `@leads_v2_router.put('/stages/{stage_id}')` at line 172
-- Added data-testid attributes for move buttons: `move-stage-up-{index}`, `move-stage-down-{index}`
-- Fixed login redirect from `/dashboard` to `/leads`
-
-**Testing Results:**
-- Backend: 100% (8/8 tests passed)
-- Frontend: 100% (5/5 features verified)
-
-### Meta Ads Performance Marketing Board ✅ (March 2026)
-Complete performance marketing project management view with dual views and custom fields:
-
-**Features:**
-1. **Stats Dashboard**: Total Campaigns, Total Ads, Total Leads, Total Spend
-2. **View Toggle**: Table View and Kanban View with one-click switch
-3. **Table View (Month-on-Month)**: 
-   - Campaigns grouped by month with summary stats (leads, spend)
-   - Expandable rows showing ads for each campaign
-   - Inline status dropdowns for quick updates
-4. **Kanban View (Creative Pipeline)**: 
-   - 6 columns: Yet to Start → Design → Edit → Review → Published → Approved
-   - Drag-style ad cards with quick status update
-   - Visual campaign/ad context per card
-5. **Campaign Management**: Create/Edit/Delete campaigns with client, area, mode, month, target, service angle
-6. **Ad Management**: Create/Edit/Delete ads with type, content doc URL, creative drive URL, status tracking
-7. **Custom Fields**: Add unlimited custom attributes with types: Select (dropdown), Text, Number, URL
-8. **Document Popups**: In-app iframe preview for Google Docs/Drive links
-9. **Filters**: Search, Month filter, Area filter
-
-**API Endpoints:**
-- `/api/meta-ads/campaigns` - Campaign CRUD
-- `/api/meta-ads/campaigns/{id}/ads` - Ad CRUD
-- `/api/meta-ads/custom-attributes` - Custom attributes CRUD
-- `/api/meta-ads/stats` - Stats and analytics
-
-**Database Collections:** `meta_ads_campaigns`, `meta_ads`, `meta_ads_custom_attributes`
-
----
-
-## Previous Updates (February 2026)
-
-### Website Projects Enhancement ✅ (February 2026)
-Comprehensive project details for website development tracking:
-
-**5-Tab Create/Edit Project Modal:**
-1. **Basic Tab**: Project Name, Status, Onboarding Date, Deadline, Platform (8 options), Website Type (8 options), Product Details, Onboarding Form Notes
-2. **Client Tab**: Client Name, Location, Email, Phone
-3. **Credentials Tab**: 
-   - Domain: URL, Username, Password (show/hide), 2FA, Email DNS
-   - Server: Details, Username, Password (show/hide), 2FA
-4. **Team Tab**: Developer, Designer, Content Writer, Project Manager
-5. **Links Tab**: Client Drive (new tab), Documents (in-app popup), Communication
-
-**Project Detail View:**
-- Row 1: Domain, Developer, Onboarding, Deadline, Platform, Type
-- Row 2: Client, Location, Client Drive, Documents, Server
-- Phase Stats: Wireframe, UI Design, Content, Development progress
-
-**Default Pages Feature:**
-Quick add buttons: Home Page, About Us, Services, Contact Us, Privacy Policy, Terms & Conditions
-
-### Invoice Module Enhancement ✅ (February 2026)
-Complete invoice management system with comprehensive attributes:
-
-**Features:**
-1. **Stats Dashboard**: Total Invoices, Paid, Pending, Overdue, Total Value
-2. **Invoice List**: Sortable table with all invoice details
-3. **Create Invoice** (4-tab wizard):
-   - **Client Tab**: Quick select from leads, Name, Company, Email, Phone, Address, City, State, Pincode, GST Number, PAN
-   - **Items Tab**: Add/remove items with Service Name, Qty, Rate, GST %, Discount %, auto-calculated totals
-   - **Payment Tab**: Invoice Date, Due Date, Payment Terms, Payment Method, PO Number, Reference, Bank Details
-   - **Settings Tab**: Invoice Type (GST/Non-GST/Proforma/Credit Note), Template, Notes, T&C
-4. **Download PDF**: jsPDF generation with professional formatting
-5. **Actions**: View, Download, Duplicate, Delete
-6. **Search & Filter**: By invoice number, client name, status
-
-**Invoice Types:** GST, Non-GST, Proforma, Credit Note
-**Payment Terms:** Due on Receipt, Net 7, Net 15, Net 30, Net 45, Net 60
-**GST Rates:** 0%, 5%, 12%, 18%, 28%
-
-### Super Admin Dashboard Redesign ✅ (February 2026)
-Complete dashboard overhaul with comprehensive business overview:
-
-**4 Main Sections:**
-
-1. **Sales Section**
-   - Date Filter: Today (default), This Week, This Month, This Quarter, This Year
-   - No. of Leads, Proposals, Deals Closed
-   - Real-time data from `/api/leads`
-
-2. **HR Section**
-   - Date Filter: Today (default)
-   - People Present, Absent, Work From Home
-   - Data from `/api/hr/admin/dashboard-stats`
-
-3. **Operations Row View**
-   - **Website**: Ongoing Projects, Delivery, New Project with date filter
-   - **SEO/SMM/Meta**: Client counts with "Know More" buttons
-   - Links to `/sop-works?service=seo`, `/social-media`, `/sop-works?service=meta_ads`
-
-4. **Finance Section**
-   - Date Filter: Today (default)
-   - Cash In (green ₹), Cash Out (red ₹), Till Month Revenue
-   - Data from `/api/expense/dashboard-summary`
-
-### Creative Design Board ✅ (February 2026)
-Complete design task management system with stage-wise tracking:
-
-**Structure:**
-- Two main tabs: **Website UI** and **Design**
-- List view with columns: Task Name, Project, Design Type, Design Content, Design File, Status, Final, Actions
-- Board view option (Kanban-style by stage)
-
-**Design Types:**
-- Poster, Story, Brochure, Social Post, Banner, Logo, Video Thumbnail, Presentation
-- Custom design types with sizes can be added
-- Each type has predefined size options
-
-**Stage-wise Tracking (4 Stages):**
-1. Design Content - Due Date, Assignee, Link, Status
-2. Design File - Due Date, Assignee, Link, Status
-3. Review - Due Date, Assignee, Link, Status
-4. Final - Due Date, Assignee, Link, Status
-
-**API Endpoints:**
-- `/api/creative/projects` - Creative projects CRUD
-- `/api/creative/tasks` - Tasks with stage data CRUD
-- `/api/creative/design-types` - Built-in + custom design types
-
-### HR Attendance Enhancement ✅ (February 2026)
-Enhanced sign-in/logout flow with manual time entry:
-
-**Features:**
-- **Auto-capture Clock In Time:** Time automatically recorded when user clicks "Clock In - Office" or "Clock In - WFH"
-- **Manual Logout Time Entry:** When clicking "Clock Out", a modal appears with:
-  - Display of clock-in time
-  - Time picker for manual logout time entry
-  - "Enter your actual logout time" helper text
-  - Cancel and Confirm Logout buttons
-- Backend accepts `manual_logout_time` parameter in HH:MM format
-
-### Expense View Date Filter ✅ (February 2026)
-Added month/year filter to Expense tab in Finance module:
-
-**Features:**
-- Month dropdown (January - December)
-- Year dropdown (2024, 2025, 2026, 2027)
-- Filters apply to category expense items
-- Items reload when filter changes
-- Backend `/api/expense/entries` accepts `month` and `year` params
-
-### Enhanced Add Cash In Flow with Invoice Integration ✅ (February 2026)
-Multi-step wizard for recording income with invoice integration:
-
-**3-Step Flow:**
-1. **Step 1 - Select Invoice Type:**
-   - GST Invoice (With 18% GST) card
-   - NO GST Invoice (Without GST) card
-   - Visual icons for each option
-
-2. **Step 2 - Select/Create Invoice:**
-   - Shows list of unpaid invoices filtered by type
-   - "Create New Invoice" button
-   - Back navigation to Step 1
-   - Empty state: "No unpaid GST invoices" message
-
-3. **Step 3 - Enter Payment Details:**
-   - Date picker
-   - Payment Type: Advance, Partial, Full
-   - Payment Cycle: One-Time, Monthly, Quarterly, Half-Yearly, Yearly
-   - Bank Account dropdown
-   - Amount Received field
-   - Tax % selection
-   - Add Income button
-
-**Create Invoice Modal (On-the-fly):**
-- Client Name*, Client Email, Due Date
-- Invoice Items with Add Item button
-- Description, Quantity, Rate per item
-- Subtotal, Tax % dropdown, Total calculation
-- Create Invoice button → Auto-selects and proceeds to Step 3
-
-### Finance Module - Complete 7-Tab System ✅ (February 2026)
-Comprehensive financial management system with Notion-like customization:
-
-**7 Main Tabs:**
-1. **Dashboard Tab** - 5 KPI Cards, Bank Accounts, Quick Actions, Export
-2. **Cashbook Tab** - Cash In/Out tables, Account tabs, Month/Year filter, Export
-3. **Expense Tab** - Category accordion view, Add Category, Add expense inside category, Export
-4. **Budget Tab** - Monthly tabs, Category cards, Detail view, Export
-5. **Invoice Tab** - Invoice list, Summary cards, Create Invoice, Export
-6. **Outstanding Tab** - Track expected payments, Record Payment, Export
-7. **Custom Tab** - Notion-like: add/delete custom tabs
-
-**Key Features:**
-- Excel export on EVERY tab using xlsx library
-- Category-based expense tracking with accordion view
-- Multi-step Add Cash In with invoice integration
-- Color-coded badges for categories and project types
-- Dark mode support throughout
-
----
-
-## Previous Updates
-
-### Expense Module - Two Boards System ✅
-- Expense Budget Board (Master View)
-- Cashbook Board (Credit/Debit)
-- Bank Account management
-
-### Website Projects - Complete Overhaul ✅
-- All Projects View, Project Detail View, Page Detail View
-
-### Other Completed Features
-- SOP Works Board ✅
-- Drawlead AI Assistant ✅
-- Marketing Module ✅
-- Theme Toggle ✅
-
----
+## Technical Architecture
+- **Backend**: FastAPI with MongoDB (motor async driver)
+- **Frontend**: React with Tailwind CSS, Shadcn UI components
+- **Authentication**: JWT-based with Emergent-managed Google Auth option
+- **Database**: MongoDB with collections for users, leads, attendance, leave, documentation, etc.
 
 ## API Endpoints
+### Authentication
+- POST `/api/auth/login` - Login with email/password
+- POST `/api/auth/register` - Register new user
+- GET `/api/auth/me` - Get current user
 
-### Finance Module
-- `/api/expense/dashboard-summary` - Dashboard KPIs
-- `/api/expense/bank-accounts` - Bank accounts CRUD
-- `/api/expense/categories` - Expense categories
-- `/api/expense/entries` - Items within categories
-- `/api/expense/income` - Credit/Income entries
-- `/api/expense/payments` - Debit/Expense payments
-- `/api/expense/cashflow` - Monthly cashflow view
-- `/api/expense/outstanding` - Outstanding revenue CRUD
-- `/api/expense/budget-monthly` - Monthly budget data
-- `/api/finance/invoices` - Invoice CRUD
+### Leads (V2)
+- GET/POST `/api/leads` - List/create leads
+- PUT/DELETE `/api/leads/{lead_id}` - Update/delete lead
+- GET `/api/leads/export` - Export leads to CSV
+- POST `/api/leads/import` - Import leads from CSV
+- GET/POST/PUT/DELETE `/api/leads/stages` - Manage lead stages
+
+### HR
+- POST/GET `/api/hr/attendance/clock-in`, `/api/hr/attendance/clock-out`
+- GET `/api/hr/attendance/history`, `/api/hr/attendance/today`
+- POST/GET `/api/hr/leave/request`, `/api/hr/leave/my-requests`
+- PUT `/api/hr/leave/{leave_id}/approve`, `/api/hr/leave/{leave_id}/reject`
+
+### Documentation
+- GET/POST `/api/docs/documents` - List/create documents
+- PUT/DELETE `/api/docs/documents/{doc_id}` - Update/delete document
+- GET `/api/docs/stats` - Get document statistics
+
+### Settings
+- GET/POST/PUT/DELETE `/api/users` - User management
+- GET/POST/PUT/DELETE `/api/services` - Service management
+- GET `/api/roles` - Role definitions
+
+## Database Schema
+
+### users
+```json
+{
+  "user_id": "string",
+  "name": "string",
+  "email": "string",
+  "password_hash": "string",
+  "role": "super_admin|admin|business_development|project_manager|employee",
+  "module_access": ["leads", "hr", "operations", "settings"],
+  "permissions": {
+    "can_create_projects": boolean,
+    "can_delete_tasks": boolean,
+    "can_manage_users": boolean
+  }
+}
+```
+
+### leads
+```json
+{
+  "lead_id": "string",
+  "name": "string",
+  "email": "string",
+  "phone": "string",
+  "company_name": "string",
+  "website": "string",
+  "source": "string",
+  "lead_owner_id": "string",
+  "service": "string",
+  "priority": "hot|warm|cold",
+  "lead_type": "new|existing",
+  "industry": "string",
+  "estimation_amount": number,
+  "quotation_link": "string",
+  "proposal_link": "string",
+  "notes": "string",
+  "stage_id": "string",
+  "created_at": "datetime",
+  "updated_at": "datetime"
+}
+```
+
+### documentation
+```json
+{
+  "doc_id": "string",
+  "name": "string",
+  "link": "string",
+  "doc_type": "sheet|doc",
+  "description": "string",
+  "created_by": "string",
+  "created_by_name": "string",
+  "created_at": "datetime",
+  "is_deleted": boolean
+}
+```
 
 ---
 
-## Pending/Future Tasks
+## What's Been Implemented (as of December 2025)
 
-### PENDING: Google Calendar Integration 📅
-- New sidebar item "My Calendar / CEO" (super admin only)
-- Emergent-managed Google Auth
-- Show real Google Calendar events
-- Tasks view with department tabs
+### Completed Features
 
-### Other Pending
-- Configure Resend API key for email notifications
-- Refactor OperationsPage.js (86KB+ monolith)
-- Refactor WebsiteProjectsPage.js
+#### P0 - Documentations Module (DONE - Dec 2025)
+- ✅ Full CRUD for Google Sheets and Docs links
+- ✅ Sheets and Docs tabs with counts
+- ✅ Add/Edit/Delete documents
+- ✅ In-app viewer modal with iframe embedding
+- ✅ Stats badges showing document counts
+- ✅ RBAC restriction to Business Development users
+- ✅ Backend API at `/api/docs/*`
+
+#### P1 - Theme Fixes (DONE - Dec 2025)
+- ✅ Fixed light/dark mode on HR page
+- ✅ Fixed light/dark mode on HR Admin page  
+- ✅ Fixed light/dark mode on Settings page
+- ✅ Proper theme context usage with props passing to sub-components
+
+#### Earlier Completed
+- ✅ Comprehensive Leads Module with stages, Kanban view
+- ✅ Lead import/export via CSV
+- ✅ Lead Owner functionality with auto-assignment
+- ✅ Role-Based Access Control (RBAC) system
+- ✅ User management with role/permission assignment
+- ✅ Sidebar navigation with RBAC-based menu visibility
+- ✅ HR attendance tracking (clock in/out, history)
+- ✅ HR leave management with approval workflow
+- ✅ Operations Kanban board
+
+---
+
+## Prioritized Backlog
+
+### P0 - Critical
+- [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
+- [ ] Leads Custom Fields - Notion-style custom fields for leads
+
+### P1 - High Priority
+- [ ] Refactor LeadsPageV2.js - Break down into smaller components
+- [ ] Google Calendar Integration - Sync meetings and events
+
+### P2 - Medium Priority
+- [ ] Chat Backend Refactor - Migrate from in-memory to MongoDB
+- [ ] Operations Kanban Drag-and-Drop improvements
+- [ ] Enhanced reporting and analytics
+
+### P3 - Future/Nice to Have
+- [ ] Mobile responsive improvements
+- [ ] Email template customization
+- [ ] Notification system
+- [ ] Activity logging/audit trail
 
 ---
 
 ## Test Credentials
-- **Admin:** vinoth@drawlead.com / admin123
-
-## Key Features Summary
-
-| Feature | Status |
-|---------|--------|
-| Super Admin Dashboard (4 sections) | ✅ Complete |
-| Creative Design Board (2 tabs, stage tracking) | ✅ Complete |
-| HR Attendance (Manual logout time entry) | ✅ Complete |
-| Expense View Date Filter | ✅ Complete |
-| Finance Module - 7 Tabs | ✅ Complete |
-| Enhanced Add Cash In (3-step wizard) | ✅ Complete |
-| Create Invoice On-the-fly | ✅ Complete |
-| Payment Cycle Options | ✅ Complete |
-| Excel Export on All Tabs | ✅ Complete |
-| Dashboard with KPIs | ✅ Complete |
-| Cashbook (Cash In/Out) | ✅ Complete |
-| Expense (Category Accordion) | ✅ Complete |
-| Budget (Monthly Tabs) | ✅ Complete |
-| Invoice Management | ✅ Complete |
-| Outstanding Revenue | ✅ Complete |
-| Custom Tabs (Notion-like) | ✅ Complete |
-| Website Projects - All Views | ✅ Complete |
-| SOP Works Board | ✅ Complete |
-| Social Media Module | ✅ Complete |
-| Leads V2 Kanban Board | ✅ Complete |
-| Leads Stage Reordering | ✅ Complete |
-| Leads Follow-up Feature | ✅ Complete |
-| Google Calendar | 🟡 Pending |
-| Google Sheets Integration | 🟡 Pending |
-| Leads Custom Fields | 🟡 Pending |
-
-## Pending Tasks
-
-### High Priority
-- **Light Mode Theme Fix (P0):** Settings, HR, HR Admin pages still use hardcoded dark colors - need proper theme support
-- **Google Sheets Integration (P1):** Auto-sync leads from spreadsheet
-
-### Medium Priority
-- Google Calendar Integration (postponed by user)
-- Configure Resend API key for email notifications
-- Dialog accessibility improvement (add aria-describedby)
-
-### Future/Backlog
-- Sales Module CSV Import/Export
-- Chat Backend migration to MongoDB (currently in-memory)
-- Kanban drag-and-drop for Operations module
+- **Admin**: vinoth@drawlead.com / admin123
 
 ## 3rd Party Integrations
 - Emergent-managed Google Auth
-- Claude Sonnet 4.5
-- jsPDF & jspdf-autotable
-- Resend (placeholder keys)
-- react-split-pane
-- xlsx (Excel export)
+- Claude Sonnet 4.5 (for AI features)
+- Resend (email - MOCKED with placeholder keys)
+- jsPDF & jspdf-autotable (PDF generation)
+- xlsx (Excel/CSV handling)
+- @dnd-kit/core & @dnd-kit/sortable (drag-and-drop)
+
+## Known Mocked Services
+- **Resend Email**: Uses placeholder API keys - emails are logged but not sent
+- **Team Chat Backend**: Uses in-memory storage, not persistent
