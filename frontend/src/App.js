@@ -22,6 +22,7 @@ import WebsiteProjectsPage from './pages/WebsiteProjectsPage';
 import SocialMediaPage from './pages/SocialMediaPage';
 import CreativeDesignBoard from './pages/CreativeDesignBoard';
 import MetaAdsBoard from './pages/Operations/MetaAdsBoard';
+import DocumentationsPage from './pages/DocumentationsPage';
 import './App.css';
 
 function AppRouter() {
@@ -152,6 +153,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <MetaAdsBoard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/documentations"
+        element={
+          <ProtectedRoute>
+            <DocumentationsPage />
           </ProtectedRoute>
         }
       />

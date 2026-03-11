@@ -24,6 +24,7 @@ import {
   FolderOpen,
   PanelLeftClose,
   PanelLeft,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -366,6 +367,19 @@ const Sidebar = () => {
           >
             <Settings className="h-5 w-5" strokeWidth={2} />
             {!isCollapsed && 'Settings'}
+          </Link>
+        )}
+
+        {/* Documentations - visible for business_development and admins */}
+        {(hasAccess('leads') || isBDE) && (
+          <Link
+            to="/documentations"
+            data-testid="nav-documentations"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/documentations' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Documentations' : ''}
+          >
+            <FileSpreadsheet className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'Documentations'}
           </Link>
         )}
       </nav>

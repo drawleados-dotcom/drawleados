@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import { useTheme } from '../contexts/ThemeContext';
 import api from '../utils/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Button } from '../components/ui/button';
@@ -20,6 +21,7 @@ import WorkspacesTab from '../components/settings/WorkspacesTab';
 import StatusManagementTab from '../components/settings/StatusManagementTab';
 
 const SettingsPage = () => {
+  const { isDark } = useTheme();
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,14 @@ const SettingsPage = () => {
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
+
+  // Theme classes
+  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
+  const bgInput = isDark ? 'bg-[#09090b]' : 'bg-white';
+  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
+  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
 
   const roles = [
     { value: 'super_admin', label: 'Super Admin', color: '#ef4444' },
@@ -80,11 +90,9 @@ const SettingsPage = () => {
   const handleSaveUser = async (userData) => {
     try {
       if (selectedUser) {
-        // Update existing user
         await api.put(`/users/${selectedUser.user_id}`, userData);
         toast.success('User updated successfully');
       } else {
-        // Create new user with email notification
         const response = await api.post('/admin/create-user', userData);
         if (response.data.email_sent) {
           toast.success('User created and credentials sent via email');
@@ -175,7 +183,7 @@ const SettingsPage = () => {
     return (
       <Layout>
         <div className="flex items-center justify-center h-full">
-          <p className="text-[#a1a1aa]">Loading settings...</p>
+          <p className={textSecondary}>Loading settings...</p>
         </div>
       </Layout>
     );
@@ -183,7 +191,7 @@ const SettingsPage = () => {
 
   return (
     <Layout>
-      <div className="space-y-6" data-testid="settings-page">
+      <div className={`space-y-6 p-6 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'} min-h-screen`} data-testid="settings-page">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -195,7 +203,7 @@ const SettingsPage = () => {
                 Settings
               </span>
             </h1>
-            <p className="text-[#a1a1aa] text-base">
+            <p className={`${textSecondary} text-base`}>
               Manage company profile, users, workspaces, and system settings
             </p>
           </div>
@@ -203,7 +211,7 @@ const SettingsPage = () => {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="bg-[#18181b] border border-[#27272a] p-1 flex-wrap h-auto">
+          <TabsList className={`${bgCard} border ${borderColor} p-1 flex-wrap h-auto`}>
             <TabsTrigger
               value="company"
               data-testid="company-tab"
@@ -269,13 +277,13 @@ const SettingsPage = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#a1a1aa]" />
+                  <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
                   <Input
                     placeholder="Search users..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     data-testid="search-users-input"
-                    className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
+                    className={`pl-10 ${bgInput} border ${borderColor} ${textPrimary} focus:border-[#6366f1]`}
                   />
                 </div>
                 <Button
@@ -289,22 +297,22 @@ const SettingsPage = () => {
               </div>
 
               {/* Users Table */}
-              <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <table className="w-full">
-                  <thead className="bg-[#09090b]">
+                  <thead className={isDark ? 'bg-[#09090b]' : 'bg-gray-50'}>
                     <tr>
-                      <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">User</th>
-                      <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Role</th>
-                      <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Module Access</th>
-                      <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Permissions</th>
-                      <th className="text-right p-4 text-xs font-medium text-[#a1a1aa] uppercase">Actions</th>
+                      <th className={`text-left p-4 text-xs font-medium ${textSecondary} uppercase`}>User</th>
+                      <th className={`text-left p-4 text-xs font-medium ${textSecondary} uppercase`}>Role</th>
+                      <th className={`text-left p-4 text-xs font-medium ${textSecondary} uppercase`}>Module Access</th>
+                      <th className={`text-left p-4 text-xs font-medium ${textSecondary} uppercase`}>Permissions</th>
+                      <th className={`text-right p-4 text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredUsers.map((user) => (
                       <tr
                         key={user.user_id}
-                        className="border-t border-[#27272a] hover:bg-[#27272a]/30 transition-colors"
+                        className={`border-t ${borderColor} ${isDark ? 'hover:bg-[#27272a]/30' : 'hover:bg-gray-50'} transition-colors`}
                         data-testid={`user-row-${user.user_id}`}
                       >
                         <td className="p-4">
@@ -313,8 +321,8 @@ const SettingsPage = () => {
                               {user.name?.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="text-sm font-medium text-[#fafafa]">{user.name}</p>
-                              <p className="text-xs text-[#a1a1aa]">{user.email}</p>
+                              <p className={`text-sm font-medium ${textPrimary}`}>{user.name}</p>
+                              <p className={`text-xs ${textSecondary}`}>{user.email}</p>
                             </div>
                           </div>
                         </td>
@@ -329,7 +337,7 @@ const SettingsPage = () => {
                         <td className="p-4">
                           <div className="flex flex-wrap gap-1">
                             {(user.module_access || []).map((mod) => (
-                              <Badge key={mod} variant="outline" className="text-xs border-[#27272a] text-[#a1a1aa]">
+                              <Badge key={mod} variant="outline" className={`text-xs ${borderColor} ${textSecondary}`}>
                                 {mod}
                               </Badge>
                             ))}
@@ -354,7 +362,7 @@ const SettingsPage = () => {
                               size="sm"
                               onClick={() => handleEditUser(user)}
                               data-testid={`edit-user-${user.user_id}`}
-                              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8"
+                              className={`${bgSecondary} hover:bg-[#3f3f46] ${textPrimary} h-8`}
                             >
                               <Edit className="h-3 w-3" />
                             </Button>
@@ -362,7 +370,7 @@ const SettingsPage = () => {
                               size="sm"
                               onClick={() => handleDeleteUser(user.user_id)}
                               data-testid={`delete-user-${user.user_id}`}
-                              className="bg-[#27272a] hover:bg-[#ef4444] text-[#fafafa] h-8"
+                              className={`${bgSecondary} hover:bg-[#ef4444] ${textPrimary} h-8`}
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
@@ -373,7 +381,7 @@ const SettingsPage = () => {
                   </tbody>
                 </table>
                 {filteredUsers.length === 0 && (
-                  <div className="p-8 text-center text-[#a1a1aa]">No users found</div>
+                  <div className={`p-8 text-center ${textSecondary}`}>No users found</div>
                 )}
               </div>
             </div>
@@ -384,13 +392,13 @@ const SettingsPage = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="relative flex-1 max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#a1a1aa]" />
+                  <Search className={`absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
                   <Input
                     placeholder="Search services..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     data-testid="search-services-input"
-                    className="pl-10 bg-[#18181b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]"
+                    className={`pl-10 ${bgInput} border ${borderColor} ${textPrimary} focus:border-[#6366f1]`}
                   />
                 </div>
                 <Button
@@ -408,26 +416,26 @@ const SettingsPage = () => {
                 {filteredServices.map((service) => (
                   <div
                     key={service.service_id}
-                    className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 hover:border-[#6366f1]/30 transition-all"
+                    className={`${bgCard} border ${borderColor} rounded-xl p-4 hover:border-[#6366f1]/30 transition-all`}
                     data-testid={`service-card-${service.service_id}`}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className="text-sm font-semibold text-[#fafafa]">{service.name}</h3>
-                        <p className="text-xs text-[#a1a1aa]">{service.category}</p>
+                        <h3 className={`text-sm font-semibold ${textPrimary}`}>{service.name}</h3>
+                        <p className={`text-xs ${textSecondary}`}>{service.category}</p>
                       </div>
                       <div className="flex gap-1">
                         <Button
                           size="sm"
                           onClick={() => handleEditService(service)}
-                          className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-7 w-7 p-0"
+                          className={`${bgSecondary} hover:bg-[#3f3f46] ${textPrimary} h-7 w-7 p-0`}
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
                         <Button
                           size="sm"
                           onClick={() => handleDeleteService(service.service_id)}
-                          className="bg-[#27272a] hover:bg-[#ef4444] text-[#fafafa] h-7 w-7 p-0"
+                          className={`${bgSecondary} hover:bg-[#ef4444] ${textPrimary} h-7 w-7 p-0`}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -435,12 +443,12 @@ const SettingsPage = () => {
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between">
-                        <span className="text-xs text-[#a1a1aa]">Base Price</span>
-                        <span className="text-sm font-medium text-[#fafafa]">₹{service.amount?.toLocaleString()}</span>
+                        <span className={`text-xs ${textSecondary}`}>Base Price</span>
+                        <span className={`text-sm font-medium ${textPrimary}`}>₹{service.amount?.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-xs text-[#a1a1aa]">Billing</span>
-                        <Badge variant="outline" className="text-xs border-[#27272a] text-[#a1a1aa]">
+                        <span className={`text-xs ${textSecondary}`}>Billing</span>
+                        <Badge variant="outline" className={`text-xs ${borderColor} ${textSecondary}`}>
                           {service.billing_type}
                         </Badge>
                       </div>
@@ -449,7 +457,7 @@ const SettingsPage = () => {
                 ))}
               </div>
               {filteredServices.length === 0 && (
-                <div className="p-8 text-center text-[#a1a1aa] bg-[#18181b] border border-[#27272a] rounded-xl">
+                <div className={`p-8 text-center ${textSecondary} ${bgCard} border ${borderColor} rounded-xl`}>
                   No services found
                 </div>
               )}
@@ -464,7 +472,7 @@ const SettingsPage = () => {
           {/* Roles Tab */}
           <TabsContent value="roles" className="mt-6">
             <div className="space-y-6">
-              <p className="text-sm text-[#a1a1aa]">
+              <p className={`text-sm ${textSecondary}`}>
                 Role-based access control defines what each user type can see and do in the system.
               </p>
               
@@ -472,7 +480,7 @@ const SettingsPage = () => {
                 {roles.map((role) => (
                   <div
                     key={role.value}
-                    className="bg-[#18181b] border border-[#27272a] rounded-xl p-6"
+                    className={`${bgCard} border ${borderColor} rounded-xl p-6`}
                     data-testid={`role-card-${role.value}`}
                   >
                     <div className="flex items-center justify-between mb-4">
@@ -484,8 +492,8 @@ const SettingsPage = () => {
                           <Shield className="h-5 w-5" style={{ color: role.color }} />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-[#fafafa]">{role.label}</h3>
-                          <p className="text-xs text-[#a1a1aa]">{role.value}</p>
+                          <h3 className={`text-lg font-semibold ${textPrimary}`}>{role.label}</h3>
+                          <p className={`text-xs ${textSecondary}`}>{role.value}</p>
                         </div>
                       </div>
                       <Badge style={{ backgroundColor: `${role.color}20`, color: role.color }}>
@@ -508,13 +516,13 @@ const SettingsPage = () => {
                             className={`p-3 rounded-lg border ${
                               hasAccess
                                 ? 'bg-[#10b981]/10 border-[#10b981]/30'
-                                : 'bg-[#27272a]/30 border-[#27272a]'
+                                : `${bgSecondary} ${borderColor}`
                             }`}
                           >
                             <p className={`text-sm font-medium ${hasAccess ? 'text-[#10b981]' : 'text-[#71717a]'}`}>
                               {mod.label}
                             </p>
-                            <p className="text-xs text-[#a1a1aa]">
+                            <p className={`text-xs ${textSecondary}`}>
                               {hasAccess ? 'Enabled' : 'Disabled'}
                             </p>
                           </div>
@@ -537,6 +545,12 @@ const SettingsPage = () => {
           modules={modules}
           onClose={() => setShowUserModal(false)}
           onSave={handleSaveUser}
+          isDark={isDark}
+          bgCard={bgCard}
+          bgInput={bgInput}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
         />
       )}
 
@@ -546,6 +560,12 @@ const SettingsPage = () => {
           service={selectedService}
           onClose={() => setShowServiceModal(false)}
           onSave={handleSaveService}
+          isDark={isDark}
+          bgCard={bgCard}
+          bgInput={bgInput}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
         />
       )}
     </Layout>
@@ -553,7 +573,7 @@ const SettingsPage = () => {
 };
 
 // User Form Modal Component
-const UserFormModal = ({ user, roles, modules, onClose, onSave }) => {
+const UserFormModal = ({ user, roles, modules, onClose, onSave, isDark, bgCard, bgInput, textPrimary, textSecondary, borderColor }) => {
   const [formData, setFormData] = useState({
     name: user?.name || '',
     email: user?.email || '',
@@ -590,52 +610,52 @@ const UserFormModal = ({ user, roles, modules, onClose, onSave }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border-[#27272a] text-[#fafafa] max-w-lg">
+      <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-lg`}>
         <DialogHeader>
-          <DialogTitle>{user ? 'Edit User' : 'Add New User'}</DialogTitle>
+          <DialogTitle className={textPrimary}>{user ? 'Edit User' : 'Add New User'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>Name *</Label>
+            <Label className={textPrimary}>Name *</Label>
             <Input
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="Enter full name"
               data-testid="user-name-input"
-              className="bg-[#09090b] border-[#27272a]"
+              className={`${bgInput} border ${borderColor} ${textPrimary}`}
             />
           </div>
           <div className="space-y-2">
-            <Label>Email *</Label>
+            <Label className={textPrimary}>Email *</Label>
             <Input
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="Enter email address"
               data-testid="user-email-input"
-              className="bg-[#09090b] border-[#27272a]"
+              className={`${bgInput} border ${borderColor} ${textPrimary}`}
             />
           </div>
           <div className="space-y-2">
-            <Label>{user ? 'New Password (leave blank to keep current)' : 'Password *'}</Label>
+            <Label className={textPrimary}>{user ? 'New Password (leave blank to keep current)' : 'Password *'}</Label>
             <Input
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               placeholder="Enter password"
               data-testid="user-password-input"
-              className="bg-[#09090b] border-[#27272a]"
+              className={`${bgInput} border ${borderColor} ${textPrimary}`}
             />
           </div>
           <div className="space-y-2">
-            <Label>Role</Label>
+            <Label className={textPrimary}>Role</Label>
             <Select value={formData.role} onValueChange={(v) => setFormData({ ...formData, role: v })}>
-              <SelectTrigger className="bg-[#09090b] border-[#27272a]" data-testid="user-role-select">
+              <SelectTrigger className={`${bgInput} border ${borderColor} ${textPrimary}`} data-testid="user-role-select">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-[#18181b] border-[#27272a]">
+              <SelectContent className={`${bgCard} border ${borderColor}`}>
                 {roles.map((role) => (
-                  <SelectItem key={role.value} value={role.value} className="text-[#fafafa] focus:bg-[#27272a]">
+                  <SelectItem key={role.value} value={role.value} className={`${textPrimary} focus:bg-[#27272a]`}>
                     {role.label}
                   </SelectItem>
                 ))}
@@ -643,7 +663,7 @@ const UserFormModal = ({ user, roles, modules, onClose, onSave }) => {
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Module Access</Label>
+            <Label className={textPrimary}>Module Access</Label>
             <div className="grid grid-cols-3 gap-2">
               {modules.map((mod) => (
                 <div key={mod.value} className="flex items-center gap-2">
@@ -652,7 +672,7 @@ const UserFormModal = ({ user, roles, modules, onClose, onSave }) => {
                     onCheckedChange={() => handleModuleToggle(mod.value)}
                     id={`module-${mod.value}`}
                   />
-                  <label htmlFor={`module-${mod.value}`} className="text-sm text-[#a1a1aa]">
+                  <label htmlFor={`module-${mod.value}`} className={`text-sm ${textSecondary}`}>
                     {mod.label}
                   </label>
                 </div>
@@ -660,24 +680,24 @@ const UserFormModal = ({ user, roles, modules, onClose, onSave }) => {
             </div>
           </div>
           <div className="space-y-3">
-            <Label>Permissions</Label>
+            <Label className={textPrimary}>Permissions</Label>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#a1a1aa]">Can Create Projects</span>
+                <span className={`text-sm ${textSecondary}`}>Can Create Projects</span>
                 <Switch
                   checked={formData.can_create_projects}
                   onCheckedChange={(v) => setFormData({ ...formData, can_create_projects: v })}
                 />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#a1a1aa]">Can Delete Tasks</span>
+                <span className={`text-sm ${textSecondary}`}>Can Delete Tasks</span>
                 <Switch
                   checked={formData.can_delete_tasks}
                   onCheckedChange={(v) => setFormData({ ...formData, can_delete_tasks: v })}
                 />
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#a1a1aa]">Can Manage Users</span>
+                <span className={`text-sm ${textSecondary}`}>Can Manage Users</span>
                 <Switch
                   checked={formData.can_manage_users}
                   onCheckedChange={(v) => setFormData({ ...formData, can_manage_users: v })}
@@ -687,7 +707,7 @@ const UserFormModal = ({ user, roles, modules, onClose, onSave }) => {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="border-[#27272a] text-[#a1a1aa]">
+          <Button variant="outline" onClick={onClose} className={`border ${borderColor} ${textSecondary}`}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} data-testid="save-user-button" className="bg-[#6366f1] hover:bg-[#4f46e5]">
@@ -700,7 +720,7 @@ const UserFormModal = ({ user, roles, modules, onClose, onSave }) => {
 };
 
 // Service Form Modal Component
-const ServiceFormModal = ({ service, onClose, onSave }) => {
+const ServiceFormModal = ({ service, onClose, onSave, isDark, bgCard, bgInput, textPrimary, textSecondary, borderColor }) => {
   const [formData, setFormData] = useState({
     name: service?.name || '',
     category: service?.category || '',
@@ -718,62 +738,62 @@ const ServiceFormModal = ({ service, onClose, onSave }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border-[#27272a] text-[#fafafa] max-w-md">
+      <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-md`}>
         <DialogHeader>
-          <DialogTitle>{service ? 'Edit Service' : 'Add New Service'}</DialogTitle>
+          <DialogTitle className={textPrimary}>{service ? 'Edit Service' : 'Add New Service'}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label>Service Name *</Label>
+            <Label className={textPrimary}>Service Name *</Label>
             <Input
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g., Website Development"
               data-testid="service-name-input"
-              className="bg-[#09090b] border-[#27272a]"
+              className={`${bgInput} border ${borderColor} ${textPrimary}`}
             />
           </div>
           <div className="space-y-2">
-            <Label>Category *</Label>
+            <Label className={textPrimary}>Category *</Label>
             <Select value={formData.category} onValueChange={(v) => setFormData({ ...formData, category: v })}>
-              <SelectTrigger className="bg-[#09090b] border-[#27272a]" data-testid="service-category-select">
+              <SelectTrigger className={`${bgInput} border ${borderColor} ${textPrimary}`} data-testid="service-category-select">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
-              <SelectContent className="bg-[#18181b] border-[#27272a]">
-                <SelectItem value="Development" className="text-[#fafafa] focus:bg-[#27272a]">Development</SelectItem>
-                <SelectItem value="Marketing" className="text-[#fafafa] focus:bg-[#27272a]">Marketing</SelectItem>
-                <SelectItem value="Consulting" className="text-[#fafafa] focus:bg-[#27272a]">Consulting</SelectItem>
-                <SelectItem value="Design" className="text-[#fafafa] focus:bg-[#27272a]">Design</SelectItem>
-                <SelectItem value="Other" className="text-[#fafafa] focus:bg-[#27272a]">Other</SelectItem>
+              <SelectContent className={`${bgCard} border ${borderColor}`}>
+                <SelectItem value="Development" className={`${textPrimary} focus:bg-[#27272a]`}>Development</SelectItem>
+                <SelectItem value="Marketing" className={`${textPrimary} focus:bg-[#27272a]`}>Marketing</SelectItem>
+                <SelectItem value="Consulting" className={`${textPrimary} focus:bg-[#27272a]`}>Consulting</SelectItem>
+                <SelectItem value="Design" className={`${textPrimary} focus:bg-[#27272a]`}>Design</SelectItem>
+                <SelectItem value="Other" className={`${textPrimary} focus:bg-[#27272a]`}>Other</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Billing Type</Label>
+            <Label className={textPrimary}>Billing Type</Label>
             <Select value={formData.billing_type} onValueChange={(v) => setFormData({ ...formData, billing_type: v })}>
-              <SelectTrigger className="bg-[#09090b] border-[#27272a]" data-testid="service-billing-select">
+              <SelectTrigger className={`${bgInput} border ${borderColor} ${textPrimary}`} data-testid="service-billing-select">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-[#18181b] border-[#27272a]">
-                <SelectItem value="one-time" className="text-[#fafafa] focus:bg-[#27272a]">One-time</SelectItem>
-                <SelectItem value="recurring" className="text-[#fafafa] focus:bg-[#27272a]">Recurring (Monthly)</SelectItem>
+              <SelectContent className={`${bgCard} border ${borderColor}`}>
+                <SelectItem value="one-time" className={`${textPrimary} focus:bg-[#27272a]`}>One-time</SelectItem>
+                <SelectItem value="recurring" className={`${textPrimary} focus:bg-[#27272a]`}>Recurring (Monthly)</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Base Amount (₹)</Label>
+            <Label className={textPrimary}>Base Amount (₹)</Label>
             <Input
               type="number"
               value={formData.amount}
               onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
               placeholder="Enter base price"
               data-testid="service-amount-input"
-              className="bg-[#09090b] border-[#27272a]"
+              className={`${bgInput} border ${borderColor} ${textPrimary}`}
             />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="border-[#27272a] text-[#a1a1aa]">
+          <Button variant="outline" onClick={onClose} className={`border ${borderColor} ${textSecondary}`}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} data-testid="save-service-button" className="bg-[#6366f1] hover:bg-[#4f46e5]">

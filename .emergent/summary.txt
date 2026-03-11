@@ -1,168 +1,226 @@
 <analysis>**original_problem_statement:**
-The user is building a comprehensive internal operating system, Drawlead OS. The current work is focused on creating a Meta Ads Performance Marketing module and completely overhauling the Leads module with a new UI, Kanban board, custom stages/fields, drag-and-drop functionality, and Google Sheets integration. The user also requested changes to the main sidebar navigation.
+The user is building a comprehensive internal operating system, Drawlead OS. The initial project involved overhauling the Leads and Meta Ads modules, and cleaning up the sidebar.
 
-**PRODUCT REQUIREMENTS:**
-1.  **Meta Ads Board:** Create a new project management view for Meta Ads, supporting multiple clients, campaigns, and ads, with both table and Kanban views. (Completed in this session).
-2.  **Sidebar Cleanup:** Hide the Dashboard, Marketing, Team Chat, Reports, and Services links from the main sidebar. Set the default page to /leads. (Completed in this session).
-3.  **Leads Module Overhaul:**
-    *   Redesign the UI based on a provided screenshot, including Kanban, List, and Preview Board views.
-    *   Implement Connect Google Sheets functionality to automatically update leads.
-    *   Allow manual creation, deletion, and reordering of lead stages.
-    *   Implement Notion-style custom fields.
-    *   Enable drag-and-drop for leads between stages in the Kanban view. (Completed in this session).
-    *   Add a Follow-up feature to log interactions with editable timestamps. (Completed in this session).
-4.  **Website Development Navigation:** Change the Website Development sidebar item from an expandable menu to a direct link to the all-projects page. (Completed in this session).
-5.  **Remove SOP Works:** Remove the SOP Works link from the Meta Ads submenu. (Completed in this session).
+Recent user requests have expanded on this, requiring:
+1.  **Role-Based Access Control (RBAC):** Create a Business Development user role with restricted access to Leads, HR, and a new Documentations module. Super admins should be able to manage users and roles.
+2.  **Lead Management Enhancements:**
+    *   Redefine lead stages and fields completely (e.g., Lead Owner, Services, Priority, Industry, Quotation/Proposal links).
+    *   Auto-assign the creator as the Lead Owner upon creation, with the ability for admins to change it.
+    *   Add a filter for Lead Owner on the leads page.
+    *   Implement CSV Import/Export for leads, including a downloadable template.
+3.  **New Documentations Module:**
+    *   Create a new page accessible to Business Development users.
+    *   It should have two tabs: Sheets and Docs.
+    *   Users can add new documents/sheets by providing a name and a link.
+    *   The list should display the name, S.No, and an Open button.
+    *   Clicking Open should display the sheet/doc in a wide modal/popup within the app, not in a new window.
+4.  **UI/UX Bug Fixes:**
+    *   Fix an issue where the Operations button in the collapsed sidebar was unresponsive.
+    *   Fix widespread UI inconsistencies where dark-themed components appear in light mode, specifically on the HR Admin, HR, and Settings pages.
+    *   Fix responsive layout issues on the Leads page where stage tabs were cramped and overlapping when the sidebar was open.
+    *   Fix an issue where edit/delete buttons overflowed the lead card boundaries.
+    *   Add functionality to the stage summary cards at the top of the leads page to filter the lead list when clicked.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The agent has successfully implemented several major features and UI changes in this session.
-- A new **Meta Ads Board** has been created from scratch, featuring a multi-client architecture. Users can create clients, and within each client, manage campaigns and ads. The module includes both a detailed table view and a drag-and-drop enabled Kanban board.
-- The main **sidebar navigation** has been reconfigured as per the user's request, hiding several items and changing the default route of the application to the new Leads page.
-- The **Leads module** has been completely redesigned into . It now includes a functional Kanban board with drag-and-drop for moving leads between stages, a new list view, and UI for a preview board. It also features modals for managing custom stages (with a bug in reordering) and adding follow-up notes to leads.
-- The Website Development and Meta Ads sections in the sidebar have been updated to match user requirements.
+The agent has implemented a significant number of features. The Leads module has been completely overhauled twice, now featuring a highly detailed creation form, Kanban and list views, custom stages, and drag-and-drop. A comprehensive RBAC system has been implemented, with a Settings page for user and role management. Lead import/export via CSV is now functional. Many UI bugs related to responsiveness and theming on the Leads page have been fixed. The agent has just begun creating the new Documentations module, having set up the basic backend routes and frontend page structure.
 
 **Last working item**:
-The user reported that reordering stages in the new Leads module was failing. The agent was in the process of debugging and fixing this issue.
+The agent was creating the new Documentations module as requested by the user.
 
-- **Last item agent was working:** Fixing the  endpoint which was consistently failing. The agent correctly identified the root cause as a route ordering conflict in FastAPI, where a dynamic route () was being matched before the static route ().
+- **Last item agent was working:** The agent was in the middle of implementing the Documentations module. Backend routes () and a frontend page () have been created. The agent was adding the navigation link for this new page to the  component.
 - **Status:** IN PROGRESS
 - **Agent Testing Done:** N
-- **Which testing method agent to use?** backend testing agent
+- **Which testing method agent to use?** both
 - **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
-- **Issue 1: Lead Stage Reordering Fails (P0)**
-    - **Description:** When the user tries to reorder stages using the up/down arrows in the Stages modal, the action fails.
-    - **Attempted fixes:**
-        1.  Modified the backend endpoint to accept a raw . This failed due to Pydantic validation.
-        2.  Created a  Pydantic model. This resolved the validation error but the endpoint returned  and did not reorder the stages.
-        3.  Added logging and discovered the endpoint was not being hit at all.
-        4.  **Root Cause Identified:** The route for reordering () is placed after the dynamic routes for getting/updating a single stage (). FastAPI was incorrectly interpreting reorder as a .
+- **Issue 1: Widespread Light/Dark Theme Inconsistencies (P1)**
+    - **Description:** Several pages, most notably **HR Admin**, **HR**, and **Settings**, display hardcoded dark theme elements even when the application is in light mode.
+    - **Attempted fixes:** The agent attempted to fix this using  to perform bulk replacements of CSS classes. This corrupted the files (, , etc.) with invalid syntax. The agent then reverted the files using usage: git [-v | --version] [-h | --help] [-C <path>] [-c <name>=<value>]
+           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]
+           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--bare]
+           [--git-dir=<path>] [--work-tree=<path>] [--namespace=<name>]
+           [--super-prefix=<path>] [--config-env=<name>=<envvar>]
+           <command> [<args>]
+
+These are common Git commands used in various situations:
+
+start a working area (see also: git help tutorial)
+   clone     Clone a repository into a new directory
+   init      Create an empty Git repository or reinitialize an existing one
+
+work on the current change (see also: git help everyday)
+   add       Add file contents to the index
+   mv        Move or rename a file, a directory, or a symlink
+   restore   Restore working tree files
+   rm        Remove files from the working tree and from the index
+
+examine the history and state (see also: git help revisions)
+   bisect    Use binary search to find the commit that introduced a bug
+   diff      Show changes between commits, commit and working tree, etc
+   grep      Print lines matching a pattern
+   log       Show commit logs
+   show      Show various types of objects
+   status    Show the working tree status
+
+grow, mark and tweak your common history
+   branch    List, create, or delete branches
+   commit    Record changes to the repository
+   merge     Join two or more development histories together
+   rebase    Reapply commits on top of another base tip
+   reset     Reset current HEAD to the specified state
+   switch    Switch branches
+   tag       Create, list, delete or verify a tag object signed with GPG
+
+collaborate (see also: git help workflows)
+   fetch     Download objects and refs from another repository
+   pull      Fetch from and integrate with another repository or a local branch
+   push      Update remote refs along with associated objects
+
+'git help -a' and 'git help -g' list available subcommands and some
+concept guides. See 'git help <command>' or 'git help <concept>'
+to read about a specific subcommand or concept.
+See 'git help git' for an overview of the system. but did not attempt a proper manual fix. The issue remains unresolved.
     - **Next debug checklist:**
-        1.  Edit .
-        2.  Move the entire  function definition to be *before* the other routes that use .
-        3.  Restart the backend service.
-        4.  Test the reordering functionality again via the UI or a  command.
-    - **Why fix this issue and what will be achieved with the fix?** This will complete a core feature of the new Leads module as requested by the user.
-    - **Status:** IN PROGRESS
-    - **Is recurring issue?** N
-    - **Should Test frontend/backend/both after fix?** backend
+        1.  Do NOT use  or other broad-stroke replacement tools.
+        2.  Manually edit the following files: , , and  (and its sub-components in ).
+        3.  Add the  to each page.
+        4.  Systematically replace hardcoded color classes (e.g., , ) with theme-aware variables (e.g., , ). Ensure correct template literal syntax (e.g., className={}).
+    - **Why fix this issue and what will be achieved with the fix?** To provide a consistent and professional user experience across the entire application, fulfilling a direct user request.
+    - **Status:** NOT STARTED (after revert)
+    - **Is recurring issue?** Y
+    - **Should Test frontend/backend/both after fix?** frontend
     - **Blocked on other issue:** No
 
 **In progress Task List**:
-- **Task 1: Complete Leads Module Redesign (P0)**
-    - **Description:** Finalize all features for the new Leads page.
-    - **Where to resume:** Resume by applying the fix for the stage reordering bug (Issue 1).
-    - **What will be achieved with this?** A fully functional and stable Leads module that meets the user's detailed specifications.
+- **Task 1: Complete Documentations Module (P0)**
+    - **Description:** Finalize the new module for managing Google Sheets and Docs links.
+    - **Where to resume:** The basic files are created. The next steps are:
+        1.  Finalize the UI in  to include tabs for Sheets and Docs, a form to add new items (name, link), a table to list them, and the Open button logic.
+        2.  Implement the modal/popup for viewing the embedded document link.
+        3.  Implement the frontend logic to fetch, create, and delete documents via the API.
+        4.  Ensure the Documentations link in  is only visible to Business Development users as per the RBAC rules.
+    - **What will be achieved with this?** A key feature for the Business Development role will be complete.
     - **Status:** IN PROGRESS
     - **Should Test frontend/backend/both after fix?** both
-    - **Blocked on something:** Blocked on Issue 1: Lead Stage Reordering Fails.
+    - **Blocked on something:** No
 
 **Upcoming and Future Tasks**
 *   **Upcoming Tasks:**
     *   **Google Sheets Integration (P0):** Implement the Connect Sheets functionality in the Leads module to automatically sync leads from a Google Sheet. The UI button exists, but the backend and frontend logic is missing.
     *   **Leads Custom Fields (P1):** Implement the Notion-style custom fields functionality. The UI button exists but the feature is not implemented.
-    *   **Refactor Large Components (P1):** The following components are critically oversized and must be broken down:
-        *    (newly created and already large)
-        *   
-        *   
-        *   
-    *   **Finalize SOP Works Board (P1):** Check the test report at  and fix any reported bugs.
-    *   **User Verification (P2):** Formally ask the user to verify older features: Google Docs integration, Team Chat, and the month-wise report in the Finance module's invoice tab.
+    *   **Refactor Large Components (P1):**  is critically oversized and must be broken down.
 
 *   **Future Tasks:**
-    *   **Google Calendar Integration:** The user previously postponed this.
-    *   **Sales Module:** Implement CSV Import/Export for leads.
-    *   **Chat Backend Refactor:** Migrate the in-memory chat backend to use MongoDB for persistence.
-    *   **Kanban Drag-and-Drop:** Add drag-and-drop functionality to the Operations module's Kanban view.
+    *   Google Calendar Integration.
+    *   Chat Backend Refactor: Migrate the in-memory chat backend to use MongoDB for persistence.
+    *   Kanban Drag-and-Drop: Add drag-and-drop functionality to the Operations module's Kanban view.
 
 **Completed work in this session**
-- **Meta Ads Board (DONE):** Created a new module from scratch with multi-client support, campaign/ad management, and Kanban/Table views.
-- **Leads Module Redesign (IN PROGRESS):**
-    - Created a new page  with a new UI.
-    - Implemented Kanban view with drag-and-drop lead movement.
-    - Implemented modal for adding/deleting custom stages.
-    - Implemented Follow-up feature with a modal for logging notes with editable timestamps.
-- **Sidebar Navigation Updates (DONE):**
-    - Hidden Dashboard, Marketing, Team Chat, Reports, Services.
-    - Changed the app's root path to .
-    - Converted Website Development from a menu to a direct link.
-    - Removed SOP Works from the Meta Ads submenu.
+- **Lead Stage Reordering Bug (DONE):** Fixed a FastAPI route ordering issue in .
+- **Comprehensive Leads Module Overhaul (DONE):**
+    - Implemented a completely new set of lead stages and a detailed lead creation/edit form with tabs.
+    - Added fields for Lead Owner, Services, Industry, Priority, Estimation, and document links.
+    - Backend models and routes were updated accordingly.
+- **Role-Based Access Control & User Management (DONE):**
+    - Implemented a full RBAC system. Admins can now create users, assign roles (Business Development, Admin, etc.), and set module-level permissions.
+    - Implemented a feature for admins to create users with a set password and send credentials via email (mocked).
+    - Sidebar navigation is now dynamically rendered based on the logged-in user's role.
+- **Lead Owner Functionality (DONE):**
+    - The system now auto-assigns the creator as the Lead Owner.
+    - A Lead Owner dropdown filter has been added to the Leads page.
+- **Lead Import/Export (DONE):**
+    - Implemented functionality to export all leads to CSV.
+    - Implemented functionality to import leads from a CSV file, including a downloadable template.
+- **UI/UX Fixes (DONE):**
+    - **Sidebar:** Fixed a bug where the Operations menu button was unresponsive when the sidebar was collapsed.
+    - **Leads Page:**
+        - Fixed responsive layout issues with stage cards and filter tabs.
+        - Fixed an issue where edit/delete buttons overflowed the lead card.
+        - Made stage summary cards clickable to filter the leads list.
+        - Corrected multiple light/dark mode inconsistencies on the Leads page itself.
 
 **Earlier issues found/mentioned but not fixed**
-- **User Verification Pending:** The month-wise report/view in the Finance module's invoice tab, Google Docs integration, and Team Chat have never been formally verified by the user.
-- **Sidebar Font Weight:** A user request to make sidebar fonts bolder has not been explicitly addressed or verified.
+- **Issue 1: Incomplete Theming for HR & Settings pages**
+    - The agent's attempt to fix light/dark mode issues on these pages with  failed, corrupted the files, and was reverted. The core issue of hardcoded dark-theme classes on these pages persists.
+    - **Debug checklist:** See Issue 1 in the **All Pending/In progress Issue list** section above.
+    - **Why to solve this issue?** It's a direct user request and a major UI inconsistency.
+    - **Should Test frontend/backend/both after fix:** frontend
+    - **Is recurring issue?** Y
 
 **Known issue recurrence from previous fork**
-- The  authentication failures persist, making  the preferred method for authenticated UI testing.
+- None.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
 *   **Backend:** FastAPI, MongoDB (), Pydantic.
-*   **Frontend:** React, Tailwind CSS, .
-*   **Drag & Drop:** , .
+*   **Frontend:** React, Tailwind CSS, , .
+*   **Data Handling:**  for CSV/Excel operations.
+*   **State Management:** React Hooks (, , ).
 
 **key DB schema**
-*   **meta_ads_clients:** , , , , , .
-*   **meta_ads_campaigns:** , , , , , .
-*   **leads_stages:** , , , .
-*   **leads:** , , , , , , ,  (list).
+*   **users:** , , , , ,  (list),  (dict).
+*   **leads:** , , , , , , , , , , , , , , , , , , .
+*   **documentations:** , ,  ('sheet' or 'doc'), , .
 
 **changes in tech stack**
-- Added  and  for drag-and-drop functionality in the Leads Kanban view.
+-  library was used for CSV import/export functionality.
 
 **All files of reference**
-*   : New file for all Leads module API endpoints. **(Currently being debugged)**
-*   : New, large component for the redesigned Leads page.
-*   : Heavily modified to reflect new navigation structure.
-*   : New file for the Meta Ads module API.
-*   : New component for the Meta Ads board.
-*   : Modified to include the new  and .
-*   : Modified to change the root route to  and use .
+*    (New file for the current task)
+*    (New file for the current task)
+*    (Modified for RBAC and new module)
+*    (Heavily modified for new features and bug fixes)
+*    (Modified for import/export and owner assignment)
+*    (Modified to add new routers and user management logic)
+*    (File where theming fix failed and was reverted)
+*    (File where theming fix failed and was reverted)
+*    (File where theming fix failed and was reverted)
 
 **Areas that need refactoring**:
-*   **Critical:**  is already very large and handles state for multiple modals and views. It should be broken down into smaller components (e.g., , , ).
-*   **Critical:**  remains extremely large and complex.
-*   **High Priority:**  and  are oversized.
+*   **Critical:** The , , and  files need a careful, manual implementation of theming support. The previous agent's attempt with  was destructive and highlights the need for a delicate approach.
+*   **Critical:**  continues to grow and is a prime candidate for being broken down into smaller, specialized components (e.g., , , ).
 
 **key api endpoints**
-*   : (GET, POST)
-*   : (GET, POST)
-*   : (GET, POST)
-*   : (PUT) **<- This is the endpoint currently being fixed.**
-*   : (PUT)
-*   : (POST)
+*   : (POST) Creates a user and sends credentials.
+*   : (GET) Exports all leads to a CSV file.
+*   : (GET) Downloads a CSV template for importing leads.
+*   : (POST) Imports leads from an uploaded CSV file.
+*   : (GET, POST) Manage documentation links.
+*   : (DELETE)
 
 **Critical Info for New Agent**
-*   **Your immediate priority is to fix the stage reordering bug.** The root cause is a route ordering conflict in . Move the  endpoint before any endpoints with .
-*   Once the Leads module is stable, the next user-requested feature is **Google Sheets integration**. This is a major upcoming task.
-*   The  component is already becoming a monolith. Propose refactoring it into smaller, manageable components after the current bug fixes and features are complete.
+*   **Your immediate priority is to complete the Documentations module.** The foundational files are in place, but the core UI and logic for adding, listing, and viewing documents in a modal need to be implemented.
+*   **BE EXTREMELY CAUTIOUS when addressing the theming issue (Issue #1).** The previous agent corrupted several files by using  for bulk replacement. This approach failed. You must manually edit , , , and their related components to add theme support correctly. Do not use automated bulk replacement tools.
+*   The  file is becoming unmanageable. Plan to propose its refactoring after completing the immediate user requests.
 
 **documents and test reports created in this job**
+*   
+*   
 *   
 *    (updated)
 
 **Last 10 User Messages and any pending HUMAN messages**
-10. **User:** while reordering it shows fail reordering - **(Current Blocker)** User reported the bug the agent is now fixing.
-9.  **User:** Enable to change the stages order Next in the lead Followup Button... - Requested stage reordering and the follow-up feature. (Follow-up is done, reordering is bugged).
-8.  **User:** in th lead in kanban view lead can drag drop to move the next stage - Requested drag-and-drop for the Kanban board. (Completed).
-7.  **User:** Operations - If i Click the website developement it shows all the projects... - Requested simplifying the Website Development sidebar link. (Completed).
-6.  **User:** add this type list view - Provided a screenshot for the new List View design in the Leads module. (Completed).
-5.  **User:** Hide Dashboard Marketing... In the leads, Create this UI Connect Sheets... - Requested a major sidebar cleanup and a complete overhaul of the Leads module with specific features. (Partially completed).
-4.  **User:** Remove the SOP Works In the Meta Ads - Requested cleanup of the Meta Ads submenu. (Completed).
-3.  **User:** Meta Ads Board Can handle Create mulitple clients like the Website - Requested multi-client support for the Meta Ads board. (Completed).
-2.  **User:** In the Under the Operation the meta Baord is not updated its show the old view only - Reported an issue seeing the new Meta Ads board, likely due to browser cache. (Resolved).
-1.  **User:** add the meta new board to the this under the operations meta - Requested placing the new Meta Ads board under the Operations menu in the sidebar. (Completed).
+10. **User:** Requests a new Documentations module for Business Dev users with specific features (Sheets/Docs tabs, add/list, in-app viewer). (IN PROGRESS)
+9.  **User:** Reports bugs: Operations button on collapsed sidebar not working, and dark mode elements appearing in light mode on HR/Settings pages. Also requests lead Import/Export. (Partially Resolved - Theme issue remains).
+8.  **User:** Requests creation of a Business Development user role with specific access (Leads, HR) and several new features related to lead ownership and user management by admins. (DONE)
+7.  **User:** Specifies that clicking a stage summary card should filter the leads list. (DONE)
+6.  **User:** Reports that clicking on stages opens the list of leads, which is unexpected behavior. (Clarified and Implemented as a feature).
+5.  **User:** Reports an overlapping UI issue with buttons on the lead card. (DONE)
+4.  **User:** Reports a visual bug with the lead card's border in light mode. (DONE)
+3.  **User:** Reports widespread issues with dark mode components appearing in light mode. (Partially Resolved - Leads page fixed, others remain broken).
+2.  **User:** Reports responsive layout issues on the Leads page (cramped/unaligned stages) when the sidebar is open. (DONE)
+1.  **User:** Provides a comprehensive list of new stages and fields for the Leads module redesign. (DONE)
 
 **Project Health Check:**
 *   **Broken:**
-    *   Leads module stage reordering functionality.
+    *   Light mode theming on , , and . These pages display dark elements incorrectly.
 *   **Mocked:**
-    *   **Resend Integration:** Uses placeholder API keys.
+    *   **Resend Integration:** Uses placeholder API keys for sending emails.
     *   **Team Chat:** Backend uses in-memory lists (not persistent).
 
 **3rd Party Integrations**
@@ -176,11 +234,11 @@ The user reported that reordering stages in the new Leads module was failing. Th
 *    & 
 
 **Testing status**
-- **Testing agent used after significant changes:** YES, for the initial Meta Ads Board implementation.
+- **Testing agent used after significant changes:** YES, used successfully to verify RBAC, Lead Owner, and other features.
 - **Troubleshoot agent used after agent stuck in loop:** NO
 - **Test files created:**
     - 
-- **Known regressions:** None.
+- **Known regressions:** The theming on Settings/HR pages is a major regression after the failed fix attempt.
 
 **Credentials to test flow:**
 *   **Admin:**
@@ -188,5 +246,5 @@ The user reported that reordering stages in the new Leads module was failing. Th
     *   Password: 
 
 **What agent forgot to execute**
-*   The agent has not yet implemented the **Google Sheets integration**, the Notion-style **custom fields**, or the **Preview Board** view for the new Leads module, all of which were part of the user's initial request for the overhaul.
-*   The agent did not call the  after the substantial redesign of the Leads module. Self-testing was performed using screenshots.</analysis>
+*   The agent failed to properly fix the light/dark mode theme issues in the **Settings** and **HR** pages. The botched  attempt was reverted, but the original issue was left unresolved, which is a significant pending task and a direct violation of a user request.
+*   The original requests for **Google Sheets integration** and **Notion-style custom fields** for the Leads module are still pending and have been pushed to upcoming tasks.</analysis>
