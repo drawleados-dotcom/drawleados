@@ -124,8 +124,13 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - ✅ Add/Edit/Delete documents
 - ✅ In-app viewer modal with iframe embedding
 - ✅ Stats badges showing document counts
-- ✅ RBAC restriction to Business Development users
 - ✅ Backend API at `/api/docs/*`
+- ✅ **Role-Based Document Privacy:**
+  - Regular users only see their department's documents
+  - Super Admin & Operations see ALL documents with department tabs:
+    - CEO | BD | Operations | Website | SEO | Meta
+  - Documents auto-assigned to user's department on creation
+  - Admins can create documents for any department
 
 #### P1 - Theme Fixes (DONE - Dec 2025)
 - ✅ Fixed light/dark mode on HR page

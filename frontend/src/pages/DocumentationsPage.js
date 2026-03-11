@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { 
   FileSpreadsheet, 
   FileText, 
@@ -14,12 +15,28 @@ import {
   Trash2, 
   Edit2,
   X,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Users,
+  Briefcase,
+  Globe,
+  Search,
+  TrendingUp,
+  Megaphone
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
 const API = process.env.REACT_APP_BACKEND_URL;
+
+// Department configuration with icons
+const DEPARTMENT_CONFIG = {
+  ceo: { name: 'CEO', icon: Users, color: '#ef4444' },
+  bd: { name: 'BD', icon: Briefcase, color: '#3b82f6' },
+  operations: { name: 'Operations', icon: TrendingUp, color: '#8b5cf6' },
+  website: { name: 'Website', icon: Globe, color: '#22c55e' },
+  seo: { name: 'SEO', icon: Search, color: '#f59e0b' },
+  meta: { name: 'Meta', icon: Megaphone, color: '#ec4899' },
+};
 
 const DocumentationsPage = () => {
   const { isDark } = useTheme();
@@ -33,11 +50,19 @@ const DocumentationsPage = () => {
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
 
-  // State
-  const [activeTab, setActiveTab] = useState('sheets');
-  const [documents, setDocuments] = useState([]);
+  // User info state
+  const [userInfo, setUserInfo] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // For admin view - all documents grouped by department
+  const [allDocuments, setAllDocuments] = useState({});
+  const [deptStats, setDeptStats] = useState({});
+  const [activeDept, setActiveDept] = useState('ceo');
+
+  // For regular user view
+  const [documents, setDocuments] = useState([]);
   const [stats, setStats] = useState({ sheets: 0, docs: 0, total: 0 });
+  const [activeDocType, setActiveDocType] = useState('sheets');
 
   // Modal state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -49,10 +74,26 @@ const DocumentationsPage = () => {
   const [formData, setFormData] = useState({
     name: '',
     link: '',
-    description: ''
+    description: '',
+    department: ''
   });
 
-  // Load documents
+  // Load user info
+  const loadUserInfo = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/docs/user-info`, { headers });
+      setUserInfo(res.data);
+      if (res.data.department) {
+        setActiveDept(res.data.department);
+      }
+      return res.data;
+    } catch (error) {
+      console.error('Error loading user info:', error);
+      return null;
+    }
+  }, []);
+
+  // Load documents for regular users
   const loadDocuments = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/docs/documents`, { headers });
@@ -62,6 +103,17 @@ const DocumentationsPage = () => {
     }
   }, []);
 
+  // Load all documents grouped (admin only)
+  const loadAllDocumentsGrouped = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/docs/documents/all`, { headers });
+      setAllDocuments(res.data || {});
+    } catch (error) {
+      console.error('Error loading all documents:', error);
+    }
+  }, []);
+
+  // Load stats
   const loadStats = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/docs/stats`, { headers });
@@ -71,29 +123,56 @@ const DocumentationsPage = () => {
     }
   }, []);
 
+  // Load stats by department (admin only)
+  const loadStatsByDepartment = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/docs/stats/by-department`, { headers });
+      setDeptStats(res.data || {});
+    } catch (error) {
+      console.error('Error loading department stats:', error);
+    }
+  }, []);
+
+  // Initial load
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true);
-      await Promise.all([loadDocuments(), loadStats()]);
+      const info = await loadUserInfo();
+      
+      if (info?.can_view_all) {
+        // Admin view - load all documents grouped
+        await Promise.all([loadAllDocumentsGrouped(), loadStatsByDepartment()]);
+      } else {
+        // Regular user view - load only their department's documents
+        await Promise.all([loadDocuments(), loadStats()]);
+      }
       setLoading(false);
     };
     loadAll();
-  }, [loadDocuments, loadStats]);
+  }, [loadUserInfo, loadDocuments, loadStats, loadAllDocumentsGrouped, loadStatsByDepartment]);
 
-  // Filter documents by type
+  // Refresh data
+  const refreshData = async () => {
+    if (userInfo?.can_view_all) {
+      await Promise.all([loadAllDocumentsGrouped(), loadStatsByDepartment()]);
+    } else {
+      await Promise.all([loadDocuments(), loadStats()]);
+    }
+  };
+
+  // Filter documents by type for regular users
   const sheets = documents.filter(d => d.doc_type === 'sheet');
   const docs = documents.filter(d => d.doc_type === 'doc');
 
   // Reset form
   const resetForm = () => {
-    setFormData({ name: '', link: '', description: '' });
+    setFormData({ name: '', link: '', description: '', department: userInfo?.can_view_all ? activeDept : '' });
     setEditingDoc(null);
   };
 
   // Open add modal
-  const openAddModal = (type) => {
+  const openAddModal = () => {
     resetForm();
-    setActiveTab(type);
     setShowAddModal(true);
   };
 
@@ -103,7 +182,8 @@ const DocumentationsPage = () => {
     setFormData({
       name: doc.name,
       link: doc.link,
-      description: doc.description || ''
+      description: doc.description || '',
+      department: doc.department || ''
     });
     setShowAddModal(true);
   };
@@ -120,20 +200,30 @@ const DocumentationsPage = () => {
     }
 
     try {
+      const docType = userInfo?.can_view_all 
+        ? (activeDocType === 'sheets' ? 'sheet' : 'doc')
+        : (activeDocType === 'sheets' ? 'sheet' : 'doc');
+
       if (editingDoc) {
-        await axios.put(`${API}/api/docs/documents/${editingDoc.doc_id}`, formData, { headers });
+        await axios.put(`${API}/api/docs/documents/${editingDoc.doc_id}`, {
+          name: formData.name,
+          link: formData.link,
+          description: formData.description
+        }, { headers });
         toast.success('Document updated');
       } else {
         await axios.post(`${API}/api/docs/documents`, {
-          ...formData,
-          doc_type: activeTab === 'sheets' ? 'sheet' : 'doc'
+          name: formData.name,
+          link: formData.link,
+          description: formData.description,
+          doc_type: docType,
+          department: userInfo?.can_view_all ? (formData.department || activeDept) : undefined
         }, { headers });
         toast.success('Document added');
       }
       setShowAddModal(false);
       resetForm();
-      loadDocuments();
-      loadStats();
+      refreshData();
     } catch (error) {
       toast.error('Failed to save document');
     }
@@ -146,8 +236,7 @@ const DocumentationsPage = () => {
     try {
       await axios.delete(`${API}/api/docs/documents/${docId}`, { headers });
       toast.success('Document deleted');
-      loadDocuments();
-      loadStats();
+      refreshData();
     } catch (error) {
       toast.error('Failed to delete document');
     }
@@ -161,24 +250,13 @@ const DocumentationsPage = () => {
 
   // Get embeddable URL for Google Docs/Sheets
   const getEmbedUrl = (url) => {
-    // Google Sheets
     if (url.includes('docs.google.com/spreadsheets')) {
-      // Convert view/edit URL to embedded URL
-      if (url.includes('/edit')) {
-        return url.replace('/edit', '/preview');
-      }
-      if (!url.includes('/preview')) {
-        return url + '/preview';
-      }
+      if (url.includes('/edit')) return url.replace('/edit', '/preview');
+      if (!url.includes('/preview')) return url + '/preview';
     }
-    // Google Docs
     if (url.includes('docs.google.com/document')) {
-      if (url.includes('/edit')) {
-        return url.replace('/edit', '/preview');
-      }
-      if (!url.includes('/preview')) {
-        return url + '/preview';
-      }
+      if (url.includes('/edit')) return url.replace('/edit', '/preview');
+      if (!url.includes('/preview')) return url + '/preview';
     }
     return url;
   };
@@ -275,6 +353,290 @@ const DocumentationsPage = () => {
     </div>
   );
 
+  if (loading) {
+    return (
+      <Layout>
+        <div className={`min-h-screen ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'} flex items-center justify-center`}>
+          <p className={textSecondary}>Loading...</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ============== ADMIN VIEW ==============
+  if (userInfo?.can_view_all) {
+    const currentDeptDocs = allDocuments[activeDept] || { sheets: [], docs: [] };
+    const currentDeptStats = deptStats[activeDept] || { sheets: 0, docs: 0, total: 0 };
+
+    return (
+      <Layout>
+        <div className={`min-h-screen ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
+          {/* Header */}
+          <div className={`p-6 border-b ${borderColor}`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className={`text-2xl font-bold ${textPrimary}`}>Documentations</h1>
+                <p className={`${textSecondary} mt-1`}>
+                  View and manage documents across all departments
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Department Tabs */}
+          <div className="p-6">
+            <Tabs value={activeDept} onValueChange={setActiveDept} className="w-full">
+              <TabsList className={`${bgCard} border ${borderColor} h-auto flex-wrap p-1 mb-6`}>
+                {Object.entries(DEPARTMENT_CONFIG).map(([key, config]) => {
+                  const Icon = config.icon;
+                  const deptStat = deptStats[key] || { total: 0 };
+                  return (
+                    <TabsTrigger
+                      key={key}
+                      value={key}
+                      className="data-[state=active]:text-white px-4 py-2"
+                      style={{
+                        backgroundColor: activeDept === key ? config.color : 'transparent',
+                      }}
+                    >
+                      <Icon className="h-4 w-4 mr-2" />
+                      {config.name}
+                      {deptStat.total > 0 && (
+                        <Badge className="ml-2 bg-white/20 text-inherit">{deptStat.total}</Badge>
+                      )}
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+
+              {Object.keys(DEPARTMENT_CONFIG).map((deptKey) => (
+                <TabsContent key={deptKey} value={deptKey} className="mt-0">
+                  {/* Stats for selected department */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex gap-3">
+                      <Badge className={`${bgSecondary} ${textSecondary}`}>
+                        <FileSpreadsheet className="h-3 w-3 mr-1" />
+                        {(deptStats[deptKey] || {}).sheets || 0} Sheets
+                      </Badge>
+                      <Badge className={`${bgSecondary} ${textSecondary}`}>
+                        <FileText className="h-3 w-3 mr-1" />
+                        {(deptStats[deptKey] || {}).docs || 0} Docs
+                      </Badge>
+                    </div>
+                    <Button
+                      onClick={openAddModal}
+                      style={{ backgroundColor: DEPARTMENT_CONFIG[deptKey].color }}
+                      className="hover:opacity-90"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Document
+                    </Button>
+                  </div>
+
+                  {/* Sheets/Docs sub-tabs */}
+                  <Tabs value={activeDocType} onValueChange={setActiveDocType} className="w-full">
+                    <TabsList className={`${bgCard} border ${borderColor} mb-4`}>
+                      <TabsTrigger
+                        value="sheets"
+                        className="data-[state=active]:bg-[#22c55e] data-[state=active]:text-white"
+                      >
+                        <FileSpreadsheet className="h-4 w-4 mr-2" />
+                        Sheets ({(allDocuments[deptKey] || {}).sheets?.length || 0})
+                      </TabsTrigger>
+                      <TabsTrigger
+                        value="docs"
+                        className="data-[state=active]:bg-[#3b82f6] data-[state=active]:text-white"
+                      >
+                        <FileText className="h-4 w-4 mr-2" />
+                        Docs ({(allDocuments[deptKey] || {}).docs?.length || 0})
+                      </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="sheets" className="mt-0">
+                      <DocumentTable 
+                        items={(allDocuments[deptKey] || {}).sheets || []} 
+                        type="sheet" 
+                      />
+                    </TabsContent>
+                    <TabsContent value="docs" className="mt-0">
+                      <DocumentTable 
+                        items={(allDocuments[deptKey] || {}).docs || []} 
+                        type="doc" 
+                      />
+                    </TabsContent>
+                  </Tabs>
+                </TabsContent>
+              ))}
+            </Tabs>
+          </div>
+
+          {/* Add Modal for Admin - includes department selector */}
+          <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+            <DialogContent className={`${bgCard} ${textPrimary} max-w-md`}>
+              <DialogHeader>
+                <DialogTitle>
+                  {editingDoc ? 'Edit' : 'Add'} Document
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Department</label>
+                  <Select 
+                    value={formData.department || activeDept} 
+                    onValueChange={(val) => setFormData({ ...formData, department: val })}
+                  >
+                    <SelectTrigger className={bgSecondary}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={`${bgCard} border ${borderColor}`}>
+                      {Object.entries(DEPARTMENT_CONFIG).map(([key, config]) => (
+                        <SelectItem key={key} value={key}>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-3 h-3 rounded-full" 
+                              style={{ backgroundColor: config.color }}
+                            />
+                            {config.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Type</label>
+                  <Select 
+                    value={activeDocType} 
+                    onValueChange={setActiveDocType}
+                  >
+                    <SelectTrigger className={bgSecondary}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={`${bgCard} border ${borderColor}`}>
+                      <SelectItem value="sheets">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-4 w-4 text-[#22c55e]" />
+                          Sheet
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="docs">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-[#3b82f6]" />
+                          Document
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Name *</label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., Sales Report Q4"
+                    className={bgSecondary}
+                  />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Link *</label>
+                  <Input
+                    value={formData.link}
+                    onChange={(e) => setFormData({ ...formData, link: e.target.value })}
+                    placeholder="https://docs.google.com/..."
+                    className={bgSecondary}
+                  />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Description (Optional)</label>
+                  <Input
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Brief description..."
+                    className={bgSecondary}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => { setShowAddModal(false); resetForm(); }}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={saveDocument}
+                  style={{ backgroundColor: DEPARTMENT_CONFIG[formData.department || activeDept]?.color }}
+                >
+                  {editingDoc ? 'Update' : 'Add'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Document Viewer Modal */}
+          <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+            <DialogContent className={`${bgCard} ${textPrimary} max-w-[95vw] w-[1400px] h-[85vh] p-0`}>
+              <div className={`flex items-center justify-between p-4 border-b ${borderColor}`}>
+                <div className="flex items-center gap-3">
+                  {selectedDoc?.doc_type === 'sheet' ? (
+                    <FileSpreadsheet className="h-5 w-5 text-[#22c55e]" />
+                  ) : (
+                    <FileText className="h-5 w-5 text-[#3b82f6]" />
+                  )}
+                  <div>
+                    <h3 className={`font-semibold ${textPrimary}`}>{selectedDoc?.name}</h3>
+                    <div className="flex items-center gap-2">
+                      {selectedDoc?.department && (
+                        <Badge 
+                          style={{ 
+                            backgroundColor: `${DEPARTMENT_CONFIG[selectedDoc.department]?.color}20`,
+                            color: DEPARTMENT_CONFIG[selectedDoc.department]?.color 
+                          }}
+                        >
+                          {DEPARTMENT_CONFIG[selectedDoc.department]?.name}
+                        </Badge>
+                      )}
+                      {selectedDoc?.description && (
+                        <span className={`text-xs ${textSecondary}`}>{selectedDoc.description}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(selectedDoc?.link, '_blank')}
+                    className={borderColor}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open in New Tab
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowViewModal(false)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 h-[calc(85vh-70px)]">
+                {selectedDoc && (
+                  <iframe
+                    src={getEmbedUrl(selectedDoc.link)}
+                    className="w-full h-full border-0"
+                    title={selectedDoc.name}
+                    allow="fullscreen"
+                  />
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ============== REGULAR USER VIEW ==============
   return (
     <Layout>
       <div className={`min-h-screen ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
@@ -282,12 +644,20 @@ const DocumentationsPage = () => {
         <div className={`p-6 border-b ${borderColor}`}>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className={`text-2xl font-bold ${textPrimary}`}>Documentations</h1>
+              <h1 className={`text-2xl font-bold ${textPrimary}`}>My Documents</h1>
               <p className={`${textSecondary} mt-1`}>
                 Manage your Google Sheets and Documents
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <Badge 
+                style={{ 
+                  backgroundColor: `${DEPARTMENT_CONFIG[userInfo?.department]?.color}20`,
+                  color: DEPARTMENT_CONFIG[userInfo?.department]?.color 
+                }}
+              >
+                {DEPARTMENT_CONFIG[userInfo?.department]?.name || 'My Department'}
+              </Badge>
               <Badge className={`${bgSecondary} ${textSecondary}`}>
                 <FileSpreadsheet className="h-3 w-3 mr-1" />
                 {stats.sheets} Sheets
@@ -302,7 +672,7 @@ const DocumentationsPage = () => {
 
         {/* Main Content */}
         <div className="p-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeDocType} onValueChange={setActiveDocType} className="w-full">
             <div className="flex items-center justify-between mb-6">
               <TabsList className={`${bgCard} border ${borderColor}`}>
                 <TabsTrigger 
@@ -322,11 +692,11 @@ const DocumentationsPage = () => {
               </TabsList>
 
               <Button
-                onClick={() => openAddModal(activeTab)}
-                className={activeTab === 'sheets' ? 'bg-[#22c55e] hover:bg-[#16a34a]' : 'bg-[#3b82f6] hover:bg-[#2563eb]'}
+                onClick={openAddModal}
+                className={activeDocType === 'sheets' ? 'bg-[#22c55e] hover:bg-[#16a34a]' : 'bg-[#3b82f6] hover:bg-[#2563eb]'}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add {activeTab === 'sheets' ? 'Sheet' : 'Document'}
+                Add {activeDocType === 'sheets' ? 'Sheet' : 'Document'}
               </Button>
             </div>
 
@@ -340,12 +710,12 @@ const DocumentationsPage = () => {
           </Tabs>
         </div>
 
-        {/* Add/Edit Modal */}
+        {/* Add/Edit Modal for Regular Users */}
         <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
           <DialogContent className={`${bgCard} ${textPrimary} max-w-md`}>
             <DialogHeader>
               <DialogTitle>
-                {editingDoc ? 'Edit' : 'Add'} {activeTab === 'sheets' ? 'Sheet' : 'Document'}
+                {editingDoc ? 'Edit' : 'Add'} {activeDocType === 'sheets' ? 'Sheet' : 'Document'}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
@@ -354,7 +724,7 @@ const DocumentationsPage = () => {
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder={activeTab === 'sheets' ? 'e.g., Sales Report Q4' : 'e.g., Project Proposal'}
+                  placeholder={activeDocType === 'sheets' ? 'e.g., Sales Report Q4' : 'e.g., Project Proposal'}
                   className={bgSecondary}
                 />
               </div>
@@ -367,7 +737,7 @@ const DocumentationsPage = () => {
                   className={bgSecondary}
                 />
                 <p className={`text-xs ${textSecondary} mt-1`}>
-                  Paste the Google {activeTab === 'sheets' ? 'Sheets' : 'Docs'} URL
+                  Paste the Google {activeDocType === 'sheets' ? 'Sheets' : 'Docs'} URL
                 </p>
               </div>
               <div>
@@ -386,7 +756,7 @@ const DocumentationsPage = () => {
               </Button>
               <Button 
                 onClick={saveDocument}
-                className={activeTab === 'sheets' ? 'bg-[#22c55e] hover:bg-[#16a34a]' : 'bg-[#3b82f6] hover:bg-[#2563eb]'}
+                className={activeDocType === 'sheets' ? 'bg-[#22c55e] hover:bg-[#16a34a]' : 'bg-[#3b82f6] hover:bg-[#2563eb]'}
               >
                 {editingDoc ? 'Update' : 'Add'}
               </Button>
