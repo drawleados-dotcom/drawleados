@@ -47,23 +47,49 @@ class GoogleSheetConfig(BaseModel):
     sync_interval: int = 5  # minutes
 
 class LeadCreate(BaseModel):
+    # Basic Details
     name: str
-    phone: str = ''
     email: str = ''
-    stage_id: str = ''
+    phone: str = ''
+    location: str = ''
+    website: str = ''
+    social_media: str = ''
+    # Lead Details
     source: str = ''
+    lead_owner: str = ''  # user_id of team member
     service: str = ''
+    priority: str = 'Medium'  # High, Medium, Low
+    lead_type: str = ''  # Inbound, Outbound
+    date_of_lead: str = ''  # Auto but editable
+    industry: str = ''
+    estimation: float = 0  # Amount
+    quotation_link: str = ''  # URL
+    proposal_link: str = ''  # URL
     notes: str = ''
+    stage_id: str = ''
     custom_fields: Dict[str, Any] = {}
 
 class LeadUpdate(BaseModel):
+    # Basic Details
     name: Optional[str] = None
-    phone: Optional[str] = None
     email: Optional[str] = None
-    stage_id: Optional[str] = None
+    phone: Optional[str] = None
+    location: Optional[str] = None
+    website: Optional[str] = None
+    social_media: Optional[str] = None
+    # Lead Details
     source: Optional[str] = None
+    lead_owner: Optional[str] = None
     service: Optional[str] = None
+    priority: Optional[str] = None
+    lead_type: Optional[str] = None
+    date_of_lead: Optional[str] = None
+    industry: Optional[str] = None
+    estimation: Optional[float] = None
+    quotation_link: Optional[str] = None
+    proposal_link: Optional[str] = None
     notes: Optional[str] = None
+    stage_id: Optional[str] = None
     custom_fields: Optional[Dict[str, Any]] = None
 
 # ============== AUTH HELPER ==============
@@ -110,12 +136,14 @@ async def get_stages(request: Request):
     # Create default stages if none exist
     if not stages:
         default_stages = [
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "New Lead", "color": "#3b82f6", "order": 0},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Contacted", "color": "#8b5cf6", "order": 1},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Proposal", "color": "#f59e0b", "order": 2},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "RNR", "color": "#ef4444", "order": 3},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Follow-up", "color": "#10b981", "order": 4},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Converted", "color": "#22c55e", "order": 5},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Prospect", "color": "#6366f1", "order": 0},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Lead", "color": "#3b82f6", "order": 1},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Qualified", "color": "#8b5cf6", "order": 2},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Proposal", "color": "#f59e0b", "order": 3},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Negotiation", "color": "#ec4899", "order": 4},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Followup", "color": "#14b8a6", "order": 5},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Payment Stage", "color": "#f97316", "order": 6},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Deal Closed", "color": "#22c55e", "order": 7},
         ]
         for stage in default_stages:
             stage["created_at"] = datetime.now(timezone.utc)
@@ -443,3 +471,176 @@ async def get_lead_stats(request: Request):
         }
     
     return stats
+
+
+# ============== SERVICES ROUTES ==============
+
+@leads_v2_router.get("/services")
+async def get_services(request: Request):
+    """Get all services for dropdown"""
+    await get_current_user_from_request(request)
+    services = await db.lead_services.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("name", 1).to_list(100)
+    
+    # Create default services if none exist
+    if not services:
+        default_services = [
+            {"service_id": f"svc_{uuid.uuid4().hex[:8]}", "name": "Website Development"},
+            {"service_id": f"svc_{uuid.uuid4().hex[:8]}", "name": "SEO"},
+            {"service_id": f"svc_{uuid.uuid4().hex[:8]}", "name": "Social Media Marketing"},
+            {"service_id": f"svc_{uuid.uuid4().hex[:8]}", "name": "Meta Ads"},
+            {"service_id": f"svc_{uuid.uuid4().hex[:8]}", "name": "Google Ads"},
+            {"service_id": f"svc_{uuid.uuid4().hex[:8]}", "name": "Content Marketing"},
+            {"service_id": f"svc_{uuid.uuid4().hex[:8]}", "name": "Branding"},
+        ]
+        for svc in default_services:
+            svc["created_at"] = datetime.now(timezone.utc)
+            svc["is_deleted"] = False
+            await db.lead_services.insert_one(svc)
+        services = default_services
+    
+    return services
+
+@leads_v2_router.post("/services")
+async def create_service(request: Request):
+    """Create a new service"""
+    user = await get_current_user_from_request(request)
+    body = await request.json()
+    name = body.get("name", "").strip()
+    
+    if not name:
+        raise HTTPException(status_code=400, detail="Service name is required")
+    
+    # Check if service already exists
+    existing = await db.lead_services.find_one({"name": {"$regex": f"^{name}$", "$options": "i"}, "is_deleted": {"$ne": True}})
+    if existing:
+        raise HTTPException(status_code=400, detail="Service already exists")
+    
+    service_id = f"svc_{uuid.uuid4().hex[:8]}"
+    service_doc = {
+        "service_id": service_id,
+        "name": name,
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "is_deleted": False
+    }
+    
+    await db.lead_services.insert_one(service_doc)
+    return await db.lead_services.find_one({"service_id": service_id}, {"_id": 0})
+
+# ============== INDUSTRIES ROUTES ==============
+
+@leads_v2_router.get("/industries")
+async def get_industries(request: Request):
+    """Get all industries for dropdown"""
+    await get_current_user_from_request(request)
+    industries = await db.lead_industries.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("name", 1).to_list(100)
+    
+    # Create default industries if none exist
+    if not industries:
+        default_industries = [
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Healthcare"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Construction"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Real Estate"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Education"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "E-commerce"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Finance"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Technology"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Manufacturing"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Hospitality"},
+            {"industry_id": f"ind_{uuid.uuid4().hex[:8]}", "name": "Retail"},
+        ]
+        for ind in default_industries:
+            ind["created_at"] = datetime.now(timezone.utc)
+            ind["is_deleted"] = False
+            await db.lead_industries.insert_one(ind)
+        industries = default_industries
+    
+    return industries
+
+@leads_v2_router.post("/industries")
+async def create_industry(request: Request):
+    """Create a new industry"""
+    user = await get_current_user_from_request(request)
+    body = await request.json()
+    name = body.get("name", "").strip()
+    
+    if not name:
+        raise HTTPException(status_code=400, detail="Industry name is required")
+    
+    # Check if industry already exists
+    existing = await db.lead_industries.find_one({"name": {"$regex": f"^{name}$", "$options": "i"}, "is_deleted": {"$ne": True}})
+    if existing:
+        raise HTTPException(status_code=400, detail="Industry already exists")
+    
+    industry_id = f"ind_{uuid.uuid4().hex[:8]}"
+    industry_doc = {
+        "industry_id": industry_id,
+        "name": name,
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "is_deleted": False
+    }
+    
+    await db.lead_industries.insert_one(industry_doc)
+    return await db.lead_industries.find_one({"industry_id": industry_id}, {"_id": 0})
+
+# ============== TEAM MEMBERS ROUTES ==============
+
+@leads_v2_router.get("/team-members")
+async def get_team_members(request: Request):
+    """Get all team members for Lead Owner dropdown"""
+    await get_current_user_from_request(request)
+    
+    members = await db.users.find(
+        {"is_active": True},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
+    ).to_list(100)
+    
+    return members
+
+# ============== FOLLOW-UP ROUTES ==============
+
+@leads_v2_router.post("/leads/{lead_id}/followups")
+async def add_followup(lead_id: str, request: Request):
+    """Add a follow-up to a lead"""
+    user = await get_current_user_from_request(request)
+    body = await request.json()
+    
+    remarks = body.get("remarks", "").strip()
+    if not remarks:
+        raise HTTPException(status_code=400, detail="Remarks are required")
+    
+    followup = {
+        "followup_id": f"fu_{uuid.uuid4().hex[:8]}",
+        "remarks": remarks,
+        "date": datetime.now(timezone.utc).isoformat(),
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name", "Unknown")
+    }
+    
+    await db.leads_v2.update_one(
+        {"lead_id": lead_id},
+        {
+            "$push": {"followups": followup},
+            "$set": {"updated_at": datetime.now(timezone.utc)}
+        }
+    )
+    
+    return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+
+@leads_v2_router.get("/leads/{lead_id}/followups")
+async def get_followups(lead_id: str, request: Request):
+    """Get all follow-ups for a lead"""
+    await get_current_user_from_request(request)
+    
+    lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0, "followups": 1})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    return lead.get("followups", [])

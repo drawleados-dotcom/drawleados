@@ -54,6 +54,11 @@ const LeadsPageV2 = () => {
   const [stats, setStats] = useState({ total: 0, by_stage: {} });
   const [sheetsConfig, setSheetsConfig] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // Dropdown data
+  const [services, setServices] = useState([]);
+  const [industries, setIndustries] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
 
   // UI state
   const [viewMode, setViewMode] = useState('kanban'); // 'list', 'kanban', 'preview'
@@ -64,16 +69,35 @@ const LeadsPageV2 = () => {
   const [showSheetsModal, setShowSheetsModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [editingLead, setEditingLead] = useState(null);
+  
+  // Add new service/industry modal state
+  const [showAddServiceModal, setShowAddServiceModal] = useState(false);
+  const [showAddIndustryModal, setShowAddIndustryModal] = useState(false);
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newIndustryName, setNewIndustryName] = useState('');
 
-  // Form state
+  // Form state - comprehensive lead form
   const [leadForm, setLeadForm] = useState({
+    // Basic Details
     name: '',
-    phone: '',
     email: '',
-    stage_id: '',
+    phone: '',
+    location: '',
+    website: '',
+    social_media: '',
+    // Lead Details
     source: '',
+    lead_owner: '',
     service: '',
+    priority: 'Medium',
+    lead_type: '',
+    date_of_lead: new Date().toISOString().split('T')[0],
+    industry: '',
+    estimation: '',
+    quotation_link: '',
+    proposal_link: '',
     notes: '',
+    stage_id: '',
     custom_fields: {},
   });
 
@@ -88,11 +112,7 @@ const LeadsPageV2 = () => {
   // Follow-up modal state
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [followUpLead, setFollowUpLead] = useState(null);
-  const [followUpForm, setFollowUpForm] = useState({
-    date: '',
-    time: '',
-    notes: '',
-  });
+  const [followUpRemarks, setFollowUpRemarks] = useState('');
 
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -148,6 +168,33 @@ const LeadsPageV2 = () => {
     }
   }, []);
 
+  const loadServices = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/leads-v2/services`, { headers });
+      setServices(res.data || []);
+    } catch (error) {
+      console.error('Error loading services:', error);
+    }
+  }, []);
+
+  const loadIndustries = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/leads-v2/industries`, { headers });
+      setIndustries(res.data || []);
+    } catch (error) {
+      console.error('Error loading industries:', error);
+    }
+  }, []);
+
+  const loadTeamMembers = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/leads-v2/team-members`, { headers });
+      setTeamMembers(res.data || []);
+    } catch (error) {
+      console.error('Error loading team members:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true);
@@ -157,11 +204,14 @@ const LeadsPageV2 = () => {
         loadCustomFields(),
         loadStats(),
         loadSheetsConfig(),
+        loadServices(),
+        loadIndustries(),
+        loadTeamMembers(),
       ]);
       setLoading(false);
     };
     loadAll();
-  }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig]);
+  }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadTeamMembers]);
 
   // ============== LEAD ACTIONS ==============
 
@@ -225,13 +275,26 @@ const LeadsPageV2 = () => {
 
   const resetLeadForm = () => {
     setLeadForm({
+      // Basic Details
       name: '',
-      phone: '',
       email: '',
-      stage_id: stages.length > 0 ? stages[0].stage_id : '',
+      phone: '',
+      location: '',
+      website: '',
+      social_media: '',
+      // Lead Details
       source: '',
+      lead_owner: '',
       service: '',
+      priority: 'Medium',
+      lead_type: '',
+      date_of_lead: new Date().toISOString().split('T')[0],
+      industry: '',
+      estimation: '',
+      quotation_link: '',
+      proposal_link: '',
       notes: '',
+      stage_id: stages.length > 0 ? stages[0].stage_id : '',
       custom_fields: {},
     });
   };
@@ -239,13 +302,26 @@ const LeadsPageV2 = () => {
   const openEditLead = (lead) => {
     setEditingLead(lead);
     setLeadForm({
+      // Basic Details
       name: lead.name || '',
-      phone: lead.phone || '',
       email: lead.email || '',
-      stage_id: lead.stage_id || '',
+      phone: lead.phone || '',
+      location: lead.location || '',
+      website: lead.website || '',
+      social_media: lead.social_media || '',
+      // Lead Details
       source: lead.source || '',
+      lead_owner: lead.lead_owner || '',
       service: lead.service || '',
+      priority: lead.priority || 'Medium',
+      lead_type: lead.lead_type || '',
+      date_of_lead: lead.date_of_lead || new Date().toISOString().split('T')[0],
+      industry: lead.industry || '',
+      estimation: lead.estimation || '',
+      quotation_link: lead.quotation_link || '',
+      proposal_link: lead.proposal_link || '',
       notes: lead.notes || '',
+      stage_id: lead.stage_id || '',
       custom_fields: lead.custom_fields || {},
     });
     setShowAddLeadModal(true);
@@ -328,45 +404,64 @@ const LeadsPageV2 = () => {
   // ============== FOLLOW-UP ACTIONS ==============
 
   const openFollowUpModal = (lead) => {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toTimeString().slice(0, 5);
-    
     setFollowUpLead(lead);
-    setFollowUpForm({
-      date: dateStr,
-      time: timeStr,
-      notes: '',
-    });
+    setFollowUpRemarks('');
     setShowFollowUpModal(true);
   };
 
   const submitFollowUp = async () => {
     if (!followUpLead) return;
+    if (!followUpRemarks.trim()) {
+      toast.error('Please enter remarks');
+      return;
+    }
     
     try {
-      const followUpEntry = {
-        date: followUpForm.date,
-        time: followUpForm.time,
-        notes: followUpForm.notes,
-        created_at: new Date().toISOString(),
-      };
-      
-      // Get existing follow-ups or create empty array
-      const existingFollowUps = followUpLead.follow_ups || [];
-      
-      // Add new follow-up to the lead
-      await axios.put(`${API}/api/leads-v2/leads/${followUpLead.lead_id}`, {
-        follow_ups: [...existingFollowUps, followUpEntry]
+      await axios.post(`${API}/api/leads-v2/leads/${followUpLead.lead_id}/followups`, {
+        remarks: followUpRemarks.trim()
       }, { headers });
       
       toast.success('Follow-up added');
       setShowFollowUpModal(false);
       setFollowUpLead(null);
-      setFollowUpForm({ date: '', time: '', notes: '' });
+      setFollowUpRemarks('');
       loadLeads();
     } catch (error) {
       toast.error('Failed to add follow-up');
+    }
+  };
+
+  // ============== SERVICE & INDUSTRY ACTIONS ==============
+
+  const addNewService = async () => {
+    if (!newServiceName.trim()) {
+      toast.error('Service name is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/leads-v2/services`, { name: newServiceName }, { headers });
+      toast.success('Service added');
+      setNewServiceName('');
+      setShowAddServiceModal(false);
+      loadServices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add service');
+    }
+  };
+
+  const addNewIndustry = async () => {
+    if (!newIndustryName.trim()) {
+      toast.error('Industry name is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/leads-v2/industries`, { name: newIndustryName }, { headers });
+      toast.success('Industry added');
+      setNewIndustryName('');
+      setShowAddIndustryModal(false);
+      loadIndustries();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add industry');
     }
   };
 
@@ -662,144 +757,331 @@ const LeadsPageV2 = () => {
 
         {/* ============== MODALS ============== */}
 
-        {/* Add/Edit Lead Modal */}
+        {/* Add/Edit Lead Modal - Comprehensive Form */}
         <Dialog open={showAddLeadModal} onOpenChange={setShowAddLeadModal}>
-          <DialogContent className={`${bgCard} ${textPrimary} max-w-lg max-h-[85vh] overflow-y-auto`}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-2xl max-h-[85vh] overflow-y-auto`}>
             <DialogHeader>
               <DialogTitle>{editingLead ? 'Edit Lead' : 'Add New Lead'}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <label className={`text-sm ${textSecondary} block mb-1`}>Name *</label>
-                <Input
-                  value={leadForm.name}
-                  onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
-                  placeholder="Lead name"
-                  data-testid="lead-name-input"
-                  className={bgSecondary}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <Tabs defaultValue="basic" className="w-full">
+              <TabsList className={`grid w-full grid-cols-3 ${bgSecondary}`}>
+                <TabsTrigger value="basic">Basic Details</TabsTrigger>
+                <TabsTrigger value="lead">Lead Details</TabsTrigger>
+                <TabsTrigger value="followup">Follow-up</TabsTrigger>
+              </TabsList>
+              
+              {/* Basic Details Tab */}
+              <TabsContent value="basic" className="space-y-4 mt-4">
                 <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Phone</label>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Name *</label>
                   <Input
-                    value={leadForm.phone}
-                    onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
-                    placeholder="+91 98765 43210"
+                    value={leadForm.name}
+                    onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
+                    placeholder="Lead name"
+                    data-testid="lead-name-input"
                     className={bgSecondary}
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Email</label>
+                    <Input
+                      type="email"
+                      value={leadForm.email}
+                      onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
+                      placeholder="email@example.com"
+                      className={bgSecondary}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Phone</label>
+                    <Input
+                      value={leadForm.phone}
+                      onChange={(e) => setLeadForm({ ...leadForm, phone: e.target.value })}
+                      placeholder="+91 98765 43210"
+                      className={bgSecondary}
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Email</label>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Location</label>
                   <Input
-                    type="email"
-                    value={leadForm.email}
-                    onChange={(e) => setLeadForm({ ...leadForm, email: e.target.value })}
-                    placeholder="email@example.com"
+                    value={leadForm.location}
+                    onChange={(e) => setLeadForm({ ...leadForm, location: e.target.value })}
+                    placeholder="City, State"
                     className={bgSecondary}
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Website</label>
+                    <Input
+                      value={leadForm.website}
+                      onChange={(e) => setLeadForm({ ...leadForm, website: e.target.value })}
+                      placeholder="https://example.com"
+                      className={bgSecondary}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Social Media</label>
+                    <Input
+                      value={leadForm.social_media}
+                      onChange={(e) => setLeadForm({ ...leadForm, social_media: e.target.value })}
+                      placeholder="Instagram/LinkedIn URL"
+                      className={bgSecondary}
+                    />
+                  </div>
+                </div>
+              </TabsContent>
+              
+              {/* Lead Details Tab */}
+              <TabsContent value="lead" className="space-y-4 mt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Stage</label>
+                    <Select
+                      value={leadForm.stage_id}
+                      onValueChange={(v) => setLeadForm({ ...leadForm, stage_id: v })}
+                    >
+                      <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select stage" /></SelectTrigger>
+                      <SelectContent>
+                        {stages.map(s => (
+                          <SelectItem key={s.stage_id} value={s.stage_id}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded" style={{ backgroundColor: s.color }} />
+                              {s.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Source</label>
+                    <Input
+                      value={leadForm.source}
+                      onChange={(e) => setLeadForm({ ...leadForm, source: e.target.value })}
+                      placeholder="e.g., Website, Referral"
+                      className={bgSecondary}
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Lead Owner</label>
+                    <Select
+                      value={leadForm.lead_owner}
+                      onValueChange={(v) => setLeadForm({ ...leadForm, lead_owner: v })}
+                    >
+                      <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select owner" /></SelectTrigger>
+                      <SelectContent>
+                        {teamMembers.map(m => (
+                          <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Services</label>
+                    <div className="flex gap-2">
+                      <Select
+                        value={leadForm.service}
+                        onValueChange={(v) => {
+                          if (v === '__add_new__') {
+                            setShowAddServiceModal(true);
+                          } else {
+                            setLeadForm({ ...leadForm, service: v });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className={`${bgSecondary} flex-1`}><SelectValue placeholder="Select service" /></SelectTrigger>
+                        <SelectContent>
+                          {services.map(s => (
+                            <SelectItem key={s.service_id} value={s.name}>{s.name}</SelectItem>
+                          ))}
+                          <SelectItem value="__add_new__" className="text-blue-400">+ Add New Service</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Priority</label>
+                    <Select
+                      value={leadForm.priority}
+                      onValueChange={(v) => setLeadForm({ ...leadForm, priority: v })}
+                    >
+                      <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select priority" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="High">High</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="Low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Lead Type</label>
+                    <Select
+                      value={leadForm.lead_type}
+                      onValueChange={(v) => setLeadForm({ ...leadForm, lead_type: v })}
+                    >
+                      <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select type" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Inbound">Inbound</SelectItem>
+                        <SelectItem value="Outbound">Outbound</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Date of Lead</label>
+                    <Input
+                      type="date"
+                      value={leadForm.date_of_lead}
+                      onChange={(e) => setLeadForm({ ...leadForm, date_of_lead: e.target.value })}
+                      className={bgSecondary}
+                    />
+                  </div>
+                </div>
+                
                 <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Stage</label>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Industry</label>
                   <Select
-                    value={leadForm.stage_id}
-                    onValueChange={(v) => setLeadForm({ ...leadForm, stage_id: v })}
+                    value={leadForm.industry}
+                    onValueChange={(v) => {
+                      if (v === '__add_new__') {
+                        setShowAddIndustryModal(true);
+                      } else {
+                        setLeadForm({ ...leadForm, industry: v });
+                      }
+                    }}
                   >
-                    <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select stage" /></SelectTrigger>
+                    <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select industry" /></SelectTrigger>
                     <SelectContent>
-                      {stages.map(s => (
-                        <SelectItem key={s.stage_id} value={s.stage_id}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 rounded" style={{ backgroundColor: s.color }} />
-                            {s.name}
-                          </div>
-                        </SelectItem>
+                      {industries.map(i => (
+                        <SelectItem key={i.industry_id} value={i.name}>{i.name}</SelectItem>
                       ))}
+                      <SelectItem value="__add_new__" className="text-blue-400">+ Add New Industry</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Source</label>
-                  <Input
-                    value={leadForm.source}
-                    onChange={(e) => setLeadForm({ ...leadForm, source: e.target.value })}
-                    placeholder="e.g., Website, Referral"
-                    className={bgSecondary}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className={`text-sm ${textSecondary} block mb-1`}>Service</label>
-                <Input
-                  value={leadForm.service}
-                  onChange={(e) => setLeadForm({ ...leadForm, service: e.target.value })}
-                  placeholder="Service interested in"
-                  className={bgSecondary}
-                />
-              </div>
-              <div>
-                <label className={`text-sm ${textSecondary} block mb-1`}>Notes</label>
-                <Textarea
-                  value={leadForm.notes}
-                  onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })}
-                  placeholder="Additional notes..."
-                  className={bgSecondary}
-                  rows={3}
-                />
-              </div>
-
-              {/* Custom Fields */}
-              {customFields.length > 0 && (
-                <div className="border-t border-[#3f3f46] pt-4">
-                  <h4 className={`text-sm font-medium ${textPrimary} mb-3`}>Custom Fields</h4>
-                  <div className="space-y-3">
-                    {customFields.map(field => (
-                      <div key={field.field_id}>
-                        <label className={`text-sm ${textSecondary} block mb-1`}>{field.name}</label>
-                        {field.field_type === 'textarea' ? (
-                          <Textarea
-                            value={leadForm.custom_fields?.[field.field_id] || ''}
-                            onChange={(e) => setLeadForm({
-                              ...leadForm,
-                              custom_fields: { ...leadForm.custom_fields, [field.field_id]: e.target.value }
-                            })}
-                            className={bgSecondary}
-                            rows={2}
-                          />
-                        ) : field.field_type === 'select' ? (
-                          <Select
-                            value={leadForm.custom_fields?.[field.field_id] || ''}
-                            onValueChange={(v) => setLeadForm({
-                              ...leadForm,
-                              custom_fields: { ...leadForm.custom_fields, [field.field_id]: v }
-                            })}
-                          >
-                            <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select..." /></SelectTrigger>
-                            <SelectContent>
-                              {(field.options || []).map(opt => (
-                                <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <Input
-                            type={field.field_type === 'number' ? 'number' : field.field_type === 'date' ? 'date' : 'text'}
-                            value={leadForm.custom_fields?.[field.field_id] || ''}
-                            onChange={(e) => setLeadForm({
-                              ...leadForm,
-                              custom_fields: { ...leadForm.custom_fields, [field.field_id]: e.target.value }
-                            })}
-                            className={bgSecondary}
-                          />
-                        )}
-                      </div>
-                    ))}
+                
+                <div className={`p-4 rounded-lg border ${borderColor} space-y-4`}>
+                  <h4 className={`text-sm font-medium ${textPrimary}`}>Documents & Estimation</h4>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Estimation Amount (₹)</label>
+                    <Input
+                      type="number"
+                      value={leadForm.estimation}
+                      onChange={(e) => setLeadForm({ ...leadForm, estimation: e.target.value })}
+                      placeholder="50000"
+                      className={bgSecondary}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Quotation Link</label>
+                    <Input
+                      value={leadForm.quotation_link}
+                      onChange={(e) => setLeadForm({ ...leadForm, quotation_link: e.target.value })}
+                      placeholder="https://drive.google.com/..."
+                      className={bgSecondary}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Proposal Link</label>
+                    <Input
+                      value={leadForm.proposal_link}
+                      onChange={(e) => setLeadForm({ ...leadForm, proposal_link: e.target.value })}
+                      placeholder="https://drive.google.com/..."
+                      className={bgSecondary}
+                    />
                   </div>
                 </div>
-              )}
-            </div>
+                
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Notes</label>
+                  <Textarea
+                    value={leadForm.notes}
+                    onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })}
+                    placeholder="Additional notes..."
+                    className={bgSecondary}
+                    rows={3}
+                  />
+                </div>
+              </TabsContent>
+              
+              {/* Follow-up Tab */}
+              <TabsContent value="followup" className="mt-4">
+                {editingLead ? (
+                  <div className="space-y-4">
+                    <div className={`p-4 rounded-lg border ${borderColor}`}>
+                      <h4 className={`text-sm font-medium ${textPrimary} mb-3`}>Add New Follow-up</h4>
+                      <Textarea
+                        value={followUpRemarks}
+                        onChange={(e) => setFollowUpRemarks(e.target.value)}
+                        placeholder="Enter follow-up remarks..."
+                        className={`${bgSecondary} mb-3`}
+                        rows={3}
+                      />
+                      <Button 
+                        onClick={async () => {
+                          if (!followUpRemarks.trim()) {
+                            toast.error('Please enter remarks');
+                            return;
+                          }
+                          try {
+                            await axios.post(`${API}/api/leads-v2/leads/${editingLead.lead_id}/followups`, {
+                              remarks: followUpRemarks.trim()
+                            }, { headers });
+                            toast.success('Follow-up added');
+                            setFollowUpRemarks('');
+                            loadLeads();
+                            // Refresh editingLead data
+                            const res = await axios.get(`${API}/api/leads-v2/leads`, { headers });
+                            const updatedLead = res.data.find(l => l.lead_id === editingLead.lead_id);
+                            if (updatedLead) setEditingLead(updatedLead);
+                          } catch (error) {
+                            toast.error('Failed to add follow-up');
+                          }
+                        }}
+                        className="bg-[#3b82f6] hover:bg-[#2563eb]"
+                      >
+                        <Plus className="h-4 w-4 mr-2" /> Add Follow-up
+                      </Button>
+                    </div>
+                    
+                    <div>
+                      <h4 className={`text-sm font-medium ${textPrimary} mb-3`}>Follow-up History</h4>
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                        {(editingLead.followups || []).length === 0 ? (
+                          <p className={`text-sm ${textSecondary} text-center py-4`}>No follow-ups yet</p>
+                        ) : (
+                          [...(editingLead.followups || [])].reverse().map((fu, idx) => (
+                            <div key={fu.followup_id || idx} className={`p-3 rounded-lg ${bgSecondary}`}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Clock className="h-4 w-4 text-blue-400" />
+                                <span className={`text-xs ${textSecondary}`}>
+                                  {new Date(fu.date).toLocaleString()} by {fu.created_by_name || 'Unknown'}
+                                </span>
+                              </div>
+                              <p className={`text-sm ${textPrimary}`}>{fu.remarks}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`text-center py-8 ${textSecondary}`}>
+                    <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>Save the lead first to add follow-ups</p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+            
             <DialogFooter>
               <Button variant="ghost" onClick={() => { setShowAddLeadModal(false); setEditingLead(null); }}>Cancel</Button>
               <Button
@@ -809,6 +1091,44 @@ const LeadsPageV2 = () => {
               >
                 {editingLead ? 'Update Lead' : 'Create Lead'}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Add Service Modal */}
+        <Dialog open={showAddServiceModal} onOpenChange={setShowAddServiceModal}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle>Add New Service</DialogTitle>
+            </DialogHeader>
+            <Input
+              value={newServiceName}
+              onChange={(e) => setNewServiceName(e.target.value)}
+              placeholder="Service name"
+              className={bgSecondary}
+            />
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowAddServiceModal(false)}>Cancel</Button>
+              <Button onClick={addNewService} className="bg-[#3b82f6] hover:bg-[#2563eb]">Add</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Add Industry Modal */}
+        <Dialog open={showAddIndustryModal} onOpenChange={setShowAddIndustryModal}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle>Add New Industry</DialogTitle>
+            </DialogHeader>
+            <Input
+              value={newIndustryName}
+              onChange={(e) => setNewIndustryName(e.target.value)}
+              placeholder="Industry name"
+              className={bgSecondary}
+            />
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowAddIndustryModal(false)}>Cancel</Button>
+              <Button onClick={addNewIndustry} className="bg-[#3b82f6] hover:bg-[#2563eb]">Add</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -998,49 +1318,40 @@ const LeadsPageV2 = () => {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Date</label>
-                  <Input
-                    type="date"
-                    value={followUpForm.date}
-                    onChange={(e) => setFollowUpForm({ ...followUpForm, date: e.target.value })}
-                    className={bgSecondary}
-                  />
-                </div>
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Time</label>
-                  <Input
-                    type="time"
-                    value={followUpForm.time}
-                    onChange={(e) => setFollowUpForm({ ...followUpForm, time: e.target.value })}
-                    className={bgSecondary}
-                  />
-                </div>
+              <div className={`p-3 rounded-lg ${bgSecondary} flex items-center gap-2`}>
+                <Calendar className="h-4 w-4 text-[#3b82f6]" />
+                <span className={`text-sm ${textPrimary}`}>
+                  {new Date().toLocaleString()}
+                </span>
+                <span className={`text-xs ${textSecondary}`}>(Auto-captured)</span>
               </div>
+              
               <div>
-                <label className={`text-sm ${textSecondary} block mb-1`}>Notes</label>
+                <label className={`text-sm ${textSecondary} block mb-1`}>Remarks *</label>
                 <Textarea
-                  value={followUpForm.notes}
-                  onChange={(e) => setFollowUpForm({ ...followUpForm, notes: e.target.value })}
-                  placeholder="Follow-up notes..."
+                  value={followUpRemarks}
+                  onChange={(e) => setFollowUpRemarks(e.target.value)}
+                  placeholder="Enter follow-up remarks..."
                   className={bgSecondary}
-                  rows={3}
+                  rows={4}
+                  autoFocus
                 />
               </div>
               
               {/* Previous follow-ups */}
-              {followUpLead?.follow_ups && followUpLead.follow_ups.length > 0 && (
+              {followUpLead?.followups && followUpLead.followups.length > 0 && (
                 <div className="border-t border-[#3f3f46] pt-4">
-                  <h4 className={`text-sm font-medium ${textPrimary} mb-2`}>Previous Follow-ups</h4>
-                  <div className="space-y-2 max-h-[150px] overflow-y-auto">
-                    {followUpLead.follow_ups.map((fu, idx) => (
-                      <div key={idx} className={`p-2 rounded ${bgSecondary} text-sm`}>
+                  <h4 className={`text-sm font-medium ${textPrimary} mb-2`}>Previous Follow-ups ({followUpLead.followups.length})</h4>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    {[...followUpLead.followups].reverse().map((fu, idx) => (
+                      <div key={fu.followup_id || idx} className={`p-3 rounded ${bgSecondary}`}>
                         <div className="flex items-center gap-2 mb-1">
-                          <Calendar className="h-3 w-3 text-[#f59e0b]" />
-                          <span className={textPrimary}>{fu.date} {fu.time}</span>
+                          <Calendar className="h-3 w-3 text-[#3b82f6]" />
+                          <span className={`text-xs ${textSecondary}`}>
+                            {new Date(fu.date).toLocaleString()} by {fu.created_by_name || 'Unknown'}
+                          </span>
                         </div>
-                        {fu.notes && <p className={`text-xs ${textSecondary}`}>{fu.notes}</p>}
+                        <p className={`text-sm ${textPrimary}`}>{fu.remarks}</p>
                       </div>
                     ))}
                   </div>
@@ -1048,7 +1359,7 @@ const LeadsPageV2 = () => {
               )}
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => { setShowFollowUpModal(false); setFollowUpLead(null); }}>Cancel</Button>
+              <Button variant="ghost" onClick={() => { setShowFollowUpModal(false); setFollowUpLead(null); setFollowUpRemarks(''); }}>Cancel</Button>
               <Button onClick={submitFollowUp} className="bg-[#f59e0b] hover:bg-[#d97706]">
                 <MessageSquare className="h-4 w-4 mr-2" /> Add Follow-up
               </Button>
