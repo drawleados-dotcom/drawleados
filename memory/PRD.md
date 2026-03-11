@@ -1,10 +1,26 @@
 # Drawlead OS - Product Requirements Document
 
-## Last Updated: March 2026
+## Last Updated: March 11, 2026
 
 ---
 
 ## Recent Changes (March 2026 - Latest)
+
+### Leads Module V2 - Stage Reordering Bug Fix ✅ (March 11, 2026)
+Fixed critical bug in the Leads module where stage reordering was failing:
+
+**Root Cause:**
+- FastAPI route ordering conflict - static route `/stages/reorder` was placed AFTER dynamic routes like `/stages/{stage_id}`
+- FastAPI was interpreting "reorder" as a `stage_id` parameter
+
+**Fix Applied:**
+- Moved `@leads_v2_router.put('/stages/reorder')` endpoint to line 155, BEFORE the dynamic `@leads_v2_router.put('/stages/{stage_id}')` at line 172
+- Added data-testid attributes for move buttons: `move-stage-up-{index}`, `move-stage-down-{index}`
+- Fixed login redirect from `/dashboard` to `/leads`
+
+**Testing Results:**
+- Backend: 100% (8/8 tests passed)
+- Frontend: 100% (5/5 features verified)
 
 ### Meta Ads Performance Marketing Board ✅ (March 2026)
 Complete performance marketing project management view with dual views and custom fields:
@@ -275,12 +291,20 @@ Comprehensive financial management system with Notion-like customization:
 | Website Projects - All Views | ✅ Complete |
 | SOP Works Board | ✅ Complete |
 | Social Media Module | ✅ Complete |
+| Leads V2 Kanban Board | ✅ Complete |
+| Leads Stage Reordering | ✅ Complete |
+| Leads Follow-up Feature | ✅ Complete |
 | Google Calendar | 🟡 Pending |
+| Google Sheets Integration | 🟡 Pending |
+| Leads Custom Fields | 🟡 Pending |
 
 ## Pending Tasks
 
 ### High Priority
+- **Google Sheets Integration (P0):** Implement "Connect Sheets" functionality in Leads module to automatically sync leads from Google Sheets
+- **Leads Custom Fields (P1):** Implement Notion-style custom fields for leads
 - **Refactor Large Files:**
+  - `/app/frontend/src/pages/LeadsPageV2.js` (1546 lines) - CRITICAL, newly created and already large
   - `/app/frontend/src/pages/OperationsPage.js` (86KB+ monolith) - CRITICAL
   - `/app/frontend/src/components/finance/ExpenseTab.js` (2394 lines) - CRITICAL
   - `/app/frontend/src/pages/WebsiteProjectsPage.js` (~700 lines)
@@ -292,7 +316,7 @@ Comprehensive financial management system with Notion-like customization:
 ### Future/Backlog
 - Sales Module CSV Import/Export
 - Chat Backend migration to MongoDB (currently in-memory)
-- Kanban drag-and-drop functionality
+- Kanban drag-and-drop for Operations module
 
 ## 3rd Party Integrations
 - Emergent-managed Google Auth
