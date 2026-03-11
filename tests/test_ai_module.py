@@ -7,7 +7,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://drawlead-os-v2.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://sales-pipeline-113.preview.emergentagent.com').rstrip('/')
 
 class TestAIAuth:
     """Authentication tests for AI module"""

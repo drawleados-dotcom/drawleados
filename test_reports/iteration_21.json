@@ -1,0 +1,77 @@
+{
+  "summary": "Bug fix verification complete: Stage reordering in Leads module now works correctly. The root cause was a FastAPI route ordering conflict where /stages/reorder was placed after /stages/{stage_id}, causing 'reorder' to be interpreted as a stage_id. Fix confirmed: static route now placed before dynamic route.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_leads_v2_stage_reorder.py",
+    "/app/test_reports/pytest/leads_v2_stage_reorder_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GOOD: Route ordering fix properly implemented - /stages/reorder now before /stages/{stage_id} at line 155",
+    "GOOD: data-testid attributes added for move buttons: move-stage-up-{index}, move-stage-down-{index}",
+    "GOOD: Login correctly redirects to /leads instead of /dashboard"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_leads_v2_stage_reorder.py"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 tests passed)",
+    "frontend": "100% (5/5 features verified)"
+  },
+  "test_credentials": {
+    "email": "vinoth@drawlead.com",
+    "password": "admin123"
+  },
+  "seed_data_creation": "None - used existing stages data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Stage reordering bug fixed and verified. The /api/leads-v2/stages/reorder endpoint works correctly. Move up/down buttons in Stages modal functional with proper data-testid attributes. Kanban board reflects stage order changes. 5 existing stages: Contacted, Proposal, RNR, Follow-up, Converted.",
+  "features_tested": {
+    "stage_reorder_api": {
+      "result": "PASS",
+      "details": "PUT /api/leads-v2/stages/reorder returns 200 and persists order changes"
+    },
+    "move_up_button": {
+      "result": "PASS",
+      "details": "Clicking move-stage-up-{index} button reorders stages via API call"
+    },
+    "move_down_button": {
+      "result": "PASS",
+      "details": "Clicking move-stage-down-{index} button reorders stages via API call"
+    },
+    "kanban_order_reflection": {
+      "result": "PASS",
+      "details": "Kanban board columns display in correct order after reordering"
+    },
+    "login_redirect": {
+      "result": "PASS",
+      "details": "Login redirects to /leads instead of /dashboard"
+    }
+  },
+  "backend_tests_summary": {
+    "total_tests": 8,
+    "passed": 8,
+    "failed": 0,
+    "categories_tested": [
+      "GET /stages - returns sorted stages (1 test)",
+      "PUT /stages/reorder - main bug fix test (3 tests)",
+      "PUT /stages/{stage_id} - dynamic route still works (1 test)",
+      "Authentication tests (2 tests)",
+      "Invalid data handling (1 test)"
+    ]
+  },
+  "rca_of_the_issue": {
+    "root_cause": "FastAPI route ordering conflict - static routes must be defined BEFORE dynamic routes",
+    "problem": "/stages/reorder was defined AFTER /stages/{stage_id}, causing 'reorder' to be captured as stage_id parameter",
+    "fix_applied": "Moved @leads_v2_router.put('/stages/reorder') to line 155, before @leads_v2_router.put('/stages/{stage_id}') at line 172",
+    "verification": "API now correctly routes to reorder handler, returns 200 with 'Stages reordered' message, and persists order changes to database"
+  }
+}

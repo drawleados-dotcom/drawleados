@@ -20,7 +20,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success('Login successful!');
-      navigate('/dashboard');
+      navigate('/leads');
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Login failed');
     } finally {

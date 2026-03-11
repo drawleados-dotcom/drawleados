@@ -14,6 +14,13 @@ def init_leads_v2_db(database):
 
 # ============== MODELS ==============
 
+class StageReorderItem(BaseModel):
+    stage_id: str
+    order: int
+
+class StageReorderRequest(BaseModel):
+    stages: List[StageReorderItem]
+
 class StageCreate(BaseModel):
     name: str
     color: str = '#71717a'
@@ -144,6 +151,24 @@ async def create_stage(stage_data: StageCreate, request: Request):
     await db.lead_stages.insert_one(stage_doc)
     return await db.lead_stages.find_one({"stage_id": stage_id}, {"_id": 0})
 
+# IMPORTANT: Static routes must come BEFORE dynamic routes with path parameters
+@leads_v2_router.put("/stages/reorder")
+async def reorder_stages(reorder_data: StageReorderRequest, request: Request):
+    """Reorder stages"""
+    import logging
+    logging.info(f"Reorder stages called with: {reorder_data}")
+    await get_current_user_from_request(request)
+    
+    for item in reorder_data.stages:
+        logging.info(f"Updating stage {item.stage_id} to order {item.order}")
+        result = await db.lead_stages.update_one(
+            {"stage_id": item.stage_id},
+            {"$set": {"order": item.order}}
+        )
+        logging.info(f"Update result: modified={result.modified_count}")
+    
+    return {"message": "Stages reordered"}
+
 @leads_v2_router.put("/stages/{stage_id}")
 async def update_stage(stage_id: str, update_data: StageUpdate, request: Request):
     """Update a stage"""
@@ -175,19 +200,6 @@ async def delete_stage(stage_id: str, request: Request):
     )
     
     return {"message": "Stage deleted"}
-
-@leads_v2_router.put("/stages/reorder")
-async def reorder_stages(stage_orders: List[Dict[str, Any]], request: Request):
-    """Reorder stages"""
-    await get_current_user_from_request(request)
-    
-    for item in stage_orders:
-        await db.lead_stages.update_one(
-            {"stage_id": item["stage_id"]},
-            {"$set": {"order": item["order"]}}
-        )
-    
-    return {"message": "Stages reordered"}
 
 # ============== CUSTOM FIELDS ROUTES ==============
 

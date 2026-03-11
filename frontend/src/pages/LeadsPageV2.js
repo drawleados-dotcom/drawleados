@@ -297,7 +297,7 @@ const LeadsPageV2 = () => {
     }));
     
     try {
-      await axios.put(`${API}/api/leads-v2/stages/reorder`, stageOrders, { headers });
+      await axios.put(`${API}/api/leads-v2/stages/reorder`, { stages: stageOrders }, { headers });
       setStages(newStages);
       toast.success('Stage order updated');
     } catch (error) {
@@ -317,7 +317,7 @@ const LeadsPageV2 = () => {
     }));
     
     try {
-      await axios.put(`${API}/api/leads-v2/stages/reorder`, stageOrders, { headers });
+      await axios.put(`${API}/api/leads-v2/stages/reorder`, { stages: stageOrders }, { headers });
       setStages(newStages);
       toast.success('Stage order updated');
     } catch (error) {
@@ -828,6 +828,7 @@ const LeadsPageV2 = () => {
                       <button
                         onClick={() => moveStageUp(index)}
                         disabled={index === 0}
+                        data-testid={`move-stage-up-${index}`}
                         className={`p-0.5 rounded hover:bg-[#3f3f46] ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
                       >
                         <ArrowUp className="h-3 w-3" />
@@ -835,6 +836,7 @@ const LeadsPageV2 = () => {
                       <button
                         onClick={() => moveStageDown(index)}
                         disabled={index === stages.length - 1}
+                        data-testid={`move-stage-down-${index}`}
                         className={`p-0.5 rounded hover:bg-[#3f3f46] ${index === stages.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
                       >
                         <ArrowDown className="h-3 w-3" />
