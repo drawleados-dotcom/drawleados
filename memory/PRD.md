@@ -6,6 +6,46 @@
 
 ## Recent Changes (March 2026 - Latest)
 
+### Leads Module V2 - Complete Overhaul ✅ (March 11, 2026)
+Completely redesigned Leads module with new stages, comprehensive lead form, and follow-up feature:
+
+**New 8 Stages:**
+1. Prospect
+2. Lead
+3. Qualified
+4. Proposal
+5. Negotiation
+6. Followup
+7. Payment Stage
+8. Deal Closed
+
+**Comprehensive Lead Form (3 Tabs):**
+- **Basic Details Tab:** Name, Email, Phone, Location, Website, Social Media
+- **Lead Details Tab:**
+  - Stage (dropdown)
+  - Source (text)
+  - Lead Owner (dropdown from team members)
+  - Services (dropdown with "+ Add New Service" option)
+  - Priority (High/Medium/Low)
+  - Lead Type (Inbound/Outbound)
+  - Date of Lead (auto-filled, editable)
+  - Industry (dropdown with "+ Add New Industry" option)
+  - Estimation Amount (₹)
+  - Quotation Link (URL)
+  - Proposal Link (URL)
+  - Notes
+- **Follow-up Tab:** Add follow-ups with auto-date capture, view history
+
+**New API Endpoints:**
+- `/api/leads-v2/services` - GET/POST services with duplicate detection
+- `/api/leads-v2/industries` - GET/POST industries with duplicate detection
+- `/api/leads-v2/team-members` - GET team members for Lead Owner dropdown
+- `/api/leads-v2/leads/{lead_id}/followups` - POST/GET follow-ups
+
+**Testing Results:**
+- Backend: 100% (20/20 tests passed)
+- Frontend: 100% (all UI features verified)
+
 ### Leads Module V2 - Stage Reordering Bug Fix ✅ (March 11, 2026)
 Fixed critical bug in the Leads module where stage reordering was failing:
 
@@ -302,9 +342,8 @@ Comprehensive financial management system with Notion-like customization:
 
 ### High Priority
 - **Google Sheets Integration (P0):** Implement "Connect Sheets" functionality in Leads module to automatically sync leads from Google Sheets
-- **Leads Custom Fields (P1):** Implement Notion-style custom fields for leads
 - **Refactor Large Files:**
-  - `/app/frontend/src/pages/LeadsPageV2.js` (1546 lines) - CRITICAL, newly created and already large
+  - `/app/frontend/src/pages/LeadsPageV2.js` (~1800+ lines) - CRITICAL, break into smaller components
   - `/app/frontend/src/pages/OperationsPage.js` (86KB+ monolith) - CRITICAL
   - `/app/frontend/src/components/finance/ExpenseTab.js` (2394 lines) - CRITICAL
   - `/app/frontend/src/pages/WebsiteProjectsPage.js` (~700 lines)
@@ -312,6 +351,7 @@ Comprehensive financial management system with Notion-like customization:
 ### Medium Priority
 - Google Calendar Integration (postponed by user)
 - Configure Resend API key for email notifications
+- Dialog accessibility improvement (add aria-describedby)
 
 ### Future/Backlog
 - Sales Module CSV Import/Export
