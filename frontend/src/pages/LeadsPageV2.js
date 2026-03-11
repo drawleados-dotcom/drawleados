@@ -1799,7 +1799,7 @@ const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, onFollowUp, f
       draggable
       onDragStart={(e) => onDragStart && onDragStart(e, lead)}
       onDragEnd={onDragEnd}
-      className={`p-3 ${isDark ? 'bg-[#0c0a09]' : 'bg-gray-50'} rounded-lg border ${borderColor} ${isDark ? 'hover:border-[#3f3f46]' : 'hover:border-gray-300'} group cursor-grab active:cursor-grabbing transition-all duration-200 ${
+      className={`p-3 ${isDark ? 'bg-[#1c1917]' : 'bg-white'} rounded-lg border ${isDark ? 'border-[#27272a]' : 'border-gray-200'} ${isDark ? 'hover:border-[#3f3f46]' : 'hover:border-gray-300'} shadow-sm group cursor-grab active:cursor-grabbing transition-all duration-200 ${
         isDragging ? 'opacity-50 scale-95 rotate-2' : 'opacity-100'
       }`}
       data-testid={`lead-card-${lead.lead_id}`}
@@ -1835,7 +1835,7 @@ const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, onFollowUp, f
       </div>
       
       {/* Follow-up Button */}
-      <div className={`mt-2 pt-2 border-t ${borderColor}`}>
+      <div className={`mt-2 pt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-100'}`}>
         <Button
           size="sm"
           variant="ghost"
