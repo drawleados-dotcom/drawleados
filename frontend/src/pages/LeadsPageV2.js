@@ -1799,17 +1799,17 @@ const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, onFollowUp, f
       draggable
       onDragStart={(e) => onDragStart && onDragStart(e, lead)}
       onDragEnd={onDragEnd}
-      className={`p-3 ${isDark ? 'bg-[#1c1917]' : 'bg-white'} rounded-lg border ${isDark ? 'border-[#27272a]' : 'border-gray-200'} ${isDark ? 'hover:border-[#3f3f46]' : 'hover:border-gray-300'} shadow-sm group cursor-grab active:cursor-grabbing transition-all duration-200 ${
+      className={`p-3 ${isDark ? 'bg-[#1c1917]' : 'bg-white'} rounded-lg border ${isDark ? 'border-[#27272a]' : 'border-gray-200'} ${isDark ? 'hover:border-[#3f3f46]' : 'hover:border-gray-300'} shadow-sm group cursor-grab active:cursor-grabbing transition-all duration-200 overflow-hidden ${
         isDragging ? 'opacity-50 scale-95 rotate-2' : 'opacity-100'
       }`}
       data-testid={`lead-card-${lead.lead_id}`}
     >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <GripVertical className={`h-4 w-4 ${textSecondary} opacity-0 group-hover:opacity-100 transition-opacity cursor-grab`} />
-          <span className={`font-medium ${textPrimary}`}>{lead.name}</span>
+      <div className="flex items-start justify-between mb-2 gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <GripVertical className={`h-4 w-4 ${textSecondary} opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0`} />
+          <span className={`font-medium ${textPrimary} truncate`}>{lead.name}</span>
         </div>
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
           <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); onEdit(lead); }}>
             <Edit2 className="h-3 w-3" />
           </Button>
