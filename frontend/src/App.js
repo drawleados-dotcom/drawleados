@@ -23,6 +23,7 @@ import SocialMediaPage from './pages/SocialMediaPage';
 import CreativeDesignBoard from './pages/CreativeDesignBoard';
 import MetaAdsBoard from './pages/Operations/MetaAdsBoard';
 import DocumentationsPage from './pages/DocumentationsPage';
+import SEOBoardPage from './pages/SEOBoardPage';
 import './App.css';
 
 function AppRouter() {
@@ -161,6 +162,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <DocumentationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/seo-board"
+        element={
+          <ProtectedRoute>
+            <SEOBoardPage />
           </ProtectedRoute>
         }
       />

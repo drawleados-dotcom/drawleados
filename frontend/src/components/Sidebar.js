@@ -25,6 +25,7 @@ import {
   PanelLeftClose,
   PanelLeft,
   FileSpreadsheet,
+  Search,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -246,6 +247,18 @@ const Sidebar = () => {
               >
                 <span className="text-base">🔍</span>
                 <span>SEO</span>
+              </Link>
+
+              <Link
+                to="/seo-board"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.pathname === '/seo-board'
+                    ? isDark ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#f59e0b]/10 text-[#d97706]'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <Search className="h-4 w-4" />
+                <span>SEO Board</span>
               </Link>
               
               <Link
