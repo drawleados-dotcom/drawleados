@@ -601,7 +601,7 @@ const LeadsPageV2 = () => {
                 <Button
                   onClick={() => setShowSheetsModal(true)}
                   variant="outline"
-                  className="border-[#27272a] bg-[#18181b] text-[#a1a1aa] hover:text-[#fafafa]"
+                  className={`${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary}`}
                   data-testid="connect-sheets-btn"
                 >
                   <Link2 className="h-4 w-4 mr-2" />
@@ -610,11 +610,11 @@ const LeadsPageV2 = () => {
               )}
 
               {/* View Toggle */}
-              <div className="flex items-center bg-[#18181b] rounded-lg p-1 border border-[#27272a]">
+              <div className={`flex items-center ${bgSecondary} rounded-lg p-1 border ${borderColor}`}>
                 <button
                   onClick={() => setViewMode('list')}
                   data-testid="view-list-btn"
-                  className={`p-2 rounded ${viewMode === 'list' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                  className={`p-2 rounded ${viewMode === 'list' ? `${isDark ? 'bg-[#3f3f46]' : 'bg-white shadow-sm'} ${textPrimary}` : textSecondary}`}
                   title="List View"
                 >
                   <Table2 className="h-4 w-4" />
@@ -622,7 +622,7 @@ const LeadsPageV2 = () => {
                 <button
                   onClick={() => setViewMode('preview')}
                   data-testid="view-preview-btn"
-                  className={`p-2 rounded ${viewMode === 'preview' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                  className={`p-2 rounded ${viewMode === 'preview' ? `${isDark ? 'bg-[#3f3f46]' : 'bg-white shadow-sm'} ${textPrimary}` : textSecondary}`}
                   title="Preview Board"
                 >
                   <Columns3 className="h-4 w-4" />
@@ -630,7 +630,7 @@ const LeadsPageV2 = () => {
                 <button
                   onClick={() => setViewMode('kanban')}
                   data-testid="view-kanban-btn"
-                  className={`p-2 rounded ${viewMode === 'kanban' ? 'bg-[#27272a] text-[#fafafa]' : 'text-[#71717a]'}`}
+                  className={`p-2 rounded ${viewMode === 'kanban' ? `${isDark ? 'bg-[#3f3f46]' : 'bg-white shadow-sm'} ${textPrimary}` : textSecondary}`}
                   title="Kanban View"
                 >
                   <LayoutGrid className="h-4 w-4" />
@@ -640,7 +640,7 @@ const LeadsPageV2 = () => {
               <Button
                 onClick={() => setShowStagesModal(true)}
                 variant="outline"
-                className="border-[#27272a] bg-[#18181b] text-[#a1a1aa] hover:text-[#fafafa]"
+                className={`${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary}`}
               >
                 <Settings className="h-4 w-4 mr-2" />
                 Stages
@@ -649,7 +649,7 @@ const LeadsPageV2 = () => {
               <Button
                 onClick={() => setShowFieldsModal(true)}
                 variant="outline"
-                className="border-[#27272a] bg-[#18181b] text-[#a1a1aa] hover:text-[#fafafa]"
+                className={`${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary}`}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Fields
@@ -1340,7 +1340,7 @@ const LeadsPageV2 = () => {
               
               {/* Previous follow-ups */}
               {followUpLead?.followups && followUpLead.followups.length > 0 && (
-                <div className="border-t border-[#3f3f46] pt-4">
+                <div className={`border-t ${borderColor} pt-4`}>
                   <h4 className={`text-sm font-medium ${textPrimary} mb-2`}>Previous Follow-ups ({followUpLead.followups.length})</h4>
                   <div className="space-y-2 max-h-[200px] overflow-y-auto">
                     {[...followUpLead.followups].reverse().map((fu, idx) => (
@@ -1431,7 +1431,7 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
           className={`flex items-center gap-1.5 sm:gap-2 pb-2 border-b-2 transition-all flex-shrink-0 ${
             activeTab === 'all' 
               ? 'border-[#3b82f6] text-[#3b82f6]' 
-              : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+              : `border-transparent ${textSecondary} hover:${textPrimary}`
           }`}
         >
           <span className="font-medium text-xs sm:text-sm">All ({leads.length})</span>
@@ -1443,7 +1443,7 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
             className={`flex items-center gap-1 sm:gap-2 pb-2 border-b-2 transition-all whitespace-nowrap flex-shrink-0 ${
               activeTab === stage.stage_id 
                 ? `border-current`
-                : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+                : `border-transparent ${textSecondary} hover:${textPrimary}`
             }`}
             style={{ color: activeTab === stage.stage_id ? stage.color : undefined }}
           >
@@ -1480,7 +1480,7 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                 return (
                   <tr 
                     key={lead.lead_id} 
-                    className={`border-b ${borderColor} hover:bg-[#27272a]/30 transition-colors`}
+                    className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/30' : 'hover:bg-gray-50'} transition-colors`}
                   >
                     {/* Lead Column - Avatar + Name + Location */}
                     <td className="px-4 py-4">
@@ -1626,12 +1626,12 @@ const KanbanView = ({ stages, getLeadsByStage, onEdit, onDelete, onStageChange, 
           >
             {/* Column Header */}
             <div 
-              className="p-3 border-b border-[#27272a] flex items-center gap-2"
+              className={`p-3 border-b ${borderColor} flex items-center gap-2`}
               style={{ borderBottomColor: isDropTarget ? stage.color : undefined }}
             >
               <div className="w-3 h-3 rounded" style={{ backgroundColor: stage.color }} />
               <span className={`text-sm font-medium ${textPrimary}`}>{stage.name}</span>
-              <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">
+              <Badge className={`${bgSecondary} ${textSecondary} text-xs ml-auto`}>
                 {stageLeads.length}
               </Badge>
             </div>
@@ -1764,7 +1764,7 @@ const PreviewBoard = ({ leads, stages, selectedLead, setSelectedLead, onEdit, on
                 </div>
               )}
               {customFields.length > 0 && Object.keys(selectedLead.custom_fields || {}).length > 0 && (
-                <div className="border-t border-[#3f3f46] pt-4">
+                <div className={`border-t ${borderColor} pt-4`}>
                   <h4 className={`text-sm font-medium ${textPrimary} mb-2`}>Custom Fields</h4>
                   <div className="grid grid-cols-2 gap-3">
                     {customFields.map(field => {
@@ -1799,7 +1799,7 @@ const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, onFollowUp, f
       draggable
       onDragStart={(e) => onDragStart && onDragStart(e, lead)}
       onDragEnd={onDragEnd}
-      className={`p-3 ${isDark ? 'bg-[#0c0a09]' : 'bg-gray-50'} rounded-lg border ${borderColor} hover:border-[#3f3f46] group cursor-grab active:cursor-grabbing transition-all duration-200 ${
+      className={`p-3 ${isDark ? 'bg-[#0c0a09]' : 'bg-gray-50'} rounded-lg border ${borderColor} ${isDark ? 'hover:border-[#3f3f46]' : 'hover:border-gray-300'} group cursor-grab active:cursor-grabbing transition-all duration-200 ${
         isDragging ? 'opacity-50 scale-95 rotate-2' : 'opacity-100'
       }`}
       data-testid={`lead-card-${lead.lead_id}`}
@@ -1835,7 +1835,7 @@ const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, onFollowUp, f
       </div>
       
       {/* Follow-up Button */}
-      <div className="mt-2 pt-2 border-t border-[#27272a]">
+      <div className={`mt-2 pt-2 border-t ${borderColor}`}>
         <Button
           size="sm"
           variant="ghost"
@@ -1844,9 +1844,9 @@ const LeadCard = ({ lead, stages, onEdit, onDelete, onStageChange, onFollowUp, f
         >
           <Clock className="h-3 w-3 mr-1" />
           Follow-up
-          {lead.follow_ups?.length > 0 && (
+          {lead.followups?.length > 0 && (
             <Badge className="ml-auto bg-[#f59e0b]/20 text-[#f59e0b] text-xs px-1">
-              {lead.follow_ups.length}
+              {lead.followups.length}
             </Badge>
           )}
         </Button>
