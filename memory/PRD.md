@@ -6,6 +6,32 @@
 
 ## Recent Changes (March 2026 - Latest)
 
+### Role-Based Access Control & User Management ✅ (March 11, 2026)
+Implemented comprehensive RBAC system:
+
+**New Roles:**
+- `super_admin` - Full access to all modules
+- `admin` - Full access to all modules
+- `business_development` - Limited access: Leads, HR, Settings only
+- `project_manager` - Operations, Reports, HR
+- `employee` - Operations, HR
+
+**User Management Features:**
+- Admin can create users with manual password
+- Credentials sent via email (Resend integration)
+- Password change with email OTP verification
+- Role-based sidebar menu filtering
+
+**Lead Owner Features:**
+- Auto-assignment: Creator becomes lead owner
+- Lead Owner filter dropdown in search area
+- Lead owner displayed on lead cards
+- Filter by lead owner in API and UI
+
+**Testing Results:**
+- Backend: 100% (12/12 tests passed)
+- Frontend: 100% (all UI features verified)
+
 ### Leads Module V2 - Complete Overhaul ✅ (March 11, 2026)
 Completely redesigned Leads module with new stages, comprehensive lead form, and follow-up feature:
 
