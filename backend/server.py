@@ -65,11 +65,12 @@ api_router = APIRouter(prefix="/api")
 @app.on_event("startup")
 async def ensure_admin_user():
     """Ensure admin user exists on startup for login access"""
-    # Create vinoth@drawlead.com as primary admin
+    # Always ensure vinoth@drawlead.com exists as super_admin with known password
+    password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
     existing_admin = await db.users.find_one({"email": "vinoth@drawlead.com"})
     if not existing_admin:
         admin_id = f"user_{uuid.uuid4().hex[:12]}"
-        password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         admin_doc = {
             "user_id": admin_id,
             "email": "vinoth@drawlead.com",
@@ -87,14 +88,19 @@ async def ensure_admin_user():
         await db.users.insert_one(admin_doc)
         logging.info("Admin user vinoth@drawlead.com created automatically on startup")
     else:
-        # Ensure admin has password_hash
-        if not existing_admin.get("password_hash"):
-            password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            await db.users.update_one(
-                {"email": "vinoth@drawlead.com"},
-                {"$set": {"password_hash": password_hash, "role": "super_admin"}}
-            )
-            logging.info("Admin user password updated on startup")
+        # Always reset password and ensure super_admin role on startup
+        await db.users.update_one(
+            {"email": "vinoth@drawlead.com"},
+            {"$set": {
+                "password_hash": password_hash, 
+                "role": "super_admin",
+                "module_access": ["leads", "operations", "finance", "reports", "settings", "hr"],
+                "can_create_projects": True,
+                "can_delete_tasks": True,
+                "can_manage_users": True
+            }}
+        )
+        logging.info("Admin user vinoth@drawlead.com password reset to admin123 on startup")
 
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
