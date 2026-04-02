@@ -30,6 +30,7 @@ import BDETasksPage from './pages/BDETasksPage';
 import CalendarDayDetailPage from './pages/CalendarDayDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import LeaveVerificationPage from './pages/LeaveVerificationPage';
+import TasksModulePage from './pages/TasksModulePage';
 import './App.css';
 
 function AppRouter() {
@@ -217,6 +218,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <BDETasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          <ProtectedRoute>
+            <TasksModulePage />
           </ProtectedRoute>
         }
       />

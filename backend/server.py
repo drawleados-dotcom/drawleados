@@ -37,6 +37,7 @@ from designation_routes import designation_router
 from bde_routes import bde_router
 from google_calendar_routes import calendar_router, init_calendar_db
 from payroll_routes import payroll_router
+from department_routes import department_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2045,6 +2046,7 @@ api_router.include_router(designation_router)
 api_router.include_router(bde_router)
 api_router.include_router(calendar_router)
 api_router.include_router(payroll_router)
+api_router.include_router(department_router)
 
 # Include router in main app
 app.include_router(api_router)

@@ -29,6 +29,7 @@ import {
   Search,
   Calendar,
   Briefcase,
+  Layers,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -255,6 +256,19 @@ const Sidebar = () => {
         >
           <Briefcase className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'BDE Tasks'}
+        </Link>
+        )}
+
+        {/* Tasks Module - Departments/Projects/Tasks */}
+        {hasAccess('operations') && (
+        <Link
+          to="/tasks"
+          data-testid="nav-tasks-module"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/tasks' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Tasks' : ''}
+        >
+          <Layers className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'Tasks'}
         </Link>
         )}
 
