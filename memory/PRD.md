@@ -150,6 +150,18 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
   - Documents auto-assigned to user's department on creation
   - Admins can create documents for any department
 
+#### P0 - Operations Approval Workflow (DONE - Dec 2025)
+- ✅ **Digital Marketing Board Template** with approval workflow for DM teams
+- ✅ **Approval Status Flow**: To Do → In Progress → Operations Approval → Vinoth Approval (optional) → Client Approval → Revision → Done
+- ✅ **Departments**: Website, SEO, Meta Ads, Content, Design, Social Media
+- ✅ **Priority Levels**: Low, Medium, High, Urgent
+- ✅ **Enhanced Kanban View**:
+  - Approval columns highlighted with different backgrounds
+  - Approval steps marked with ⏳ icons
+  - Quick status change dropdown on task cards
+  - "Move to next status" button for workflow progression
+- ✅ **Task Fields**: Task Name, Department, Status, Priority, Due Date, Assigned To, Client, Attachments, Revision Notes
+
 #### P0 - Add Employee Feature (DONE - Dec 2025)
 - ✅ **Add Employee Modal** in HR Admin with 5 tabs:
   - Basic Details (name, email, phone, DOB, gender, blood group, address, emergency contact)
