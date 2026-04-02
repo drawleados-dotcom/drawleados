@@ -28,6 +28,7 @@ import {
   FileSpreadsheet,
   Search,
   Calendar,
+  Briefcase,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -99,6 +100,9 @@ const Sidebar = () => {
   const canSeeDepartment = (deptKey) => {
     // Admin and super admin can see all
     if (isAdmin) return true;
+    
+    // BDE role can always see bde tasks
+    if (deptKey === 'bde' && isBDE) return true;
     
     // Map department keys to designation keywords
     const deptMap = {
@@ -240,6 +244,19 @@ const Sidebar = () => {
           <Calendar className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'Calendar'}
         </Link>
+
+        {/* BDE Tasks - Direct link for BDE users or users with bde designation */}
+        {(isBDE || canSeeDepartment('bde')) && (
+        <Link
+          to="/bde-tasks"
+          data-testid="nav-bde-tasks"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/bde-tasks' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'BDE Tasks' : ''}
+        >
+          <Briefcase className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'BDE Tasks'}
+        </Link>
+        )}
 
         {/* Operations with Service Types - visible if user has operations access */}
         {hasAccess('operations') && (

@@ -971,7 +971,7 @@ async def admin_create_user_with_email(request: Request, current_user: User = De
         module_access = ["leads", "hr", "operations", "finance", "reports", "settings"]
         can_manage_users = True
     elif role == "business_development":
-        module_access = ["leads", "hr", "settings"]
+        module_access = ["leads", "hr", "operations", "settings"]
         can_manage_users = False
     elif role == "project_manager":
         module_access = ["operations", "reports", "hr"]
