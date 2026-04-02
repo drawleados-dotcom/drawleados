@@ -26,6 +26,7 @@ import {
   PanelLeft,
   FileSpreadsheet,
   Search,
+  Calendar,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -408,6 +409,17 @@ const Sidebar = () => {
           {!isCollapsed && 'My Profile'}
         </Link>
         )}
+
+        {/* Calendar - visible for all users */}
+        <Link
+          to={`/calendar/${new Date().toISOString().split('T')[0]}`}
+          data-testid="nav-calendar"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Calendar' : ''}
+        >
+          <Calendar className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'Calendar'}
+        </Link>
 
         {/* HR Admin - Admin/Manager only */}
         {canManageHR && (

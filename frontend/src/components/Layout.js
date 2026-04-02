@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import DrawleadAI from './DrawleadAI';
 import ThemeToggle from './ThemeToggle';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, LogIn, LogOut, Coffee, Play, Building, Home, X, Calendar } from 'lucide-react';
+import { Clock, LogIn, LogOut, Coffee, Play, Building, Home, X, Calendar, ClipboardList } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -34,6 +34,7 @@ const routeToContext = {
 
 const Layout = ({ children }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { isDark } = useTheme();
   const { user } = useAuth();
   const currentModule = routeToContext[location.pathname] || 'general';
@@ -451,8 +452,18 @@ const Layout = ({ children }) => {
             </div>
           </div>
           
-          {/* Right: Theme Toggle */}
-          <ThemeToggle />
+          {/* Right: Task Manager & Theme Toggle */}
+          <div className="flex items-center gap-3">
+            <Button
+              size="sm"
+              onClick={() => navigate('/bde-tasks')}
+              className={`h-8 px-3 text-xs ${location.pathname === '/bde-tasks' ? 'bg-[#6366f1]' : isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${isDark ? 'text-white' : 'text-gray-700'}`}
+            >
+              <ClipboardList className="h-3 w-3 mr-1" />
+              Task Manager
+            </Button>
+            <ThemeToggle />
+          </div>
         </header>
         
         {/* Main Content */}
