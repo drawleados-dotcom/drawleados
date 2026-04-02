@@ -28,6 +28,8 @@ import AdminSignupPage from './pages/AdminSignupPage';
 import ProfilePage from './pages/ProfilePage';
 import BDETasksPage from './pages/BDETasksPage';
 import CalendarDayDetailPage from './pages/CalendarDayDetailPage';
+import CalendarPage from './pages/CalendarPage';
+import LeaveVerificationPage from './pages/LeaveVerificationPage';
 import './App.css';
 
 function AppRouter() {
@@ -111,6 +113,22 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <CalendarDayDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calendar"
+        element={
+          <ProtectedRoute>
+            <CalendarPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/leave-verification"
+        element={
+          <ProtectedRoute>
+            <LeaveVerificationPage />
           </ProtectedRoute>
         }
       />

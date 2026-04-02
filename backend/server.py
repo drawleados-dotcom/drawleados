@@ -35,6 +35,7 @@ from documentation_routes import documentation_router, init_documentation_db
 from seo_board_routes import seo_board_router, init_seo_board_db
 from designation_routes import designation_router
 from bde_routes import bde_router
+from google_calendar_routes import calendar_router, init_calendar_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -60,6 +61,7 @@ init_meta_ads_db(db)
 init_leads_v2_db(db)
 init_documentation_db(db)
 init_seo_board_db(db)
+init_calendar_db(db)
 
 # Create the main app
 app = FastAPI()
@@ -2040,6 +2042,7 @@ api_router.include_router(documentation_router)
 api_router.include_router(seo_board_router)
 api_router.include_router(designation_router)
 api_router.include_router(bde_router)
+api_router.include_router(calendar_router)
 
 # Include router in main app
 app.include_router(api_router)

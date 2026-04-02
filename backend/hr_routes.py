@@ -1992,6 +1992,248 @@ async def reject_leave_request(leave_id: str, request: Request, reason: str = ""
     
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 
+# ============== ENHANCED LEAVE APPROVAL WORKFLOW ==============
+
+@hr_router.get("/leave/{leave_id}/tasks")
+async def get_tasks_for_leave_period(leave_id: str, request: Request):
+    """Get tasks assigned to user during the leave period"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    # Only managers and admins can view this
+    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager", "operations_admin"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    leave = await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    
+    # Parse dates
+    start = leave.get("start_date")
+    end = leave.get("end_date")
+    if isinstance(start, str):
+        start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+    if isinstance(end, str):
+        end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+    
+    start_str = start.strftime("%Y-%m-%d")
+    end_str = end.strftime("%Y-%m-%d")
+    
+    # Get tasks assigned to this user during the leave period
+    tasks = await db.bde_tasks.find({
+        "assigned_to": leave.get("user_id"),
+        "due_date": {"$gte": start_str, "$lte": end_str},
+        "status": {"$ne": "completed"}
+    }, {"_id": 0}).to_list(50)
+    
+    return {
+        "leave_id": leave_id,
+        "user_name": leave.get("user_name"),
+        "leave_dates": {"start": start_str, "end": end_str},
+        "tasks_count": len(tasks),
+        "tasks": tasks
+    }
+
+@hr_router.post("/leave/{leave_id}/send-for-verification")
+async def send_leave_for_verification(leave_id: str, request: Request):
+    """HR sends leave request to Operations Admin for task verification"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    leave = await db.leave_requests.find_one({"leave_id": leave_id})
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    
+    if leave.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="Leave request is not pending")
+    
+    # Update status to pending_verification
+    await db.leave_requests.update_one(
+        {"leave_id": leave_id},
+        {"$set": {
+            "status": "pending_verification",
+            "sent_for_verification_by": user.user_id,
+            "sent_for_verification_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
+
+@hr_router.get("/leave/pending-verification")
+async def get_pending_verification_leaves(request: Request):
+    """Get leave requests pending verification (for Operations Admin)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "operations_admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    requests = await db.leave_requests.find(
+        {"status": "pending_verification"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Enrich with task counts
+    for req in requests:
+        start = req.get("start_date")
+        end = req.get("end_date")
+        if isinstance(start, str):
+            start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+        if isinstance(end, str):
+            end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+        
+        start_str = start.strftime("%Y-%m-%d")
+        end_str = end.strftime("%Y-%m-%d")
+        
+        tasks_count = await db.bde_tasks.count_documents({
+            "assigned_to": req.get("user_id"),
+            "due_date": {"$gte": start_str, "$lte": end_str},
+            "status": {"$ne": "completed"}
+        })
+        req["pending_tasks_count"] = tasks_count
+    
+    return requests
+
+class TaskReassignment(BaseModel):
+    task_id: str
+    new_assignee_id: str
+    remarks: Optional[str] = ""
+
+class LeaveVerification(BaseModel):
+    verified: bool
+    task_reassignments: Optional[List[TaskReassignment]] = []
+    verification_remarks: Optional[str] = ""
+
+@hr_router.post("/leave/{leave_id}/verify")
+async def verify_leave_tasks(leave_id: str, verification: LeaveVerification, request: Request):
+    """Operations Admin verifies and optionally reassigns tasks"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "operations_admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    leave = await db.leave_requests.find_one({"leave_id": leave_id})
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    
+    if leave.get("status") != "pending_verification":
+        raise HTTPException(status_code=400, detail="Leave is not pending verification")
+    
+    # Reassign tasks if needed
+    reassignment_results = []
+    for reassignment in verification.task_reassignments:
+        # Get new assignee details
+        new_assignee = await db.users.find_one(
+            {"user_id": reassignment.new_assignee_id},
+            {"_id": 0, "name": 1}
+        )
+        
+        if new_assignee:
+            await db.bde_tasks.update_one(
+                {"task_id": reassignment.task_id},
+                {"$set": {
+                    "assigned_to": reassignment.new_assignee_id,
+                    "assigned_to_name": new_assignee.get("name"),
+                    "reassigned_by": user.user_id,
+                    "reassigned_at": datetime.now(timezone.utc),
+                    "reassignment_reason": f"Leave: {leave.get('user_name')} - {reassignment.remarks}"
+                }}
+            )
+            reassignment_results.append({
+                "task_id": reassignment.task_id,
+                "new_assignee": new_assignee.get("name"),
+                "status": "reassigned"
+            })
+    
+    # Update leave status based on verification result
+    new_status = "verified_pending_approval" if verification.verified else "verification_rejected"
+    
+    await db.leave_requests.update_one(
+        {"leave_id": leave_id},
+        {"$set": {
+            "status": new_status,
+            "verified_by": user.user_id,
+            "verified_by_name": user.name,
+            "verified_at": datetime.now(timezone.utc),
+            "verification_remarks": verification.verification_remarks,
+            "task_reassignments": [r.dict() for r in verification.task_reassignments] if verification.task_reassignments else []
+        }}
+    )
+    
+    return {
+        "leave_id": leave_id,
+        "status": new_status,
+        "reassignments": reassignment_results,
+        "message": "Leave verified and tasks reassigned" if verification.verified else "Leave verification rejected"
+    }
+
+@hr_router.put("/leave/{leave_id}/final-approve")
+async def final_approve_leave(leave_id: str, request: Request, remarks: str = ""):
+    """Final approval after verification (HR/Admin)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    leave = await db.leave_requests.find_one({"leave_id": leave_id})
+    if not leave:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    
+    # Can approve from pending or verified_pending_approval status
+    if leave.get("status") not in ["pending", "verified_pending_approval"]:
+        raise HTTPException(status_code=400, detail="Leave cannot be approved in current state")
+    
+    await db.leave_requests.update_one(
+        {"leave_id": leave_id},
+        {"$set": {
+            "status": "approved",
+            "approved_by": user.user_id,
+            "approved_by_name": user.name,
+            "approved_at": datetime.now(timezone.utc),
+            "approval_remarks": remarks
+        }}
+    )
+    
+    # Update leave balance (same logic as before)
+    start = leave["start_date"]
+    end = leave["end_date"]
+    if isinstance(start, str):
+        start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+    if isinstance(end, str):
+        end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+    days = (end - start).days + 1
+    
+    leave_type = leave["leave_type"]
+    year = start.year
+    
+    await db.leave_balance.update_one(
+        {"user_id": leave["user_id"], "year": year},
+        {"$inc": {f"{leave_type}_used": days}},
+        upsert=True
+    )
+    
+    # Send notification
+    employee_email = leave.get("user_email", "")
+    if employee_email:
+        start_str = start.strftime("%d %b %Y")
+        end_str = end.strftime("%d %b %Y")
+        asyncio.create_task(notify_leave_decision(
+            employee_email=employee_email,
+            employee_name=leave.get("user_name", "Employee"),
+            leave_type=leave_type,
+            start_date=start_str,
+            end_date=end_str,
+            status="approved",
+            approved_by=user.name
+        ))
+    
+    return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
+
 @hr_router.get("/leave/balance")
 async def get_leave_balance(request: Request):
     """Get leave balance for current year"""
@@ -2024,6 +2266,83 @@ async def get_leave_balance(request: Request):
         )
     
     return balance
+
+@hr_router.get("/leave/monthly-balance")
+async def get_monthly_leave_balance(request: Request, month: Optional[int] = None, year: Optional[int] = None):
+    """Get monthly leave balance (2 casual + 2 sick per month)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    now = datetime.now(timezone.utc)
+    target_month = month or now.month
+    target_year = year or now.year
+    
+    # Get start and end of month
+    start_of_month = datetime(target_year, target_month, 1, tzinfo=timezone.utc)
+    if target_month == 12:
+        end_of_month = datetime(target_year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end_of_month = datetime(target_year, target_month + 1, 1, tzinfo=timezone.utc)
+    
+    # Count approved leaves taken this month
+    leaves_this_month = await db.leave_requests.find({
+        "user_id": user.user_id,
+        "status": "approved",
+        "$or": [
+            {"start_date": {"$gte": start_of_month.isoformat(), "$lt": end_of_month.isoformat()}},
+            {"end_date": {"$gte": start_of_month.isoformat(), "$lt": end_of_month.isoformat()}}
+        ]
+    }, {"_id": 0}).to_list(50)
+    
+    # Calculate days used per type
+    casual_used = 0
+    sick_used = 0
+    
+    for leave in leaves_this_month:
+        leave_type = leave.get("leave_type", "")
+        start = leave.get("start_date")
+        end = leave.get("end_date")
+        
+        # Parse dates
+        if isinstance(start, str):
+            start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+        if isinstance(end, str):
+            end = datetime.fromisoformat(end.replace('Z', '+00:00'))
+        
+        # Count days that fall within this month
+        days = 0
+        current = start
+        while current <= end:
+            if start_of_month <= current < end_of_month:
+                days += 1
+            current += timedelta(days=1)
+        
+        if leave_type == "casual":
+            casual_used += days
+        elif leave_type == "sick":
+            sick_used += days
+    
+    # Monthly allocation: 2 casual + 2 sick
+    monthly_casual = 2
+    monthly_sick = 2
+    
+    return {
+        "month": target_month,
+        "year": target_year,
+        "monthly_allocation": {
+            "casual": monthly_casual,
+            "sick": monthly_sick
+        },
+        "used": {
+            "casual": casual_used,
+            "sick": sick_used
+        },
+        "remaining": {
+            "casual": max(0, monthly_casual - casual_used),
+            "sick": max(0, monthly_sick - sick_used)
+        },
+        "leaves_this_month": leaves_this_month
+    }
 
 # ============== PAYROLL ROUTES ==============
 

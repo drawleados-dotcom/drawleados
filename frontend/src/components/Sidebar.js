@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Megaphone,
   ClipboardList,
+  ClipboardCheck,
   Globe,
   FolderOpen,
   PanelLeftClose,
@@ -412,7 +413,7 @@ const Sidebar = () => {
 
         {/* Calendar - visible for all users */}
         <Link
-          to={`/calendar/${new Date().toISOString().split('T')[0]}`}
+          to="/calendar"
           data-testid="nav-calendar"
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
           title={isCollapsed ? 'Calendar' : ''}
@@ -420,6 +421,19 @@ const Sidebar = () => {
           <Calendar className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'Calendar'}
         </Link>
+
+        {/* Leave Verification - Operations Admin/Manager only */}
+        {(isProjectManager || userRole === 'admin' || userRole === 'super_admin' || userRole === 'operations_admin') && (
+          <Link
+            to="/leave-verification"
+            data-testid="nav-leave-verification"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leave-verification' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Leave Verification' : ''}
+          >
+            <ClipboardCheck className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'Leave Verification'}
+          </Link>
+        )}
 
         {/* HR Admin - Admin/Manager only */}
         {canManageHR && (

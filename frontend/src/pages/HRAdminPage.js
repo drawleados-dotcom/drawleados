@@ -14,7 +14,8 @@ import {
   Users, Clock, Calendar, CheckCircle, XCircle, 
   Home, Building, Edit, Search, UserPlus, X, Trash2,
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus,
-  Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink
+  Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
+  Send, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -300,6 +301,38 @@ export default function HRAdminPage() {
       loadStats();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to reject');
+    }
+  };
+
+  // Enhanced leave workflow functions
+  const handleViewTasks = async (leaveId) => {
+    try {
+      const res = await axios.get(`${API}/api/hr/leave/${leaveId}/tasks`, { headers });
+      return res.data;
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to load tasks');
+      return null;
+    }
+  };
+
+  const handleSendForVerification = async (leaveId) => {
+    try {
+      await axios.post(`${API}/api/hr/leave/${leaveId}/send-for-verification`, {}, { headers });
+      toast.success('Leave sent to Operations Admin for task verification');
+      loadLeaveRequests();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to send for verification');
+    }
+  };
+
+  const handleFinalApprove = async (leaveId) => {
+    try {
+      await axios.put(`${API}/api/hr/leave/${leaveId}/final-approve`, {}, { headers });
+      toast.success('Leave request approved!');
+      loadLeaveRequests();
+      loadStats();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to approve');
     }
   };
 
@@ -607,6 +640,9 @@ export default function HRAdminPage() {
             setFilter={setLeaveFilter}
             onApprove={handleApprove}
             onReject={handleReject}
+            onViewTasks={handleViewTasks}
+            onSendForVerification={handleSendForVerification}
+            onFinalApprove={handleFinalApprove}
             formatDate={formatDate}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
@@ -1978,22 +2014,65 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, 
 }
 
 // ============== LEAVE REQUESTS TAB ==============
-function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, onViewTasks, onSendForVerification, onFinalApprove, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [selectedLeave, setSelectedLeave] = useState(null);
+  const [leaveTasks, setLeaveTasks] = useState(null);
+  const [showTasksModal, setShowTasksModal] = useState(false);
+  const [loadingTasks, setLoadingTasks] = useState(false);
+
+  const handleViewTasksClick = async (leaveId) => {
+    setLoadingTasks(true);
+    const data = await onViewTasks(leaveId);
+    if (data) {
+      setLeaveTasks(data);
+      setSelectedLeave(leaveId);
+      setShowTasksModal(true);
+    }
+    setLoadingTasks(false);
+  };
+
+  const getStatusBadge = (status) => {
+    const statusStyles = {
+      pending: 'bg-yellow-500/20 text-yellow-400',
+      pending_verification: 'bg-purple-500/20 text-purple-400',
+      verified_pending_approval: 'bg-blue-500/20 text-blue-400',
+      verification_rejected: 'bg-orange-500/20 text-orange-400',
+      approved: 'bg-green-500/20 text-green-400',
+      rejected: 'bg-red-500/20 text-red-400'
+    };
+    const statusLabels = {
+      pending: 'Pending',
+      pending_verification: 'Awaiting Verification',
+      verified_pending_approval: 'Verified - Pending Approval',
+      verification_rejected: 'Verification Rejected',
+      approved: 'Approved',
+      rejected: 'Rejected'
+    };
+    return (
+      <Badge className={statusStyles[status] || 'bg-gray-500/20 text-gray-400'}>
+        {statusLabels[status] || status}
+      </Badge>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Filter */}
-      <div className="flex gap-2">
-        {['pending', 'approved', 'rejected', 'all'].map((f) => (
+      <div className="flex gap-2 flex-wrap">
+        {['pending', 'pending_verification', 'verified_pending_approval', 'approved', 'rejected', 'all'].map((f) => (
           <Button
             key={f}
             onClick={() => setFilter(f)}
+            size="sm"
             className={`${
               filter === f
                 ? 'bg-[#6366f1] text-white'
                 : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
             }`}
           >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {f === 'pending_verification' ? 'Verification' : 
+             f === 'verified_pending_approval' ? 'Verified' : 
+             f.charAt(0).toUpperCase() + f.slice(1)}
           </Button>
         ))}
       </div>
@@ -2003,7 +2082,7 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
         {requests.map((req) => (
           <Card key={req.leave_id} className={`${bgCard} border ${borderColor}`}>
             <CardContent className="p-4">
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="h-10 w-10 rounded-full bg-[#6366f1] flex items-center justify-center text-white font-bold">
@@ -2037,35 +2116,88 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
                     </div>
                     <div>
                       <p className={`text-xs ${textSecondary}`}>Status</p>
-                      <Badge className={`${
-                        req.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                        req.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                        'bg-yellow-500/20 text-yellow-400'
-                      }`}>
-                        {req.status}
-                      </Badge>
+                      {getStatusBadge(req.status)}
                     </div>
                   </div>
+
+                  {/* Verification info */}
+                  {req.verified_by_name && (
+                    <div className={`mt-3 p-2 rounded ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary}`}>
+                        Verified by: <span className={textPrimary}>{req.verified_by_name}</span>
+                        {req.verification_remarks && ` - "${req.verification_remarks}"`}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                {req.status === 'pending' && (
-                  <div className="flex gap-2 ml-4">
+                {/* Action Buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {/* View Tasks button - always visible for pending statuses */}
+                  {['pending', 'pending_verification', 'verified_pending_approval'].includes(req.status) && (
                     <Button
-                      onClick={() => onApprove(req.leave_id)}
-                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      onClick={() => handleViewTasksClick(req.leave_id)}
+                      disabled={loadingTasks}
+                      className="bg-[#3b82f6] hover:bg-[#2563eb] text-white"
+                      size="sm"
                     >
-                      <CheckCircle className="mr-1 h-4 w-4" />
-                      Approve
+                      <Briefcase className="mr-1 h-4 w-4" />
+                      View Tasks
                     </Button>
-                    <Button
-                      onClick={() => onReject(req.leave_id)}
-                      className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                    >
-                      <XCircle className="mr-1 h-4 w-4" />
-                      Reject
-                    </Button>
-                  </div>
-                )}
+                  )}
+
+                  {/* Pending: Send for verification or Direct approve/reject */}
+                  {req.status === 'pending' && (
+                    <>
+                      <Button
+                        onClick={() => onSendForVerification(req.leave_id)}
+                        className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white"
+                        size="sm"
+                      >
+                        <Send className="mr-1 h-4 w-4" />
+                        Send for Verification
+                      </Button>
+                      <Button
+                        onClick={() => onApprove(req.leave_id)}
+                        className="bg-[#10b981] hover:bg-[#059669] text-white"
+                        size="sm"
+                      >
+                        <CheckCircle className="mr-1 h-4 w-4" />
+                        Quick Approve
+                      </Button>
+                      <Button
+                        onClick={() => onReject(req.leave_id)}
+                        className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                        size="sm"
+                      >
+                        <XCircle className="mr-1 h-4 w-4" />
+                        Reject
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Verified pending approval: Final approve/reject */}
+                  {req.status === 'verified_pending_approval' && (
+                    <>
+                      <Button
+                        onClick={() => onFinalApprove(req.leave_id)}
+                        className="bg-[#10b981] hover:bg-[#059669] text-white"
+                        size="sm"
+                      >
+                        <CheckCircle className="mr-1 h-4 w-4" />
+                        Final Approve
+                      </Button>
+                      <Button
+                        onClick={() => onReject(req.leave_id)}
+                        className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                        size="sm"
+                      >
+                        <XCircle className="mr-1 h-4 w-4" />
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -2074,10 +2206,71 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, fo
         {requests.length === 0 && (
           <div className="text-center py-12">
             <Calendar className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
-            <p className={textSecondary}>No {filter !== 'all' ? filter : ''} leave requests</p>
+            <p className={textSecondary}>No {filter !== 'all' ? filter.replace('_', ' ') : ''} leave requests</p>
           </div>
         )}
       </div>
+
+      {/* Tasks Modal */}
+      {showTasksModal && leaveTasks && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col`}>
+            <CardHeader className="flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className={textPrimary}>Tasks During Leave Period</CardTitle>
+                  <p className={`text-sm ${textSecondary} mt-1`}>
+                    {leaveTasks.user_name} | {leaveTasks.leave_dates?.start} to {leaveTasks.leave_dates?.end}
+                  </p>
+                </div>
+                <Button variant="ghost" onClick={() => setShowTasksModal(false)}>
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto">
+              {leaveTasks.tasks_count === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 text-[#10b981] mx-auto mb-4" />
+                  <p className={textPrimary}>No pending tasks during this period</p>
+                  <p className={`text-sm ${textSecondary}`}>Leave can be approved safely</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className={`p-3 rounded ${bgSecondary} mb-4`}>
+                    <p className={`text-sm ${textPrimary}`}>
+                      <AlertTriangle className="h-4 w-4 inline mr-2 text-[#f59e0b]" />
+                      {leaveTasks.tasks_count} pending task(s) found that need attention
+                    </p>
+                  </div>
+                  {leaveTasks.tasks?.map((task) => (
+                    <div key={task.task_id} className={`p-3 rounded border ${borderColor}`}>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{task.task_name}</p>
+                          <p className={`text-xs ${textSecondary} mt-1`}>
+                            Due: {task.due_date} | Priority: {task.priority || 'Normal'}
+                          </p>
+                          {task.description && (
+                            <p className={`text-sm ${textSecondary} mt-2`}>{task.description}</p>
+                          )}
+                        </div>
+                        <Badge className={`${
+                          task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                          task.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {task.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
