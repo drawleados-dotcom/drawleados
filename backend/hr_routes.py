@@ -602,7 +602,7 @@ async def lunch_end(lunch_data: LunchEndRequest, request: Request):
     # Support both field names
     lunch_end_str = lunch_data.lunch_end_time or lunch_data.time
     if lunch_end_str:
-        end_time = parse_time_string(lunch_data.lunch_end_time, today)
+        end_time = parse_time_string(lunch_end_str, today)
     else:
         end_time = datetime.now(timezone.utc)
     
