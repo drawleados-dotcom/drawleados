@@ -528,6 +528,13 @@ async def login(credentials: UserLogin):
     
     del user_doc["password_hash"]
     
+    # Add designation and department from employee_profiles if not set
+    if not user_doc.get("designation") or not user_doc.get("department"):
+        profile = await db.employee_profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0})
+        if profile:
+            user_doc["designation"] = profile.get("designation", "")
+            user_doc["department"] = profile.get("department", "")
+    
     return {"user": user_doc, "session_token": session_token}
 
 @api_router.post("/auth/google-session")

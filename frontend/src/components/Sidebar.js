@@ -90,6 +90,28 @@ const Sidebar = () => {
   const canManageHR = isAdmin || userRole === 'hr_manager';
   const canManageUsers = user?.can_manage_users || false;
 
+  // User designation for department filtering
+  const userDesignation = (user?.designation || '').toLowerCase();
+  
+  // Check if user can see a specific operations department
+  const canSeeDepartment = (deptKey) => {
+    // Admin and super admin can see all
+    if (isAdmin) return true;
+    
+    // Map department keys to designation keywords
+    const deptMap = {
+      'website': ['website', 'web developer', 'web', 'developer', 'frontend', 'backend', 'fullstack'],
+      'seo': ['seo', 'search engine', 'seo specialist', 'seo executive'],
+      'social': ['social', 'social media', 'smm', 'social media manager'],
+      'creative': ['creative', 'design', 'designer', 'graphic', 'creative design'],
+      'meta': ['meta', 'ads', 'meta ads', 'performance', 'paid', 'marketing'],
+      'bde': ['bde', 'business development', 'sales', 'bd']
+    };
+    
+    const keywords = deptMap[deptKey] || [];
+    return keywords.some(kw => userDesignation.includes(kw));
+  };
+
   // Load databases for operations submenu
   const loadDatabases = useCallback(async () => {
     if (!token) return;
@@ -232,10 +254,11 @@ const Sidebar = () => {
             {!isCollapsed && <span className="flex-1 text-left">Operations</span>}
           </button>
 
-          {/* Service Types */}
+          {/* Service Types - Filtered by user department */}
           {!isCollapsed && operationsExpanded && (
             <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
               {/* Website Development - Direct Link */}
+              {canSeeDepartment('website') && (
               <Link
                 to="/website-projects"
                 data-testid="nav-website-projects"
@@ -249,7 +272,10 @@ const Sidebar = () => {
                 <span className="flex-1 text-left">Website Development</span>
                 <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs px-1.5">{websiteProjects.length}</Badge>
               </Link>
+              )}
               
+              {canSeeDepartment('seo') && (
+              <>
               <Link
                 to="/sop-works?service=seo"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
@@ -273,7 +299,10 @@ const Sidebar = () => {
                 <Search className="h-4 w-4" />
                 <span>SEO Board</span>
               </Link>
+              </>
+              )}
               
+              {canSeeDepartment('social') && (
               <Link
                 to="/social-media"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
@@ -285,7 +314,9 @@ const Sidebar = () => {
                 <span className="text-base">📱</span>
                 <span>Social Media</span>
               </Link>
+              )}
               
+              {canSeeDepartment('creative') && (
               <Link
                 to="/creative-board"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
@@ -297,8 +328,10 @@ const Sidebar = () => {
                 <span className="text-base">🎨</span>
                 <span>Creative Design</span>
               </Link>
+              )}
               
               {/* Meta Ads - Expandable */}
+              {canSeeDepartment('meta') && (
               <div>
                 <button
                   onClick={() => setMetaAdsExpanded(!metaAdsExpanded)}
@@ -331,8 +364,25 @@ const Sidebar = () => {
                   </div>
                 )}
               </div>
+              )}
 
-              {/* Add Custom Service */}
+              {/* BDE Tasks */}
+              {canSeeDepartment('bde') && (
+              <Link
+                to="/sop-works?service=bde"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.search.includes('service=bde')
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <span className="text-base">💼</span>
+                <span>BDE Tasks</span>
+              </Link>
+              )}
+
+              {/* Add Custom Service - Only for admins */}
+              {isAdmin && (
               <Link
                 to="/sop-works?action=add-service"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${isDark ? 'text-[#6366f1] hover:bg-[#6366f1]/10' : 'text-[#6366f1] hover:bg-[#6366f1]/10'}`}
@@ -340,6 +390,7 @@ const Sidebar = () => {
                 <Plus className="h-4 w-4" />
                 <span>Add Custom Service</span>
               </Link>
+              )}
             </div>
           )}
         </div>

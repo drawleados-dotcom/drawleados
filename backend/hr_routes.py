@@ -2279,6 +2279,8 @@ async def create_employee(data: CreateEmployeeRequest, request: Request):
         "role": data.role,
         "password_hash": hash_password(data.password),
         "is_active": True,
+        "designation": data.designation or "",
+        "department": data.department or "",
         "module_access": data.module_access or [],
         "project_access": [],
         "can_create_projects": data.role in ["admin", "super_admin", "project_manager"],
