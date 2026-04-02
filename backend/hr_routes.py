@@ -1078,6 +1078,11 @@ async def get_calendar(year: int, month: int, request: Request):
             "created_at": datetime.now(timezone.utc)
         }
         await db.hr_calendar.insert_one(calendar)
+        # Re-fetch without _id
+        calendar = await db.hr_calendar.find_one({
+            "month": month,
+            "year": year
+        }, {"_id": 0})
     
     return calendar
 

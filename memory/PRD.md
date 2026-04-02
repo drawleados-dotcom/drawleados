@@ -38,10 +38,34 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - GET/POST/PUT/DELETE `/api/leads/stages` - Manage lead stages
 
 ### HR
-- POST/GET `/api/hr/attendance/clock-in`, `/api/hr/attendance/clock-out`
-- GET `/api/hr/attendance/history`, `/api/hr/attendance/today`
-- POST/GET `/api/hr/leave/request`, `/api/hr/leave/my-requests`
-- PUT `/api/hr/leave/{leave_id}/approve`, `/api/hr/leave/{leave_id}/reject`
+- POST `/api/hr/attendance/clock-in` - Clock in with login time entry
+- POST `/api/hr/attendance/clock-out` - Clock out with logout time entry
+- POST `/api/hr/attendance/lunch-start` - Start lunch break
+- POST `/api/hr/attendance/lunch-end` - End lunch break
+- GET `/api/hr/attendance/today` - Today's attendance + HR settings
+- GET `/api/hr/attendance/history` - Monthly attendance history with summary
+- GET `/api/hr/attendance/report` - 6-month attendance report
+- POST `/api/hr/permission/request` - Request permission (hours off)
+- GET `/api/hr/permission/requests` - My permission requests
+- POST `/api/hr/leave/request` - Request leave
+- GET `/api/hr/leave/my-requests` - My leave requests
+- GET `/api/hr/leave/balance` - Leave balance
+- PUT `/api/hr/leave/{leave_id}/approve` - Approve leave
+- GET `/api/hr/admin/attendance/pending-approvals` - Pending approvals (HR Admin)
+- POST `/api/hr/admin/attendance/approve/{attendance_id}` - Approve attendance
+- GET `/api/hr/admin/attendance/all` - All employees' attendance
+- GET/PUT `/api/hr/admin/settings` - HR Settings (work hours, login/logout times)
+- GET/PUT `/api/hr/admin/calendar/{year}/{month}` - Monthly calendar with holidays
+- GET/POST `/api/hr/admin/salary/{user_id}` - Employee salary details
+- POST `/api/hr/admin/payslip/generate` - Generate payslip
+- GET `/api/hr/admin/payslips` - All payslips
+- PUT `/api/hr/admin/payslip/{id}/submit` - Submit for approval
+- PUT `/api/hr/admin/payslip/{id}/approve` - Super Admin approves
+- PUT `/api/hr/payslip/{id}/acknowledge` - Employee acknowledges
+- PUT `/api/hr/admin/payslip/{id}/send-to-finance` - Send to finance
+- PUT `/api/hr/finance/payslip/{id}/release` - Finance releases payment
+- GET `/api/hr/payslips/my` - My payslips
+- GET `/api/hr/payslip/{id}` - Single payslip details
 
 ### Documentation
 - GET/POST `/api/docs/documents` - List/create documents
@@ -149,6 +173,25 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
     - CEO | BD | Operations | Website | SEO | Meta
   - Documents auto-assigned to user's department on creation
   - Admins can create documents for any department
+
+#### P0 - HR/Attendance Management System (DONE - Dec 2025)
+- ✅ **Enhanced Attendance Tracking**:
+  - Employee enters login/logout time manually
+  - Lunch break tracking (start/end with duration calculation)
+  - Auto-calculation: Work hours = Total time - Lunch - Permission hours
+  - Extra hours calculation when > 9 hours
+- ✅ **Dashboard Cards**: Working Days, Present, Absent, Casual Leave (0/12), Sick Leave (0/6), Extra Hours
+- ✅ **Request Leave/Permission Buttons** with modals
+- ✅ **Approval Workflow**:
+  - Early login (>1 hour before 09:00) → pending HR approval
+  - Early logout (<9 hours) → pending HR approval
+- ✅ **Attendance History Table**: Date, Day, Login, Logout, Lunch, Permission, Work Hrs, Extra Hrs, Status
+- ✅ **HR Settings**: Standard work hours (9), login time (09:00), logout time (18:00)
+- ✅ **Monthly Calendar**: HR Admin can set holidays and working days
+- ✅ **Payslip System** (Backend ready, needs frontend UI):
+  - Generate payslip based on attendance
+  - Approval flow: HR → Super Admin → Employee Acknowledge → Finance Release
+  - PDF download capability
 
 #### P0 - Operations Approval Workflow (DONE - Dec 2025)
 - ✅ **Digital Marketing Board Template** with approval workflow for DM teams
