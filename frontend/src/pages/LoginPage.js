@@ -1,18 +1,78 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Loader2, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import axios from 'axios';
+
+const API = process.env.REACT_APP_BACKEND_URL;
+
+// Demo users for quick testing
+const DEMO_USERS = [
+  { id: 'admin', name: 'Vinoth (Super Admin)', email: 'Vinoth@drawlead.com', password: '6383145061', role: 'super_admin' },
+  { id: 'hr', name: 'HR Manager', email: 'hr@drawlead.com', password: 'hr123456', role: 'hr_manager' },
+  { id: 'bde', name: 'Business Dev', email: 'bde@drawlead.com', password: 'bde123456', role: 'business_development' },
+  { id: 'dev', name: 'Web Developer', email: 'dev@drawlead.com', password: 'dev123456', role: 'website_developer' },
+  { id: 'seo', name: 'SEO Specialist', email: 'seo@drawlead.com', password: 'seo123456', role: 'seo_specialist' },
+];
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [demoUsersReady, setDemoUsersReady] = useState(false);
+  const [selectedDemoUser, setSelectedDemoUser] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // Seed demo users on load (only once)
+  useEffect(() => {
+    const seedDemoUsers = async () => {
+      try {
+        await axios.post(`${API}/api/auth/seed-demo-users`, {});
+        setDemoUsersReady(true);
+      } catch (error) {
+        // Ignore errors - users may already exist
+        setDemoUsersReady(true);
+      }
+    };
+    seedDemoUsers();
+  }, []);
+
+  // Handle demo user selection
+  const handleDemoUserSelect = (userId) => {
+    setSelectedDemoUser(userId);
+    const demoUser = DEMO_USERS.find(u => u.id === userId);
+    if (demoUser) {
+      setEmail(demoUser.email);
+      setPassword(demoUser.password);
+    }
+  };
+
+  // Quick login for demo user
+  const handleQuickLogin = async () => {
+    if (!selectedDemoUser) {
+      toast.error('Please select a demo user first');
+      return;
+    }
+    const demoUser = DEMO_USERS.find(u => u.id === selectedDemoUser);
+    if (demoUser) {
+      setLoading(true);
+      try {
+        await login(demoUser.email, demoUser.password);
+        toast.success(`Logged in as ${demoUser.name}`);
+        navigate('/leads');
+      } catch (error) {
+        toast.error(error.response?.data?.detail || 'Login failed');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -135,9 +195,43 @@ export default function LoginPage() {
             </Button>
           </div>
 
-          <p className="mt-6 text-center text-sm text-[#a1a1aa]">
-            Demo: vinoth@drawlead.com / admin123
-          </p>
+          {/* Demo Users Section */}
+          <div className="mt-6 pt-4 border-t border-[#27272a]">
+            <p className="text-center text-sm text-[#a1a1aa] mb-3">Quick Demo Login</p>
+            <div className="flex gap-2">
+              <Select value={selectedDemoUser} onValueChange={handleDemoUserSelect}>
+                <SelectTrigger 
+                  className="flex-1 bg-[#18181b] border-[#27272a] text-[#fafafa]"
+                  data-testid="demo-user-select"
+                >
+                  <SelectValue placeholder="Select demo user..." />
+                </SelectTrigger>
+                <SelectContent className="bg-[#18181b] border-[#27272a]">
+                  {DEMO_USERS.map((user) => (
+                    <SelectItem 
+                      key={user.id} 
+                      value={user.id}
+                      className="text-[#fafafa] focus:bg-[#27272a]"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>{user.name}</span>
+                        <span className="text-xs text-[#6366f1]">({user.role.replace('_', ' ')})</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                onClick={handleQuickLogin}
+                disabled={loading || !selectedDemoUser}
+                data-testid="quick-login-button"
+                className="bg-[#10b981] hover:bg-[#059669] text-white px-4"
+              >
+                <UserCheck className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

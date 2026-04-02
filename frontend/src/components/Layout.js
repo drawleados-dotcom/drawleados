@@ -183,6 +183,84 @@ const Layout = ({ children }) => {
     return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
+  // Parse time string to minutes since midnight
+  const parseTimeToMinutes = (timeStr) => {
+    if (!timeStr) return null;
+    try {
+      const cleaned = timeStr.trim().toUpperCase();
+      let hours, minutes;
+      
+      if (cleaned.includes('AM') || cleaned.includes('PM')) {
+        const isPM = cleaned.includes('PM');
+        const timePart = cleaned.replace('AM', '').replace('PM', '').trim();
+        [hours, minutes] = timePart.split(':').map(Number);
+        if (isPM && hours !== 12) hours += 12;
+        if (!isPM && hours === 12) hours = 0;
+      } else {
+        [hours, minutes] = cleaned.split(':').map(Number);
+      }
+      
+      return hours * 60 + minutes;
+    } catch {
+      return null;
+    }
+  };
+
+  // Calculate duration in hours and minutes
+  const calculateDuration = (startTimeStr, endTimeStr) => {
+    const startMinutes = parseTimeToMinutes(startTimeStr);
+    const endMinutes = parseTimeToMinutes(endTimeStr);
+    
+    if (startMinutes === null || endMinutes === null) return null;
+    
+    let diffMinutes = endMinutes - startMinutes;
+    if (diffMinutes < 0) diffMinutes += 24 * 60; // Handle overnight
+    
+    const hours = Math.floor(diffMinutes / 60);
+    const mins = diffMinutes % 60;
+    
+    return { hours, mins, totalMinutes: diffMinutes };
+  };
+
+  // Get formatted clock-in time from today's attendance
+  const getClockInTime = () => {
+    if (!todayAttendance?.clock_in) return null;
+    const date = new Date(todayAttendance.clock_in);
+    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+  };
+
+  // Get formatted lunch-out time from today's attendance
+  const getLunchOutTime = () => {
+    if (!todayAttendance?.lunch_out) return null;
+    const date = new Date(todayAttendance.lunch_out);
+    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+  };
+
+  // Calculate lunch duration for Lunch In modal
+  const getLunchDuration = () => {
+    const lunchOutTime = getLunchOutTime();
+    if (!lunchOutTime) return null;
+    return calculateDuration(lunchOutTime, lunchInData.time);
+  };
+
+  // Calculate work duration for Clock Out modal (includes lunch deduction)
+  const getWorkDuration = () => {
+    const clockInTime = getClockInTime();
+    if (!clockInTime) return null;
+    
+    const totalDuration = calculateDuration(clockInTime, clockOutData.time);
+    if (!totalDuration) return null;
+    
+    // Deduct lunch duration if lunch was taken
+    let lunchMinutes = todayAttendance?.lunch_duration || 0;
+    
+    const workMinutes = totalDuration.totalMinutes - lunchMinutes;
+    const hours = Math.floor(workMinutes / 60);
+    const mins = Math.abs(workMinutes % 60);
+    
+    return { hours, mins, totalMinutes: workMinutes, lunchMinutes };
+  };
+
   const isClockedIn = todayAttendance?.clock_in && !todayAttendance?.clock_out;
   const isClockedOut = todayAttendance?.clock_out;
   const isOnLunch = todayAttendance?.lunch_out && !todayAttendance?.lunch_in;
@@ -389,6 +467,30 @@ const Layout = ({ children }) => {
         submitText="Clock Out"
         submitColor="bg-[#ef4444] hover:bg-[#dc2626]"
       >
+        {/* Work Duration Display */}
+        {(() => {
+          const duration = getWorkDuration();
+          return duration ? (
+            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#10b981]/10' : 'bg-emerald-50'} border ${isDark ? 'border-[#10b981]/30' : 'border-emerald-200'}`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-sm ${isDark ? 'text-[#10b981]' : 'text-emerald-700'}`}>Total Work Hours:</span>
+                <span className={`text-2xl font-bold ${isDark ? 'text-[#10b981]' : 'text-emerald-700'}`}>
+                  {duration.hours}h {duration.mins}m
+                </span>
+              </div>
+              <div className={`text-xs mt-2 space-y-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>
+                <p>Clocked in at {formatTime(todayAttendance?.clock_in)}</p>
+                {duration.lunchMinutes > 0 && (
+                  <p>Lunch break: {Math.floor(duration.lunchMinutes / 60)}h {duration.lunchMinutes % 60}m deducted</p>
+                )}
+                {duration.totalMinutes < 540 && (
+                  <p className="text-[#f59e0b]">⚠️ Less than 9 hours - may require approval</p>
+                )}
+              </div>
+            </div>
+          ) : null;
+        })()}
+        
         {/* Work Mode Display */}
         <div className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-3`}>
           {todayAttendance?.work_mode === 'remote' ? (
@@ -459,6 +561,24 @@ const Layout = ({ children }) => {
         submitText="Resume Work"
         submitColor="bg-[#8b5cf6] hover:bg-[#7c3aed]"
       >
+        {/* Lunch Duration Display */}
+        {(() => {
+          const duration = getLunchDuration();
+          return duration ? (
+            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#f59e0b]/10' : 'bg-amber-50'} border ${isDark ? 'border-[#f59e0b]/30' : 'border-amber-200'}`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-sm ${isDark ? 'text-[#f59e0b]' : 'text-amber-700'}`}>Lunch Duration:</span>
+                <span className={`text-2xl font-bold ${isDark ? 'text-[#f59e0b]' : 'text-amber-700'}`}>
+                  {duration.hours > 0 ? `${duration.hours}h ` : ''}{duration.mins}m
+                </span>
+              </div>
+              <p className={`text-xs mt-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>
+                Lunch started at {formatTime(todayAttendance?.lunch_out)}
+              </p>
+            </div>
+          ) : null;
+        })()}
+        
         {/* Work Mode Display */}
         <div className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-3`}>
           {todayAttendance?.work_mode === 'remote' ? (

@@ -838,6 +838,96 @@ async def verify_otp_and_change_password(request: Request, current_user: User = 
     
     return {"message": "Password changed successfully"}
 
+# ============== SEED DEMO USERS ==============
+
+@api_router.post("/auth/seed-demo-users")
+async def seed_demo_users():
+    """Seed demo users for testing - creates users if they don't exist"""
+    demo_users = [
+        {
+            "email": "hr@drawlead.com",
+            "name": "HR Manager",
+            "password": "hr123456",
+            "role": "hr_manager",
+            "designation": "HR Manager",
+            "department": "HR",
+            "module_access": ["hr", "hr_admin", "operations"]
+        },
+        {
+            "email": "bde@drawlead.com", 
+            "name": "Business Dev",
+            "password": "bde123456",
+            "role": "business_development",
+            "designation": "Business Development Executive",
+            "department": "Sales",
+            "module_access": ["leads", "hr", "operations"]
+        },
+        {
+            "email": "dev@drawlead.com",
+            "name": "Web Developer",
+            "password": "dev123456",
+            "role": "website_developer",
+            "designation": "Website Developer",
+            "department": "Website",
+            "module_access": ["operations", "hr"]
+        },
+        {
+            "email": "seo@drawlead.com",
+            "name": "SEO Specialist",
+            "password": "seo123456",
+            "role": "seo_specialist",
+            "designation": "SEO Specialist",
+            "department": "SEO",
+            "module_access": ["operations", "hr"]
+        }
+    ]
+    
+    created = []
+    skipped = []
+    
+    for user_data in demo_users:
+        existing = await db.users.find_one({"email": user_data["email"]})
+        if existing:
+            skipped.append(user_data["email"])
+            continue
+        
+        user_id = f"usr_{uuid.uuid4().hex[:12]}"
+        user_doc = {
+            "user_id": user_id,
+            "email": user_data["email"],
+            "name": user_data["name"],
+            "password_hash": hash_password(user_data["password"]),
+            "role": user_data["role"],
+            "designation": user_data.get("designation", ""),
+            "department": user_data.get("department", ""),
+            "module_access": user_data.get("module_access", []),
+            "can_manage_users": False,
+            "picture": "",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }
+        
+        await db.users.insert_one(user_doc)
+        
+        # Initialize leave balance
+        year = datetime.now().year
+        await db.leave_balance.update_one(
+            {"user_id": user_id, "year": year},
+            {"$setOnInsert": {
+                "casual_leave": 12,
+                "sick_leave": 6,
+                "earned_leave": 15,
+                "casual_used": 0,
+                "sick_used": 0,
+                "earned_used": 0
+            }},
+            upsert=True
+        )
+        
+        created.append(user_data["email"])
+    
+    return {"message": "Demo users seeded", "created": created, "skipped": skipped}
+
 # ============== ADMIN CREATE USER WITH EMAIL ==============
 
 @api_router.post("/admin/create-user")

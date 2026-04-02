@@ -521,6 +521,7 @@ export default function HRAdminPage() {
     { id: 'all-attendance', label: 'All Attendance', icon: Clock },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'payslips', label: 'Payslips', icon: FileText },
+    { id: 'settings', label: 'Work Settings', icon: Clock },
   ];
 
   return (
@@ -980,6 +981,20 @@ export default function HRAdminPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Work Settings Tab */}
+        {activeTab === 'settings' && (
+          <WorkSettingsTab
+            settings={hrSettings}
+            onUpdate={handleUpdateHRSettings}
+            onRefresh={loadHRSettings}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
         )}
 
         {/* Add Employee Modal */}
@@ -2863,6 +2878,193 @@ function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGe
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============== WORK SETTINGS TAB ==============
+function WorkSettingsTab({ settings, onUpdate, onRefresh, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [formData, setFormData] = useState({
+    standard_work_hours: 9,
+    standard_login_time: '09:00',
+    standard_logout_time: '18:00',
+    early_login_threshold_minutes: 60,
+    grace_period_minutes: 15,
+    default_lunch_duration: 60,
+    overtime_rate_multiplier: 1.5
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings) {
+      setFormData({
+        standard_work_hours: settings.standard_work_hours || 9,
+        standard_login_time: settings.standard_login_time || '09:00',
+        standard_logout_time: settings.standard_logout_time || '18:00',
+        early_login_threshold_minutes: settings.early_login_threshold_minutes || 60,
+        grace_period_minutes: settings.grace_period_minutes || 15,
+        default_lunch_duration: settings.default_lunch_duration || 60,
+        overtime_rate_multiplier: settings.overtime_rate_multiplier || 1.5
+      });
+    }
+  }, [settings]);
+
+  const handleChange = (field, value) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onUpdate(formData);
+    setSaving(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className={`text-xl font-semibold ${textPrimary}`}>Work Time Settings</h2>
+          <p className={`text-sm ${textSecondary}`}>Configure standard work hours, login/logout times, and approval thresholds</p>
+        </div>
+        <Button onClick={onRefresh} variant="outline" className={`${borderColor}`}>
+          Refresh
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Standard Work Hours */}
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader>
+            <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+              <Clock className="h-5 w-5 text-[#6366f1]" />
+              Work Hours Configuration
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className={textPrimary}>Standard Work Hours</Label>
+                <Input
+                  type="number"
+                  step="0.5"
+                  value={formData.standard_work_hours}
+                  onChange={(e) => handleChange('standard_work_hours', parseFloat(e.target.value))}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                />
+                <p className={`text-xs mt-1 ${textSecondary}`}>Hours per day (e.g., 9)</p>
+              </div>
+              <div>
+                <Label className={textPrimary}>Default Lunch Duration</Label>
+                <Input
+                  type="number"
+                  value={formData.default_lunch_duration}
+                  onChange={(e) => handleChange('default_lunch_duration', parseInt(e.target.value))}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                />
+                <p className={`text-xs mt-1 ${textSecondary}`}>Minutes (e.g., 60)</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className={textPrimary}>Standard Login Time</Label>
+                <Input
+                  type="time"
+                  value={formData.standard_login_time}
+                  onChange={(e) => handleChange('standard_login_time', e.target.value)}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Standard Logout Time</Label>
+                <Input
+                  type="time"
+                  value={formData.standard_logout_time}
+                  onChange={(e) => handleChange('standard_logout_time', e.target.value)}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Approval Thresholds */}
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader>
+            <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+              <AlertCircle className="h-5 w-5 text-[#f59e0b]" />
+              Approval Thresholds
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label className={textPrimary}>Early Login Threshold</Label>
+              <Input
+                type="number"
+                value={formData.early_login_threshold_minutes}
+                onChange={(e) => handleChange('early_login_threshold_minutes', parseInt(e.target.value))}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              />
+              <p className={`text-xs mt-1 ${textSecondary}`}>
+                Minutes before standard login that triggers approval (e.g., 60 = 1 hour before)
+              </p>
+            </div>
+
+            <div>
+              <Label className={textPrimary}>Grace Period</Label>
+              <Input
+                type="number"
+                value={formData.grace_period_minutes}
+                onChange={(e) => handleChange('grace_period_minutes', parseInt(e.target.value))}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              />
+              <p className={`text-xs mt-1 ${textSecondary}`}>
+                Minutes of grace period for late login (e.g., 15)
+              </p>
+            </div>
+
+            <div>
+              <Label className={textPrimary}>Overtime Rate Multiplier</Label>
+              <Input
+                type="number"
+                step="0.1"
+                value={formData.overtime_rate_multiplier}
+                onChange={(e) => handleChange('overtime_rate_multiplier', parseFloat(e.target.value))}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              />
+              <p className={`text-xs mt-1 ${textSecondary}`}>
+                Extra hours pay multiplier (e.g., 1.5 = 1.5x)
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Info Box */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className={`p-4 rounded-lg ${bgSecondary}`}>
+            <h4 className={`font-medium ${textPrimary} mb-2`}>How Approvals Work</h4>
+            <ul className={`text-sm ${textSecondary} space-y-2`}>
+              <li>• <strong>Early Login:</strong> If an employee clocks in more than {formData.early_login_threshold_minutes} minutes before {formData.standard_login_time}, it requires HR/Admin approval.</li>
+              <li>• <strong>Early Logout:</strong> If an employee clocks out with less than {formData.standard_work_hours} hours worked (after deducting lunch), it requires HR/Admin approval.</li>
+              <li>• <strong>Grace Period:</strong> Employees can clock in up to {formData.grace_period_minutes} minutes late without penalty.</li>
+              <li>• <strong>Overtime:</strong> Hours worked beyond {formData.standard_work_hours} hours are calculated as extra hours, multiplied by {formData.overtime_rate_multiplier}x for payroll.</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button 
+          onClick={handleSave} 
+          disabled={saving}
+          className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-8"
+        >
+          {saving ? 'Saving...' : 'Save Settings'}
+        </Button>
+      </div>
     </div>
   );
 }
