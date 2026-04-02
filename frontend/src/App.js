@@ -31,6 +31,8 @@ import CalendarDayDetailPage from './pages/CalendarDayDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import LeaveVerificationPage from './pages/LeaveVerificationPage';
 import TasksModulePage from './pages/TasksModulePage';
+import MyTasksPage from './pages/MyTasksPage';
+import MyDocumentsPage from './pages/MyDocumentsPage';
 import './App.css';
 
 function AppRouter() {
@@ -226,6 +228,22 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <TasksModulePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-tasks"
+        element={
+          <ProtectedRoute>
+            <MyTasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-documents"
+        element={
+          <ProtectedRoute>
+            <MyDocumentsPage />
           </ProtectedRoute>
         }
       />

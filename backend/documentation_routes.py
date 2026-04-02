@@ -258,3 +258,44 @@ async def get_user_info(request: Request):
         "department": get_user_department(user),
         "can_view_all": can_view_all_departments(user)
     }
+
+
+# ============== MY DOCUMENTS (Personal) ==============
+
+@documentation_router.get("/my-documents")
+async def get_my_documents(request: Request):
+    """Get documents created by the current user (personal docs)"""
+    user = await get_current_user_from_request(request)
+    
+    query = {
+        "is_deleted": {"$ne": True},
+        "created_by": user["user_id"]
+    }
+    
+    documents = await doc_db.documentation.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return documents
+
+
+@documentation_router.post("/my-documents")
+async def create_my_document(doc_data: DocumentCreate, request: Request):
+    """Create a personal document entry for the current user"""
+    user = await get_current_user_from_request(request)
+    
+    doc_id = f"doc_{uuid.uuid4().hex[:12]}"
+    doc = {
+        "doc_id": doc_id,
+        "name": doc_data.name,
+        "link": doc_data.link,
+        "doc_type": doc_data.doc_type,
+        "department": "personal",  # Mark as personal document
+        "description": doc_data.description or "",
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name", "Unknown"),
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "is_deleted": False,
+        "is_personal": True
+    }
+    
+    await doc_db.documentation.insert_one(doc)
+    return await doc_db.documentation.find_one({"doc_id": doc_id}, {"_id": 0})

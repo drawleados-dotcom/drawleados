@@ -397,9 +397,12 @@ async def get_current_user(request: Request) -> User:
     if not user_doc:
         raise HTTPException(status_code=401, detail="User not found")
     
-    # Convert datetime strings to datetime objects
-    if isinstance(user_doc['created_at'], str):
-        user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
+    # Convert datetime strings to datetime objects if present
+    if user_doc.get('created_at'):
+        if isinstance(user_doc['created_at'], str):
+            user_doc['created_at'] = datetime.fromisoformat(user_doc['created_at'])
+    else:
+        user_doc['created_at'] = datetime.now(timezone.utc)
     
     return User(**user_doc)
 

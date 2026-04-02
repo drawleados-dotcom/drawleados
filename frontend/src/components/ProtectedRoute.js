@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 
 export default function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isAdmin } = useAuth();
   const location = useLocation();
 
   // If user data passed from AuthCallback, render immediately
@@ -25,6 +25,20 @@ export default function ProtectedRoute({ children }) {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Check if user has ONLY tasks module (Operations Head view)
+  const moduleAccess = user?.module_access || [];
+  const hasTasksModuleOnly = moduleAccess.includes('tasks') && !isAdmin;
+  
+  // Redirect tasks-only users from unauthorized pages to /my-tasks
+  if (hasTasksModuleOnly) {
+    const allowedPaths = ['/calendar', '/my-tasks', '/tasks', '/hr', '/my-documents'];
+    const isAllowed = allowedPaths.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
+    
+    if (!isAllowed) {
+      return <Navigate to="/my-tasks" replace />;
+    }
   }
 
   return children;

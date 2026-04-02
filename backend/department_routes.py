@@ -956,3 +956,79 @@ async def get_task_timer_status(task_id: str, request: Request):
 
 
 
+# ========== MY TASKS (Tasks assigned to current user) ==========
+
+@department_router.get("/my-tasks")
+async def get_my_tasks(request: Request):
+    """Get all tasks assigned to the current user across all projects"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    # Find all tasks assigned to current user
+    tasks = await db.project_tasks.find({
+        "assigned_to": current_user.user_id
+    }).sort("created_at", -1).to_list(500)
+    
+    # Collect project IDs to get project names
+    project_ids = list(set(t.get("project_id") for t in tasks if t.get("project_id")))
+    
+    # Get project info
+    projects_map = {}
+    if project_ids:
+        projects = await db.department_projects.find(
+            {"project_id": {"$in": project_ids}},
+            {"_id": 0, "project_id": 1, "name": 1, "department_id": 1}
+        ).to_list(100)
+        projects_map = {p["project_id"]: {"name": p["name"], "department_id": p.get("department_id")} for p in projects}
+    
+    # Get department info
+    dept_ids = list(set(p.get("department_id") for p in projects_map.values() if p.get("department_id")))
+    depts_map = {}
+    if dept_ids:
+        depts = await db.departments.find(
+            {"department_id": {"$in": dept_ids}},
+            {"_id": 0, "department_id": 1, "name": 1, "icon": 1, "color": 1}
+        ).to_list(50)
+        depts_map = {d["department_id"]: d for d in depts}
+    
+    # Get user names for assigned_by, created_by
+    user_ids = set()
+    for t in tasks:
+        if t.get("assigned_by"):
+            user_ids.add(t["assigned_by"])
+        if t.get("created_by"):
+            user_ids.add(t["created_by"])
+    
+    users_map = {}
+    if user_ids:
+        users = await db.users.find({"user_id": {"$in": list(user_ids)}}, {"_id": 0, "user_id": 1, "name": 1}).to_list(100)
+        users_map = {u["user_id"]: u["name"] for u in users}
+    
+    # Build response
+    result = []
+    for t in tasks:
+        t.pop("_id", None)
+        
+        # Add project info
+        proj_info = projects_map.get(t.get("project_id"), {})
+        t["project_name"] = proj_info.get("name", "Unknown Project")
+        
+        # Add department info
+        dept_id = proj_info.get("department_id") or t.get("department_id")
+        if dept_id and dept_id in depts_map:
+            t["department_name"] = depts_map[dept_id].get("name", "")
+            t["department_icon"] = depts_map[dept_id].get("icon", "📁")
+            t["department_color"] = depts_map[dept_id].get("color", "#6366f1")
+        
+        # Add user names
+        if t.get("assigned_by") and t["assigned_by"] in users_map:
+            t["assigned_by_name"] = users_map[t["assigned_by"]]
+        if t.get("created_by") and t["created_by"] in users_map:
+            t["created_by_name"] = users_map[t["created_by"]]
+        
+        result.append(t)
+    
+    return result
+
+
+
