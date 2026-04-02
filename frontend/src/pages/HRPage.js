@@ -531,9 +531,9 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
     }
   };
 
-  // Calculate monthly leave balance (2 casual + 2 sick per month)
-  const monthlyCasualTotal = 2;
-  const monthlySickTotal = 2;
+  // Get monthly leave allocation from API (admin-configurable, defaults to 2 each)
+  const monthlyCasualTotal = monthlyStats?.monthly_casual_allocation || 2;
+  const monthlySickTotal = monthlyStats?.monthly_sick_allocation || 2;
   const casualUsed = monthlyStats?.casual_leave || 0;
   const sickUsed = monthlyStats?.sick_leave || 0;
 

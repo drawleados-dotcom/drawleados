@@ -779,6 +779,10 @@ async def get_attendance_history(
     total_working_days = calendar.get("working_days", 22) if calendar else 22
     holidays = calendar.get("holidays", []) if calendar else []
     
+    # Get monthly leave allocation from calendar (admin-configurable)
+    monthly_casual_allocation = calendar.get("monthly_casual_leave", 2) if calendar else 2
+    monthly_sick_allocation = calendar.get("monthly_sick_leave", 2) if calendar else 2
+    
     present_days = len([r for r in records if r.get("status") == "present" and r.get("approval_status") in ["auto", "approved"]])
     
     # Count leaves by type
@@ -808,7 +812,9 @@ async def get_attendance_history(
         "permissions": permissions,
         "calendar": {
             "holidays": holidays,
-            "working_days": total_working_days
+            "working_days": total_working_days,
+            "monthly_casual_leave": monthly_casual_allocation,
+            "monthly_sick_leave": monthly_sick_allocation
         },
         "summary": {
             "total_working_days": total_working_days,
@@ -816,6 +822,8 @@ async def get_attendance_history(
             "absent": total_absent,  # Only actual absences (unpaid/extra leaves, marked absent)
             "casual_leave": casual_used,
             "sick_leave": sick_used,
+            "monthly_casual_allocation": monthly_casual_allocation,
+            "monthly_sick_allocation": monthly_sick_allocation,
             "total_hours": round(total_hours, 2),
             "extra_hours": round(extra_hours, 2),
             "average_hours": round(total_hours / present_days, 2) if present_days > 0 else 0
@@ -1353,6 +1361,8 @@ async def get_calendar(year: int, month: int, request: Request):
             "holidays": [],
             "working_days": working_days,
             "special_working_days": [],
+            "monthly_casual_leave": 2,
+            "monthly_sick_leave": 2,
             "created_by": user.user_id,
             "created_at": datetime.now(timezone.utc)
         }
@@ -1362,6 +1372,12 @@ async def get_calendar(year: int, month: int, request: Request):
             "month": month,
             "year": year
         }, {"_id": 0})
+    
+    # Ensure defaults for existing calendars without leave allocation
+    if "monthly_casual_leave" not in calendar:
+        calendar["monthly_casual_leave"] = 2
+    if "monthly_sick_leave" not in calendar:
+        calendar["monthly_sick_leave"] = 2
     
     return calendar
 
@@ -1382,7 +1398,9 @@ async def update_calendar(year: int, month: int, request: Request, calendar_data
             {"$set": {
                 "holidays": calendar_data.get("holidays", []),
                 "working_days": calendar_data.get("working_days", calendar.get("working_days", 22)),
-                "special_working_days": calendar_data.get("special_working_days", [])
+                "special_working_days": calendar_data.get("special_working_days", []),
+                "monthly_casual_leave": calendar_data.get("monthly_casual_leave", calendar.get("monthly_casual_leave", 2)),
+                "monthly_sick_leave": calendar_data.get("monthly_sick_leave", calendar.get("monthly_sick_leave", 2))
             }}
         )
     else:
@@ -1393,6 +1411,8 @@ async def update_calendar(year: int, month: int, request: Request, calendar_data
             "holidays": calendar_data.get("holidays", []),
             "working_days": calendar_data.get("working_days", 22),
             "special_working_days": calendar_data.get("special_working_days", []),
+            "monthly_casual_leave": calendar_data.get("monthly_casual_leave", 2),
+            "monthly_sick_leave": calendar_data.get("monthly_sick_leave", 2),
             "created_by": user.user_id,
             "created_at": datetime.now(timezone.utc)
         })

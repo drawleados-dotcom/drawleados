@@ -2737,6 +2737,8 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
   const [holidays, setHolidays] = useState([]);
   const [newHoliday, setNewHoliday] = useState({ date: '', name: '' });
   const [workingDays, setWorkingDays] = useState(22);
+  const [monthlyCasualLeave, setMonthlyCasualLeave] = useState(2);
+  const [monthlySickLeave, setMonthlySickLeave] = useState(2);
   
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -2744,6 +2746,8 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
     if (calendar) {
       setHolidays(calendar.holidays || []);
       setWorkingDays(calendar.working_days || 22);
+      setMonthlyCasualLeave(calendar.monthly_casual_leave || 2);
+      setMonthlySickLeave(calendar.monthly_sick_leave || 2);
     }
   }, [calendar]);
 
@@ -2759,7 +2763,12 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
   };
 
   const handleSave = () => {
-    onUpdate({ holidays, working_days: workingDays });
+    onUpdate({ 
+      holidays, 
+      working_days: workingDays,
+      monthly_casual_leave: monthlyCasualLeave,
+      monthly_sick_leave: monthlySickLeave
+    });
   };
 
   return (
@@ -2867,6 +2876,46 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
           </CardContent>
         </Card>
       </div>
+
+      {/* Monthly Leave Allocation */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader>
+          <CardTitle className={textPrimary}>Monthly Leave Allocation</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className={`text-sm ${textSecondary} mb-4`}>
+            Configure the number of casual and sick leaves allocated per employee for {months[month - 1]} {year}
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <Label className={textSecondary}>Casual Leave (per month)</Label>
+              <Input 
+                type="number"
+                min="0"
+                max="10"
+                value={monthlyCasualLeave}
+                onChange={(e) => setMonthlyCasualLeave(parseInt(e.target.value) || 0)}
+                className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="monthly-casual-leave-input"
+              />
+              <p className={`text-xs ${textSecondary} mt-1`}>Default: 2 per month</p>
+            </div>
+            <div>
+              <Label className={textSecondary}>Sick Leave (per month)</Label>
+              <Input 
+                type="number"
+                min="0"
+                max="10"
+                value={monthlySickLeave}
+                onChange={(e) => setMonthlySickLeave(parseInt(e.target.value) || 0)}
+                className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="monthly-sick-leave-input"
+              />
+              <p className={`text-xs ${textSecondary} mt-1`}>Default: 2 per month</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Save Button */}
       <div className="flex justify-end">
