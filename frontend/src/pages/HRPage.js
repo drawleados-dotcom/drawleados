@@ -304,15 +304,58 @@ export default function HRPage() {
 
 function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, onClockIn, onClockOut, formatTime, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLunchModal, setShowLunchModal] = useState(false);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [showLeaveRequestModal, setShowLeaveRequestModal] = useState(false);
   const [logoutTime, setLogoutTime] = useState('');
+  const [loginTime, setLoginTime] = useState('');
+  const [lunchStartTime, setLunchStartTime] = useState('');
+  const [lunchEndTime, setLunchEndTime] = useState('');
+  const [workLocation, setWorkLocation] = useState('office');
+  const [permissionForm, setPermissionForm] = useState({ date: '', hours_requested: 2, reason: '' });
+  const [leaveForm, setLeaveForm] = useState({ leave_type: 'casual', start_date: '', end_date: '', reason: '' });
+  const [settings, setSettings] = useState(null);
   
-  const isClockedIn = todayAttendance?.clock_in && !todayAttendance?.clock_out;
-  const isClockedOut = todayAttendance?.clock_out;
-  const notClockedIn = !todayAttendance?.clock_in;
+  const token = localStorage.getItem('session_token');
+  const headers = { Authorization: `Bearer ${token}` };
+  
+  const attendance = todayAttendance?.attendance;
+  const isClockedIn = attendance?.clock_in && !attendance?.clock_out;
+  const isClockedOut = attendance?.clock_out;
+  const notClockedIn = !attendance?.clock_in;
+  const isOnLunch = attendance?.lunch_start && !attendance?.lunch_end;
+  const lunchCompleted = attendance?.lunch_end;
+  
+  useEffect(() => {
+    if (todayAttendance?.settings) {
+      setSettings(todayAttendance.settings);
+    }
+  }, [todayAttendance]);
   
   const getCurrentTimeString = () => {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  };
+
+  const handleOpenLoginModal = (location) => {
+    setWorkLocation(location);
+    setLoginTime(getCurrentTimeString());
+    setShowLoginModal(true);
+  };
+
+  const handleConfirmLogin = async () => {
+    try {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/clock-in`, 
+        { work_location: workLocation, login_time: loginTime }, 
+        { headers }
+      );
+      toast.success(`Clocked in at ${loginTime} - ${workLocation === 'home' ? 'Work from Home' : 'Office'}`);
+      setShowLoginModal(false);
+      window.location.reload();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to clock in');
+    }
   };
 
   const handleOpenLogoutModal = () => {
@@ -320,63 +363,179 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
     setShowLogoutModal(true);
   };
 
-  const handleConfirmLogout = () => {
-    onClockOut(logoutTime);
-    setShowLogoutModal(false);
-    setLogoutTime('');
+  const handleConfirmLogout = async () => {
+    try {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/clock-out`, 
+        { notes: '', logout_time: logoutTime }, 
+        { headers }
+      );
+      toast.success('Clocked out successfully');
+      setShowLogoutModal(false);
+      window.location.reload();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to clock out');
+    }
+  };
+
+  const handleStartLunch = async () => {
+    try {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/lunch-start`, 
+        { lunch_start_time: lunchStartTime || null }, 
+        { headers }
+      );
+      toast.success('Lunch break started');
+      setShowLunchModal(false);
+      window.location.reload();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to start lunch');
+    }
+  };
+
+  const handleEndLunch = async () => {
+    try {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/lunch-end`, 
+        { lunch_end_time: lunchEndTime || null }, 
+        { headers }
+      );
+      toast.success('Lunch break ended');
+      setShowLunchModal(false);
+      window.location.reload();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to end lunch');
+    }
+  };
+
+  const handlePermissionRequest = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/permission/request`, permissionForm, { headers });
+      toast.success('Permission request submitted');
+      setShowPermissionModal(false);
+      setPermissionForm({ date: '', hours_requested: 2, reason: '' });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to submit request');
+    }
+  };
+
+  const handleLeaveRequest = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/leave/request`, leaveForm, { headers });
+      toast.success('Leave request submitted');
+      setShowLeaveRequestModal(false);
+      setLeaveForm({ leave_type: 'casual', start_date: '', end_date: '', reason: '' });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to submit request');
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Dashboard Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <Card className={`${bgCard} border ${borderColor} p-3`}>
+          <p className={`text-xs ${textSecondary}`}>Working Days</p>
+          <p className="text-2xl font-bold text-[#10b981]">{attendanceSummary.total_working_days || 22}</p>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} p-3`}>
+          <p className={`text-xs ${textSecondary}`}>Present</p>
+          <p className="text-2xl font-bold text-[#6366f1]">{attendanceSummary.present || 0}</p>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} p-3`}>
+          <p className={`text-xs ${textSecondary}`}>Absent</p>
+          <p className="text-2xl font-bold text-[#ef4444]">{attendanceSummary.absent || 0}</p>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} p-3`}>
+          <p className={`text-xs ${textSecondary}`}>Casual Leave</p>
+          <p className="text-2xl font-bold text-[#f59e0b]">{attendanceSummary.casual_leave || 0}/12</p>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} p-3`}>
+          <p className={`text-xs ${textSecondary}`}>Sick Leave</p>
+          <p className="text-2xl font-bold text-[#ec4899]">{attendanceSummary.sick_leave || 0}/6</p>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} p-3`}>
+          <p className={`text-xs ${textSecondary}`}>Extra Hours</p>
+          <p className="text-2xl font-bold text-[#8b5cf6]">{attendanceSummary.extra_hours?.toFixed(1) || 0}</p>
+        </Card>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex flex-wrap gap-3">
+        <Button 
+          onClick={() => setShowLeaveRequestModal(true)}
+          className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          Request Leave
+        </Button>
+        <Button 
+          onClick={() => { setPermissionForm({...permissionForm, date: new Date().toISOString().split('T')[0]}); setShowPermissionModal(true); }}
+          className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white"
+        >
+          <Clock className="h-4 w-4 mr-2" />
+          Request Permission
+        </Button>
+      </div>
+
+      {/* Today's Attendance Card */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
           <CardTitle className={`${textPrimary} flex items-center gap-2`}>
             <Clock className="h-5 w-5 text-[#10b981]" />
-            Today&apos;s Attendance
+            Today's Attendance
+            {settings && <span className={`text-sm font-normal ${textSecondary}`}>(Standard: {settings.standard_login_time} - {settings.standard_logout_time})</span>}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
             <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Status</p>
               <Badge className={`${
                 isClockedOut ? 'bg-green-500/20 text-green-400' :
+                isOnLunch ? 'bg-yellow-500/20 text-yellow-400' :
                 isClockedIn ? 'bg-blue-500/20 text-blue-400' :
                 'bg-gray-500/20 text-gray-400'
               }`}>
-                {isClockedOut ? 'Day Complete' : isClockedIn ? 'Working' : 'Not Started'}
+                {isClockedOut ? 'Day Complete' : isOnLunch ? 'On Lunch' : isClockedIn ? 'Working' : 'Not Started'}
               </Badge>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Clock In</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>Login</p>
               <p className={`text-lg font-semibold ${textPrimary}`}>
-                {formatTime(todayAttendance?.clock_in)}
+                {formatTime(attendance?.clock_in)}
               </p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Clock Out</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>Logout</p>
               <p className={`text-lg font-semibold ${textPrimary}`}>
-                {formatTime(todayAttendance?.clock_out)}
+                {formatTime(attendance?.clock_out)}
               </p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Location</p>
-              <div className="flex items-center gap-2">
-                {todayAttendance?.work_location === 'home' ? (
-                  <><Home className="h-4 w-4 text-[#10b981]" /> <span className={textPrimary}>WFH</span></>
-                ) : todayAttendance?.work_location === 'office' ? (
-                  <><Building className="h-4 w-4 text-[#6366f1]" /> <span className={textPrimary}>Office</span></>
-                ) : (
-                  <span className={textSecondary}>-</span>
-                )}
-              </div>
+              <p className={`text-xs ${textSecondary} mb-1`}>Lunch</p>
+              <p className={`text-lg font-semibold ${textPrimary}`}>
+                {attendance?.lunch_duration ? `${attendance.lunch_duration} min` : '-'}
+              </p>
+            </div>
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Work Hours</p>
+              <p className={`text-lg font-semibold ${textPrimary}`}>
+                {attendance?.total_hours?.toFixed(2) || '-'}
+              </p>
+            </div>
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Extra Hours</p>
+              <p className={`text-lg font-semibold text-[#10b981]`}>
+                {attendance?.extra_hours?.toFixed(2) || '-'}
+              </p>
             </div>
           </div>
 
+          {/* Clock In Buttons */}
           {notClockedIn && (
             <div className="flex flex-col sm:flex-row gap-4">
               <Button
-                onClick={() => onClockIn('office')}
+                onClick={() => handleOpenLoginModal('office')}
                 data-testid="clock-in-office"
                 className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white py-6"
               >
@@ -384,7 +543,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                 Clock In - Office
               </Button>
               <Button
-                onClick={() => onClockIn('home')}
+                onClick={() => handleOpenLoginModal('home')}
                 data-testid="clock-in-wfh"
                 className="flex-1 bg-[#10b981] hover:bg-[#059669] text-white py-6"
               >
@@ -394,86 +553,307 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
             </div>
           )}
 
-          {isClockedIn && (
-            <Button
-              onClick={handleOpenLogoutModal}
-              data-testid="clock-out"
-              className="w-full bg-[#ef4444] hover:bg-[#dc2626] text-white py-6"
-            >
-              <Square className="mr-2 h-5 w-5" />
-              Clock Out
-            </Button>
+          {/* Lunch & Clock Out Buttons */}
+          {isClockedIn && !isClockedOut && (
+            <div className="flex flex-col sm:flex-row gap-4">
+              {!isOnLunch && !lunchCompleted && (
+                <Button
+                  onClick={() => { setLunchStartTime(getCurrentTimeString()); setShowLunchModal(true); }}
+                  className="flex-1 bg-[#f59e0b] hover:bg-[#d97706] text-white py-4"
+                >
+                  🍽️ Start Lunch Break
+                </Button>
+              )}
+              {isOnLunch && (
+                <Button
+                  onClick={() => { setLunchEndTime(getCurrentTimeString()); handleEndLunch(); }}
+                  className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white py-4"
+                >
+                  ✓ End Lunch Break
+                </Button>
+              )}
+              <Button
+                onClick={handleOpenLogoutModal}
+                data-testid="clock-out"
+                className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white py-4"
+              >
+                <Square className="mr-2 h-5 w-5" />
+                Clock Out
+              </Button>
+            </div>
           )}
 
-          {/* Manual Logout Time Modal */}
-          {showLogoutModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="logout-modal">
-              <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
-                <CardHeader>
-                  <CardTitle className={`${textPrimary} flex items-center gap-2`}>
-                    <Clock className="h-5 w-5 text-[#ef4444]" />
-                    Clock Out
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <p className={`text-sm ${textSecondary} mb-2`}>Clock In Time</p>
-                    <p className="text-lg font-semibold text-[#10b981]">
-                      {formatTime(todayAttendance?.clock_in)}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className={textSecondary}>Logout Time</Label>
-                    <Input
-                      type="time"
-                      value={logoutTime}
-                      onChange={(e) => setLogoutTime(e.target.value)}
-                      className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
-                      data-testid="logout-time-input"
-                    />
-                    <p className={`text-xs ${textSecondary} mt-1`}>Enter your actual logout time</p>
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <Button
-                      onClick={() => setShowLogoutModal(false)}
-                      variant="outline"
-                      className={`flex-1 border ${borderColor} ${textSecondary}`}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleConfirmLogout}
-                      className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                      data-testid="confirm-logout"
-                    >
-                      Confirm Logout
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Approval Status Warning */}
+          {attendance?.approval_status && attendance.approval_status.includes('pending') && (
+            <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-yellow-400" />
+              <span className={textSecondary}>
+                {attendance.approval_status === 'pending_early_login' 
+                  ? 'Early login - pending HR approval' 
+                  : 'Early logout - pending HR approval'}
+              </span>
             </div>
           )}
 
           {isClockedOut && (
-            <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/20">
+            <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/20 mt-4">
               <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
-              <p className="text-green-400 font-medium">You&apos;ve completed your day!</p>
+              <p className="text-green-400 font-medium">You've completed your day!</p>
               <p className={`text-sm ${textSecondary}`}>
-                Total hours: {todayAttendance?.total_hours?.toFixed(2) || 0} hrs
+                Total hours: {attendance?.total_hours?.toFixed(2) || 0} hrs | Extra: {attendance?.extra_hours?.toFixed(2) || 0} hrs
               </p>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Login Time Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+                <Clock className="h-5 w-5 text-[#10b981]" />
+                Clock In - {workLocation === 'home' ? 'Work from Home' : 'Office'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className={textSecondary}>Login Time</Label>
+                <Input
+                  type="time"
+                  value={loginTime}
+                  onChange={(e) => setLoginTime(e.target.value)}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                />
+                <p className={`text-xs ${textSecondary} mt-1`}>Enter your actual login time</p>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button onClick={() => setShowLoginModal(false)} variant="outline" className={`flex-1 border ${borderColor}`}>
+                  Cancel
+                </Button>
+                <Button onClick={handleConfirmLogin} className="flex-1 bg-[#10b981] hover:bg-[#059669] text-white">
+                  Confirm Login
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Logout Time Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="logout-modal">
+          <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+                <Clock className="h-5 w-5 text-[#ef4444]" />
+                Clock Out
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <p className={`text-sm ${textSecondary} mb-2`}>Clock In Time</p>
+                <p className="text-lg font-semibold text-[#10b981]">
+                  {formatTime(attendance?.clock_in)}
+                </p>
+              </div>
+              <div>
+                <Label className={textSecondary}>Logout Time</Label>
+                <Input
+                  type="time"
+                  value={logoutTime}
+                  onChange={(e) => setLogoutTime(e.target.value)}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                  data-testid="logout-time-input"
+                />
+                <p className={`text-xs ${textSecondary} mt-1`}>Enter your actual logout time</p>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button
+                  onClick={() => setShowLogoutModal(false)}
+                  variant="outline"
+                  className={`flex-1 border ${borderColor} ${textSecondary}`}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmLogout}
+                  className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                  data-testid="confirm-logout"
+                >
+                  Confirm Logout
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Lunch Start Modal */}
+      {showLunchModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={`${textPrimary}`}>🍽️ Lunch Break</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className={textSecondary}>Lunch Start Time</Label>
+                <Input
+                  type="time"
+                  value={lunchStartTime}
+                  onChange={(e) => setLunchStartTime(e.target.value)}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button onClick={() => setShowLunchModal(false)} variant="outline" className={`flex-1 border ${borderColor}`}>
+                  Cancel
+                </Button>
+                <Button onClick={handleStartLunch} className="flex-1 bg-[#f59e0b] hover:bg-[#d97706] text-white">
+                  Start Lunch
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Permission Request Modal */}
+      {showPermissionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>Request Permission</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handlePermissionRequest} className="space-y-4">
+                <div>
+                  <Label className={textSecondary}>Date</Label>
+                  <Input
+                    type="date"
+                    value={permissionForm.date}
+                    onChange={(e) => setPermissionForm({...permissionForm, date: e.target.value})}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className={textSecondary}>Hours Requested</Label>
+                  <Input
+                    type="number"
+                    min="0.5"
+                    max="4"
+                    step="0.5"
+                    value={permissionForm.hours_requested}
+                    onChange={(e) => setPermissionForm({...permissionForm, hours_requested: parseFloat(e.target.value)})}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label className={textSecondary}>Reason</Label>
+                  <Input
+                    value={permissionForm.reason}
+                    onChange={(e) => setPermissionForm({...permissionForm, reason: e.target.value})}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    placeholder="Reason for permission"
+                    required
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button type="button" onClick={() => setShowPermissionModal(false)} variant="outline" className={`flex-1 border ${borderColor}`}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="flex-1 bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
+                    Submit Request
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Leave Request Modal */}
+      {showLeaveRequestModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>Request Leave</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleLeaveRequest} className="space-y-4">
+                <div>
+                  <Label className={textSecondary}>Leave Type</Label>
+                  <select
+                    value={leaveForm.leave_type}
+                    onChange={(e) => setLeaveForm({...leaveForm, leave_type: e.target.value})}
+                    className={`w-full p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    required
+                  >
+                    <option value="casual">Casual Leave</option>
+                    <option value="sick">Sick Leave</option>
+                    <option value="earned">Earned Leave</option>
+                    <option value="unpaid">Unpaid Leave</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className={textSecondary}>Start Date</Label>
+                    <Input
+                      type="date"
+                      value={leaveForm.start_date}
+                      onChange={(e) => setLeaveForm({...leaveForm, start_date: e.target.value})}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label className={textSecondary}>End Date</Label>
+                    <Input
+                      type="date"
+                      value={leaveForm.end_date}
+                      onChange={(e) => setLeaveForm({...leaveForm, end_date: e.target.value})}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className={textSecondary}>Reason</Label>
+                  <Input
+                    value={leaveForm.reason}
+                    onChange={(e) => setLeaveForm({...leaveForm, reason: e.target.value})}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    placeholder="Reason for leave"
+                    required
+                  />
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button type="button" onClick={() => setShowLeaveRequestModal(false)} variant="outline" className={`flex-1 border ${borderColor}`}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="flex-1 bg-[#f59e0b] hover:bg-[#d97706] text-white">
+                    Submit Request
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Monthly Summary Card */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
-          <CardTitle className={textPrimary}>This Month&apos;s Summary</CardTitle>
+          <CardTitle className={textPrimary}>This Month's Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#10b981]">{attendanceSummary.total_days || 0}</p>
+              <p className="text-2xl font-bold text-[#10b981]">{attendanceSummary.present || 0}</p>
               <p className={`text-xs ${textSecondary}`}>Days Present</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
@@ -485,17 +865,18 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
               <p className={`text-xs ${textSecondary}`}>Avg Hours/Day</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#8b5cf6]">{attendanceSummary.wfo_days || 0}</p>
-              <p className={`text-xs ${textSecondary}`}>Office Days</p>
+              <p className="text-2xl font-bold text-[#8b5cf6]">{attendanceSummary.extra_hours?.toFixed(1) || 0}</p>
+              <p className={`text-xs ${textSecondary}`}>Extra Hours</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#ec4899]">{attendanceSummary.wfh_days || 0}</p>
-              <p className={`text-xs ${textSecondary}`}>WFH Days</p>
+              <p className="text-2xl font-bold text-[#ef4444]">{attendanceSummary.absent || 0}</p>
+              <p className={`text-xs ${textSecondary}`}>Days Absent</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Attendance History Table */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
           <CardTitle className={textPrimary}>Attendance History</CardTitle>
@@ -505,31 +886,49 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
             <table className="w-full">
               <thead>
                 <tr className={`border-b ${borderColor}`}>
-                  <th className={`text-left py-3 px-4 text-xs font-medium ${textSecondary}`}>DATE</th>
-                  <th className={`text-left py-3 px-4 text-xs font-medium ${textSecondary}`}>CLOCK IN</th>
-                  <th className={`text-left py-3 px-4 text-xs font-medium ${textSecondary}`}>CLOCK OUT</th>
-                  <th className={`text-left py-3 px-4 text-xs font-medium ${textSecondary}`}>HOURS</th>
-                  <th className={`text-left py-3 px-4 text-xs font-medium ${textSecondary}`}>LOCATION</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Date</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Day</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Login</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Logout</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Lunch</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Permission</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Work Hrs</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Extra Hrs</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {attendanceHistory.map((record, idx) => (
-                  <tr key={idx} className={`border-b ${borderColor}/50`}>
-                    <td className={`py-3 px-4 text-sm ${textPrimary}`}>{formatDate(record.date)}</td>
-                    <td className={`py-3 px-4 text-sm ${textPrimary}`}>{formatTime(record.clock_in)}</td>
-                    <td className={`py-3 px-4 text-sm ${textPrimary}`}>{formatTime(record.clock_out)}</td>
-                    <td className={`py-3 px-4 text-sm ${textPrimary}`}>{record.total_hours?.toFixed(2) || '-'}</td>
-                    <td className="py-3 px-4">
-                      <Badge className={record.work_location === 'home' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}>
-                        {record.work_location === 'home' ? 'WFH' : 'Office'}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
+                {attendanceHistory.map((record, index) => {
+                  const recordDate = new Date(record.date);
+                  const dayName = recordDate.toLocaleDateString('en-US', { weekday: 'short' });
+                  return (
+                    <tr key={index} className={`border-b ${borderColor} hover:${bgSecondary}`}>
+                      <td className={`p-3 ${textPrimary}`}>{formatDate(record.date)}</td>
+                      <td className={`p-3 ${textSecondary}`}>{dayName}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in)}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out)}</td>
+                      <td className={`p-3 ${textSecondary}`}>{record.lunch_duration ? `${record.lunch_duration} min` : '-'}</td>
+                      <td className={`p-3 ${textSecondary}`}>{record.permission_hours ? `${record.permission_hours} hrs` : '-'}</td>
+                      <td className={`p-3 font-medium ${textPrimary}`}>{record.total_hours?.toFixed(2) || '-'}</td>
+                      <td className={`p-3 font-medium text-[#10b981]`}>{record.extra_hours?.toFixed(2) || '-'}</td>
+                      <td className="p-3">
+                        <Badge className={`${
+                          record.approval_status === 'approved' || record.approval_status === 'auto' 
+                            ? 'bg-green-500/20 text-green-400' 
+                            : record.approval_status?.includes('pending')
+                            ? 'bg-yellow-500/20 text-yellow-400'
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {record.approval_status === 'auto' ? 'OK' : record.approval_status || 'N/A'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {attendanceHistory.length === 0 && (
                   <tr>
-                    <td colSpan={5} className={`py-8 text-center ${textSecondary}`}>
-                      No attendance records found
+                    <td colSpan={9} className={`p-8 text-center ${textSecondary}`}>
+                      No attendance records found for this month
                     </td>
                   </tr>
                 )}
