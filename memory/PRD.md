@@ -41,25 +41,40 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Selecting a past month shows the effective salary at that time
 - Example: Aug 2024 shows ₹15K joining salary, Apr 2026 shows current ₹25K
 
-**Payroll Breakdown:**
-- Earnings: Basic Salary + HRA (40%) + Special Allowance (10%)
-- Deductions: PF (12%) + Professional Tax (₹200 if salary > ₹15K)
-- Net Salary calculation
+**HR Admin Payroll Management (DONE - April 2026):**
+- List of all employees with current salary and total hikes
+- Search employees by name, email, or designation
+- "View History" button to see complete salary history per employee
+- "Add Salary" button to add new salary record for any employee
+- Employee cards showing: Name, Email, Designation, Join Date, Current Salary, Total Hikes
+- Salary history table with: #, Effective From, Amount, Duration, Reason (badge), Hike (+amount, %), Delete action
+- Statistics: Current Salary, Total Hikes, Initial Salary, Total Growth %
+- Hike conditions legend with color badges
 
-**UI Sub-tabs:**
-- Current Payroll: Shows current salary with month/year filter for historical payslips
-- Salary History: Complete history table with hikes, duration, and growth metrics
-
-**Key Statistics:**
-- Current Salary
-- Total Hikes count
-- Initial Salary
-- Total Growth percentage
+**Attendance-Based Payroll Calculation:**
+- **Attendance Summary:**
+  - Total Working Days (from company calendar, default 22)
+  - Holidays count
+  - Days Present (from attendance records)
+  - Casual Leave (approved)
+  - Sick Leave (approved)
+  - Absent/LOP days (unpaid absences)
+- **Salary Breakdown:**
+  - Base Salary
+  - Per Day Salary (Base / Working Days)
+  - Days Paid (Present + Paid Leaves)
+  - Earned Salary (Per Day × Days Paid)
+- **Deductions:**
+  - PF (12% of base)
+  - Professional Tax (₹200 if salary > ₹15K)
+  - LOP Deduction (Per Day × Absent Days)
+  - Total Deductions
+- **Net Salary:** Earned Salary - Deductions
 
 **API Endpoints:**
 - GET `/api/payroll/hike-reasons` - List of hike reason types
 - GET `/api/payroll/salary-history/{user_id}` - Complete salary history
-- GET `/api/payroll/details/{user_id}?month=X&year=Y` - Payroll for specific month
+- GET `/api/payroll/details/{user_id}?month=X&year=Y` - Payroll with attendance-based calc
 - GET `/api/payroll/salary-at-date/{user_id}?month=X&year=Y` - Effective salary at date
 - POST `/api/payroll/salary/add` - Add new salary record
 - DELETE `/api/payroll/salary/{record_id}` - Delete salary record
