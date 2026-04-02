@@ -91,6 +91,20 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - `approved` - Final approval
 - `rejected` - Rejected by HR
 
+### HR Attendance Monthly Statistics & Filters (DONE - April 2026)
+**Enhanced Attendance Tab in HR Portal:**
+- Month/Year dropdown filters to view historical attendance
+- Monthly statistics cards showing:
+  - Total Working Days (of the month)
+  - Presentable Days (days actually worked)
+  - Total Absent (excluding pending/future days)
+  - Casual Leave (used/2 per month)
+  - Sick Leave (used/2 per month)
+  - Extra Hours (for the month)
+- Dynamic Monthly Summary section with updated title
+- Attendance History table filtered by selected month/year
+- Backend API already supports `?month=X&year=Y` query parameters
+
 ---
 
 ## API Endpoints
@@ -116,6 +130,7 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - POST `/api/hr/attendance/clock-out` - Clock out
 - GET `/api/hr/attendance/calendar/{year}/{month}` - Attendance calendar data
 - GET `/api/hr/attendance/date-detail/{date}` - Specific date attendance
+- GET `/api/hr/attendance/history?month=X&year=Y` - **NEW** Get attendance history with monthly stats (supports month/year filters)
 - GET/PUT `/api/hr/admin/calendar/{year}/{month}` - Company calendar with holidays
 - POST `/api/hr/leave/request` - Request leave
 - GET `/api/hr/leave/my-requests` - My leave requests

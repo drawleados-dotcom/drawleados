@@ -383,8 +383,44 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const [leaveForm, setLeaveForm] = useState({ leave_type: 'casual', start_date: '', end_date: '', reason: '' });
   const [settings, setSettings] = useState(null);
   
+  // Monthly filter state
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [monthlyStats, setMonthlyStats] = useState(null);
+  const [filteredHistory, setFilteredHistory] = useState([]);
+  const [leaveBalance, setLeaveBalance] = useState(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
+  
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
+  
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  // Generate years for dropdown (current year - 2 to current year)
+  const availableYears = [currentDate.getFullYear() - 2, currentDate.getFullYear() - 1, currentDate.getFullYear()];
+  
+  // Load monthly statistics when month/year changes
+  useEffect(() => {
+    const loadMonthlyStats = async () => {
+      setIsLoadingStats(true);
+      try {
+        const res = await axios.get(
+          `${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/history?month=${selectedMonth}&year=${selectedYear}`, 
+          { headers }
+        );
+        setFilteredHistory(res.data.records || []);
+        setMonthlyStats(res.data.summary || {});
+        setLeaveBalance(res.data.leave_balance || {});
+      } catch (error) {
+        console.error('Error loading monthly stats:', error);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+    loadMonthlyStats();
+  }, [selectedMonth, selectedYear]);
   
   const attendance = todayAttendance?.attendance;
   const isClockedIn = attendance?.clock_in && !attendance?.clock_out;
@@ -495,33 +531,86 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
     }
   };
 
+  // Calculate monthly leave balance (2 casual + 2 sick per month)
+  const monthlyCasualTotal = 2;
+  const monthlySickTotal = 2;
+  const casualUsed = monthlyStats?.casual_leave || 0;
+  const sickUsed = monthlyStats?.sick_leave || 0;
+
   return (
     <div className="space-y-6">
-      {/* Dashboard Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        <Card className={`${bgCard} border ${borderColor} p-3`}>
-          <p className={`text-xs ${textSecondary}`}>Working Days</p>
-          <p className="text-2xl font-bold text-[#10b981]">{attendanceSummary.total_working_days || 22}</p>
+      {/* Month/Year Filters */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-[#10b981]" />
+              <span className={`font-medium ${textPrimary}`}>Filter by:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className={`p-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} focus:outline-none focus:ring-2 focus:ring-[#10b981]`}
+                data-testid="attendance-month-filter"
+              >
+                {monthNames.map((month, idx) => (
+                  <option key={idx} value={idx + 1}>{month}</option>
+                ))}
+              </select>
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className={`p-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} focus:outline-none focus:ring-2 focus:ring-[#10b981]`}
+                data-testid="attendance-year-filter"
+              >
+                {availableYears.map(year => (
+                  <option key={year} value={year}>{year}</option>
+                ))}
+              </select>
+            </div>
+            {isLoadingStats && (
+              <span className={`text-sm ${textSecondary}`}>Loading...</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Monthly Statistics Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="monthly-stats-cards">
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary} mb-1`}>Total Working Days</p>
+          <p className="text-2xl font-bold text-[#10b981]">{monthlyStats?.total_working_days || 22}</p>
+          <p className={`text-xs ${textSecondary} mt-1`}>of the month</p>
         </Card>
-        <Card className={`${bgCard} border ${borderColor} p-3`}>
-          <p className={`text-xs ${textSecondary}`}>Present</p>
-          <p className="text-2xl font-bold text-[#6366f1]">{attendanceSummary.present || 0}</p>
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary} mb-1`}>Presentable Days</p>
+          <p className="text-2xl font-bold text-[#6366f1]">{monthlyStats?.present || 0}</p>
+          <p className={`text-xs ${textSecondary} mt-1`}>days worked</p>
         </Card>
-        <Card className={`${bgCard} border ${borderColor} p-3`}>
-          <p className={`text-xs ${textSecondary}`}>Absent</p>
-          <p className="text-2xl font-bold text-[#ef4444]">{attendanceSummary.absent || 0}</p>
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary} mb-1`}>Total Absent</p>
+          <p className="text-2xl font-bold text-[#ef4444]">{monthlyStats?.absent || 0}</p>
+          <p className={`text-xs ${textSecondary} mt-1`}>excluding pending</p>
         </Card>
-        <Card className={`${bgCard} border ${borderColor} p-3`}>
-          <p className={`text-xs ${textSecondary}`}>Casual Leave</p>
-          <p className="text-2xl font-bold text-[#f59e0b]">{attendanceSummary.casual_leave || 0}/12</p>
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>
+          <p className="text-2xl font-bold text-[#f59e0b]">
+            {casualUsed}<span className={`text-base font-normal ${textSecondary}`}>/{monthlyCasualTotal}</span>
+          </p>
+          <p className={`text-xs ${textSecondary} mt-1`}>used this month</p>
         </Card>
-        <Card className={`${bgCard} border ${borderColor} p-3`}>
-          <p className={`text-xs ${textSecondary}`}>Sick Leave</p>
-          <p className="text-2xl font-bold text-[#ec4899]">{attendanceSummary.sick_leave || 0}/6</p>
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary} mb-1`}>Sick Leave</p>
+          <p className="text-2xl font-bold text-[#ec4899]">
+            {sickUsed}<span className={`text-base font-normal ${textSecondary}`}>/{monthlySickTotal}</span>
+          </p>
+          <p className={`text-xs ${textSecondary} mt-1`}>used this month</p>
         </Card>
-        <Card className={`${bgCard} border ${borderColor} p-3`}>
-          <p className={`text-xs ${textSecondary}`}>Extra Hours</p>
-          <p className="text-2xl font-bold text-[#8b5cf6]">{attendanceSummary.extra_hours?.toFixed(1) || 0}</p>
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary} mb-1`}>Extra Hours</p>
+          <p className="text-2xl font-bold text-[#8b5cf6]">{monthlyStats?.extra_hours?.toFixed(1) || 0}</p>
+          <p className={`text-xs ${textSecondary} mt-1`}>this month</p>
         </Card>
       </div>
 
@@ -914,28 +1003,28 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
       {/* Monthly Summary Card */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
-          <CardTitle className={textPrimary}>This Month's Summary</CardTitle>
+          <CardTitle className={textPrimary}>{monthNames[selectedMonth - 1]} {selectedYear} Summary</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#10b981]">{attendanceSummary.present || 0}</p>
+              <p className="text-2xl font-bold text-[#10b981]">{monthlyStats?.present || 0}</p>
               <p className={`text-xs ${textSecondary}`}>Days Present</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#6366f1]">{attendanceSummary.total_hours?.toFixed(1) || 0}</p>
+              <p className="text-2xl font-bold text-[#6366f1]">{monthlyStats?.total_hours?.toFixed(1) || 0}</p>
               <p className={`text-xs ${textSecondary}`}>Total Hours</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#f59e0b]">{attendanceSummary.average_hours?.toFixed(1) || 0}</p>
+              <p className="text-2xl font-bold text-[#f59e0b]">{monthlyStats?.average_hours?.toFixed(1) || 0}</p>
               <p className={`text-xs ${textSecondary}`}>Avg Hours/Day</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#8b5cf6]">{attendanceSummary.extra_hours?.toFixed(1) || 0}</p>
+              <p className="text-2xl font-bold text-[#8b5cf6]">{monthlyStats?.extra_hours?.toFixed(1) || 0}</p>
               <p className={`text-xs ${textSecondary}`}>Extra Hours</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#ef4444]">{attendanceSummary.absent || 0}</p>
+              <p className="text-2xl font-bold text-[#ef4444]">{monthlyStats?.absent || 0}</p>
               <p className={`text-xs ${textSecondary}`}>Days Absent</p>
             </div>
           </div>
@@ -945,7 +1034,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
       {/* Attendance History Table */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
-          <CardTitle className={textPrimary}>Attendance History</CardTitle>
+          <CardTitle className={textPrimary}>Attendance History - {monthNames[selectedMonth - 1]} {selectedYear}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -964,7 +1053,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                 </tr>
               </thead>
               <tbody>
-                {attendanceHistory.map((record, index) => {
+                {filteredHistory.map((record, index) => {
                   const recordDate = new Date(record.date);
                   const dayName = recordDate.toLocaleDateString('en-US', { weekday: 'short' });
                   return (
@@ -991,10 +1080,10 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                     </tr>
                   );
                 })}
-                {attendanceHistory.length === 0 && (
+                {filteredHistory.length === 0 && (
                   <tr>
                     <td colSpan={9} className={`p-8 text-center ${textSecondary}`}>
-                      No attendance records found for this month
+                      No attendance records found for {monthNames[selectedMonth - 1]} {selectedYear}
                     </td>
                   </tr>
                 )}
