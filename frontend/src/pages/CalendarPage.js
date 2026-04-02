@@ -43,6 +43,9 @@ export default function CalendarPage() {
   const [dayTasks, setDayTasks] = useState([]);
   const [dayMeetings, setDayMeetings] = useState([]);
   
+  // All tasks for the month (to show on calendar cells)
+  const [monthTasks, setMonthTasks] = useState({});
+  
   // Holiday management (HR Admin)
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [holidayForm, setHolidayForm] = useState({ date: '', name: '', type: 'public' });
@@ -135,6 +138,16 @@ export default function CalendarPage() {
     setLoadingGoogle(false);
   }, [googleConnected, currentYear, currentMonth, token]);
 
+  // Load all tasks for the month to display on calendar cells
+  const loadMonthTasks = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/bde/tasks/month/${currentYear}/${currentMonth}`, { headers });
+      setMonthTasks(res.data.tasks_by_date || {});
+    } catch (error) {
+      console.error('Error loading month tasks:', error);
+    }
+  }, [currentYear, currentMonth, token]);
+
   // Initial load
   useEffect(() => {
     loadGoogleStatus();
@@ -146,7 +159,8 @@ export default function CalendarPage() {
     loadCalendarData();
     loadMonthlyLeaveBalance();
     loadGoogleEvents();
-  }, [loadCompanyCalendar, loadCalendarData, loadMonthlyLeaveBalance, loadGoogleEvents]);
+    loadMonthTasks();
+  }, [loadCompanyCalendar, loadCalendarData, loadMonthlyLeaveBalance, loadGoogleEvents, loadMonthTasks]);
 
   // Load day detail when a date is selected
   const loadDayDetail = async (dateStr) => {
@@ -285,6 +299,9 @@ export default function CalendarPage() {
         return eventDate === dateStr;
       });
       
+      // Get tasks for this day
+      const tasks = monthTasks[dateStr] || [];
+      
       days.push({
         day: i,
         date: dateStr,
@@ -293,7 +310,8 @@ export default function CalendarPage() {
         holiday,
         attendance,
         leave,
-        eventsCount: dayEvents.length
+        eventsCount: dayEvents.length,
+        tasks
       });
     }
     
@@ -453,30 +471,62 @@ export default function CalendarPage() {
                             )}
                           </div>
                           
-                          {/* Status indicators */}
-                          <div className="flex-1 flex flex-col justify-end gap-0.5 mt-1">
-                            {dayObj.holiday && (
-                              <span className="text-[10px] text-[#ef4444] truncate">{dayObj.holiday.name}</span>
-                            )}
-                            {dayObj.leave && (
-                              <Badge className={`text-[10px] px-1 py-0 ${
-                                dayObj.leave.leave_type === 'casual' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
-                                dayObj.leave.leave_type === 'sick' ? 'bg-[#ec4899]/20 text-[#ec4899]' :
-                                'bg-[#8b5cf6]/20 text-[#8b5cf6]'
-                              }`}>
-                                {dayObj.leave.leave_type}
-                              </Badge>
-                            )}
-                            {dayObj.attendance && !dayObj.leave && (
-                              <div className="flex items-center gap-1">
-                                {dayObj.attendance.work_mode === 'remote' ? (
-                                  <Home className="h-3 w-3 text-[#10b981]" />
-                                ) : (
-                                  <Building className="h-3 w-3 text-[#6366f1]" />
+                          {/* Tasks list - small colored text */}
+                          <div className="flex-1 overflow-hidden mt-1">
+                            {dayObj.tasks && dayObj.tasks.length > 0 ? (
+                              <div className="space-y-0.5">
+                                {dayObj.tasks.slice(0, 3).map((task, tIdx) => {
+                                  // Color based on priority or type
+                                  const taskColors = {
+                                    high: 'text-[#ef4444]',
+                                    urgent: 'text-[#ef4444]',
+                                    medium: 'text-[#f59e0b]',
+                                    normal: 'text-[#3b82f6]',
+                                    low: 'text-[#10b981]'
+                                  };
+                                  const colorClass = taskColors[task.priority?.toLowerCase()] || 'text-[#6366f1]';
+                                  
+                                  return (
+                                    <p 
+                                      key={task.task_id || tIdx} 
+                                      className={`text-[9px] leading-tight truncate ${colorClass}`}
+                                      title={task.task_name}
+                                    >
+                                      • {task.task_name}
+                                    </p>
+                                  );
+                                })}
+                                {dayObj.tasks.length > 3 && (
+                                  <p className={`text-[8px] ${textSecondary}`}>+{dayObj.tasks.length - 3} more</p>
                                 )}
-                                <span className="text-[10px] text-[#10b981]">
-                                  {dayObj.attendance.total_hours?.toFixed(1)}h
-                                </span>
+                              </div>
+                            ) : (
+                              /* Status indicators (only if no tasks) */
+                              <div className="flex flex-col justify-end h-full gap-0.5">
+                                {dayObj.holiday && (
+                                  <span className="text-[10px] text-[#ef4444] truncate">{dayObj.holiday.name}</span>
+                                )}
+                                {dayObj.leave && (
+                                  <Badge className={`text-[10px] px-1 py-0 ${
+                                    dayObj.leave.leave_type === 'casual' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
+                                    dayObj.leave.leave_type === 'sick' ? 'bg-[#ec4899]/20 text-[#ec4899]' :
+                                    'bg-[#8b5cf6]/20 text-[#8b5cf6]'
+                                  }`}>
+                                    {dayObj.leave.leave_type}
+                                  </Badge>
+                                )}
+                                {dayObj.attendance && !dayObj.leave && (
+                                  <div className="flex items-center gap-1">
+                                    {dayObj.attendance.work_mode === 'remote' ? (
+                                      <Home className="h-3 w-3 text-[#10b981]" />
+                                    ) : (
+                                      <Building className="h-3 w-3 text-[#6366f1]" />
+                                    )}
+                                    <span className="text-[10px] text-[#10b981]">
+                                      {dayObj.attendance.total_hours?.toFixed(1)}h
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
@@ -513,6 +563,18 @@ export default function CalendarPage() {
                   <div className="flex items-center gap-2">
                     <Badge className="bg-[#4285f4]/20 text-[#4285f4] text-xs">3</Badge>
                     <span className={`text-xs ${textSecondary}`}>Google Events</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-[#ef4444]">• Task</span>
+                    <span className={`text-xs ${textSecondary}`}>High Priority</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-[#f59e0b]">• Task</span>
+                    <span className={`text-xs ${textSecondary}`}>Medium</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] text-[#6366f1]">• Task</span>
+                    <span className={`text-xs ${textSecondary}`}>Normal</span>
                   </div>
                 </div>
               </CardContent>

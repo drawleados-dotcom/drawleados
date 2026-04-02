@@ -190,6 +190,66 @@ async def get_tasks_by_date(date: str, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Get all tasks for a month (for calendar view)
+@bde_router.get("/tasks/month/{year}/{month}")
+async def get_tasks_for_month(year: int, month: int, request: Request):
+    """Get all tasks grouped by date for a specific month - optimized for calendar view"""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    
+    try:
+        # Get start and end of month
+        from calendar import monthrange
+        last_day = monthrange(year, month)[1]
+        start_date = f"{year}-{str(month).zfill(2)}-01"
+        end_date = f"{year}-{str(month).zfill(2)}-{str(last_day).zfill(2)}"
+        
+        # Build query - get all tasks with due_date in this month
+        base_query = {
+            "due_date": {"$gte": start_date, "$lte": end_date}
+        }
+        
+        # Filter by user access
+        if user.role not in ["super_admin", "admin", "hr_manager"]:
+            base_query = {
+                "$and": [
+                    base_query,
+                    {"$or": [
+                        {"created_by": user.user_id},
+                        {"assigned_to": user.user_id}
+                    ]}
+                ]
+            }
+        
+        tasks = await db.bde_tasks.find(base_query, {
+            "_id": 0,
+            "task_id": 1,
+            "task_name": 1,
+            "priority": 1,
+            "status": 1,
+            "due_date": 1,
+            "type": 1
+        }).sort("due_date", 1).to_list(500)
+        
+        # Group tasks by date
+        tasks_by_date = {}
+        for task in tasks:
+            date = task.get("due_date")
+            if date:
+                if date not in tasks_by_date:
+                    tasks_by_date[date] = []
+                tasks_by_date[date].append(task)
+        
+        return {
+            "year": year,
+            "month": month,
+            "tasks_by_date": tasks_by_date,
+            "total_tasks": len(tasks)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Create task
 @bde_router.post("/tasks")
 async def create_task(data: TaskCreate, request: Request):
