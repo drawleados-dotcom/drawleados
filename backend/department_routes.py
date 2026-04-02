@@ -109,14 +109,15 @@ async def get_departments(request: Request):
     
     departments = await db.departments.find({"is_active": True}).sort("order", 1).to_list(100)
     
-    # If no departments exist, create default ones
+    # If no departments exist, create default ones INCLUDING Website
     if not departments:
         default_depts = [
-            {"name": "SEO", "icon": "🔍", "color": "#10b981", "order": 1},
-            {"name": "Meta", "icon": "📊", "color": "#3b82f6", "order": 2},
-            {"name": "Social Media", "icon": "📱", "color": "#ec4899", "order": 3},
-            {"name": "Design", "icon": "🎨", "color": "#f59e0b", "order": 4},
-            {"name": "ERP", "icon": "🏢", "color": "#8b5cf6", "order": 5},
+            {"name": "Website", "icon": "🌐", "color": "#22c55e", "order": 0, "dept_type": "website"},
+            {"name": "SEO", "icon": "🔍", "color": "#10b981", "order": 1, "dept_type": "standard"},
+            {"name": "Meta", "icon": "📊", "color": "#3b82f6", "order": 2, "dept_type": "standard"},
+            {"name": "Social Media", "icon": "📱", "color": "#ec4899", "order": 3, "dept_type": "standard"},
+            {"name": "Design", "icon": "🎨", "color": "#f59e0b", "order": 4, "dept_type": "standard"},
+            {"name": "ERP", "icon": "🏢", "color": "#8b5cf6", "order": 5, "dept_type": "standard"},
         ]
         
         for dept in default_depts:
@@ -218,6 +219,293 @@ async def delete_department(department_id: str, request: Request):
 
 
 # ========== PROJECTS ==========
+
+
+# ========== WEBSITE PROJECTS (Special Department) ==========
+
+DEFAULT_WEBSITE_PAGES = [
+    "Home Page",
+    "About Us",
+    "Services",
+    "Projects/Portfolio",
+    "Contact Us",
+    "Blog",
+    "Privacy Policy",
+    "Terms & Conditions"
+]
+
+WEBSITE_STATUS_OPTIONS = ["To-Do", "In Progress", "Client Review", "Client Approved", "Completed", "On Hold"]
+
+
+@department_router.get("/website/projects")
+async def get_website_projects(
+    request: Request,
+    status: Optional[str] = None,
+    developer: Optional[str] = None
+):
+    """Get all website projects with progress stats"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    query = {}
+    if status and status != 'all':
+        query["status"] = status
+    if developer and developer != 'all':
+        query["developer"] = developer
+    
+    projects = await db.website_projects.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Calculate progress for each project
+    for project in projects:
+        tasks = await db.website_page_tasks.find(
+            {"project_id": project["project_id"]},
+            {"_id": 0, "dev_status": 1, "overall_status": 1}
+        ).to_list(100)
+        
+        total = len(tasks)
+        # DEV % - count tasks with dev_status == "Completed"
+        dev_completed = len([t for t in tasks if t.get("dev_status") == "Completed"])
+        # OVERALL % - count tasks with overall_status == "Completed"
+        overall_completed = len([t for t in tasks if t.get("overall_status") == "Completed"])
+        
+        project["total_pages"] = total
+        project["dev_percent"] = round((dev_completed / total * 100) if total > 0 else 0)
+        project["overall_percent"] = round((overall_completed / total * 100) if total > 0 else 0)
+        
+        # Get developer name
+        if project.get("developer"):
+            dev_user = await db.users.find_one({"user_id": project["developer"]}, {"_id": 0, "name": 1})
+            project["developer_name"] = dev_user.get("name") if dev_user else None
+    
+    return projects
+
+
+@department_router.post("/website/projects")
+async def create_website_project(request: Request):
+    """Create a new website project with default pages"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    data = await request.json()
+    project_id = f"wp_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    project = {
+        "project_id": project_id,
+        "name": data.get("name", "New Website Project"),
+        "onboarding_date": data.get("onboarding_date") or now.strftime("%Y-%m-%d"),
+        "deadline": data.get("deadline"),
+        "status": data.get("status", "active"),
+        "platform": data.get("platform", "Website"),
+        "website_type": data.get("website_type", "Business Website"),
+        "developer": data.get("developer"),
+        "designer": data.get("designer"),
+        "content_writer": data.get("content_writer"),
+        "project_manager": data.get("project_manager"),
+        "domain_url": data.get("domain_url"),
+        "client_drive_url": data.get("client_drive_url"),
+        "documents_url": data.get("documents_url"),
+        "created_by": current_user.user_id,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_projects.insert_one(project)
+    
+    # Create default page tasks
+    for idx, page_name in enumerate(DEFAULT_WEBSITE_PAGES, 1):
+        task_id = f"wpt_{uuid.uuid4().hex[:12]}"
+        task = {
+            "task_id": task_id,
+            "project_id": project_id,
+            "sno": idx,
+            "page_name": page_name,
+            "wireframe_url": None,
+            "wireframe_due": None,
+            "wireframe_status": "To-Do",
+            "ui_url": None,
+            "ui_due": None,
+            "ui_status": "To-Do",
+            "content_url": None,
+            "content_due": None,
+            "content_status": "To-Do",
+            "dev_url": None,
+            "dev_due": None,
+            "dev_status": "To-Do",
+            "overall_status": "To-Do",
+            "assigned_to": None,
+            "notes": None,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.website_page_tasks.insert_one(task)
+    
+    project.pop("_id", None)
+    project["total_pages"] = len(DEFAULT_WEBSITE_PAGES)
+    project["dev_percent"] = 0
+    project["overall_percent"] = 0
+    
+    return project
+
+
+@department_router.get("/website/projects/{project_id}")
+async def get_website_project_detail(project_id: str, request: Request):
+    """Get website project with all pages"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    project = await db.website_projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get all pages
+    pages = await db.website_page_tasks.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("sno", 1).to_list(100)
+    
+    project["pages"] = pages
+    
+    # Calculate progress
+    total = len(pages)
+    dev_completed = len([p for p in pages if p.get("dev_status") == "Completed"])
+    overall_completed = len([p for p in pages if p.get("overall_status") == "Completed"])
+    
+    project["total_pages"] = total
+    project["dev_percent"] = round((dev_completed / total * 100) if total > 0 else 0)
+    project["overall_percent"] = round((overall_completed / total * 100) if total > 0 else 0)
+    
+    # Get developer name
+    if project.get("developer"):
+        dev_user = await db.users.find_one({"user_id": project["developer"]}, {"_id": 0, "name": 1})
+        project["developer_name"] = dev_user.get("name") if dev_user else None
+    
+    return project
+
+
+@department_router.put("/website/projects/{project_id}")
+async def update_website_project(project_id: str, request: Request):
+    """Update website project"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    data = await request.json()
+    data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.website_projects.update_one(
+        {"project_id": project_id},
+        {"$set": data}
+    )
+    
+    project = await db.website_projects.find_one({"project_id": project_id}, {"_id": 0})
+    return project
+
+
+@department_router.delete("/website/projects/{project_id}")
+async def delete_website_project(project_id: str, request: Request):
+    """Delete website project and all its pages"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    await db.website_projects.delete_one({"project_id": project_id})
+    await db.website_page_tasks.delete_many({"project_id": project_id})
+    
+    return {"message": "Project deleted"}
+
+
+# ========== WEBSITE PAGES ==========
+
+@department_router.post("/website/projects/{project_id}/pages")
+async def add_website_page(project_id: str, request: Request):
+    """Add a new page to website project"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    data = await request.json()
+    
+    # Get max sno
+    max_page = await db.website_page_tasks.find_one(
+        {"project_id": project_id},
+        sort=[("sno", -1)]
+    )
+    next_sno = (max_page.get("sno", 0) + 1) if max_page else 1
+    
+    task_id = f"wpt_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    task = {
+        "task_id": task_id,
+        "project_id": project_id,
+        "sno": next_sno,
+        "page_name": data.get("page_name", "New Page"),
+        "wireframe_url": None,
+        "wireframe_due": None,
+        "wireframe_status": "To-Do",
+        "ui_url": None,
+        "ui_due": None,
+        "ui_status": "To-Do",
+        "content_url": None,
+        "content_due": None,
+        "content_status": "To-Do",
+        "dev_url": None,
+        "dev_due": None,
+        "dev_status": "To-Do",
+        "overall_status": "To-Do",
+        "assigned_to": data.get("assigned_to"),
+        "notes": data.get("notes"),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_page_tasks.insert_one(task)
+    task.pop("_id", None)
+    
+    return task
+
+
+@department_router.put("/website/pages/{task_id}")
+async def update_website_page(task_id: str, request: Request):
+    """Update a website page/task"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    data = await request.json()
+    data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.website_page_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": data}
+    )
+    
+    task = await db.website_page_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    return task
+
+
+@department_router.delete("/website/pages/{task_id}")
+async def delete_website_page(task_id: str, request: Request):
+    """Delete a website page"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    await db.website_page_tasks.delete_one({"task_id": task_id})
+    
+    return {"message": "Page deleted"}
+
+
+@department_router.get("/website/developers")
+async def get_website_developers(request: Request):
+    """Get all users who can be assigned as developers"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    # Get users with developer-related roles or all users
+    users = await db.users.find(
+        {"is_active": {"$ne": False}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "designation": 1, "role": 1}
+    ).to_list(100)
+    
+    return users
+
 
 @department_router.get("/{department_id}/projects")
 async def get_department_projects(department_id: str, status: Optional[str] = None, request: Request = None):
@@ -665,3 +953,6 @@ async def get_task_timer_status(task_id: str, request: Request):
     
     time_tracking = task.get("time_tracking", {"status": "not_started", "total_seconds": 0, "sessions": []})
     return {"time_tracking": time_tracking}
+
+
+

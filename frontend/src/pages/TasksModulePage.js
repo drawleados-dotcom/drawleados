@@ -10,13 +10,14 @@ import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Checkbox } from '../components/ui/checkbox';
+import { Progress } from '../components/ui/progress';
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   Trash2, Edit2, X, Briefcase,
   Play, Pause, Square, Timer, Eye, Link as LinkIcon, Filter,
   ChevronRight, ArrowLeft, FileSpreadsheet, ExternalLink,
   Search, Building2, Layers, LayoutGrid, List, FileText,
-  Repeat, Users
+  Repeat, Users, Globe, Code, Palette, FileEdit
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -39,8 +40,22 @@ const statusColors = {
 const projectStatusColors = {
   'active': 'bg-[#10b981]/20 text-[#10b981]',
   'completed': 'bg-[#6366f1]/20 text-[#6366f1]',
-  'on_hold': 'bg-[#f59e0b]/20 text-[#f59e0b]'
+  'on_hold': 'bg-[#f59e0b]/20 text-[#f59e0b]',
+  'on-hold': 'bg-[#f59e0b]/20 text-[#f59e0b]',
+  'cancelled': 'bg-[#ef4444]/20 text-[#ef4444]'
 };
+
+// Website page status colors
+const WEBSITE_STATUS_COLORS = {
+  'To-Do': 'bg-gray-500/20 text-gray-400',
+  'In Progress': 'bg-blue-500/20 text-blue-400',
+  'Client Review': 'bg-purple-500/20 text-purple-400',
+  'Client Approved': 'bg-emerald-500/20 text-emerald-400',
+  'Completed': 'bg-green-500/20 text-green-400',
+  'On Hold': 'bg-orange-500/20 text-orange-400'
+};
+
+const WEBSITE_STATUS_OPTIONS = ['To-Do', 'In Progress', 'Client Review', 'Client Approved', 'Completed', 'On Hold'];
 
 export default function TasksModulePage() {
   const { isDark } = useTheme();
@@ -57,6 +72,15 @@ export default function TasksModulePage() {
   const [projects, setProjects] = useState([]);
   const [projectDetail, setProjectDetail] = useState(null);
   const [users, setUsers] = useState([]);
+  
+  // Website specific
+  const [websiteProjects, setWebsiteProjects] = useState([]);
+  const [websiteProjectDetail, setWebsiteProjectDetail] = useState(null);
+  const [websiteViewMode, setWebsiteViewMode] = useState('projects'); // projects, tasks
+  const [websiteFilters, setWebsiteFilters] = useState({ search: '', developer: 'all', status: 'all', date: '' });
+  const [showWebsiteProjectModal, setShowWebsiteProjectModal] = useState(false);
+  const [showWebsitePageModal, setShowWebsitePageModal] = useState(false);
+  const [editingWebsitePage, setEditingWebsitePage] = useState(null);
   
   // Filters
   const [projectFilter, setProjectFilter] = useState({ status: 'all', search: '' });
@@ -145,6 +169,39 @@ export default function TasksModulePage() {
     }
   }, []);
 
+  // ========== WEBSITE SPECIFIC FUNCTIONS ==========
+  
+  // Load website projects
+  const loadWebsiteProjects = useCallback(async () => {
+    try {
+      let url = `${API}/api/departments/website/projects`;
+      const params = new URLSearchParams();
+      if (websiteFilters.status && websiteFilters.status !== 'all') params.append('status', websiteFilters.status);
+      if (websiteFilters.developer && websiteFilters.developer !== 'all') params.append('developer', websiteFilters.developer);
+      if (params.toString()) url += `?${params.toString()}`;
+      
+      const res = await axios.get(url, { headers });
+      setWebsiteProjects(res.data);
+    } catch (error) {
+      console.error('Error loading website projects:', error);
+    }
+  }, [websiteFilters.status, websiteFilters.developer]);
+
+  // Load website project detail
+  const loadWebsiteProjectDetail = useCallback(async (projectId) => {
+    try {
+      const res = await axios.get(`${API}/api/departments/website/projects/${projectId}`, { headers });
+      setWebsiteProjectDetail(res.data);
+    } catch (error) {
+      console.error('Error loading website project:', error);
+    }
+  }, []);
+
+  // Check if department is Website type
+  const isWebsiteDepartment = (dept) => {
+    return dept?.dept_type === 'website' || dept?.name === 'Website';
+  };
+
   useEffect(() => {
     loadDepartments();
     loadUsers();
@@ -152,21 +209,30 @@ export default function TasksModulePage() {
 
   useEffect(() => {
     if (selectedDepartment) {
-      loadProjects(selectedDepartment.department_id);
+      if (isWebsiteDepartment(selectedDepartment)) {
+        loadWebsiteProjects();
+      } else {
+        loadProjects(selectedDepartment.department_id);
+      }
     }
-  }, [selectedDepartment, loadProjects]);
+  }, [selectedDepartment, loadProjects, loadWebsiteProjects]);
 
   useEffect(() => {
     if (selectedProject) {
-      loadProjectDetail(selectedProject.project_id);
+      if (isWebsiteDepartment(selectedDepartment)) {
+        loadWebsiteProjectDetail(selectedProject.project_id);
+      } else {
+        loadProjectDetail(selectedProject.project_id);
+      }
     }
-  }, [selectedProject, loadProjectDetail]);
+  }, [selectedProject, selectedDepartment, loadProjectDetail, loadWebsiteProjectDetail]);
 
   // Navigate to department
   const handleSelectDepartment = (dept) => {
     setSelectedDepartment(dept);
     setSelectedProject(null);
     setProjectDetail(null);
+    setWebsiteProjectDetail(null);
     setView('projects');
   };
 
@@ -181,10 +247,12 @@ export default function TasksModulePage() {
     if (view === 'project-detail') {
       setSelectedProject(null);
       setProjectDetail(null);
+      setWebsiteProjectDetail(null);
       setView('projects');
     } else if (view === 'projects') {
       setSelectedDepartment(null);
       setProjects([]);
+      setWebsiteProjects([]);
       setView('departments');
     }
   };
@@ -195,6 +263,15 @@ export default function TasksModulePage() {
       const search = projectFilter.search.toLowerCase();
       return p.name.toLowerCase().includes(search) || 
              (p.client_name && p.client_name.toLowerCase().includes(search));
+    }
+    return true;
+  });
+
+  // Filter website projects
+  const filteredWebsiteProjects = websiteProjects.filter(p => {
+    if (websiteFilters.search) {
+      const search = websiteFilters.search.toLowerCase();
+      return p.name.toLowerCase().includes(search);
     }
     return true;
   });
@@ -513,6 +590,85 @@ export default function TasksModulePage() {
     }
   };
 
+  // ========== WEBSITE PROJECT CRUD ==========
+  
+  const [websiteProjectForm, setWebsiteProjectForm] = useState({
+    name: '', onboarding_date: '', deadline: '', status: 'active', platform: 'Website',
+    website_type: 'Business Website', developer: '', designer: '', domain_url: ''
+  });
+
+  const handleCreateWebsiteProject = async () => {
+    if (!websiteProjectForm.name.trim()) {
+      toast.error('Project name is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/departments/website/projects`, websiteProjectForm, { headers });
+      toast.success('Website project created');
+      setShowWebsiteProjectModal(false);
+      setWebsiteProjectForm({ name: '', onboarding_date: '', deadline: '', status: 'active', platform: 'Website', website_type: 'Business Website', developer: '', designer: '', domain_url: '' });
+      loadWebsiteProjects();
+    } catch (error) {
+      toast.error('Failed to create project');
+    }
+  };
+
+  const handleDeleteWebsiteProject = async (projectId) => {
+    if (!window.confirm('Delete this project and all its pages?')) return;
+    try {
+      await axios.delete(`${API}/api/departments/website/projects/${projectId}`, { headers });
+      toast.success('Project deleted');
+      loadWebsiteProjects();
+    } catch (error) {
+      toast.error('Failed to delete project');
+    }
+  };
+
+  // Website page handlers
+  const [websitePageForm, setWebsitePageForm] = useState({ page_name: '', assigned_to: '', notes: '' });
+
+  const handleAddWebsitePage = async () => {
+    if (!websitePageForm.page_name.trim()) {
+      toast.error('Page name is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/departments/website/projects/${selectedProject.project_id}/pages`, websitePageForm, { headers });
+      toast.success('Page added');
+      setShowWebsitePageModal(false);
+      setWebsitePageForm({ page_name: '', assigned_to: '', notes: '' });
+      loadWebsiteProjectDetail(selectedProject.project_id);
+    } catch (error) {
+      toast.error('Failed to add page');
+    }
+  };
+
+  const handleUpdateWebsitePage = async (taskId, updates) => {
+    try {
+      await axios.put(`${API}/api/departments/website/pages/${taskId}`, updates, { headers });
+      loadWebsiteProjectDetail(selectedProject.project_id);
+    } catch (error) {
+      toast.error('Failed to update page');
+    }
+  };
+
+  const handleDeleteWebsitePage = async (taskId) => {
+    if (!window.confirm('Delete this page?')) return;
+    try {
+      await axios.delete(`${API}/api/departments/website/pages/${taskId}`, { headers });
+      toast.success('Page deleted');
+      loadWebsiteProjectDetail(selectedProject.project_id);
+    } catch (error) {
+      toast.error('Failed to delete page');
+    }
+  };
+
+  // Format date for display
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-IN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -570,13 +726,19 @@ export default function TasksModulePage() {
                   Add Department
                 </Button>
               )}
-              {view === 'projects' && (
+              {view === 'projects' && !isWebsiteDepartment(selectedDepartment) && (
                 <Button onClick={() => { setEditingProject(null); setProjectForm({ name: '', client_name: '', description: '', start_date: '', end_date: '', status: 'active', team_members: [] }); setShowProjectModal(true); }} className="bg-[#10b981] hover:bg-[#059669]">
                   <Plus className="h-4 w-4 mr-2" />
                   New Project
                 </Button>
               )}
-              {view === 'project-detail' && (
+              {view === 'projects' && isWebsiteDepartment(selectedDepartment) && (
+                <Button onClick={() => setShowWebsiteProjectModal(true)} className="bg-[#10b981] hover:bg-[#059669]">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Project
+                </Button>
+              )}
+              {view === 'project-detail' && !isWebsiteDepartment(selectedDepartment) && (
                 <>
                   <Button variant="outline" onClick={() => setShowDocModal(true)} className={borderColor}>
                     <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -587,6 +749,12 @@ export default function TasksModulePage() {
                     Create Task
                   </Button>
                 </>
+              )}
+              {view === 'project-detail' && isWebsiteDepartment(selectedDepartment) && (
+                <Button onClick={() => setShowWebsitePageModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Page
+                </Button>
               )}
             </div>
           </div>
@@ -622,8 +790,8 @@ export default function TasksModulePage() {
             </div>
           )}
 
-          {/* Projects View */}
-          {view === 'projects' && selectedDepartment && (
+          {/* Projects View - Standard */}
+          {view === 'projects' && selectedDepartment && !isWebsiteDepartment(selectedDepartment) && (
             <div className="space-y-4">
               {/* Filters */}
               <div className="flex items-center gap-4">
@@ -748,8 +916,143 @@ export default function TasksModulePage() {
             </div>
           )}
 
+          {/* Website Projects View */}
+          {view === 'projects' && selectedDepartment && isWebsiteDepartment(selectedDepartment) && (
+            <div className="space-y-4">
+              {/* Header with count and toggle */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className={`text-lg font-semibold ${textPrimary}`}>All Website Projects</h2>
+                  <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{filteredWebsiteProjects.length} Projects</Badge>
+                </div>
+                <div className={`flex items-center ${bgCard} border ${borderColor} rounded-lg p-1`}>
+                  <button onClick={() => setWebsiteViewMode('projects')} className={`px-3 py-1 rounded text-sm ${websiteViewMode === 'projects' ? 'bg-[#6366f1] text-white' : textSecondary}`}>
+                    Projects
+                  </button>
+                  <button onClick={() => setWebsiteViewMode('tasks')} className={`px-3 py-1 rounded text-sm ${websiteViewMode === 'tasks' ? 'bg-[#6366f1] text-white' : textSecondary}`}>
+                    Task View
+                  </button>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="relative flex-1 max-w-xs">
+                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
+                  <Input
+                    placeholder="Search projects..."
+                    value={websiteFilters.search}
+                    onChange={(e) => setWebsiteFilters({ ...websiteFilters, search: e.target.value })}
+                    className={`pl-10 ${bgCard} ${borderColor}`}
+                  />
+                </div>
+                
+                <Input
+                  type="date"
+                  value={websiteFilters.date}
+                  onChange={(e) => setWebsiteFilters({ ...websiteFilters, date: e.target.value })}
+                  className={`w-40 ${bgCard} ${borderColor}`}
+                />
+                
+                <Select value={websiteFilters.developer} onValueChange={(v) => { setWebsiteFilters({ ...websiteFilters, developer: v }); }}>
+                  <SelectTrigger className={`w-40 ${bgCard} ${borderColor}`}>
+                    <SelectValue placeholder="All Developers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Developers</SelectItem>
+                    {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                
+                <Select value={websiteFilters.status} onValueChange={(v) => { setWebsiteFilters({ ...websiteFilters, status: v }); }}>
+                  <SelectTrigger className={`w-40 ${bgCard} ${borderColor}`}>
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="on-hold">On Hold</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Website Projects Table */}
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className={bgSecondary}>
+                        <tr>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Project</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Dev %</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Overall %</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Developer</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Onboarding</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Deadline</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Pages</th>
+                          <th className={`px-4 py-3`}></th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
+                        {filteredWebsiteProjects.length === 0 ? (
+                          <tr>
+                            <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>
+                              <Globe className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>No website projects found</p>
+                            </td>
+                          </tr>
+                        ) : filteredWebsiteProjects.map(project => (
+                          <tr key={project.project_id} className={`hover:${bgSecondary} cursor-pointer`} onClick={() => handleSelectProject(project)}>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <Globe className="h-5 w-5 text-[#22c55e]" />
+                                <div>
+                                  <div className={`font-medium ${textPrimary}`}>{project.name}</div>
+                                  <div className={`text-xs ${textSecondary}`}>{project.website_type || 'Website'}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge className={projectStatusColors[project.status] || projectStatusColors['active']}>{project.status}</Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-16 h-2 rounded-full ${bgSecondary}`}>
+                                  <div className="h-2 rounded-full bg-[#3b82f6]" style={{ width: `${project.dev_percent || 0}%` }} />
+                                </div>
+                                <span className={`text-xs ${textSecondary}`}>{project.dev_percent || 0}%</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Badge className={`${project.overall_percent >= 100 ? 'bg-[#10b981]/20 text-[#10b981]' : project.overall_percent >= 50 ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#71717a]/20 text-[#71717a]'}`}>
+                                {project.overall_percent || 0}%
+                              </Badge>
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{project.developer_name || '-'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{formatDateDisplay(project.onboarding_date)}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{formatDateDisplay(project.deadline)}</td>
+                            <td className="px-4 py-3">
+                              <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{project.total_pages || 0}</Badge>
+                            </td>
+                            <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteWebsiteProject(project.project_id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
           {/* Project Detail View with BDE-style Tasks */}
-          {view === 'project-detail' && projectDetail && (
+          {view === 'project-detail' && projectDetail && !isWebsiteDepartment(selectedDepartment) && (
             <div className="space-y-6">
               {/* Project Info */}
               <Card className={`${bgCard} border ${borderColor}`}>
@@ -1054,6 +1357,167 @@ export default function TasksModulePage() {
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Website Project Detail View - Pages List */}
+          {view === 'project-detail' && websiteProjectDetail && isWebsiteDepartment(selectedDepartment) && (
+            <div className="space-y-6">
+              {/* Project Info Header */}
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <div className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <Globe className="h-8 w-8 text-[#22c55e]" />
+                      <div>
+                        <h2 className={`text-xl font-semibold ${textPrimary}`}>{websiteProjectDetail.name}</h2>
+                        <p className={`text-sm ${textSecondary}`}>{websiteProjectDetail.website_type || 'Website'}</p>
+                      </div>
+                    </div>
+                    <Badge className={projectStatusColors[websiteProjectDetail.status] || projectStatusColors['active']}>{websiteProjectDetail.status}</Badge>
+                  </div>
+                  
+                  {/* Progress Stats */}
+                  <div className="grid grid-cols-4 gap-4 mt-6">
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary}`}>Total Pages</p>
+                      <p className={`text-xl font-bold ${textPrimary}`}>{websiteProjectDetail.total_pages || 0}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary}`}>Dev Progress</p>
+                      <div className="flex items-center gap-2">
+                        <div className={`flex-1 h-2 rounded-full ${isDark ? 'bg-[#3f3f46]' : 'bg-gray-300'}`}>
+                          <div className="h-2 rounded-full bg-[#3b82f6]" style={{ width: `${websiteProjectDetail.dev_percent || 0}%` }} />
+                        </div>
+                        <span className={`text-sm font-bold ${textPrimary}`}>{websiteProjectDetail.dev_percent || 0}%</span>
+                      </div>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary}`}>Overall Progress</p>
+                      <div className="flex items-center gap-2">
+                        <div className={`flex-1 h-2 rounded-full ${isDark ? 'bg-[#3f3f46]' : 'bg-gray-300'}`}>
+                          <div className="h-2 rounded-full bg-[#10b981]" style={{ width: `${websiteProjectDetail.overall_percent || 0}%` }} />
+                        </div>
+                        <span className={`text-sm font-bold ${textPrimary}`}>{websiteProjectDetail.overall_percent || 0}%</span>
+                      </div>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary}`}>Developer</p>
+                      <p className={`text-sm font-medium ${textPrimary}`}>{websiteProjectDetail.developer_name || '-'}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Info row */}
+                  <div className="flex items-center gap-6 mt-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className={`h-4 w-4 ${textSecondary}`} />
+                      <span className={`text-sm ${textSecondary}`}>Onboarding: {formatDateDisplay(websiteProjectDetail.onboarding_date)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className={`h-4 w-4 ${textSecondary}`} />
+                      <span className={`text-sm ${textSecondary}`}>Deadline: {formatDateDisplay(websiteProjectDetail.deadline)}</span>
+                    </div>
+                    {websiteProjectDetail.domain_url && (
+                      <a href={websiteProjectDetail.domain_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[#6366f1]">
+                        <ExternalLink className="h-4 w-4" />
+                        <span className="text-sm">View Site</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </Card>
+
+              {/* Pages Table */}
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className={bgSecondary}>
+                        <tr>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase w-10`}>S.No</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Page Name</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Wireframe</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>UI Design</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Content</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Development</th>
+                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Overall</th>
+                          <th className={`px-4 py-3`}></th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
+                        {(websiteProjectDetail.pages || []).length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
+                              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>No pages yet. Add your first page!</p>
+                            </td>
+                          </tr>
+                        ) : (websiteProjectDetail.pages || []).map((page, idx) => (
+                          <tr key={page.task_id} className={`hover:${bgSecondary}`}>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{page.sno || idx + 1}</td>
+                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>{page.page_name}</td>
+                            <td className="px-4 py-3">
+                              <Select value={page.wireframe_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { wireframe_status: v })}>
+                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Select value={page.ui_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { ui_status: v })}>
+                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Select value={page.content_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { content_status: v })}>
+                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Select value={page.dev_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { dev_status: v })}>
+                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Select value={page.overall_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { overall_status: v })}>
+                                <SelectTrigger className={`h-8 w-32 text-xs ${WEBSITE_STATUS_COLORS[page.overall_status || 'To-Do']}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-3">
+                              <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteWebsitePage(page.task_id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -1427,6 +1891,116 @@ export default function TasksModulePage() {
                   <Edit2 className="h-4 w-4 mr-2" /> Edit
                 </Button>
                 <Button onClick={() => setShowTaskDetailModal(false)}>Close</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Website Project Modal */}
+        {showWebsiteProjectModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className={`w-full max-w-lg ${bgCard} border ${borderColor}`}>
+              <div className={`p-4 border-b ${borderColor} flex items-center justify-between`}>
+                <h3 className={`font-semibold ${textPrimary} flex items-center gap-2`}>
+                  <Globe className="h-5 w-5 text-[#22c55e]" />
+                  New Website Project
+                </h3>
+                <button onClick={() => setShowWebsiteProjectModal(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div>
+                  <Label className={textPrimary}>Project Name *</Label>
+                  <Input value={websiteProjectForm.name} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, name: e.target.value })} placeholder="e.g., Acme Corp Website" className={`${bgSecondary} ${borderColor}`} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Website Type</Label>
+                    <Select value={websiteProjectForm.website_type} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, website_type: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Business Website">Business Website</SelectItem>
+                        <SelectItem value="E-commerce">E-commerce</SelectItem>
+                        <SelectItem value="Portfolio">Portfolio</SelectItem>
+                        <SelectItem value="Landing Page">Landing Page</SelectItem>
+                        <SelectItem value="Blog">Blog</SelectItem>
+                        <SelectItem value="Web App">Web App</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Status</Label>
+                    <Select value={websiteProjectForm.status} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, status: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="on-hold">On Hold</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Onboarding Date</Label>
+                    <Input type="date" value={websiteProjectForm.onboarding_date} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, onboarding_date: e.target.value })} className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Deadline</Label>
+                    <Input type="date" value={websiteProjectForm.deadline} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, deadline: e.target.value })} className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Developer</Label>
+                  <Select value={websiteProjectForm.developer} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, developer: v })}>
+                    <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue placeholder="Select developer" /></SelectTrigger>
+                    <SelectContent>
+                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Domain URL</Label>
+                  <Input value={websiteProjectForm.domain_url} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, domain_url: e.target.value })} placeholder="https://example.com" className={`${bgSecondary} ${borderColor}`} />
+                </div>
+              </div>
+              <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
+                <Button variant="outline" onClick={() => setShowWebsiteProjectModal(false)}>Cancel</Button>
+                <Button onClick={handleCreateWebsiteProject} className="bg-[#22c55e] hover:bg-[#16a34a]">Create Project</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Website Page Modal */}
+        {showWebsitePageModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+              <div className={`p-4 border-b ${borderColor} flex items-center justify-between`}>
+                <h3 className={`font-semibold ${textPrimary}`}>Add Page</h3>
+                <button onClick={() => setShowWebsitePageModal(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4 space-y-4">
+                <div>
+                  <Label className={textPrimary}>Page Name *</Label>
+                  <Input value={websitePageForm.page_name} onChange={(e) => setWebsitePageForm({ ...websitePageForm, page_name: e.target.value })} placeholder="e.g., About Us" className={`${bgSecondary} ${borderColor}`} />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Assign To</Label>
+                  <Select value={websitePageForm.assigned_to} onValueChange={(v) => setWebsitePageForm({ ...websitePageForm, assigned_to: v })}>
+                    <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue placeholder="Select user" /></SelectTrigger>
+                    <SelectContent>
+                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Notes</Label>
+                  <Textarea value={websitePageForm.notes} onChange={(e) => setWebsitePageForm({ ...websitePageForm, notes: e.target.value })} placeholder="Any notes..." className={`${bgSecondary} ${borderColor}`} />
+                </div>
+              </div>
+              <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
+                <Button variant="outline" onClick={() => setShowWebsitePageModal(false)}>Cancel</Button>
+                <Button onClick={handleAddWebsitePage} className="bg-[#6366f1] hover:bg-[#4f46e5]">Add Page</Button>
               </div>
             </Card>
           </div>
