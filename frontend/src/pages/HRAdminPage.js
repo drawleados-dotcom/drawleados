@@ -44,6 +44,7 @@ const ROLES = [
 const MODULES = [
   { value: 'leads', label: 'Leads', icon: Users },
   { value: 'operations', label: 'Operations', icon: Briefcase },
+  { value: 'tasks', label: 'Tasks', icon: Briefcase },
   { value: 'hr', label: 'HR', icon: Users },
   { value: 'hr_admin', label: 'HR Admin', icon: Shield },
   { value: 'finance', label: 'Finance', icon: CreditCard },

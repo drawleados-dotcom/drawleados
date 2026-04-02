@@ -52,6 +52,7 @@ const SettingsPage = () => {
     { value: 'leads', label: 'Leads' },
     { value: 'hr', label: 'HR' },
     { value: 'operations', label: 'Operations' },
+    { value: 'tasks', label: 'Tasks' },
     { value: 'finance', label: 'Finance' },
     { value: 'reports', label: 'Reports' },
     { value: 'settings', label: 'Settings' },

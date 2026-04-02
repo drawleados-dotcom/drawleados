@@ -82,9 +82,15 @@ const Sidebar = () => {
     // ALL employees get Profile access
     if (module === 'profile') return true;
     
+    // Tasks module - check explicit access
+    if (module === 'tasks') return moduleAccess.includes('tasks');
+    
     // Check explicit module access for other modules
     return moduleAccess.includes(module);
   };
+  
+  // Check if user has ONLY tasks module (Operations Head view)
+  const hasTasksModuleOnly = moduleAccess.includes('tasks') && !isAdmin;
   
   // Legacy checks (for backward compatibility)
   const isEmployee = userRole === 'employee';
@@ -222,6 +228,69 @@ const Sidebar = () => {
       </div>
 
       <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto`}>
+        {/* === TASKS MODULE USER VIEW (Operations Head) === */}
+        {hasTasksModuleOnly && (
+          <>
+            {/* Calendar */}
+            <Link
+              to="/calendar"
+              data-testid="nav-calendar-tasks"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Calendar' : ''}
+            >
+              <Calendar className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Calendar'}
+            </Link>
+
+            {/* My Tasks (BDE-style for tasks assigned to current user) */}
+            <Link
+              to="/my-tasks"
+              data-testid="nav-my-tasks"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/my-tasks' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'My Tasks' : ''}
+            >
+              <ClipboardList className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'My Tasks'}
+            </Link>
+
+            {/* Tasks (All Departments) */}
+            <Link
+              to="/tasks"
+              data-testid="nav-tasks-all"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/tasks' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Tasks' : ''}
+            >
+              <Layers className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Tasks'}
+            </Link>
+
+            {/* My Profile */}
+            <Link
+              to="/hr"
+              data-testid="nav-my-profile"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'My Profile' : ''}
+            >
+              <UserCircle className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'My Profile'}
+            </Link>
+
+            {/* Documentation (Personal) */}
+            <Link
+              to="/my-documents"
+              data-testid="nav-my-documents"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/my-documents' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Documentation' : ''}
+            >
+              <FolderOpen className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Documentation'}
+            </Link>
+          </>
+        )}
+
+        {/* === STANDARD VIEW (for non-tasks-only users) === */}
+        {!hasTasksModuleOnly && (
+          <>
         {/* Leads - visible if user has leads access */}
         {hasAccess('leads') && (
           <Link
@@ -516,6 +585,8 @@ const Sidebar = () => {
             <FileSpreadsheet className="h-5 w-5" strokeWidth={2} />
             {!isCollapsed && 'Documentations'}
           </Link>
+        )}
+          </>
         )}
       </nav>
 
