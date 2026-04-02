@@ -26,6 +26,7 @@ import DocumentationsPage from './pages/DocumentationsPage';
 import SEOBoardPage from './pages/SEOBoardPage';
 import AdminSignupPage from './pages/AdminSignupPage';
 import ProfilePage from './pages/ProfilePage';
+import BDETasksPage from './pages/BDETasksPage';
 import './App.css';
 
 function AppRouter() {
@@ -181,6 +182,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bde-tasks"
+        element={
+          <ProtectedRoute>
+            <BDETasksPage />
           </ProtectedRoute>
         }
       />

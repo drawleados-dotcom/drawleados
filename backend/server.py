@@ -34,6 +34,7 @@ from leads_v2_routes import leads_v2_router, init_leads_v2_db
 from documentation_routes import documentation_router, init_documentation_db
 from seo_board_routes import seo_board_router, init_seo_board_db
 from designation_routes import designation_router
+from bde_routes import bde_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1938,6 +1939,7 @@ api_router.include_router(leads_v2_router)
 api_router.include_router(documentation_router)
 api_router.include_router(seo_board_router)
 api_router.include_router(designation_router)
+api_router.include_router(bde_router)
 
 # Include router in main app
 app.include_router(api_router)

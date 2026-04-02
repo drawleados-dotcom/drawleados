@@ -86,8 +86,8 @@ const Sidebar = () => {
   const isEmployee = userRole === 'employee';
   const isBDE = userRole === 'business_development' || userRole === 'bde';
   const isProjectManager = userRole === 'project_manager';
-  // HR Admin access: Only Super Admin and HR Manager
-  const canManageHR = isAdmin || userRole === 'hr_manager';
+  // HR Admin access: Super Admin, HR Manager, or users with hr_admin module access
+  const canManageHR = isAdmin || userRole === 'hr_manager' || hasAccess('hr_admin');
   const canManageUsers = user?.can_manage_users || false;
 
   // User designation for department filtering
@@ -369,9 +369,9 @@ const Sidebar = () => {
               {/* BDE Tasks */}
               {canSeeDepartment('bde') && (
               <Link
-                to="/sop-works?service=bde"
+                to="/bde-tasks"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.search.includes('service=bde')
+                  location.pathname === '/bde-tasks'
                     ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
