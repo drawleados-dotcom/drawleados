@@ -341,13 +341,13 @@ export default function HRAdminPage() {
     }
   }, [token]);
 
-  const handleCreatePayslip = async (userId) => {
+  const handleCreatePayslip = async (userId, hrRemarks = '') => {
     try {
       await axios.post(`${API}/api/payroll/payslip/create`, {
         user_id: userId,
         month: payslipMonth,
         year: payslipYear,
-        hr_remarks: ''
+        hr_remarks: hrRemarks
       }, { headers: { Authorization: `Bearer ${token}` } });
       toast.success('Payslip created!');
       loadPayslips(payslipMonth, payslipYear);

@@ -60,6 +60,11 @@ export default function PayrollManagementTab({
   const [reviewText, setReviewText] = useState('');
   const [reviewType, setReviewType] = useState(''); // operations | ceo
   
+  // Create Payslip Modal state
+  const [showCreatePayslipModal, setShowCreatePayslipModal] = useState(false);
+  const [createPayslipUserId, setCreatePayslipUserId] = useState('');
+  const [hrRemarks, setHrRemarks] = useState('');
+  
   // Payroll Settings state
   const [payrollSettings, setPayrollSettings] = useState({
     pf_enabled: true,
@@ -202,16 +207,13 @@ export default function PayrollManagementTab({
     }
   };
 
-  // Handle review submit
+  // Handle review submit - review text is optional
   const handleSubmitReview = () => {
-    if (!reviewText.trim()) {
-      toast.error('Please enter review text');
-      return;
-    }
+    // Review text is optional - can be empty
     if (reviewType === 'operations') {
-      onOperationsReview(reviewPayslip.payslip_id, reviewText);
+      onOperationsReview(reviewPayslip.payslip_id, reviewText.trim());
     } else if (reviewType === 'ceo') {
-      onCEOReview(reviewPayslip.payslip_id, reviewText);
+      onCEOReview(reviewPayslip.payslip_id, reviewText.trim());
     }
     setShowReviewModal(false);
     setReviewText('');
@@ -423,6 +425,8 @@ export default function PayrollManagementTab({
               setShowReviewModal={setShowReviewModal}
               setReviewPayslip={setReviewPayslip}
               setReviewType={setReviewType}
+              setShowCreateModal={setShowCreatePayslipModal}
+              setCreateUserId={setCreatePayslipUserId}
               getStatusColor={getStatusColor}
               getStatusLabel={getStatusLabel}
               bgCard={bgCard}
@@ -589,8 +593,8 @@ export default function PayrollManagementTab({
             </DialogTitle>
             <DialogDescription className={textSecondary}>
               {reviewType === 'operations' 
-                ? 'Add your monthly review for this employee (salary details are hidden)'
-                : 'Review and approve this payslip'
+                ? 'Add your monthly review for this employee (salary details are hidden). Review is optional.'
+                : 'Review and approve this payslip. Review comment is optional.'
               }
             </DialogDescription>
           </DialogHeader>
@@ -604,7 +608,7 @@ export default function PayrollManagementTab({
                 )}
               </div>
               
-              {reviewPayslip.operations_review && reviewType === 'ceo' && (
+              {reviewPayslip.operations_review?.review_text && reviewType === 'ceo' && (
                 <div className={`p-3 rounded-lg border ${borderColor}`}>
                   <p className={`text-xs ${textSecondary} mb-1`}>Operations Review by {reviewPayslip.operations_review.reviewer_name}</p>
                   <p className={textPrimary}>{reviewPayslip.operations_review.review_text}</p>
@@ -612,14 +616,15 @@ export default function PayrollManagementTab({
               )}
               
               <div>
-                <Label className={textPrimary}>Your Review *</Label>
+                <Label className={textPrimary}>Your Review (Optional)</Label>
                 <textarea
                   value={reviewText}
                   onChange={(e) => setReviewText(e.target.value)}
-                  placeholder="Enter your review..."
+                  placeholder="Enter your review or leave empty to skip..."
                   rows={4}
                   className={`w-full p-3 rounded-lg mt-1 ${bgInput} border ${borderColor} ${textPrimary} resize-none`}
                 />
+                <p className={`text-xs ${textSecondary} mt-1`}>You can skip the review and just {reviewType === 'ceo' ? 'approve' : 'forward to CEO'}</p>
               </div>
             </div>
           )}
@@ -631,7 +636,7 @@ export default function PayrollManagementTab({
               onClick={handleSubmitReview}
               className={reviewType === 'ceo' ? "bg-[#10b981] hover:bg-[#059669] text-white" : "bg-[#6366f1] hover:bg-[#4f46e5] text-white"}
             >
-              {reviewType === 'ceo' ? 'Approve' : 'Submit Review'}
+              {reviewType === 'ceo' ? 'Approve' : (reviewText.trim() ? 'Submit Review' : 'Skip & Forward to CEO')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -715,6 +720,58 @@ export default function PayrollManagementTab({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Create Payslip Modal with HR Remarks */}
+      <Dialog open={showCreatePayslipModal} onOpenChange={setShowCreatePayslipModal}>
+        <DialogContent className={`${bgCard} border ${borderColor} max-w-md`}>
+          <DialogHeader>
+            <DialogTitle className={textPrimary}>Create Payslip</DialogTitle>
+            <DialogDescription className={textSecondary}>
+              Create payslip for {months[payslipMonth - 1]} {payslipYear}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className={`p-3 rounded-lg ${bgSecondary}`}>
+              <p className={textSecondary}>Employee: <span className={`font-medium ${textPrimary}`}>
+                {employees.find(e => e.user_id === createPayslipUserId)?.name || 'Unknown'}
+              </span></p>
+              <p className={textSecondary}>Base Salary: <span className="text-[#10b981] font-medium">
+                ₹{employees.find(e => e.user_id === createPayslipUserId)?.current_salary?.toLocaleString() || 'Not Set'}
+              </span></p>
+            </div>
+            
+            <div>
+              <Label className={textPrimary}>HR Remarks (Optional)</Label>
+              <textarea
+                value={hrRemarks}
+                onChange={(e) => setHrRemarks(e.target.value)}
+                placeholder="Add any remarks for this payslip..."
+                rows={3}
+                className={`w-full p-3 rounded-lg mt-1 ${bgInput} border ${borderColor} ${textPrimary} resize-none`}
+              />
+              <p className={`text-xs ${textSecondary} mt-1`}>These remarks will appear on the payslip</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowCreatePayslipModal(false);
+              setHrRemarks('');
+            }} className={`border ${borderColor}`}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                onCreatePayslip(createPayslipUserId, hrRemarks);
+                setShowCreatePayslipModal(false);
+                setHrRemarks('');
+              }}
+              className="bg-[#10b981] hover:bg-[#059669] text-white"
+            >
+              Create Payslip
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -732,6 +789,8 @@ function SalaryPayslipView({
   setShowReviewModal,
   setReviewPayslip,
   setReviewType,
+  setShowCreateModal,
+  setCreateUserId,
   getStatusColor,
   getStatusLabel,
   bgCard,
@@ -740,26 +799,95 @@ function SalaryPayslipView({
   textSecondary,
   borderColor
 }) {
+  const [previousPayslips, setPreviousPayslips] = useState([]);
+  const [showPreviousPayslips, setShowPreviousPayslips] = useState(false);
+  
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const token = localStorage.getItem('session_token');
+  
+  // Helper function to open create modal
+  const openCreateModal = () => {
+    setCreateUserId(employee.user_id);
+    setShowCreateModal(true);
+  };
+  
+  // Load previous payslips
+  useEffect(() => {
+    const loadPreviousPayslips = async () => {
+      try {
+        const res = await axios.get(
+          `${API}/api/payroll/employee-payslips/${employee.user_id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        // Filter out current month's payslip
+        const prev = res.data.filter(p => !(p.month === payslipMonth && p.year === payslipYear));
+        setPreviousPayslips(prev);
+      } catch (error) {
+        console.error('Error loading previous payslips:', error);
+      }
+    };
+    if (employee?.user_id) {
+      loadPreviousPayslips();
+    }
+  }, [employee?.user_id, payslipMonth, payslipYear, token]);
   
   const payslip = payslips.find(p => p.user_id === employee.user_id);
   
   if (!payslip) {
     return (
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardContent className="py-12 text-center">
-          <CreditCard className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
-          <p className={textPrimary}>No payslip for {months[payslipMonth - 1]} {payslipYear}</p>
-          <p className={`text-sm ${textSecondary} mb-4`}>Create a payslip based on attendance and salary records</p>
-          <Button 
-            onClick={() => onCreatePayslip(employee.user_id)}
-            className="bg-[#10b981] hover:bg-[#059669] text-white"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create Payslip
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="py-12 text-center">
+            <CreditCard className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
+            <p className={textPrimary}>No payslip for {months[payslipMonth - 1]} {payslipYear}</p>
+            <p className={`text-sm ${textSecondary} mb-4`}>Create a payslip based on attendance and salary records</p>
+            <Button 
+              onClick={openCreateModal}
+              className="bg-[#10b981] hover:bg-[#059669] text-white"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Payslip
+            </Button>
+          </CardContent>
+        </Card>
+        
+        {/* Previous Payslips for when no current payslip exists */}
+        {previousPayslips.length > 0 && (
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={`${textPrimary} text-lg`}>Previous Payslips</CardTitle>
+              <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{previousPayslips.length} records</Badge>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {previousPayslips.slice(0, 6).map((p) => (
+                  <div key={p.payslip_id} className={`p-3 rounded-lg border ${borderColor} flex items-center justify-between`}>
+                    <div>
+                      <p className={`font-medium ${textPrimary}`}>{months[p.month - 1]} {p.year}</p>
+                      <p className={`text-sm ${p.net_salary >= 0 ? 'text-[#10b981]' : 'text-red-400'}`}>
+                        ₹{p.net_salary?.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
+                      {p.status === 'generated' && (
+                        <Button
+                          onClick={() => onDownloadPDF(p)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-[#6366f1]"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
@@ -880,11 +1008,11 @@ function SalaryPayslipView({
             </div>
           </div>
 
-          {/* Reviews Section */}
-          {(payslip.operations_review || payslip.ceo_review) && (
+          {/* Reviews Section - Only show if reviews have text */}
+          {((payslip.operations_review?.review_text) || (payslip.ceo_review?.review_text)) && (
             <div className="space-y-3">
               <h4 className={`font-medium ${textPrimary}`}>Reviews</h4>
-              {payslip.operations_review && (
+              {payslip.operations_review?.review_text && (
                 <div className={`p-3 rounded-lg border ${borderColor}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">Operations</Badge>
@@ -893,7 +1021,7 @@ function SalaryPayslipView({
                   <p className={textPrimary}>{payslip.operations_review.review_text}</p>
                 </div>
               )}
-              {payslip.ceo_review && (
+              {payslip.ceo_review?.review_text && (
                 <div className={`p-3 rounded-lg border ${borderColor}`}>
                   <div className="flex items-center gap-2 mb-1">
                     <Badge className="bg-[#10b981]/20 text-[#10b981]">CEO</Badge>
@@ -963,6 +1091,66 @@ function SalaryPayslipView({
           </div>
         </CardContent>
       </Card>
+      
+      {/* Previous Payslips Section */}
+      {previousPayslips.length > 0 && (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader 
+            className="flex flex-row items-center justify-between cursor-pointer"
+            onClick={() => setShowPreviousPayslips(!showPreviousPayslips)}
+          >
+            <CardTitle className={`${textPrimary} text-lg flex items-center gap-2`}>
+              <Clock className="h-5 w-5" />
+              Previous Payslips
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{previousPayslips.length} records</Badge>
+              <ChevronRight className={`h-5 w-5 ${textSecondary} transition-transform ${showPreviousPayslips ? 'rotate-90' : ''}`} />
+            </div>
+          </CardHeader>
+          {showPreviousPayslips && (
+            <CardContent>
+              <div className="space-y-3">
+                {previousPayslips.map((p) => (
+                  <div key={p.payslip_id} className={`p-4 rounded-lg border ${borderColor} flex flex-col md:flex-row md:items-center justify-between gap-3`}>
+                    <div className="flex items-center gap-4">
+                      <div className={`p-2 rounded-lg ${bgSecondary}`}>
+                        <Calendar className="h-5 w-5 text-[#6366f1]" />
+                      </div>
+                      <div>
+                        <p className={`font-medium ${textPrimary}`}>{months[p.month - 1]} {p.year}</p>
+                        <p className={`text-sm ${textSecondary}`}>Base: ₹{p.base_salary?.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col md:flex-row md:items-center gap-3">
+                      <div className="text-right">
+                        <p className={`text-xs ${textSecondary}`}>Net Salary</p>
+                        <p className={`text-lg font-bold ${p.net_salary >= 0 ? 'text-[#10b981]' : 'text-red-400'}`}>
+                          ₹{p.net_salary?.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
+                        {p.status === 'generated' && (
+                          <Button
+                            onClick={() => onDownloadPDF(p)}
+                            variant="ghost"
+                            size="sm"
+                            className="text-[#6366f1] hover:bg-[#6366f1]/10"
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

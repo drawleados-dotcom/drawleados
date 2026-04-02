@@ -46,7 +46,7 @@ class CreatePayslipRequest(BaseModel):
     hr_remarks: Optional[str] = ""
 
 class ReviewPayslipRequest(BaseModel):
-    review_text: str
+    review_text: Optional[str] = ""  # Optional review text
     
 class CompanySettingsRequest(BaseModel):
     company_name: str
@@ -403,54 +403,66 @@ async def submit_for_operations_review(payslip_id: str, request: Request):
 
 @payroll_router.put("/payslip/{payslip_id}/operations-review")
 async def add_operations_review(payslip_id: str, data: ReviewPayslipRequest, request: Request):
-    """Operations adds their review (without seeing salary)"""
+    """Operations adds their review (without seeing salary) - review text is optional"""
     from server import get_current_user
     current_user = await get_current_user(request)
     
     if current_user.role not in ["admin", "super_admin", "operations_admin"]:
         raise HTTPException(status_code=403, detail="Only Operations can add review")
     
+    # Review text is optional - if empty, just skip to CEO review
+    update_data = {
+        "status": "ceo_review",
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    # Only add operations_review if review text is provided
+    if data.review_text and data.review_text.strip():
+        update_data["operations_review"] = {
+            "reviewer_id": current_user.user_id,
+            "reviewer_name": current_user.name,
+            "review_text": data.review_text.strip(),
+            "reviewed_at": datetime.now(timezone.utc)
+        }
+    
     result = await db.payslips.update_one(
         {"payslip_id": payslip_id, "status": "operations_review"},
-        {"$set": {
-            "operations_review": {
-                "reviewer_id": current_user.user_id,
-                "reviewer_name": current_user.name,
-                "review_text": data.review_text,
-                "reviewed_at": datetime.now(timezone.utc)
-            },
-            "status": "ceo_review",
-            "updated_at": datetime.now(timezone.utc)
-        }}
+        {"$set": update_data}
     )
     
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Payslip not found or not in operations review")
     
-    return {"message": "Operations review added, submitted for CEO review"}
+    return {"message": "Submitted for CEO review"}
 
 
 @payroll_router.put("/payslip/{payslip_id}/ceo-review")
 async def add_ceo_review(payslip_id: str, data: ReviewPayslipRequest, request: Request):
-    """CEO adds review and approves"""
+    """CEO adds review and approves - review text is optional"""
     from server import get_current_user
     current_user = await get_current_user(request)
     
     if current_user.role not in ["super_admin", "ceo"]:
         raise HTTPException(status_code=403, detail="Only CEO can approve payslips")
     
+    # Review text is optional
+    update_data = {
+        "status": "approved",
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    # Only add ceo_review if review text is provided
+    if data.review_text and data.review_text.strip():
+        update_data["ceo_review"] = {
+            "reviewer_id": current_user.user_id,
+            "reviewer_name": current_user.name,
+            "review_text": data.review_text.strip(),
+            "reviewed_at": datetime.now(timezone.utc)
+        }
+    
     result = await db.payslips.update_one(
         {"payslip_id": payslip_id, "status": "ceo_review"},
-        {"$set": {
-            "ceo_review": {
-                "reviewer_id": current_user.user_id,
-                "reviewer_name": current_user.name,
-                "review_text": data.review_text,
-                "reviewed_at": datetime.now(timezone.utc)
-            },
-            "status": "approved",
-            "updated_at": datetime.now(timezone.utc)
-        }}
+        {"$set": update_data}
     )
     
     if result.modified_count == 0:
@@ -482,6 +494,24 @@ async def generate_payslip(payslip_id: str, request: Request):
         raise HTTPException(status_code=400, detail="Payslip not found or not approved yet")
     
     return {"message": "Payslip generated and available for employee"}
+
+
+@payroll_router.get("/employee-payslips/{user_id}")
+async def get_employee_payslips(user_id: str, request: Request):
+    """Get all payslips for a specific employee (for HR Admin to see previous payslips)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    # Only HR/Admin can view other employee's payslips
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        if current_user.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    
+    payslips = await db.payslips.find({"user_id": user_id}).sort([("year", -1), ("month", -1)]).to_list(24)
+    for p in payslips:
+        p.pop("_id", None)
+    
+    return payslips
 
 
 @payroll_router.get("/my-payslips")
@@ -1042,26 +1072,11 @@ async def generate_payslip_pdf(payslip_id: str, request: Request):
     elements.append(net_table)
     elements.append(Spacer(1, 10*mm))
     
-    # Reviews Section
-    if payslip.get('operations_review') or payslip.get('ceo_review'):
-        elements.append(Paragraph("REVIEWS", header_style))
-        
-        if payslip.get('operations_review'):
-            op_review = payslip['operations_review']
-            elements.append(Paragraph(f"<b>Operations Review</b> by {op_review.get('reviewer_name', 'N/A')}", normal_style))
-            elements.append(Paragraph(op_review.get('review_text', ''), normal_style))
-            elements.append(Spacer(1, 3*mm))
-        
-        if payslip.get('ceo_review'):
-            ceo_review = payslip['ceo_review']
-            elements.append(Paragraph(f"<b>CEO Review</b> by {ceo_review.get('reviewer_name', 'N/A')}", normal_style))
-            elements.append(Paragraph(ceo_review.get('review_text', ''), normal_style))
-        
-        elements.append(Spacer(1, 8*mm))
+    # Note: Reviews are NOT included in PDF per user request - only professional salary details
     
-    # HR Remarks
+    # HR Remarks (optional)
     if payslip.get('hr_remarks'):
-        elements.append(Paragraph("HR REMARKS", header_style))
+        elements.append(Paragraph("REMARKS", header_style))
         elements.append(Paragraph(payslip['hr_remarks'], normal_style))
         elements.append(Spacer(1, 8*mm))
     
