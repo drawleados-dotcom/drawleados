@@ -12,9 +12,9 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../components/ui/dialog';
 import { 
   Users, Clock, Calendar, CheckCircle, XCircle, 
-  Home, Building, Edit, Search, UserPlus, X,
-  AlertCircle, TrendingUp, Eye, EyeOff, FileText,
-  Briefcase, CreditCard, FolderOpen, Shield, Mail, Key
+  Home, Building, Edit, Search, UserPlus, X, Trash2,
+  AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus,
+  Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -100,6 +100,15 @@ export default function HRAdminPage() {
   
   // HR Settings state
   const [hrSettings, setHrSettings] = useState(null);
+  
+  // Designations and Departments state
+  const [designations, setDesignations] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [showDesignationModal, setShowDesignationModal] = useState(false);
+  const [showDepartmentModal, setShowDepartmentModal] = useState(false);
+  const [newDesignation, setNewDesignation] = useState({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [] });
+  const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
+  const [editingDesignation, setEditingDesignation] = useState(null);
 
   const loadStats = useCallback(async () => {
     try {
@@ -206,6 +215,34 @@ export default function HRAdminPage() {
     }
   }, [token]);
 
+  const loadDesignations = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/designations/`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDesignations(res.data);
+    } catch (error) {
+      console.error('Error loading designations:', error);
+    }
+  }, [token]);
+
+  const loadDepartments = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/designations/departments/list`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDepartments(res.data);
+    } catch (error) {
+      console.error('Error loading departments:', error);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    // Always load designations and departments for Add Employee form
+    loadDesignations();
+    loadDepartments();
+  }, [loadDesignations, loadDepartments]);
+
   useEffect(() => {
     if (activeTab === 'dashboard') {
       loadStats();
@@ -228,6 +265,10 @@ export default function HRAdminPage() {
       loadEmployees();
     } else if (activeTab === 'settings') {
       loadHRSettings();
+    } else if (activeTab === 'designations') {
+      loadDesignations();
+    } else if (activeTab === 'departments') {
+      loadDepartments();
     }
   }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings]);
 
@@ -382,6 +423,75 @@ export default function HRAdminPage() {
     }
   };
 
+  // Designation handlers
+  const handleCreateDesignation = async () => {
+    if (!newDesignation.title.trim()) {
+      toast.error('Designation title is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/designations/`, newDesignation, { headers });
+      toast.success('Designation created successfully');
+      setShowDesignationModal(false);
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [] });
+      loadDesignations();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create designation');
+    }
+  };
+
+  const handleUpdateDesignation = async () => {
+    if (!editingDesignation?.title.trim()) {
+      toast.error('Designation title is required');
+      return;
+    }
+    try {
+      await axios.put(`${API}/api/designations/${editingDesignation.designation_id}`, editingDesignation, { headers });
+      toast.success('Designation updated successfully');
+      setEditingDesignation(null);
+      loadDesignations();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update designation');
+    }
+  };
+
+  const handleDeleteDesignation = async (id) => {
+    try {
+      await axios.delete(`${API}/api/designations/${id}`, { headers });
+      toast.success('Designation deleted');
+      loadDesignations();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete designation');
+    }
+  };
+
+  // Department handlers
+  const handleCreateDepartment = async () => {
+    if (!newDepartment.name.trim()) {
+      toast.error('Department name is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/designations/departments`, newDepartment, { headers });
+      toast.success('Department created successfully');
+      setShowDepartmentModal(false);
+      setNewDepartment({ name: '', description: '' });
+      loadDepartments();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create department');
+    }
+  };
+
+  const handleDeleteDepartment = async (id) => {
+    try {
+      await axios.delete(`${API}/api/designations/departments/${id}`, { headers });
+      toast.success('Department deleted');
+      loadDepartments();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete department');
+    }
+  };
+
   const formatTime = (dateStr) => {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
@@ -402,6 +512,8 @@ export default function HRAdminPage() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
     { id: 'employees', label: 'Employees', icon: Users },
+    { id: 'designations', label: 'Designations', icon: Briefcase },
+    { id: 'departments', label: 'Departments', icon: Building },
     { id: 'approvals', label: 'Approvals', icon: CheckCircle },
     { id: 'requests', label: 'Leave Requests', icon: Calendar },
     { id: 'all-attendance', label: 'All Attendance', icon: Clock },
@@ -585,6 +697,289 @@ export default function HRAdminPage() {
           />
         )}
 
+        {/* Designations Tab */}
+        {activeTab === 'designations' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className={`text-xl font-semibold ${textPrimary}`}>Designations</h2>
+              <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Designation
+              </Button>
+            </div>
+            
+            {/* Designations List */}
+            <div className="grid gap-4">
+              {designations.length > 0 ? designations.map((desg) => (
+                <Card key={desg.designation_id} className={`${bgCard} border ${borderColor}`}>
+                  <CardContent className="p-4">
+                    {editingDesignation?.designation_id === desg.designation_id ? (
+                      // Edit Mode
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className={textPrimary}>Title *</Label>
+                            <Input
+                              value={editingDesignation.title}
+                              onChange={(e) => setEditingDesignation(prev => ({ ...prev, title: e.target.value }))}
+                              className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                            />
+                          </div>
+                          <div>
+                            <Label className={textPrimary}>Description</Label>
+                            <Input
+                              value={editingDesignation.description}
+                              onChange={(e) => setEditingDesignation(prev => ({ ...prev, description: e.target.value }))}
+                              className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <Label className={textPrimary}>Roles & Responsibilities</Label>
+                          <textarea
+                            value={editingDesignation.roles_responsibilities}
+                            onChange={(e) => setEditingDesignation(prev => ({ ...prev, roles_responsibilities: e.target.value }))}
+                            rows={3}
+                            className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          />
+                        </div>
+                        <div>
+                          <Label className={textPrimary}>Module Access</Label>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {MODULES.map(m => (
+                              <button
+                                key={m.value}
+                                type="button"
+                                onClick={() => {
+                                  const access = editingDesignation.module_access || [];
+                                  setEditingDesignation(prev => ({
+                                    ...prev,
+                                    module_access: access.includes(m.value)
+                                      ? access.filter(x => x !== m.value)
+                                      : [...access, m.value]
+                                  }));
+                                }}
+                                className={`px-3 py-1 rounded-full text-sm ${
+                                  (editingDesignation.module_access || []).includes(m.value)
+                                    ? 'bg-[#6366f1] text-white'
+                                    : `${bgSecondary} ${textSecondary}`
+                                }`}
+                              >
+                                {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="ghost" onClick={() => setEditingDesignation(null)}>Cancel</Button>
+                          <Button onClick={handleUpdateDesignation} className="bg-[#10b981] hover:bg-[#059669]">Save</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      // View Mode
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className={`text-lg font-semibold ${textPrimary}`}>{desg.title}</h3>
+                          {desg.description && <p className={`text-sm ${textSecondary} mt-1`}>{desg.description}</p>}
+                          {desg.roles_responsibilities && (
+                            <div className="mt-2">
+                              <span className={`text-xs ${textSecondary}`}>Responsibilities:</span>
+                              <p className={`text-sm ${textPrimary} whitespace-pre-wrap`}>{desg.roles_responsibilities}</p>
+                            </div>
+                          )}
+                          {desg.module_access?.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-3">
+                              {desg.module_access.map(m => (
+                                <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1]">{m}</Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => setEditingDesignation(desg)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => handleDeleteDesignation(desg.designation_id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )) : (
+                <Card className={`${bgCard} border ${borderColor}`}>
+                  <CardContent className="p-8 text-center">
+                    <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                    <p className={textSecondary}>No designations created yet</p>
+                    <p className={`text-sm ${textSecondary}`}>Add designations to define employee roles and access</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+            
+            {/* Add Designation Modal */}
+            {showDesignationModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`}>
+                  <CardHeader>
+                    <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                      <Briefcase className="h-5 w-5 text-[#6366f1]" />
+                      Add New Designation
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label className={textPrimary}>Designation Title *</Label>
+                      <Input
+                        value={newDesignation.title}
+                        onChange={(e) => setNewDesignation(prev => ({ ...prev, title: e.target.value }))}
+                        placeholder="e.g., Senior Developer"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Description</Label>
+                      <Input
+                        value={newDesignation.description}
+                        onChange={(e) => setNewDesignation(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="Brief description of the role"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Roles & Responsibilities</Label>
+                      <textarea
+                        value={newDesignation.roles_responsibilities}
+                        onChange={(e) => setNewDesignation(prev => ({ ...prev, roles_responsibilities: e.target.value }))}
+                        placeholder="List the key responsibilities..."
+                        rows={4}
+                        className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Module Access</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {MODULES.map(m => (
+                          <button
+                            key={m.value}
+                            type="button"
+                            onClick={() => {
+                              setNewDesignation(prev => ({
+                                ...prev,
+                                module_access: prev.module_access.includes(m.value)
+                                  ? prev.module_access.filter(x => x !== m.value)
+                                  : [...prev.module_access, m.value]
+                              }));
+                            }}
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              newDesignation.module_access.includes(m.value)
+                                ? 'bg-[#6366f1] text-white'
+                                : `${bgSecondary} ${textSecondary}`
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-4">
+                      <Button variant="ghost" onClick={() => setShowDesignationModal(false)}>Cancel</Button>
+                      <Button onClick={handleCreateDesignation} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create Designation</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Departments Tab */}
+        {activeTab === 'departments' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className={`text-xl font-semibold ${textPrimary}`}>Departments</h2>
+              <Button onClick={() => setShowDepartmentModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Department
+              </Button>
+            </div>
+            
+            {/* Departments List */}
+            <div className={`rounded-lg border ${borderColor} overflow-hidden`}>
+              <table className="w-full">
+                <thead className={bgSecondary}>
+                  <tr>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>S.No</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Department Name</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Description</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#3f3f46]">
+                  {departments.length > 0 ? departments.map((dept, index) => (
+                    <tr key={dept.department_id} className={bgCard}>
+                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>{index + 1}</td>
+                      <td className={`px-4 py-3 text-sm font-medium ${textPrimary}`}>{dept.name}</td>
+                      <td className={`px-4 py-3 text-sm ${textSecondary}`}>{dept.description || '-'}</td>
+                      <td className="px-4 py-3">
+                        <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => handleDeleteDepartment(dept.department_id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  )) : (
+                    <tr>
+                      <td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>
+                        <Building className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                        <p>No departments created yet</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Add Department Modal */}
+            {showDepartmentModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
+                  <CardHeader>
+                    <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                      <Building className="h-5 w-5 text-[#6366f1]" />
+                      Add New Department
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label className={textPrimary}>Department Name *</Label>
+                      <Input
+                        value={newDepartment.name}
+                        onChange={(e) => setNewDepartment(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="e.g., Engineering"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Description</Label>
+                      <Input
+                        value={newDepartment.description}
+                        onChange={(e) => setNewDepartment(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="Brief description"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end pt-4">
+                      <Button variant="ghost" onClick={() => setShowDepartmentModal(false)}>Cancel</Button>
+                      <Button onClick={handleCreateDepartment} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create Department</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Add Employee Modal */}
         {showAddModal && (
           <AddEmployeeModal
@@ -597,6 +992,8 @@ export default function HRAdminPage() {
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            designations={designations}
+            departments={departments}
           />
         )}
 
@@ -619,9 +1016,14 @@ export default function HRAdminPage() {
 }
 
 // ============== ADD EMPLOYEE MODAL ==============
-function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondary, textPrimary, textSecondary, borderColor, designations = [], departments = [] }) {
   const [activeTab, setActiveTab] = useState('basic');
   const [showPassword, setShowPassword] = useState(false);
+  const [documents, setDocuments] = useState([]);
+  const [showDocModal, setShowDocModal] = useState(false);
+  const [newDoc, setNewDoc] = useState({ name: '', link: '', description: '' });
+  const [deleteConfirm, setDeleteConfirm] = useState({ show: false, index: -1, typed: '' });
+  
   const [formData, setFormData] = useState({
     // Basic Details
     full_name: '',
@@ -631,28 +1033,23 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
     gender: '',
     blood_group: '',
     // Account Details
+    account_holder_name: '',
     bank_name: '',
+    branch: '',
     account_number: '',
     ifsc_code: '',
+    upi_id: '',
     pan_number: '',
     aadhar_number: '',
     // Employment Details
     employee_id: '',
-    designation: '',
+    designation_id: '',
     department: '',
     employment_type: 'full-time',
     joining_date: '',
     reporting_manager: '',
     work_location: 'office',
-    // Documents
-    resume_link: '',
-    id_proof_link: '',
-    address_proof_link: '',
-    education_docs_link: '',
-    offer_letter_link: '',
-    // Role & Access
-    role: 'employee',
-    module_access: [],
+    // Role & Access (simplified - based on designation)
     password: '',
     // Emergency Contact
     emergency_contact_name: '',
@@ -669,13 +1066,21 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const toggleModule = (module) => {
-    setFormData(prev => ({
-      ...prev,
-      module_access: prev.module_access.includes(module)
-        ? prev.module_access.filter(m => m !== module)
-        : [...prev.module_access, module]
-    }));
+  const addDocument = () => {
+    if (!newDoc.name || !newDoc.link) {
+      toast.error('Document name and link are required');
+      return;
+    }
+    setDocuments(prev => [...prev, { ...newDoc, id: Date.now() }]);
+    setNewDoc({ name: '', link: '', description: '' });
+    setShowDocModal(false);
+  };
+
+  const removeDocument = (index) => {
+    if (deleteConfirm.typed === 'DELETE') {
+      setDocuments(prev => prev.filter((_, i) => i !== index));
+      setDeleteConfirm({ show: false, index: -1, typed: '' });
+    }
   };
 
   const generatePassword = () => {
@@ -700,8 +1105,23 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
       toast.error('Password is required (minimum 6 characters)');
       return;
     }
-    console.log('Submitting form data:', formData);
-    onSave(formData);
+    if (!formData.designation_id) {
+      toast.error('Please select a designation');
+      return;
+    }
+    
+    // Get designation details for role and module access
+    const selectedDesignation = designations.find(d => d.designation_id === formData.designation_id);
+    const submitData = {
+      ...formData,
+      designation: selectedDesignation?.title || '',
+      role: 'employee', // All employees get 'employee' role, access based on designation
+      module_access: selectedDesignation?.module_access || [],
+      documents: documents
+    };
+    
+    console.log('Submitting form data:', submitData);
+    onSave(submitData);
   };
 
   const tabConfig = [
@@ -895,11 +1315,29 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                 <h4 className={`font-medium ${textPrimary} mb-3`}>Bank Details</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+                    <Label className={textSecondary}>A/C Holder Name</Label>
+                    <Input
+                      value={formData.account_holder_name}
+                      onChange={(e) => handleChange('account_holder_name', e.target.value)}
+                      placeholder="Account holder name"
+                      className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
                     <Label className={textSecondary}>Bank Name</Label>
                     <Input
                       value={formData.bank_name}
                       onChange={(e) => handleChange('bank_name', e.target.value)}
                       placeholder="e.g., HDFC Bank"
+                      className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textSecondary}>Branch</Label>
+                    <Input
+                      value={formData.branch}
+                      onChange={(e) => handleChange('branch', e.target.value)}
+                      placeholder="Branch name"
                       className={`${bgInput} border ${borderColor} ${textPrimary}`}
                     />
                   </div>
@@ -918,6 +1356,15 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                       value={formData.ifsc_code}
                       onChange={(e) => handleChange('ifsc_code', e.target.value)}
                       placeholder="e.g., HDFC0001234"
+                      className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textSecondary}>UPI ID</Label>
+                    <Input
+                      value={formData.upi_id}
+                      onChange={(e) => handleChange('upi_id', e.target.value)}
+                      placeholder="e.g., name@upi"
                       className={`${bgInput} border ${borderColor} ${textPrimary}`}
                     />
                   </div>
@@ -964,13 +1411,19 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                   />
                 </div>
                 <div>
-                  <Label className={textPrimary}>Designation</Label>
-                  <Input
-                    value={formData.designation}
-                    onChange={(e) => handleChange('designation', e.target.value)}
-                    placeholder="e.g., Senior Developer"
-                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
-                  />
+                  <Label className={textPrimary}>Designation *</Label>
+                  <Select value={formData.designation_id} onValueChange={(v) => handleChange('designation_id', v)}>
+                    <SelectTrigger className={`${bgInput} border ${borderColor}`}>
+                      <SelectValue placeholder="Select designation" />
+                    </SelectTrigger>
+                    <SelectContent className={`${bgCard} border ${borderColor}`}>
+                      {designations.map(desg => (
+                        <SelectItem key={desg.designation_id} value={desg.designation_id}>
+                          {desg.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label className={textPrimary}>Department</Label>
@@ -979,14 +1432,11 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                       <SelectValue placeholder="Select department" />
                     </SelectTrigger>
                     <SelectContent className={`${bgCard} border ${borderColor}`}>
-                      <SelectItem value="Engineering">Engineering</SelectItem>
-                      <SelectItem value="Marketing">Marketing</SelectItem>
-                      <SelectItem value="Sales">Sales</SelectItem>
-                      <SelectItem value="HR">HR</SelectItem>
-                      <SelectItem value="Finance">Finance</SelectItem>
-                      <SelectItem value="Operations">Operations</SelectItem>
-                      <SelectItem value="Design">Design</SelectItem>
-                      <SelectItem value="Content">Content</SelectItem>
+                      {departments.map(dept => (
+                        <SelectItem key={dept.department_id || dept.name} value={dept.name}>
+                          {dept.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1000,6 +1450,7 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                       <SelectItem value="full-time">Full-time</SelectItem>
                       <SelectItem value="part-time">Part-time</SelectItem>
                       <SelectItem value="contract">Contract</SelectItem>
+                      <SelectItem value="freelancer">Freelancer</SelectItem>
                       <SelectItem value="intern">Intern</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1036,118 +1487,232 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                   </Select>
                 </div>
               </div>
+              
+              {/* Show selected designation info */}
+              {formData.designation_id && (
+                <div className={`p-4 ${bgSecondary} rounded-lg mt-4`}>
+                  {(() => {
+                    const desg = designations.find(d => d.designation_id === formData.designation_id);
+                    return desg ? (
+                      <>
+                        <h4 className={`font-medium ${textPrimary} mb-2`}>Designation Info: {desg.title}</h4>
+                        {desg.description && <p className={`text-sm ${textSecondary} mb-2`}>{desg.description}</p>}
+                        {desg.module_access?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            <span className={`text-xs ${textSecondary}`}>Access:</span>
+                            {desg.module_access.map(m => (
+                              <Badge key={m} variant="secondary" className="text-xs">{m}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : null;
+                  })()}
+                </div>
+              )}
             </div>
           )}
 
           {/* Documents Tab */}
           {activeTab === 'documents' && (
             <div className="space-y-4">
-              <p className={`text-sm ${textSecondary} mb-4`}>
-                Add Google Drive links for employee documents
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <Label className={textPrimary}>Resume / CV</Label>
-                  <Input
-                    value={formData.resume_link}
-                    onChange={(e) => handleChange('resume_link', e.target.value)}
-                    placeholder="https://drive.google.com/..."
-                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>ID Proof (Aadhar/Passport)</Label>
-                  <Input
-                    value={formData.id_proof_link}
-                    onChange={(e) => handleChange('id_proof_link', e.target.value)}
-                    placeholder="https://drive.google.com/..."
-                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>Address Proof</Label>
-                  <Input
-                    value={formData.address_proof_link}
-                    onChange={(e) => handleChange('address_proof_link', e.target.value)}
-                    placeholder="https://drive.google.com/..."
-                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>Education Documents</Label>
-                  <Input
-                    value={formData.education_docs_link}
-                    onChange={(e) => handleChange('education_docs_link', e.target.value)}
-                    placeholder="https://drive.google.com/..."
-                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>Offer Letter</Label>
-                  <Input
-                    value={formData.offer_letter_link}
-                    onChange={(e) => handleChange('offer_letter_link', e.target.value)}
-                    placeholder="https://drive.google.com/..."
-                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
+              <div className="flex justify-between items-center">
+                <p className={`text-sm ${textSecondary}`}>
+                  Add employee documents with links
+                </p>
+                <Button 
+                  onClick={() => setShowDocModal(true)}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                  size="sm"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Document
+                </Button>
               </div>
+              
+              {/* Documents List */}
+              {documents.length > 0 ? (
+                <div className={`rounded-lg border ${borderColor} overflow-hidden`}>
+                  <table className="w-full">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>S.No</th>
+                        <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Document Name</th>
+                        <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Link</th>
+                        <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#3f3f46]">
+                      {documents.map((doc, index) => (
+                        <tr key={doc.id} className={bgCard}>
+                          <td className={`px-4 py-3 text-sm ${textPrimary}`}>{index + 1}</td>
+                          <td className={`px-4 py-3 text-sm ${textPrimary}`}>
+                            {doc.name}
+                            {doc.description && (
+                              <p className={`text-xs ${textSecondary}`}>{doc.description}</p>
+                            )}
+                          </td>
+                          <td className={`px-4 py-3 text-sm`}>
+                            <a 
+                              href={doc.link} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-[#6366f1] hover:underline flex items-center gap-1"
+                            >
+                              <Link className="h-3 w-3" />
+                              View
+                            </a>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-2">
+                              <a 
+                                href={doc.link} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                              >
+                                <Button variant="ghost" size="sm" className="text-[#6366f1]">
+                                  <ExternalLink className="h-4 w-4" />
+                                </Button>
+                              </a>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-[#ef4444]"
+                                onClick={() => setDeleteConfirm({ show: true, index, typed: '' })}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className={`p-8 text-center ${bgSecondary} rounded-lg`}>
+                  <FolderOpen className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                  <p className={textSecondary}>No documents added yet</p>
+                  <p className={`text-sm ${textSecondary}`}>Click "Add Document" to upload employee documents</p>
+                </div>
+              )}
+              
+              {/* Add Document Modal */}
+              {showDocModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                  <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
+                    <CardHeader>
+                      <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                        <Plus className="h-5 w-5 text-[#6366f1]" />
+                        Add New Document
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label className={textPrimary}>Document Name *</Label>
+                        <Input
+                          value={newDoc.name}
+                          onChange={(e) => setNewDoc(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="e.g., Resume, ID Proof"
+                          className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                        />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Link *</Label>
+                        <Input
+                          value={newDoc.link}
+                          onChange={(e) => setNewDoc(prev => ({ ...prev, link: e.target.value }))}
+                          placeholder="https://drive.google.com/..."
+                          className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                        />
+                      </div>
+                      <div>
+                        <Label className={textSecondary}>Description (Optional)</Label>
+                        <Input
+                          value={newDoc.description}
+                          onChange={(e) => setNewDoc(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Brief description"
+                          className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                        />
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" onClick={() => setShowDocModal(false)}>Cancel</Button>
+                        <Button onClick={addDocument} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                          Add Document
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+              
+              {/* Delete Confirmation Modal */}
+              {deleteConfirm.show && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                  <Card className={`${bgCard} border ${borderColor} w-full max-w-sm mx-4`}>
+                    <CardHeader>
+                      <CardTitle className={`text-[#ef4444] ${textPrimary}`}>Delete Document</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <p className={textSecondary}>Type "DELETE" to confirm deletion:</p>
+                      <Input
+                        value={deleteConfirm.typed}
+                        onChange={(e) => setDeleteConfirm(prev => ({ ...prev, typed: e.target.value }))}
+                        placeholder="Type DELETE"
+                        className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" onClick={() => setDeleteConfirm({ show: false, index: -1, typed: '' })}>
+                          Cancel
+                        </Button>
+                        <Button 
+                          onClick={() => removeDocument(deleteConfirm.index)}
+                          disabled={deleteConfirm.typed !== 'DELETE'}
+                          className="bg-[#ef4444] hover:bg-[#dc2626]"
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           )}
 
           {/* Role & Access Tab */}
           {activeTab === 'access' && (
             <div className="space-y-6">
-              {/* Role Selection */}
-              <div>
-                <Label className={`${textPrimary} mb-3 block`}>Select Role *</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {ROLES.map((role) => (
-                    <button
-                      key={role.value}
-                      type="button"
-                      onClick={() => handleChange('role', role.value)}
-                      className={`p-3 rounded-lg border-2 transition-all text-left ${
-                        formData.role === role.value
-                          ? 'border-[#6366f1] bg-[#6366f1]/10'
-                          : `border-[#3f3f46] ${bgSecondary} hover:border-[#6366f1]/50`
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: role.color }}
-                        />
-                        <span className={`text-sm font-medium ${textPrimary}`}>{role.label}</span>
+              {/* Info about designation-based access */}
+              <div className={`p-4 ${bgSecondary} rounded-lg border border-[#6366f1]/30`}>
+                <div className="flex items-start gap-3">
+                  <Shield className="h-5 w-5 text-[#6366f1] mt-0.5" />
+                  <div>
+                    <h4 className={`font-medium ${textPrimary}`}>Access Control</h4>
+                    <p className={`text-sm ${textSecondary} mt-1`}>
+                      Module access is determined by the selected designation. 
+                      Select a designation in the Employment tab to see the assigned permissions.
+                    </p>
+                    {formData.designation_id && (
+                      <div className="mt-3">
+                        {(() => {
+                          const desg = designations.find(d => d.designation_id === formData.designation_id);
+                          return desg ? (
+                            <div className="flex flex-wrap gap-2">
+                              <span className={`text-xs ${textSecondary}`}>Modules:</span>
+                              {desg.module_access?.length > 0 ? (
+                                desg.module_access.map(m => (
+                                  <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{m}</Badge>
+                                ))
+                              ) : (
+                                <span className={`text-xs ${textSecondary}`}>No modules assigned</span>
+                              )}
+                            </div>
+                          ) : null;
+                        })()}
                       </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Module Access */}
-              <div>
-                <Label className={`${textPrimary} mb-3 block`}>Module Access</Label>
-                <div className="grid grid-cols-3 gap-3">
-                  {MODULES.map((module) => {
-                    const Icon = module.icon;
-                    const isChecked = formData.module_access.includes(module.value);
-                    return (
-                      <div
-                        key={module.value}
-                        onClick={() => toggleModule(module.value)}
-                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                          isChecked
-                            ? 'border-[#22c55e] bg-[#22c55e]/10'
-                            : `border-[#3f3f46] ${bgSecondary} hover:border-[#22c55e]/50`
-                        }`}
-                      >
-                        <Checkbox checked={isChecked} />
-                        <Icon className={`h-4 w-4 ${isChecked ? 'text-[#22c55e]' : textSecondary}`} />
-                        <span className={`text-sm ${textPrimary}`}>{module.label}</span>
-                      </div>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1157,7 +1722,7 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                   <Key className="h-4 w-4" />
                   Login Credentials
                 </h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
                     <Label className={textSecondary}>Work Email *</Label>
                     <div className="relative">
@@ -1202,7 +1767,7 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                   </div>
                 </div>
                 <p className={`text-xs ${textSecondary} mt-3`}>
-                  These credentials will be shared with the employee for board access.
+                  These credentials will be shared with the employee for board access. Password can be regenerated later.
                 </p>
               </div>
             </div>

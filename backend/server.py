@@ -33,6 +33,7 @@ from meta_ads_routes import meta_ads_router, init_meta_ads_db
 from leads_v2_routes import leads_v2_router, init_leads_v2_db
 from documentation_routes import documentation_router, init_documentation_db
 from seo_board_routes import seo_board_router, init_seo_board_db
+from designation_routes import designation_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1929,6 +1930,7 @@ api_router.include_router(meta_ads_router)
 api_router.include_router(leads_v2_router)
 api_router.include_router(documentation_router)
 api_router.include_router(seo_board_router)
+api_router.include_router(designation_router)
 
 # Include router in main app
 app.include_router(api_router)

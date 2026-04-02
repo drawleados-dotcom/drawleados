@@ -284,9 +284,15 @@ The system sends email notifications with "View" buttons for:
 - [x] **SEO Board** - DONE (Dec 2025)
 - [x] **Employee Profile Page & OTP Password Change** - DONE (Apr 2026)
 - [x] **Business Development Sidebar Updates** - DONE (Apr 2026)
-  - HR renamed to "My Profile" for BDE users
-  - Security tab added to HR page with OTP password change
-  - Top header with Clock In/Out functionality
+- [x] **HR Admin Enhancements** - DONE (Apr 2026)
+  - Designations module with CRUD operations
+  - Departments module with CRUD operations
+  - Enhanced Add Employee modal:
+    - Account Details: A/C Holder Name, Branch, UPI ID
+    - Employment: Designation dropdown from Designations module
+    - Employment Type: Added Freelancer option
+    - Documents: Dynamic document management (Add/View/Delete)
+    - Role & Access: Simplified, designation-based access
 - [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
 - [ ] Leads Custom Fields - Notion-style custom fields for leads
 
