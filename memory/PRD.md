@@ -5,7 +5,7 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Core Requirements
 1. **Leads Module** - Lead management with stages, Kanban view, custom fields, CSV import/export
-2. **HR Module** - Attendance tracking, leave management, payslips, performance reviews
+2. **HR Module** - Attendance tracking, leave management, payroll management, performance reviews
 3. **Operations Module** - Project and task management with Kanban view
 4. **Documentation Module** - Google Sheets and Docs link management for Business Dev users
 5. **Settings** - User management, role management, services, company profile
@@ -23,11 +23,47 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - **Backend**: FastAPI with MongoDB (motor async driver)
 - **Frontend**: React with Tailwind CSS, Shadcn UI components
 - **Authentication**: JWT-based with Emergent-managed Google Auth option
-- **Database**: MongoDB with collections for users, leads, attendance, leave, documentation, calendar_connections, etc.
+- **Database**: MongoDB with collections for users, leads, attendance, leave, documentation, calendar_connections, salary_history, etc.
 
 ---
 
 ## Implemented Features
+
+### Payroll Management Module (DONE - April 2026)
+**Salary History & Hikes Tracking:**
+- Complete salary history with effective dates
+- Support for multiple hike types: Initial, Performance, Confirmation, Annual Increase, 6 Month Review, 3 Month Review, Promotion, Market Adjustment
+- Duration calculation for each salary level
+- Growth percentage tracking
+
+**Month-Tied Payroll Display:**
+- Payroll details dynamically change based on Month/Year filter
+- Selecting a past month shows the effective salary at that time
+- Example: Aug 2024 shows ₹15K joining salary, Apr 2026 shows current ₹25K
+
+**Payroll Breakdown:**
+- Earnings: Basic Salary + HRA (40%) + Special Allowance (10%)
+- Deductions: PF (12%) + Professional Tax (₹200 if salary > ₹15K)
+- Net Salary calculation
+
+**UI Sub-tabs:**
+- Current Payroll: Shows current salary with month/year filter for historical payslips
+- Salary History: Complete history table with hikes, duration, and growth metrics
+
+**Key Statistics:**
+- Current Salary
+- Total Hikes count
+- Initial Salary
+- Total Growth percentage
+
+**API Endpoints:**
+- GET `/api/payroll/hike-reasons` - List of hike reason types
+- GET `/api/payroll/salary-history/{user_id}` - Complete salary history
+- GET `/api/payroll/details/{user_id}?month=X&year=Y` - Payroll for specific month
+- GET `/api/payroll/salary-at-date/{user_id}?month=X&year=Y` - Effective salary at date
+- POST `/api/payroll/salary/add` - Add new salary record
+- DELETE `/api/payroll/salary/{record_id}` - Delete salary record
+- GET `/api/payroll/employees` - All employees salary overview (admin)
 
 ### Calendar Module (DONE - April 2026)
 **Full Calendar Page** accessible to ALL users from sidebar:
@@ -190,6 +226,20 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
   "holidays": [{"date": "string", "name": "string", "type": "public|optional|company"}],
   "working_days": "number",
   "special_working_days": ["string"]
+}
+```
+
+### salary_history
+```json
+{
+  "record_id": "string",
+  "user_id": "string",
+  "amount": "number",
+  "effective_from": "datetime",
+  "reason": "initial|performance|confirmation|annual_increase|6_month_review|3_month_review|promotion|market_adjustment",
+  "notes": "string",
+  "created_by": "string",
+  "created_at": "datetime"
 }
 ```
 
