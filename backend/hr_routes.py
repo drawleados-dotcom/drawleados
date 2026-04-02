@@ -1112,3 +1112,177 @@ async def get_hr_dashboard_stats(request: Request):
         "pending_leaves": pending_leaves
     }
 
+# ============== CREATE EMPLOYEE ==============
+
+class CreateEmployeeRequest(BaseModel):
+    # Basic Details
+    full_name: str
+    email: str
+    phone: Optional[str] = ""
+    date_of_birth: Optional[str] = None
+    gender: Optional[str] = ""
+    blood_group: Optional[str] = ""
+    # Account Details
+    bank_name: Optional[str] = ""
+    account_number: Optional[str] = ""
+    ifsc_code: Optional[str] = ""
+    pan_number: Optional[str] = ""
+    aadhar_number: Optional[str] = ""
+    # Employment Details
+    employee_id: Optional[str] = ""
+    designation: Optional[str] = ""
+    department: Optional[str] = ""
+    employment_type: Optional[str] = "full-time"
+    joining_date: Optional[str] = None
+    reporting_manager: Optional[str] = ""
+    work_location: Optional[str] = "office"
+    # Documents
+    resume_link: Optional[str] = ""
+    id_proof_link: Optional[str] = ""
+    address_proof_link: Optional[str] = ""
+    education_docs_link: Optional[str] = ""
+    offer_letter_link: Optional[str] = ""
+    # Role & Access
+    role: Optional[str] = "employee"
+    module_access: Optional[List[str]] = []
+    password: str
+    # Emergency Contact
+    emergency_contact_name: Optional[str] = ""
+    emergency_contact_phone: Optional[str] = ""
+    emergency_contact_relation: Optional[str] = ""
+    # Address
+    address: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
+
+@hr_router.post("/admin/create-employee")
+async def create_employee(data: CreateEmployeeRequest, request: Request):
+    """Create a new employee with full details (Admin only)"""
+    from server import get_current_user, hash_password
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Admin/HR access required")
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    emp_id = data.employee_id or f"EMP{user_id[-6:].upper()}"
+    
+    user_doc = {
+        "user_id": user_id,
+        "email": data.email,
+        "name": data.full_name,
+        "role": data.role,
+        "password_hash": hash_password(data.password),
+        "is_active": True,
+        "module_access": data.module_access or [],
+        "project_access": [],
+        "can_create_projects": data.role in ["admin", "super_admin", "project_manager"],
+        "can_delete_tasks": data.role in ["admin", "super_admin"],
+        "can_manage_users": data.role in ["admin", "super_admin", "hr_manager"],
+        "created_at": datetime.now(timezone.utc),
+        "created_by": current_user.user_id
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Create employee profile
+    profile_doc = {
+        "user_id": user_id,
+        "employee_id": emp_id,
+        "full_name": data.full_name,
+        "email": data.email,
+        "phone": data.phone,
+        "date_of_birth": data.date_of_birth,
+        "gender": data.gender,
+        "blood_group": data.blood_group,
+        # Employment
+        "designation": data.designation,
+        "department": data.department,
+        "employment_type": data.employment_type,
+        "joining_date": data.joining_date,
+        "reporting_manager": data.reporting_manager,
+        "work_location": data.work_location,
+        # Bank Details
+        "bank_name": data.bank_name,
+        "account_number": data.account_number,
+        "ifsc_code": data.ifsc_code,
+        "pan_number": data.pan_number,
+        "aadhar_number": data.aadhar_number,
+        # Documents
+        "resume_link": data.resume_link,
+        "id_proof_link": data.id_proof_link,
+        "address_proof_link": data.address_proof_link,
+        "education_docs_link": data.education_docs_link,
+        "offer_letter_link": data.offer_letter_link,
+        # Emergency Contact
+        "emergency_contact_name": data.emergency_contact_name,
+        "emergency_contact_phone": data.emergency_contact_phone,
+        "emergency_contact_relation": data.emergency_contact_relation,
+        # Address
+        "address": data.address,
+        "city": data.city,
+        "state": data.state,
+        "pincode": data.pincode,
+        # Metadata
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "created_by": current_user.user_id
+    }
+    
+    await db.employee_profiles.insert_one(profile_doc)
+    
+    # Initialize leave balance for current year
+    current_year = datetime.now().year
+    leave_balance = {
+        "user_id": user_id,
+        "year": current_year,
+        "casual_leave": 12,
+        "sick_leave": 6,
+        "earned_leave": 15,
+        "unpaid_leave": 0,
+        "casual_used": 0,
+        "sick_used": 0,
+        "earned_used": 0,
+        "unpaid_used": 0
+    }
+    await db.leave_balances.insert_one(leave_balance)
+    
+    # Send welcome email with credentials
+    email_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #6366f1;">Welcome to Drawlead OS!</h2>
+        <p>Hello {data.full_name},</p>
+        <p>Your employee account has been created. Here are your login credentials:</p>
+        <div style="background: #f4f4f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Email:</strong> {data.email}</p>
+            <p><strong>Password:</strong> {data.password}</p>
+            <p><strong>Employee ID:</strong> {emp_id}</p>
+            <p><strong>Role:</strong> {data.role.replace('_', ' ').title()}</p>
+        </div>
+        <p>Please login and change your password immediately.</p>
+        <p style="color: #71717a; font-size: 12px;">- Drawlead OS HR Team</p>
+    </div>
+    """
+    
+    await send_email_notification(
+        data.email,
+        "Welcome to Drawlead OS - Your Login Credentials",
+        email_html
+    )
+    
+    return {
+        "message": "Employee created successfully",
+        "user_id": user_id,
+        "employee_id": emp_id,
+        "email": data.email,
+        "credentials_sent": True
+    }
+
+
