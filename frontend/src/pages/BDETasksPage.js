@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase,
-  Play, Pause, Square, Timer, Eye, FileText, Tag, Users
+  Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -44,6 +44,18 @@ export default function BDETasksPage() {
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Advanced filters
+  const [filters, setFilters] = useState({
+    dateFilter: 'today', // today, all, range
+    dateFrom: '',
+    dateTo: '',
+    assignedTo: 'all', // all, myself, or user_id
+    assignedBy: 'all', // all or user_id
+    taskType: 'all', // all, general, meeting, follow_up, proposal, call
+    status: 'all' // all, pending, in_progress, completed, on_hold
+  });
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -63,7 +75,8 @@ export default function BDETasksPage() {
     type: 'general',
     assigned_to: '',
     due_date: '',
-    status: 'pending'
+    status: 'pending',
+    work_link: ''
   });
 
   // Load tasks
@@ -80,7 +93,7 @@ export default function BDETasksPage() {
   // Load users for assignment
   const loadUsers = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/users/list`, { headers });
+      const res = await axios.get(`${API}/api/users/basic`, { headers });
       setUsers(res.data);
     } catch (error) {
       console.error('Error loading users:', error);
@@ -253,7 +266,8 @@ export default function BDETasksPage() {
       type: 'general',
       assigned_to: '',
       due_date: '',
-      status: 'pending'
+      status: 'pending',
+      work_link: ''
     });
   };
 
@@ -265,7 +279,8 @@ export default function BDETasksPage() {
       type: task.type || 'general',
       assigned_to: task.assigned_to || '',
       due_date: task.due_date || '',
-      status: task.status
+      status: task.status,
+      work_link: task.work_link || ''
     });
     setEditingTask(task);
   };
@@ -275,12 +290,57 @@ export default function BDETasksPage() {
     return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  // Filter tasks
+  // Helper to get today's date string
+  const getTodayString = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
+  // Filter tasks with advanced filters
   const filteredTasks = tasks.filter(task => {
-    if (filter === 'all') return true;
-    if (filter === 'my') return task.created_by === user?.user_id || task.assigned_to === user?.user_id;
-    return task.status === filter;
+    // Quick filter (tabs)
+    if (filter === 'my' && !(task.created_by === user?.user_id || task.assigned_to === user?.user_id)) return false;
+    if (filter !== 'all' && filter !== 'my' && task.status !== filter) return false;
+    
+    // Date filter
+    if (filters.dateFilter === 'today') {
+      const today = getTodayString();
+      const taskDate = task.created_at?.split('T')[0];
+      if (taskDate !== today) return false;
+    } else if (filters.dateFilter === 'range' && (filters.dateFrom || filters.dateTo)) {
+      const taskDate = task.created_at?.split('T')[0];
+      if (filters.dateFrom && taskDate < filters.dateFrom) return false;
+      if (filters.dateTo && taskDate > filters.dateTo) return false;
+    }
+    
+    // Assigned To filter
+    if (filters.assignedTo === 'myself' && task.assigned_to !== user?.user_id) return false;
+    if (filters.assignedTo !== 'all' && filters.assignedTo !== 'myself' && task.assigned_to !== filters.assignedTo) return false;
+    
+    // Assigned By filter
+    if (filters.assignedBy !== 'all' && task.assigned_by !== filters.assignedBy) return false;
+    
+    // Type filter
+    if (filters.taskType !== 'all' && task.type !== filters.taskType) return false;
+    
+    // Status filter (from advanced filters)
+    if (filters.status !== 'all' && task.status !== filters.status) return false;
+    
+    return true;
   });
+
+  // Reset filters
+  const resetFilters = () => {
+    setFilters({
+      dateFilter: 'today',
+      dateFrom: '',
+      dateTo: '',
+      assignedTo: 'all',
+      assignedBy: 'all',
+      taskType: 'all',
+      status: 'all'
+    });
+  };
 
   // Stats
   const stats = {
@@ -353,19 +413,155 @@ export default function BDETasksPage() {
           </Card>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex gap-2">
-          {['all', 'my', 'pending', 'in_progress', 'completed'].map(f => (
+        {/* Filter Tabs & Advanced Filters */}
+        <div className="space-y-4">
+          <div className="flex gap-2 justify-between items-center flex-wrap">
+            <div className="flex gap-2 flex-wrap">
+              {['all', 'my', 'pending', 'in_progress', 'completed'].map(f => (
+                <Button
+                  key={f}
+                  variant={filter === f ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter(f)}
+                  className={filter === f ? 'bg-[#6366f1]' : ''}
+                >
+                  {f === 'all' ? 'All' : f === 'my' ? 'My Tasks' : f.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                </Button>
+              ))}
+            </div>
             <Button
-              key={f}
-              variant={filter === f ? 'default' : 'outline'}
+              variant="outline"
               size="sm"
-              onClick={() => setFilter(f)}
-              className={filter === f ? 'bg-[#6366f1]' : ''}
+              onClick={() => setShowFilters(!showFilters)}
+              className={showFilters ? 'bg-[#6366f1] text-white' : ''}
             >
-              {f === 'all' ? 'All' : f === 'my' ? 'My Tasks' : f.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
             </Button>
-          ))}
+          </div>
+
+          {/* Advanced Filters Panel */}
+          {showFilters && (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {/* Date Filter */}
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Date</Label>
+                    <Select value={filters.dateFilter} onValueChange={(v) => setFilters({...filters, dateFilter: v})}>
+                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="range">Date Range</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Date Range */}
+                  {filters.dateFilter === 'range' && (
+                    <>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>From</Label>
+                        <Input
+                          type="date"
+                          value={filters.dateFrom}
+                          onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
+                          className={`h-9 ${bgSecondary} border ${borderColor}`}
+                        />
+                      </div>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>To</Label>
+                        <Input
+                          type="date"
+                          value={filters.dateTo}
+                          onChange={(e) => setFilters({...filters, dateTo: e.target.value})}
+                          className={`h-9 ${bgSecondary} border ${borderColor}`}
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Assigned To */}
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Assigned To</Label>
+                    <Select value={filters.assignedTo} onValueChange={(v) => setFilters({...filters, assignedTo: v})}>
+                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="myself">Myself</SelectItem>
+                        {users.map(u => (
+                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Assigned By */}
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Assigned By</Label>
+                    <Select value={filters.assignedBy} onValueChange={(v) => setFilters({...filters, assignedBy: v})}>
+                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="all">All</SelectItem>
+                        {users.map(u => (
+                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Task Type */}
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Type</Label>
+                    <Select value={filters.taskType} onValueChange={(v) => setFilters({...filters, taskType: v})}>
+                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="all">All Types</SelectItem>
+                        <SelectItem value="general">General</SelectItem>
+                        <SelectItem value="meeting">Meeting</SelectItem>
+                        <SelectItem value="follow_up">Follow Up</SelectItem>
+                        <SelectItem value="proposal">Proposal</SelectItem>
+                        <SelectItem value="call">Call</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Status</Label>
+                    <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
+                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="on_hold">On Hold</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Reset Filters */}
+                <div className="flex justify-end mt-4">
+                  <Button variant="ghost" size="sm" onClick={resetFilters}>
+                    Reset Filters
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Tasks Table */}
@@ -375,13 +571,12 @@ export default function BDETasksPage() {
               <table className="w-full">
                 <thead className={bgSecondary}>
                   <tr>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Task Name</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Task</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Created By</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Assigned To</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Created / Assigned</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Due Date</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Priority</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Time Spent</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Link</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Time</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Timer</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
                   </tr>
@@ -389,14 +584,14 @@ export default function BDETasksPage() {
                 <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
+                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
                     </tr>
                   ) : filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>
+                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                         <p>No tasks found</p>
-                        <p className="text-sm">Create a new task to get started</p>
+                        <p className="text-sm">{filters.dateFilter === 'today' ? 'No tasks created today' : 'Create a new task to get started'}</p>
                       </td>
                     </tr>
                   ) : filteredTasks.map(task => (
@@ -419,12 +614,28 @@ export default function BDETasksPage() {
                           {task.status?.replace('_', ' ') || 'Pending'}
                         </Badge>
                       </td>
-                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>
-                        {task.created_by_name || '-'}
-                        <div className={`text-xs ${textSecondary}`}>{formatDate(task.created_at)}</div>
-                      </td>
-                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>
-                        {task.assigned_to_name || '-'}
+                      <td className={`px-4 py-3 text-sm`}>
+                        <div className="space-y-1">
+                          {/* Show if created by them or assigned to them */}
+                          {task.created_by === user?.user_id ? (
+                            <div>
+                              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs mb-1">Created by you</Badge>
+                              <p className={`text-xs ${textSecondary}`}>{formatDate(task.created_at)}</p>
+                            </div>
+                          ) : task.assigned_to === user?.user_id ? (
+                            <div>
+                              <Badge className="bg-[#10b981]/20 text-[#10b981] text-xs mb-1">Assigned to you</Badge>
+                              <p className={`text-xs ${textSecondary}`}>by {task.assigned_by_name || task.created_by_name || 'Unknown'}</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className={`${textPrimary}`}>{task.created_by_name || '-'}</p>
+                              {task.assigned_to_name && (
+                                <p className={`text-xs ${textSecondary}`}>→ {task.assigned_to_name}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className={`px-4 py-3 text-sm`}>
                         {task.due_date ? (
@@ -435,10 +646,19 @@ export default function BDETasksPage() {
                           <span className={textSecondary}>-</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <Badge className={priorityColors[task.priority]}>
-                          {task.priority}
-                        </Badge>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {task.work_link ? (
+                          <a 
+                            href={task.work_link} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[#3b82f6] hover:text-[#2563eb]"
+                          >
+                            <Link className="h-4 w-4" />
+                          </a>
+                        ) : (
+                          <span className={textSecondary}>-</span>
+                        )}
                       </td>
                       <td className={`px-4 py-3`}>
                         <div className="flex items-center gap-2">
@@ -569,6 +789,15 @@ export default function BDETasksPage() {
                     />
                   </div>
                 </div>
+                <div>
+                  <Label className={textPrimary}>Work Link (File/Project URL)</Label>
+                  <Input
+                    value={formData.work_link}
+                    onChange={(e) => setFormData(prev => ({ ...prev, work_link: e.target.value }))}
+                    placeholder="https://docs.google.com/... or project URL"
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                </div>
                 <div className="flex gap-3 pt-4">
                   <Button variant="outline" onClick={() => { setShowCreateModal(false); setEditingTask(null); resetForm(); }} className="flex-1">
                     Cancel
@@ -637,6 +866,9 @@ export default function BDETasksPage() {
                       <Users className="h-3 w-3" /> Assigned To
                     </p>
                     <p className={`font-medium ${textPrimary}`}>{viewingTask.assigned_to_name || 'Not assigned'}</p>
+                    {viewingTask.assigned_by_name && (
+                      <p className={`text-xs ${textSecondary}`}>by {viewingTask.assigned_by_name}</p>
+                    )}
                   </div>
                   <div className={`p-4 rounded-lg ${bgSecondary}`}>
                     <p className={`text-xs ${textSecondary} mb-1 flex items-center gap-1`}>
@@ -653,6 +885,24 @@ export default function BDETasksPage() {
                     <p className={`font-medium ${textPrimary}`}>{formatDate(viewingTask.updated_at)}</p>
                   </div>
                 </div>
+
+                {/* Work Link */}
+                {viewingTask.work_link && (
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-2 flex items-center gap-1`}>
+                      <Link className="h-3 w-3" /> Work Link
+                    </p>
+                    <a 
+                      href={viewingTask.work_link} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[#3b82f6] hover:text-[#2563eb] flex items-center gap-2 break-all"
+                    >
+                      <Link className="h-4 w-4 flex-shrink-0" />
+                      {viewingTask.work_link}
+                    </a>
+                  </div>
+                )}
 
                 {/* Time Tracking Section */}
                 <div>

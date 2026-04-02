@@ -16,8 +16,10 @@ class TaskCreate(BaseModel):
     priority: str = "medium"  # high, medium, low
     type: str = "general"  # general, follow_up, meeting, proposal, call
     assigned_to: Optional[str] = None
+    assigned_by: Optional[str] = None
     due_date: Optional[str] = None
     status: str = "pending"  # pending, in_progress, completed, on_hold
+    work_link: Optional[str] = None  # Link to work file/project
 
 class TaskUpdate(BaseModel):
     task_name: Optional[str] = None
@@ -25,8 +27,10 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     type: Optional[str] = None
     assigned_to: Optional[str] = None
+    assigned_by: Optional[str] = None
     due_date: Optional[str] = None
     status: Optional[str] = None
+    work_link: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -58,7 +62,7 @@ async def get_tasks(request: Request):
                 ]
             }, {"_id": 0}).sort("created_at", -1).to_list(1000)
         
-        # Add assigned user names
+        # Add assigned user names and assigned_by names
         for task in tasks:
             if task.get("assigned_to"):
                 assigned_user = await db.users.find_one(
@@ -68,6 +72,16 @@ async def get_tasks(request: Request):
                 task["assigned_to_name"] = assigned_user.get("name") if assigned_user else "Unknown"
             else:
                 task["assigned_to_name"] = None
+            
+            # Add assigned_by name
+            if task.get("assigned_by"):
+                assigned_by_user = await db.users.find_one(
+                    {"user_id": task["assigned_by"]}, 
+                    {"name": 1, "_id": 0}
+                )
+                task["assigned_by_name"] = assigned_by_user.get("name") if assigned_by_user else "Unknown"
+            else:
+                task["assigned_by_name"] = None
                 
             if task.get("created_by"):
                 creator = await db.users.find_one(
@@ -89,6 +103,9 @@ async def create_task(data: TaskCreate, request: Request):
     try:
         task_id = f"task_{uuid.uuid4().hex[:12]}"
         
+        # If assigned_to is provided, set assigned_by to current user
+        assigned_by = data.assigned_by or (user.user_id if data.assigned_to else None)
+        
         task = {
             "task_id": task_id,
             "task_name": data.task_name,
@@ -96,8 +113,10 @@ async def create_task(data: TaskCreate, request: Request):
             "priority": data.priority,
             "type": data.type,
             "assigned_to": data.assigned_to,
+            "assigned_by": assigned_by,
             "due_date": data.due_date,
             "status": data.status,
+            "work_link": data.work_link,
             "created_by": user.user_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -143,10 +162,17 @@ async def update_task(task_id: str, data: TaskUpdate, request: Request):
             update_data["type"] = data.type
         if data.assigned_to is not None:
             update_data["assigned_to"] = data.assigned_to
+            # If assigning to someone, set assigned_by to current user
+            if data.assigned_to and not existing.get("assigned_by"):
+                update_data["assigned_by"] = user.user_id
+        if data.assigned_by is not None:
+            update_data["assigned_by"] = data.assigned_by
         if data.due_date is not None:
             update_data["due_date"] = data.due_date
         if data.status is not None:
             update_data["status"] = data.status
+        if data.work_link is not None:
+            update_data["work_link"] = data.work_link
         
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         
