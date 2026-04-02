@@ -30,6 +30,35 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Operations Head Dashboard (NEW - April 2026)
+**Purpose:** Custom restricted view for users with ONLY 'tasks' module access.
+
+**Implementation:**
+- Users with `module_access: ['tasks']` and non-admin role get a restricted sidebar
+- Sidebar shows ONLY: Calendar, My Tasks, Tasks, My Profile, Documentation
+- Hidden items: Leads, BDE Tasks, Operations submenu, HR Admin, Finance, Settings, Documentations (full)
+- Auto-redirect to `/my-tasks` after login (instead of default `/leads`)
+- Access control: Blocked pages redirect to `/my-tasks`
+
+**New Pages:**
+- `/my-tasks` - BDE-style task table filtered to show only tasks assigned to the user
+- `/my-documents` - Personal documentation management (Sheets/Docs created by user)
+
+**New API Endpoints:**
+- `GET /api/departments/my-tasks` - Returns all tasks where assigned_to matches current user
+- `GET/POST /api/docs/my-documents` - Personal documents CRUD
+
+**Files Modified:**
+- `Sidebar.js` - `hasTasksModuleOnly` conditional rendering
+- `ProtectedRoute.js` - Access control and redirect logic
+- `App.js` - New routes for /my-tasks and /my-documents
+- `department_routes.py` - /my-tasks endpoint
+- `documentation_routes.py` - /my-documents endpoints
+
+**Test User:** opshead@drawlead.com / admin123
+
+---
+
 ### Tasks Module (NEW - April 2026, Updated with BDE-style Features)
 **Hierarchical Structure:**
 - **Departments** (SEO, Meta, Social Media, Design, ERP) - Admins can create more
@@ -398,6 +427,7 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Credentials
 - Super Admin: vinoth@drawlead.com / admin123
+- Operations Head (Tasks-only): opshead@drawlead.com / admin123
 
 ## Environment Variables
 - `GOOGLE_CALENDAR_CLIENT_ID` - Google OAuth Client ID
