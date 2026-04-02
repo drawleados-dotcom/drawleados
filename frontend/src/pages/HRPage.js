@@ -540,15 +540,99 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const casualUsed = monthlyStats?.casual_leave || 0;
   const sickUsed = monthlyStats?.sick_leave || 0;
 
+  // State for day detail popup
+  const [selectedDayRecord, setSelectedDayRecord] = useState(null);
+  const [showDayDetailModal, setShowDayDetailModal] = useState(false);
+  
+  // Standard lunch duration (in minutes)
+  const standardLunchMinutes = 45;
+
+  // Open day detail popup
+  const handleDayClick = (record) => {
+    setSelectedDayRecord(record);
+    setShowDayDetailModal(true);
+  };
+
+  // Calculate lunch difference
+  const getLunchDiff = (lunchDuration) => {
+    if (!lunchDuration) return null;
+    const diff = lunchDuration - standardLunchMinutes;
+    if (diff > 0) return { text: `+${diff} min extra`, color: 'text-red-400' };
+    if (diff < 0) return { text: `${Math.abs(diff)} min before`, color: 'text-green-400' };
+    return { text: 'On time', color: 'text-gray-400' };
+  };
+
   return (
     <div className="space-y-6">
-      {/* Month/Year Filters */}
+      {/* 1. Today's Attendance Summary (No buttons) */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader className="pb-2">
+          <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+            <Clock className="h-5 w-5 text-[#10b981]" />
+            Today's Attendance
+            {settings && <span className={`text-sm font-normal ${textSecondary}`}>(Standard: {settings.standard_login_time} - {settings.standard_logout_time})</span>}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Status</p>
+              <Badge className={`${
+                isClockedOut ? 'bg-green-500/20 text-green-400' :
+                isOnLunch ? 'bg-yellow-500/20 text-yellow-400' :
+                isClockedIn ? 'bg-blue-500/20 text-blue-400' :
+                'bg-gray-500/20 text-gray-400'
+              }`}>
+                {isClockedOut ? 'Day Complete' : isOnLunch ? 'On Lunch' : isClockedIn ? 'Working' : 'Not Started'}
+              </Badge>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Work Mode</p>
+              <div className="flex items-center gap-1">
+                {attendance?.work_mode === 'home' || attendance?.work_location === 'home' ? (
+                  <>
+                    <Home className="h-4 w-4 text-[#10b981]" />
+                    <span className={`text-sm font-semibold ${textPrimary}`}>Remote</span>
+                  </>
+                ) : (
+                  <>
+                    <Building className="h-4 w-4 text-[#6366f1]" />
+                    <span className={`text-sm font-semibold ${textPrimary}`}>Office</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Login</p>
+              <p className={`text-lg font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_in)}</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Logout</p>
+              <p className={`text-lg font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_out)}</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Lunch</p>
+              <p className={`text-lg font-semibold ${textPrimary}`}>{attendance?.lunch_duration ? `${attendance.lunch_duration} min` : '-'}</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Sessions</p>
+              <p className={`text-lg font-semibold ${textPrimary}`}>{sessions.length > 0 ? sessions.length : (attendance?.clock_in ? 1 : 0)}</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Work Hours</p>
+              <p className={`text-lg font-semibold text-[#10b981]`}>{attendance?.total_hours?.toFixed(2) || '-'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 2. Filter by Month/Year */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="pt-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-[#10b981]" />
-              <span className={`font-medium ${textPrimary}`}>Filter by:</span>
+              <span className={`font-medium ${textPrimary}`}>Filter:</span>
             </div>
             <div className="flex items-center gap-2">
               <select
@@ -579,43 +663,202 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
         </CardContent>
       </Card>
 
-      {/* Monthly Statistics Summary Cards */}
+      {/* 3. Month Summary Statistics */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="monthly-stats-cards">
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Total Working Days</p>
           <p className="text-2xl font-bold text-[#10b981]">{monthlyStats?.total_working_days || 22}</p>
-          <p className={`text-xs ${textSecondary} mt-1`}>of the month</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Presentable Days</p>
           <p className="text-2xl font-bold text-[#6366f1]">{monthlyStats?.present || 0}</p>
-          <p className={`text-xs ${textSecondary} mt-1`}>days worked</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Total Absent</p>
           <p className="text-2xl font-bold text-[#ef4444]">{monthlyStats?.absent || 0}</p>
-          <p className={`text-xs ${textSecondary} mt-1`}>extra/unpaid leaves</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>
           <p className="text-2xl font-bold text-[#f59e0b]">
             {casualUsed}<span className={`text-base font-normal ${textSecondary}`}>/{monthlyCasualTotal}</span>
           </p>
-          <p className={`text-xs ${textSecondary} mt-1`}>used this month</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Sick Leave</p>
           <p className="text-2xl font-bold text-[#ec4899]">
             {sickUsed}<span className={`text-base font-normal ${textSecondary}`}>/{monthlySickTotal}</span>
           </p>
-          <p className={`text-xs ${textSecondary} mt-1`}>used this month</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Extra Hours</p>
           <p className="text-2xl font-bold text-[#8b5cf6]">{monthlyStats?.extra_hours?.toFixed(1) || 0}</p>
-          <p className={`text-xs ${textSecondary} mt-1`}>this month</p>
         </Card>
       </div>
+
+      {/* 4. Attendance History Table */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader>
+          <CardTitle className={textPrimary}>Attendance History - {monthNames[selectedMonth - 1]} {selectedYear}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className={`border-b ${borderColor}`}>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Date</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Day</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Sessions</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Login</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Logout</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Lunch</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Work Hrs</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistory.map((record, index) => {
+                  const recordDate = new Date(record.date);
+                  const dayName = recordDate.toLocaleDateString('en-US', { weekday: 'short' });
+                  const sessionsCount = record.sessions?.length || (record.clock_in ? 1 : 0);
+                  const lunchDiff = getLunchDiff(record.lunch_duration);
+                  return (
+                    <tr 
+                      key={index} 
+                      className={`border-b ${borderColor} hover:${bgSecondary} cursor-pointer transition-colors`}
+                      onClick={() => handleDayClick(record)}
+                    >
+                      <td className={`p-3 ${textPrimary} font-medium`}>{formatDate(record.date)}</td>
+                      <td className={`p-3 ${textSecondary}`}>{dayName}</td>
+                      <td className={`p-3`}>
+                        <span className="bg-[#6366f1]/20 text-[#6366f1] px-2 py-1 rounded text-sm">{sessionsCount}</span>
+                      </td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in)}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out)}</td>
+                      <td className={`p-3`}>
+                        {record.lunch_duration ? (
+                          <div>
+                            <span className={textPrimary}>{record.lunch_duration} min</span>
+                            {lunchDiff && <span className={`text-xs ml-1 ${lunchDiff.color}`}>({lunchDiff.text})</span>}
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td className={`p-3 font-medium text-[#10b981]`}>{record.total_hours?.toFixed(2) || '-'}</td>
+                      <td className="p-3">
+                        <Badge className={`${
+                          record.approval_status === 'approved' || record.approval_status === 'auto' 
+                            ? 'bg-green-500/20 text-green-400' 
+                            : record.approval_status?.includes('pending')
+                            ? 'bg-yellow-500/20 text-yellow-400'
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {record.approval_status === 'auto' ? 'OK' : record.approval_status || 'N/A'}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filteredHistory.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className={`p-8 text-center ${textSecondary}`}>
+                      No attendance records found for {monthNames[selectedMonth - 1]} {selectedYear}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Day Detail Popup */}
+      {showDayDetailModal && selectedDayRecord && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowDayDetailModal(false)}>
+          <Card className={`w-full max-w-lg ${bgCard} border ${borderColor}`} onClick={e => e.stopPropagation()}>
+            <CardHeader>
+              <CardTitle className={`${textPrimary} flex items-center justify-between`}>
+                <span>Attendance Summary - {formatDate(selectedDayRecord.date)}</span>
+                <Button variant="ghost" size="sm" onClick={() => setShowDayDetailModal(false)} className={textSecondary}>
+                  <XCircle className="h-5 w-5" />
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Sessions Info */}
+              <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={textSecondary}>Total Sessions</span>
+                  <span className="text-2xl font-bold text-[#6366f1]">
+                    {selectedDayRecord.sessions?.length || (selectedDayRecord.clock_in ? 1 : 0)}
+                  </span>
+                </div>
+                {selectedDayRecord.sessions?.map((session, idx) => (
+                  <div key={idx} className={`flex justify-between text-sm py-1 border-t ${borderColor}`}>
+                    <span className={textSecondary}>Session {idx + 1}</span>
+                    <span className={textPrimary}>
+                      {formatTime(session.clock_in)} - {formatTime(session.clock_out)} ({session.hours?.toFixed(2)} hrs)
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Work Hours */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Total Work Hours</p>
+                  <p className="text-2xl font-bold text-[#10b981]">{selectedDayRecord.total_hours?.toFixed(2) || 0}</p>
+                </div>
+                <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Extra Hours</p>
+                  <p className="text-2xl font-bold text-[#8b5cf6]">{selectedDayRecord.extra_hours?.toFixed(2) || 0}</p>
+                </div>
+              </div>
+
+              {/* Lunch Break Info */}
+              <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                <p className={`text-xs ${textSecondary} mb-2`}>Lunch Break</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xl font-bold text-[#f59e0b]">{selectedDayRecord.lunch_duration || 0} min</span>
+                    <span className={textSecondary}> / {standardLunchMinutes} min</span>
+                  </div>
+                  {(() => {
+                    const diff = getLunchDiff(selectedDayRecord.lunch_duration);
+                    if (diff) {
+                      return (
+                        <span className={`font-medium ${diff.color}`}>
+                          {diff.text}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                <div className={`text-sm mt-2 ${textSecondary}`}>
+                  {formatTime(selectedDayRecord.lunch_start)} - {formatTime(selectedDayRecord.lunch_end)}
+                </div>
+              </div>
+
+              {/* Work Mode */}
+              <div className={`p-4 ${bgSecondary} rounded-lg flex items-center justify-between`}>
+                <span className={textSecondary}>Work Mode</span>
+                <div className="flex items-center gap-2">
+                  {selectedDayRecord.work_mode === 'home' || selectedDayRecord.work_location === 'home' ? (
+                    <>
+                      <Home className="h-5 w-5 text-[#10b981]" />
+                      <span className={`font-semibold ${textPrimary}`}>Remote</span>
+                    </>
+                  ) : (
+                    <>
+                      <Building className="h-5 w-5 text-[#6366f1]" />
+                      <span className={`font-semibold ${textPrimary}`}>Office</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
@@ -634,151 +877,6 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
           Request Permission
         </Button>
       </div>
-
-      {/* Today's Attendance Card */}
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardHeader>
-          <CardTitle className={`${textPrimary} flex items-center gap-2`}>
-            <Clock className="h-5 w-5 text-[#10b981]" />
-            Today's Attendance
-            {settings && <span className={`text-sm font-normal ${textSecondary}`}>(Standard: {settings.standard_login_time} - {settings.standard_logout_time})</span>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Status</p>
-              <Badge className={`${
-                isClockedOut ? 'bg-green-500/20 text-green-400' :
-                isOnLunch ? 'bg-yellow-500/20 text-yellow-400' :
-                isClockedIn ? 'bg-blue-500/20 text-blue-400' :
-                'bg-gray-500/20 text-gray-400'
-              }`}>
-                {isClockedOut ? 'Day Complete' : isOnLunch ? 'On Lunch' : isClockedIn ? 'Working' : 'Not Started'}
-              </Badge>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Login</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>
-                {formatTime(attendance?.clock_in)}
-              </p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Logout</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>
-                {formatTime(attendance?.clock_out)}
-              </p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Lunch</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>
-                {attendance?.lunch_duration ? `${attendance.lunch_duration} min` : '-'}
-              </p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Work Hours</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>
-                {attendance?.total_hours?.toFixed(2) || '-'}
-              </p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Extra Hours</p>
-              <p className={`text-lg font-semibold text-[#10b981]`}>
-                {attendance?.extra_hours?.toFixed(2) || '-'}
-              </p>
-            </div>
-          </div>
-
-          {/* Clock In Buttons */}
-          {notClockedIn && (
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button
-                onClick={() => handleOpenLoginModal('office')}
-                data-testid="clock-in-office"
-                className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white py-6"
-              >
-                <Building className="mr-2 h-5 w-5" />
-                Clock In - Office
-              </Button>
-              <Button
-                onClick={() => handleOpenLoginModal('home')}
-                data-testid="clock-in-wfh"
-                className="flex-1 bg-[#10b981] hover:bg-[#059669] text-white py-6"
-              >
-                <Home className="mr-2 h-5 w-5" />
-                Clock In - Work from Home
-              </Button>
-            </div>
-          )}
-
-          {/* Lunch & Clock Out Buttons */}
-          {isClockedIn && !isClockedOut && (
-            <div className="flex flex-col sm:flex-row gap-4">
-              {/* Start Lunch button - only if lunch not started or completed */}
-              {!isOnLunch && !lunchCompleted && (
-                <Button
-                  onClick={() => { setLunchStartTime(getCurrentTimeString()); setShowLunchModal(true); }}
-                  className="flex-1 bg-[#f59e0b] hover:bg-[#d97706] text-white py-4"
-                  data-testid="start-lunch-btn"
-                >
-                  🍽️ Start Lunch Break
-                </Button>
-              )}
-              {/* End Lunch button - visible when on lunch */}
-              {isOnLunch && (
-                <Button
-                  onClick={() => { setLunchEndTime(getCurrentTimeString()); handleEndLunch(); }}
-                  className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white py-4"
-                  data-testid="end-lunch-btn"
-                >
-                  ✓ End Lunch Break
-                </Button>
-              )}
-              <Button
-                onClick={handleOpenLogoutModal}
-                data-testid="clock-out"
-                className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white py-4"
-              >
-                <Square className="mr-2 h-5 w-5" />
-                Clock Out
-              </Button>
-            </div>
-          )}
-          
-          {/* Clock In Again after Clock Out (multiple sessions) */}
-          {isClockedOut && (
-            <div className="flex flex-col gap-4">
-              <div className="text-center p-4 bg-green-500/10 rounded-lg border border-green-500/20">
-                <CheckCircle className="h-8 w-8 text-green-400 mx-auto mb-2" />
-                <p className={`font-medium ${textPrimary}`}>Session Complete</p>
-                <p className={`text-sm ${textSecondary}`}>
-                  {sessions.length > 0 ? `${sessions.length} session(s) today` : 'Clocked out'}
-                </p>
-              </div>
-              <Button
-                onClick={handleOpenLoginModal}
-                className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-4"
-                data-testid="clock-in-again"
-              >
-                <Play className="mr-2 h-5 w-5" />
-                Clock In Again (New Session)
-              </Button>
-            </div>
-          )}
-
-          {/* Approval Status Warning */}
-          {attendance?.approval_status && attendance.approval_status.includes('pending') && (
-            <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-400" />
-              <span className={textSecondary}>
-                {attendance.approval_status === 'pending_early_login' 
-                  ? 'Early login - pending HR approval' 
-                  : 'Early logout - pending HR approval'}
-              </span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {/* Login Time Modal */}
       {showLoginModal && (
@@ -1017,99 +1115,6 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
           </Card>
         </div>
       )}
-
-      {/* Monthly Summary Card */}
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardHeader>
-          <CardTitle className={textPrimary}>{monthNames[selectedMonth - 1]} {selectedYear} Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#10b981]">{monthlyStats?.present || 0}</p>
-              <p className={`text-xs ${textSecondary}`}>Days Present</p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#6366f1]">{monthlyStats?.total_hours?.toFixed(1) || 0}</p>
-              <p className={`text-xs ${textSecondary}`}>Total Hours</p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#f59e0b]">{monthlyStats?.average_hours?.toFixed(1) || 0}</p>
-              <p className={`text-xs ${textSecondary}`}>Avg Hours/Day</p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#8b5cf6]">{monthlyStats?.extra_hours?.toFixed(1) || 0}</p>
-              <p className={`text-xs ${textSecondary}`}>Extra Hours</p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
-              <p className="text-2xl font-bold text-[#ef4444]">{monthlyStats?.absent || 0}</p>
-              <p className={`text-xs ${textSecondary}`}>Days Absent</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Attendance History Table */}
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardHeader>
-          <CardTitle className={textPrimary}>Attendance History - {monthNames[selectedMonth - 1]} {selectedYear}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className={`border-b ${borderColor}`}>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Date</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Day</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Login</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Logout</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Lunch</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Permission</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Work Hrs</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Extra Hrs</th>
-                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredHistory.map((record, index) => {
-                  const recordDate = new Date(record.date);
-                  const dayName = recordDate.toLocaleDateString('en-US', { weekday: 'short' });
-                  return (
-                    <tr key={index} className={`border-b ${borderColor} hover:${bgSecondary}`}>
-                      <td className={`p-3 ${textPrimary}`}>{formatDate(record.date)}</td>
-                      <td className={`p-3 ${textSecondary}`}>{dayName}</td>
-                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in)}</td>
-                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out)}</td>
-                      <td className={`p-3 ${textSecondary}`}>{record.lunch_duration ? `${record.lunch_duration} min` : '-'}</td>
-                      <td className={`p-3 ${textSecondary}`}>{record.permission_hours ? `${record.permission_hours} hrs` : '-'}</td>
-                      <td className={`p-3 font-medium ${textPrimary}`}>{record.total_hours?.toFixed(2) || '-'}</td>
-                      <td className={`p-3 font-medium text-[#10b981]`}>{record.extra_hours?.toFixed(2) || '-'}</td>
-                      <td className="p-3">
-                        <Badge className={`${
-                          record.approval_status === 'approved' || record.approval_status === 'auto' 
-                            ? 'bg-green-500/20 text-green-400' 
-                            : record.approval_status?.includes('pending')
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-gray-500/20 text-gray-400'
-                        }`}>
-                          {record.approval_status === 'auto' ? 'OK' : record.approval_status || 'N/A'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filteredHistory.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className={`p-8 text-center ${textSecondary}`}>
-                      No attendance records found for {monthNames[selectedMonth - 1]} {selectedYear}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
