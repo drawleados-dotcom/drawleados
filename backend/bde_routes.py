@@ -302,7 +302,7 @@ async def track_time(task_id: str, data: TimeTrackingAction, request: Request):
         minutes = (time_tracking["total_seconds"] % 3600) // 60
         
         return {
-            "message": f"Timer {action}ed successfully",
+            "message": f"Timer {action}d successfully",
             "time_tracking": time_tracking,
             "total_time_formatted": f"{hours}h {minutes}m"
         }

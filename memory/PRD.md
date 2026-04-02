@@ -310,12 +310,27 @@ The system sends email notifications with "View" buttons for:
   - Warning displayed if <9 hours worked (requires approval)
   - Lunch In modal shows "Lunch Duration" dynamically
   - Duration updates in real-time as user changes time
-- [x] **New Time Picker UI for Attendance** - DONE (Apr 2026)
-  - Separate Hour input (1-12) with up/down arrow buttons
-  - Separate Minute input (0-59) with up/down arrow buttons
-  - AM/PM toggle button (Blue for AM, Orange for PM)
-  - Manual number entry supported
-  - Real-time duration recalculation as values change
+- [x] **Read-Only Time Capture for Attendance** - DONE (Apr 2026)
+  - Auto-captures current time (no manual editing)
+  - Shows time in large read-only display boxes (HH:MM AM/PM)
+  - User confirms with one click
+- [x] **HR Admin Designations Employee Count** - DONE (Apr 2026)
+  - Each designation shows badge with "X Employees" count
+- [x] **BDE Tasks Time Tracking** - DONE (Apr 2026)
+  - Start button to begin timer
+  - Pause button to pause (tracks session)
+  - Resume button to continue
+  - Finish button to complete task
+  - Total time spent displayed per task
+  - Sessions tracked with timestamps
+- [x] **Employee Attendance Calendar** - DONE (Apr 2026)
+  - Monthly calendar view in HR Portal
+  - Color-coded: Blue=Office, Green=WFH, Orange=Leave
+  - Click date to see detail panel:
+    - Login/Logout times
+    - Work hours & mode
+    - Tasks completed with time spent
+  - Monthly summary: Days Present, Total Hours, Avg Hours/Day
 - [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
 - [ ] Leads Custom Fields - Notion-style custom fields for leads
 
