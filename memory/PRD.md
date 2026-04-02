@@ -293,10 +293,28 @@ The system sends email notifications with "View" buttons for:
     - Employment Type: Added Freelancer option
     - Documents: Dynamic document management (Add/View/Delete)
     - Role & Access: Simplified, designation-based access
+- [x] **Demo Users & Quick Login** - DONE (Apr 2026)
+  - 5 Demo users (Super Admin, HR Manager, BDE, Web Dev, SEO)
+  - Auto-login dropdown on login page
+  - Quick login button for one-click test access
+- [x] **Work Time Settings in HR Admin** - DONE (Apr 2026)
+  - Configurable standard work hours (default: 9)
+  - Standard login/logout times (09:00 AM - 06:00 PM)
+  - Default lunch duration (60 minutes)
+  - Early login threshold (60 minutes before login triggers approval)
+  - Grace period (15 minutes for late login)
+  - Overtime rate multiplier (1.5x)
+  - Info box explaining how approvals work
+- [x] **Dynamic Duration Display in Attendance Modals** - DONE (Apr 2026)
+  - Clock Out modal shows "Total Work Hours" dynamically
+  - Warning displayed if <9 hours worked (requires approval)
+  - Lunch In modal shows "Lunch Duration" dynamically
+  - Duration updates in real-time as user changes time
 - [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
 - [ ] Leads Custom Fields - Notion-style custom fields for leads
 
 ### P1 - High Priority
+- [ ] Multiple Login/Logout Sessions Per Day - Allow multiple clock-in/out cycles
 - [ ] Refactor LeadsPageV2.js - Break down into smaller components
 - [ ] Google Calendar Integration - Sync meetings and events
 
@@ -314,8 +332,11 @@ The system sends email notifications with "View" buttons for:
 ---
 
 ## Test Credentials
-- **Admin**: vinoth@drawlead.com / admin123
-- **Employee**: Praveenkumar6361@gmail.com / praveenps
+- **Super Admin**: Vinoth@drawlead.com / 6383145061
+- **HR Manager**: hr@drawlead.com / hr123456
+- **Business Dev**: bde@drawlead.com / bde123456
+- **Web Developer**: dev@drawlead.com / dev123456
+- **SEO Specialist**: seo@drawlead.com / seo123456
 
 ## 3rd Party Integrations
 - Emergent-managed Google Auth
