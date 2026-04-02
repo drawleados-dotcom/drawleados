@@ -1042,37 +1042,69 @@ function KanbanView({ columns, rows, statusColumn, users, onUpdateCell, onDelete
   const rowsByStatus = getRowsByStatus();
   const nameColumn = columns.find(c => c.is_primary || c.name.toLowerCase() === 'name');
   
+  // Define approval workflow order
+  const approvalWorkflowStatuses = ['To Do', 'In Progress', 'Operations Approval', 'Vinoth Approval', 'Client Approval', 'Revision', 'Done'];
+  
+  // Sort statuses by workflow order if they match approval workflow
+  const sortedStatuses = [...(statusColumn.options || [])].sort((a, b) => {
+    const aIndex = approvalWorkflowStatuses.indexOf(a.name);
+    const bIndex = approvalWorkflowStatuses.indexOf(b.name);
+    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+    if (aIndex !== -1) return -1;
+    if (bIndex !== -1) return 1;
+    return 0;
+  });
+  
   return (
     <div className="flex gap-4 overflow-x-auto pb-4">
-      {statusColumn.options?.map(status => (
-        <div key={status.id} className="flex-shrink-0 w-72 bg-[#18181b] rounded-lg border border-[#27272a]">
-          <div className="p-3 border-b border-[#27272a] flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: status.color }} />
-            <span className="text-sm font-medium text-[#fafafa]">{status.name}</span>
-            <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">
-              {rowsByStatus[status.id]?.length || 0}
-            </Badge>
+      {sortedStatuses.map(status => {
+        const isApprovalStep = ['Operations Approval', 'Vinoth Approval', 'Client Approval'].includes(status.name);
+        const isRevision = status.name === 'Revision';
+        
+        return (
+          <div 
+            key={status.id} 
+            className={`flex-shrink-0 w-72 rounded-lg border ${
+              isApprovalStep ? 'bg-[#1a1a2e] border-[#3f3f46]' : 
+              isRevision ? 'bg-[#1a1a1a] border-red-900/50' :
+              'bg-[#18181b] border-[#27272a]'
+            }`}
+          >
+            <div className={`p-3 border-b flex items-center gap-2 ${
+              isApprovalStep ? 'border-[#3f3f46]' : 
+              isRevision ? 'border-red-900/50' :
+              'border-[#27272a]'
+            }`}>
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: status.color }} />
+              <span className="text-sm font-medium text-[#fafafa]">{status.name}</span>
+              {isApprovalStep && <span className="text-xs text-[#f59e0b]">⏳</span>}
+              <Badge className="bg-[#27272a] text-[#71717a] text-xs ml-auto">
+                {rowsByStatus[status.id]?.length || 0}
+              </Badge>
+            </div>
+            <div className="p-2 space-y-2 max-h-[calc(100vh-350px)] overflow-y-auto">
+              {rowsByStatus[status.id]?.map(row => (
+                <KanbanCard
+                  key={row.row_id}
+                  row={row}
+                  columns={columns}
+                  nameColumn={nameColumn}
+                  statusColumn={statusColumn}
+                  users={users}
+                  onUpdateCell={onUpdateCell}
+                  onDelete={() => onDeleteRow(row.row_id)}
+                />
+              ))}
+              <button
+                onClick={onAddRow}
+                className="w-full p-2 text-sm text-[#71717a] hover:text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" /> Add task
+              </button>
+            </div>
           </div>
-          <div className="p-2 space-y-2 max-h-[calc(100vh-350px)] overflow-y-auto">
-            {rowsByStatus[status.id]?.map(row => (
-              <KanbanCard
-                key={row.row_id}
-                row={row}
-                columns={columns}
-                nameColumn={nameColumn}
-                users={users}
-                onDelete={() => onDeleteRow(row.row_id)}
-              />
-            ))}
-            <button
-              onClick={onAddRow}
-              className="w-full p-2 text-sm text-[#71717a] hover:text-[#fafafa] hover:bg-[#27272a] rounded flex items-center gap-2"
-            >
-              <Plus className="h-4 w-4" /> Add task
-            </button>
-          </div>
-        </div>
-      ))}
+        );
+      })}
       
       {/* No Status column */}
       {rowsByStatus['none']?.length > 0 && (
@@ -1089,7 +1121,9 @@ function KanbanView({ columns, rows, statusColumn, users, onUpdateCell, onDelete
                 row={row}
                 columns={columns}
                 nameColumn={nameColumn}
+                statusColumn={statusColumn}
                 users={users}
+                onUpdateCell={onUpdateCell}
                 onDelete={() => onDeleteRow(row.row_id)}
               />
             ))}
@@ -1100,42 +1134,113 @@ function KanbanView({ columns, rows, statusColumn, users, onUpdateCell, onDelete
   );
 }
 
-function KanbanCard({ row, columns, nameColumn, users, onDelete }) {
+function KanbanCard({ row, columns, nameColumn, statusColumn, users, onUpdateCell, onDelete }) {
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
   const priorityCol = columns.find(c => c.name.toLowerCase() === 'priority');
   const dateCol = columns.find(c => c.type === 'date');
   const personCol = columns.find(c => c.type === 'person');
+  const deptCol = columns.find(c => c.name.toLowerCase() === 'department');
   
   const priority = priorityCol?.options?.find(o => o.id === row.values?.[priorityCol?.column_id]);
   const assignee = users.find(u => u.user_id === row.values?.[personCol?.column_id]);
   const dueDate = row.values?.[dateCol?.column_id];
+  const department = deptCol?.options?.find(o => o.id === row.values?.[deptCol?.column_id]);
+  const currentStatus = statusColumn?.options?.find(o => o.id === row.values?.[statusColumn?.column_id]);
+  
+  const handleStatusChange = (newStatusId) => {
+    if (statusColumn) {
+      onUpdateCell(row.row_id, statusColumn.column_id, newStatusId);
+    }
+    setShowStatusMenu(false);
+  };
+  
+  // Get next logical status based on approval workflow
+  const getNextStatus = () => {
+    const workflow = ['To Do', 'In Progress', 'Operations Approval', 'Client Approval', 'Done'];
+    const currentIndex = workflow.indexOf(currentStatus?.name);
+    if (currentIndex >= 0 && currentIndex < workflow.length - 1) {
+      const nextName = workflow[currentIndex + 1];
+      return statusColumn?.options?.find(o => o.name === nextName);
+    }
+    return null;
+  };
+  
+  const nextStatus = getNextStatus();
   
   return (
-    <div className="p-3 bg-[#0c0a09] rounded-lg border border-[#27272a] hover:border-[#3f3f46] group">
+    <div className="p-3 bg-[#0c0a09] rounded-lg border border-[#27272a] hover:border-[#3f3f46] group relative">
       <div className="flex items-start justify-between mb-2">
-        <span className="text-sm text-[#fafafa]">
+        <span className="text-sm text-[#fafafa] font-medium flex-1 pr-2">
           {row.values?.[nameColumn?.column_id] || 'Untitled'}
         </span>
-        <button
-          onClick={onDelete}
-          className="opacity-0 group-hover:opacity-100 text-[#71717a] hover:text-red-400"
-        >
-          <X className="h-3 w-3" />
-        </button>
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+          {/* Quick status change button */}
+          <button
+            onClick={() => setShowStatusMenu(!showStatusMenu)}
+            className="p-1 text-[#71717a] hover:text-[#fafafa] hover:bg-[#27272a] rounded"
+            title="Change status"
+          >
+            <ChevronDown className="h-3 w-3" />
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1 text-[#71717a] hover:text-red-400"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
       </div>
+      
+      {/* Status quick-change dropdown */}
+      {showStatusMenu && (
+        <div className="absolute right-2 top-8 z-50 bg-[#18181b] border border-[#27272a] rounded-lg shadow-xl py-1 min-w-[160px]">
+          {statusColumn?.options?.map(status => (
+            <button
+              key={status.id}
+              onClick={() => handleStatusChange(status.id)}
+              className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-[#27272a] ${
+                status.id === currentStatus?.id ? 'text-[#6366f1]' : 'text-[#fafafa]'
+              }`}
+            >
+              <div className="w-2 h-2 rounded" style={{ backgroundColor: status.color }} />
+              {status.name}
+              {status.id === currentStatus?.id && <Check className="h-3 w-3 ml-auto" />}
+            </button>
+          ))}
+        </div>
+      )}
+      
       <div className="flex items-center gap-2 flex-wrap">
+        {department && (
+          <Badge style={{ backgroundColor: `${department.color}20`, color: department.color, borderColor: department.color }} className="text-xs border">
+            {department.name}
+          </Badge>
+        )}
         {priority && (
           <Badge style={{ backgroundColor: `${priority.color}20`, color: priority.color }} className="text-xs">
             {priority.name}
           </Badge>
         )}
+      </div>
+      <div className="flex items-center gap-2 mt-2">
         {dueDate && (
           <span className="text-xs text-[#71717a] flex items-center gap-1">
             <Calendar className="h-3 w-3" />
             {new Date(dueDate).toLocaleDateString()}
           </span>
         )}
+        {nextStatus && (
+          <button 
+            onClick={() => handleStatusChange(nextStatus.id)}
+            className="text-xs px-2 py-0.5 rounded bg-[#6366f1]/20 text-[#6366f1] hover:bg-[#6366f1]/30 flex items-center gap-1"
+            title={`Move to ${nextStatus.name}`}
+          >
+            <ChevronRight className="h-3 w-3" />
+            {nextStatus.name}
+          </button>
+        )}
         {assignee && (
-          <div className="ml-auto w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs">
+          <div className="ml-auto w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs" title={assignee.name}>
             {assignee.name?.charAt(0).toUpperCase()}
           </div>
         )}

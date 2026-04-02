@@ -146,13 +146,32 @@ async def create_database(data: DatabaseCreate, request: Request):
             "name": "Status",
             "type": "select",
             "options": [
-                {"id": "opt_1", "name": "Not Started", "color": "#71717a"},
+                {"id": "opt_1", "name": "To Do", "color": "#71717a"},
                 {"id": "opt_2", "name": "In Progress", "color": "#3b82f6"},
-                {"id": "opt_3", "name": "Completed", "color": "#10b981"},
-                {"id": "opt_4", "name": "On Hold", "color": "#f59e0b"}
+                {"id": "opt_3", "name": "Operations Approval", "color": "#f59e0b"},
+                {"id": "opt_4", "name": "Vinoth Approval", "color": "#8b5cf6"},
+                {"id": "opt_5", "name": "Client Approval", "color": "#ec4899"},
+                {"id": "opt_6", "name": "Revision", "color": "#ef4444"},
+                {"id": "opt_7", "name": "Done", "color": "#10b981"}
             ],
-            "width": 150,
+            "width": 180,
             "order": 1,
+            "is_visible": True
+        },
+        {
+            "column_id": f"col_{uuid.uuid4().hex[:8]}",
+            "name": "Department",
+            "type": "select",
+            "options": [
+                {"id": "dept_1", "name": "Website", "color": "#3b82f6"},
+                {"id": "dept_2", "name": "SEO", "color": "#10b981"},
+                {"id": "dept_3", "name": "Meta Ads", "color": "#8b5cf6"},
+                {"id": "dept_4", "name": "Content", "color": "#f59e0b"},
+                {"id": "dept_5", "name": "Design", "color": "#ec4899"},
+                {"id": "dept_6", "name": "Social Media", "color": "#06b6d4"}
+            ],
+            "width": 140,
+            "order": 2,
             "is_visible": True
         },
         {
@@ -162,10 +181,11 @@ async def create_database(data: DatabaseCreate, request: Request):
             "options": [
                 {"id": "pri_1", "name": "Low", "color": "#71717a"},
                 {"id": "pri_2", "name": "Medium", "color": "#f59e0b"},
-                {"id": "pri_3", "name": "High", "color": "#ef4444"}
+                {"id": "pri_3", "name": "High", "color": "#ef4444"},
+                {"id": "pri_4", "name": "Urgent", "color": "#dc2626"}
             ],
             "width": 120,
-            "order": 2,
+            "order": 3,
             "is_visible": True
         },
         {
@@ -174,7 +194,16 @@ async def create_database(data: DatabaseCreate, request: Request):
             "type": "date",
             "options": [],
             "width": 150,
-            "order": 3,
+            "order": 4,
+            "is_visible": True
+        },
+        {
+            "column_id": f"col_{uuid.uuid4().hex[:8]}",
+            "name": "Assigned To",
+            "type": "person",
+            "options": [],
+            "width": 150,
+            "order": 5,
             "is_visible": True
         }
     ]
@@ -786,6 +815,44 @@ async def get_templates(request: Request):
                 {"name": "URL", "type": "url"},
                 {"name": "Active", "type": "checkbox"}
             ]
+        },
+        {
+            "id": "dm_task_board",
+            "name": "Digital Marketing Board",
+            "icon": "🎯",
+            "description": "Task management with approval workflow for digital marketing teams",
+            "columns": [
+                {"name": "Task Name", "type": "text"},
+                {"name": "Department", "type": "select", "options": [
+                    {"name": "Website", "color": "#3b82f6"},
+                    {"name": "SEO", "color": "#10b981"},
+                    {"name": "Meta Ads", "color": "#8b5cf6"},
+                    {"name": "Content", "color": "#f59e0b"},
+                    {"name": "Design", "color": "#ec4899"},
+                    {"name": "Social Media", "color": "#06b6d4"}
+                ]},
+                {"name": "Status", "type": "select", "options": [
+                    {"name": "To Do", "color": "#71717a"},
+                    {"name": "In Progress", "color": "#3b82f6"},
+                    {"name": "Operations Approval", "color": "#f59e0b"},
+                    {"name": "Vinoth Approval", "color": "#8b5cf6"},
+                    {"name": "Client Approval", "color": "#ec4899"},
+                    {"name": "Revision", "color": "#ef4444"},
+                    {"name": "Done", "color": "#10b981"}
+                ]},
+                {"name": "Priority", "type": "select", "options": [
+                    {"name": "Low", "color": "#71717a"},
+                    {"name": "Medium", "color": "#f59e0b"},
+                    {"name": "High", "color": "#ef4444"},
+                    {"name": "Urgent", "color": "#dc2626"}
+                ]},
+                {"name": "Due Date", "type": "date"},
+                {"name": "Assigned To", "type": "person"},
+                {"name": "Assigned By", "type": "person"},
+                {"name": "Client", "type": "text"},
+                {"name": "Attachments", "type": "url"},
+                {"name": "Revision Notes", "type": "text"}
+            ]
         }
     ]
     
@@ -891,6 +958,41 @@ async def create_from_template(template_id: str, data: Dict[str, Any], request: 
                 {"name": "Price", "type": "number"},
                 {"name": "URL", "type": "url"},
                 {"name": "Active", "type": "checkbox"}
+            ]
+        },
+        "dm_task_board": {
+            "name": data.get("name", "Digital Marketing Board"),
+            "icon": "🎯",
+            "columns": [
+                {"name": "Task Name", "type": "text", "is_primary": True},
+                {"name": "Department", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Website", "color": "#3b82f6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "SEO", "color": "#10b981"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Meta Ads", "color": "#8b5cf6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Content", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Design", "color": "#ec4899"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Social Media", "color": "#06b6d4"}
+                ]},
+                {"name": "Status", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "To Do", "color": "#71717a"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "In Progress", "color": "#3b82f6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Operations Approval", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Vinoth Approval", "color": "#8b5cf6"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Client Approval", "color": "#ec4899"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Revision", "color": "#ef4444"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Done", "color": "#10b981"}
+                ]},
+                {"name": "Priority", "type": "select", "options": [
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Low", "color": "#71717a"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Medium", "color": "#f59e0b"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "High", "color": "#ef4444"},
+                    {"id": f"opt_{uuid.uuid4().hex[:6]}", "name": "Urgent", "color": "#dc2626"}
+                ]},
+                {"name": "Due Date", "type": "date"},
+                {"name": "Assigned To", "type": "person"},
+                {"name": "Client", "type": "text"},
+                {"name": "Attachments", "type": "url"},
+                {"name": "Revision Notes", "type": "text"}
             ]
         }
     }
