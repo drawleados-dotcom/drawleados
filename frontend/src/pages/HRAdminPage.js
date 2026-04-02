@@ -52,6 +52,7 @@ export default function HRAdminPage() {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState('dashboard');
   const token = localStorage.getItem('session_token');
+  const headers = { Authorization: `Bearer ${token}` };
   
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
