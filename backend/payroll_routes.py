@@ -36,6 +36,393 @@ class AddSalaryRequest(BaseModel):
     reason: str
     notes: Optional[str] = ""
 
+class CreatePayslipRequest(BaseModel):
+    user_id: str
+    month: int
+    year: int
+    hr_remarks: Optional[str] = ""
+
+class ReviewPayslipRequest(BaseModel):
+    review_text: str
+    
+class CompanySettingsRequest(BaseModel):
+    company_name: str
+    company_address: str
+    company_logo_url: Optional[str] = ""
+    company_phone: Optional[str] = ""
+    company_email: Optional[str] = ""
+    company_website: Optional[str] = ""
+
+
+# ========== COMPANY SETTINGS ==========
+
+@payroll_router.get("/company-settings")
+async def get_company_settings(request: Request):
+    """Get company settings for payslip PDF"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    settings = await db.company_settings.find_one({"type": "payroll"})
+    if not settings:
+        # Return defaults
+        return {
+            "company_name": "Drawlead",
+            "company_address": "",
+            "company_logo_url": "",
+            "company_phone": "",
+            "company_email": "",
+            "company_website": ""
+        }
+    
+    settings.pop("_id", None)
+    return settings
+
+@payroll_router.put("/company-settings")
+async def update_company_settings(data: CompanySettingsRequest, request: Request):
+    """Update company settings (super_admin only)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super admin can update company settings")
+    
+    await db.company_settings.update_one(
+        {"type": "payroll"},
+        {"$set": {
+            "type": "payroll",
+            "company_name": data.company_name,
+            "company_address": data.company_address,
+            "company_logo_url": data.company_logo_url,
+            "company_phone": data.company_phone,
+            "company_email": data.company_email,
+            "company_website": data.company_website,
+            "updated_at": datetime.now(timezone.utc)
+        }},
+        upsert=True
+    )
+    
+    return {"message": "Company settings updated successfully"}
+
+
+# ========== PAYSLIP WORKFLOW ==========
+
+@payroll_router.post("/payslip/create")
+async def create_payslip(data: CreatePayslipRequest, request: Request):
+    """HR creates a payslip for an employee for a specific month"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Only HR can create payslips")
+    
+    # Check if payslip already exists for this month
+    existing = await db.payslips.find_one({
+        "user_id": data.user_id,
+        "month": data.month,
+        "year": data.year
+    })
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Payslip already exists for this month")
+    
+    # Get salary at that date
+    target_date = datetime(data.year, data.month, 1)
+    salary_record = await db.salary_history.find_one(
+        {"user_id": data.user_id, "effective_from": {"$lte": target_date}},
+        sort=[("effective_from", -1)]
+    )
+    
+    base_salary = salary_record["amount"] if salary_record else 0
+    
+    # Get attendance data
+    import calendar as cal
+    total_days_in_month = cal.monthrange(data.year, data.month)[1]
+    
+    # Get calendar for working days
+    calendar_data = await db.company_calendars.find_one({"month": data.month, "year": data.year})
+    total_working_days = calendar_data.get("working_days", 22) if calendar_data else 22
+    holidays = calendar_data.get("holidays", []) if calendar_data else []
+    
+    # Get attendance records
+    month_start = datetime(data.year, data.month, 1)
+    month_end = datetime(data.year, data.month + 1, 1) if data.month < 12 else datetime(data.year + 1, 1, 1)
+    
+    attendance_records = await db.attendance.find({
+        "user_id": data.user_id,
+        "date": {"$gte": month_start, "$lt": month_end}
+    }).to_list(31)
+    
+    days_present = len([r for r in attendance_records if r.get("status") == "present"])
+    
+    # Get leave records
+    leave_records = await db.leave_requests.find({
+        "user_id": data.user_id,
+        "status": "approved",
+        "start_date": {"$lte": month_end.strftime("%Y-%m-%d")},
+        "end_date": {"$gte": month_start.strftime("%Y-%m-%d")}
+    }).to_list(20)
+    
+    casual_leaves = sum(r.get("days", 1) for r in leave_records if r.get("leave_type", "").lower() == "casual")
+    sick_leaves = sum(r.get("days", 1) for r in leave_records if r.get("leave_type", "").lower() == "sick")
+    total_leaves = casual_leaves + sick_leaves
+    
+    # Calculate absent days
+    absent_days = max(0, total_working_days - days_present - total_leaves - len(holidays))
+    
+    # Calculate salary
+    per_day_salary = round(base_salary / total_working_days, 2) if total_working_days > 0 else 0
+    days_paid = days_present + casual_leaves + sick_leaves
+    earned_salary = round(per_day_salary * days_paid, 2)
+    
+    # Deductions
+    pf_deduction = round(base_salary * 0.12, 2)
+    professional_tax = 200 if base_salary > 15000 else 0
+    lop_deduction = round(per_day_salary * absent_days, 2)
+    total_deductions = pf_deduction + professional_tax + lop_deduction
+    net_salary = round(earned_salary - pf_deduction - professional_tax, 2)
+    
+    # Get employee info
+    employee = await db.users.find_one({"user_id": data.user_id}, {"_id": 0, "name": 1, "email": 1, "designation": 1, "employee_id": 1})
+    
+    payslip_id = f"payslip_{uuid.uuid4().hex[:12]}"
+    
+    payslip = {
+        "payslip_id": payslip_id,
+        "user_id": data.user_id,
+        "employee_name": employee.get("name", ""),
+        "employee_email": employee.get("email", ""),
+        "employee_designation": employee.get("designation", ""),
+        "employee_id": employee.get("employee_id", ""),
+        "month": data.month,
+        "year": data.year,
+        "base_salary": base_salary,
+        "attendance": {
+            "total_working_days": total_working_days,
+            "holidays": len(holidays),
+            "days_present": days_present,
+            "casual_leaves": casual_leaves,
+            "sick_leaves": sick_leaves,
+            "absent_days": absent_days
+        },
+        "calculation": {
+            "per_day_salary": per_day_salary,
+            "days_paid": days_paid,
+            "earned_salary": earned_salary
+        },
+        "deductions": {
+            "pf": pf_deduction,
+            "professional_tax": professional_tax,
+            "lop_deduction": lop_deduction,
+            "total_deductions": total_deductions
+        },
+        "net_salary": net_salary,
+        "status": "draft",  # draft -> operations_review -> ceo_review -> approved -> generated
+        "hr_remarks": data.hr_remarks,
+        "operations_review": None,
+        "ceo_review": None,
+        "created_by": current_user.user_id,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    await db.payslips.insert_one(payslip)
+    payslip.pop("_id", None)
+    
+    return payslip
+
+
+@payroll_router.get("/payslips")
+async def get_payslips(month: int, year: int, status: Optional[str] = None, request: Request = None):
+    """Get all payslips for a month with optional status filter"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    query = {"month": month, "year": year}
+    
+    # Non-admin users can only see approved payslips for themselves
+    if current_user.role not in ["admin", "super_admin", "hr_manager", "operations_admin", "ceo"]:
+        query["user_id"] = current_user.user_id
+        query["status"] = "generated"
+    elif status:
+        query["status"] = status
+    
+    payslips = await db.payslips.find(query).to_list(100)
+    for p in payslips:
+        p.pop("_id", None)
+        # Hide salary details for operations review
+        if current_user.role == "operations_admin" and p.get("status") == "operations_review":
+            p["base_salary"] = "HIDDEN"
+            p["net_salary"] = "HIDDEN"
+            p["calculation"] = "HIDDEN"
+            p["deductions"] = "HIDDEN"
+    
+    return payslips
+
+
+@payroll_router.get("/payslip/{payslip_id}")
+async def get_payslip(payslip_id: str, request: Request):
+    """Get single payslip details"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    payslip = await db.payslips.find_one({"payslip_id": payslip_id})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    # Check access
+    if current_user.role not in ["admin", "super_admin", "hr_manager", "operations_admin", "ceo"]:
+        if payslip["user_id"] != current_user.user_id or payslip["status"] != "generated":
+            raise HTTPException(status_code=403, detail="Not authorized")
+    
+    payslip.pop("_id", None)
+    
+    # Hide salary for operations admin during review
+    if current_user.role == "operations_admin" and payslip.get("status") == "operations_review":
+        payslip["base_salary"] = "HIDDEN"
+        payslip["net_salary"] = "HIDDEN"
+        payslip["calculation"] = "HIDDEN"
+        payslip["deductions"] = "HIDDEN"
+    
+    return payslip
+
+
+@payroll_router.put("/payslip/{payslip_id}/submit-for-operations")
+async def submit_for_operations_review(payslip_id: str, request: Request):
+    """HR submits payslip for Operations review"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Only HR can submit for review")
+    
+    result = await db.payslips.update_one(
+        {"payslip_id": payslip_id, "status": "draft"},
+        {"$set": {"status": "operations_review", "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Payslip not found or already submitted")
+    
+    return {"message": "Submitted for Operations review"}
+
+
+@payroll_router.put("/payslip/{payslip_id}/operations-review")
+async def add_operations_review(payslip_id: str, data: ReviewPayslipRequest, request: Request):
+    """Operations adds their review (without seeing salary)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin", "operations_admin"]:
+        raise HTTPException(status_code=403, detail="Only Operations can add review")
+    
+    result = await db.payslips.update_one(
+        {"payslip_id": payslip_id, "status": "operations_review"},
+        {"$set": {
+            "operations_review": {
+                "reviewer_id": current_user.user_id,
+                "reviewer_name": current_user.name,
+                "review_text": data.review_text,
+                "reviewed_at": datetime.now(timezone.utc)
+            },
+            "status": "ceo_review",
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Payslip not found or not in operations review")
+    
+    return {"message": "Operations review added, submitted for CEO review"}
+
+
+@payroll_router.put("/payslip/{payslip_id}/ceo-review")
+async def add_ceo_review(payslip_id: str, data: ReviewPayslipRequest, request: Request):
+    """CEO adds review and approves"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["super_admin", "ceo"]:
+        raise HTTPException(status_code=403, detail="Only CEO can approve payslips")
+    
+    result = await db.payslips.update_one(
+        {"payslip_id": payslip_id, "status": "ceo_review"},
+        {"$set": {
+            "ceo_review": {
+                "reviewer_id": current_user.user_id,
+                "reviewer_name": current_user.name,
+                "review_text": data.review_text,
+                "reviewed_at": datetime.now(timezone.utc)
+            },
+            "status": "approved",
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Payslip not found or not in CEO review")
+    
+    return {"message": "CEO approved payslip"}
+
+
+@payroll_router.put("/payslip/{payslip_id}/generate")
+async def generate_payslip(payslip_id: str, request: Request):
+    """HR generates final payslip (marks as generated)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Only HR can generate payslips")
+    
+    result = await db.payslips.update_one(
+        {"payslip_id": payslip_id, "status": "approved"},
+        {"$set": {
+            "status": "generated",
+            "generated_by": current_user.user_id,
+            "generated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Payslip not found or not approved yet")
+    
+    return {"message": "Payslip generated and available for employee"}
+
+
+@payroll_router.get("/my-payslips")
+async def get_my_payslips(month: Optional[int] = None, year: Optional[int] = None, request: Request = None):
+    """Employee gets their own generated payslips"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    query = {"user_id": current_user.user_id, "status": "generated"}
+    if month and year:
+        query["month"] = month
+        query["year"] = year
+    
+    payslips = await db.payslips.find(query).sort([("year", -1), ("month", -1)]).to_list(24)
+    for p in payslips:
+        p.pop("_id", None)
+    
+    return payslips
+
+
+@payroll_router.put("/payslip/{payslip_id}/bulk-submit-operations")
+async def bulk_submit_for_operations(month: int, year: int, request: Request):
+    """HR submits all draft payslips for a month for Operations review"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Only HR can submit for review")
+    
+    result = await db.payslips.update_many(
+        {"month": month, "year": year, "status": "draft"},
+        {"$set": {"status": "operations_review", "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    return {"message": f"Submitted {result.modified_count} payslips for Operations review"}
+
 
 # ========== SALARY MANAGEMENT ==========
 
@@ -86,7 +473,7 @@ async def add_salary_record(salary_data: AddSalaryRequest, request: Request):
     # Parse effective date
     try:
         effective_date = datetime.strptime(salary_data.effective_from, "%Y-%m-%d")
-    except:
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
     # Create salary record
