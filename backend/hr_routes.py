@@ -118,7 +118,9 @@ class AttendanceRecord(BaseModel):
     clock_out: Optional[datetime] = None
     lunch_start: Optional[datetime] = None
     lunch_end: Optional[datetime] = None
-    lunch_duration: float = 0.0  # in minutes
+    lunch_duration: float = 0.0  # in minutes (legacy - keep for backward compatibility)
+    breaks: list = []  # New: List of breaks [{start: datetime, end: datetime, duration: float}]
+    total_break_duration: float = 0.0  # Total break time in minutes
     work_location: str = "office"  # office, home
     total_hours: float = 0.0
     extra_hours: float = 0.0
@@ -140,6 +142,14 @@ class ClockOutRequest(BaseModel):
     notes: Optional[str] = ""
     logout_time: Optional[str] = None  # HH:MM format
     time: Optional[str] = None  # Alternative field name for logout_time
+
+class BreakStartRequest(BaseModel):
+    break_start_time: Optional[str] = None  # HH:MM format
+    time: Optional[str] = None  # Alternative field name
+
+class BreakEndRequest(BaseModel):
+    break_end_time: Optional[str] = None  # HH:MM format
+    time: Optional[str] = None  # Alternative field name
 
 class LunchStartRequest(BaseModel):
     lunch_start_time: Optional[str] = None  # HH:MM format
@@ -625,6 +635,133 @@ async def lunch_end(lunch_data: LunchEndRequest, request: Request):
     
     return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
 
+# ============== BREAK MANAGEMENT (Multiple Breaks) ==============
+
+@hr_router.post("/attendance/break-start")
+async def break_start(break_data: BreakStartRequest, request: Request):
+    """Start a break - supports multiple breaks per day"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    existing = await db.attendance.find_one({
+        "user_id": user.user_id,
+        "date": {"$gte": today, "$lt": today + timedelta(days=1)}
+    })
+    
+    if not existing:
+        raise HTTPException(status_code=400, detail="Please clock in first")
+    
+    if existing.get("clock_out"):
+        raise HTTPException(status_code=400, detail="Already clocked out - cannot start break")
+    
+    # Get existing breaks array or initialize from legacy data
+    breaks = existing.get("breaks", [])
+    
+    # If no breaks array but has legacy lunch data that was completed, migrate it
+    if not breaks and existing.get("lunch_start") and existing.get("lunch_end") and existing.get("lunch_duration", 0) > 0:
+        legacy_break = {
+            "start": existing["lunch_start"],
+            "end": existing["lunch_end"],
+            "duration": existing.get("lunch_duration", 0)
+        }
+        breaks = [legacy_break]
+    
+    # Check if there's an ongoing break (last break has no end time)
+    if breaks and breaks[-1].get("end") is None:
+        raise HTTPException(status_code=400, detail="You have an ongoing break. Please end it first.")
+    
+    # Parse break start time
+    break_time_str = break_data.break_start_time or break_data.time
+    if break_time_str:
+        break_time = parse_time_string(break_time_str, today)
+    else:
+        break_time = datetime.now(timezone.utc)
+    
+    # Add new break to the list
+    new_break = {
+        "start": break_time,
+        "end": None,
+        "duration": 0
+    }
+    breaks.append(new_break)
+    
+    # Calculate current total break duration (excluding ongoing break)
+    total_break_duration = sum(b.get("duration", 0) for b in breaks if b.get("end") is not None)
+    
+    await db.attendance.update_one(
+        {"attendance_id": existing["attendance_id"]},
+        {"$set": {
+            "breaks": breaks,
+            "total_break_duration": total_break_duration,
+            "lunch_start": break_time,  # Keep for backward compatibility
+            "lunch_out": break_time
+        }}
+    )
+    
+    return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
+
+
+@hr_router.post("/attendance/break-end")
+@hr_router.put("/attendance/break-in")
+async def break_end(break_data: BreakEndRequest, request: Request):
+    """End current break - auto-calculates duration"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    existing = await db.attendance.find_one({
+        "user_id": user.user_id,
+        "date": {"$gte": today, "$lt": today + timedelta(days=1)}
+    })
+    
+    if not existing:
+        raise HTTPException(status_code=400, detail="Please clock in first")
+    
+    breaks = existing.get("breaks", [])
+    
+    # Check if there's an ongoing break
+    if not breaks or breaks[-1].get("end") is not None:
+        raise HTTPException(status_code=400, detail="No ongoing break to end")
+    
+    # Parse break end time
+    break_time_str = break_data.break_end_time or break_data.time
+    if break_time_str:
+        end_time = parse_time_string(break_time_str, today)
+    else:
+        end_time = datetime.now(timezone.utc)
+    
+    # Calculate this break's duration
+    break_start = breaks[-1]["start"]
+    if isinstance(break_start, str):
+        break_start = datetime.fromisoformat(break_start.replace('Z', '+00:00'))
+    if break_start.tzinfo is None:
+        break_start = break_start.replace(tzinfo=timezone.utc)
+    
+    break_duration = (end_time - break_start).total_seconds() / 60  # minutes
+    
+    # Update the last break
+    breaks[-1]["end"] = end_time
+    breaks[-1]["duration"] = round(break_duration, 0)
+    
+    # Calculate total break duration
+    total_break_duration = sum(b.get("duration", 0) for b in breaks)
+    
+    await db.attendance.update_one(
+        {"attendance_id": existing["attendance_id"]},
+        {"$set": {
+            "breaks": breaks,
+            "total_break_duration": total_break_duration,
+            "lunch_end": end_time,  # Keep for backward compatibility
+            "lunch_in": end_time,
+            "lunch_duration": total_break_duration  # Total of all breaks
+        }}
+    )
+    
+    return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
+
 @hr_router.post("/attendance/clock-out")
 @hr_router.put("/attendance/clock-out")
 async def clock_out(clock_data: ClockOutRequest, request: Request):
@@ -661,10 +798,11 @@ async def clock_out(clock_data: ClockOutRequest, request: Request):
     
     # Calculate total hours
     total_seconds = (now - clock_in_time).total_seconds()
-    lunch_duration_seconds = existing.get("lunch_duration", 0) * 60
+    # Use total_break_duration if available, otherwise fall back to lunch_duration
+    break_duration_seconds = existing.get("total_break_duration", existing.get("lunch_duration", 0)) * 60
     permission_hours_seconds = existing.get("permission_hours", 0) * 3600
     
-    work_seconds = total_seconds - lunch_duration_seconds - permission_hours_seconds
+    work_seconds = total_seconds - break_duration_seconds - permission_hours_seconds
     total_hours = work_seconds / 3600
     
     # Calculate extra hours (over standard 9 hours)

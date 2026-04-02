@@ -2742,6 +2742,13 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
   
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+  // Check if the selected month is in the past (read-only)
+  const currentDate = new Date();
+  const currentMonth = currentDate.getMonth() + 1;
+  const currentYear = currentDate.getFullYear();
+  const isPastMonth = (year < currentYear) || (year === currentYear && month < currentMonth);
+  const isCurrentMonth = year === currentYear && month === currentMonth;
+
   useEffect(() => {
     if (calendar) {
       setHolidays(calendar.holidays || []);
@@ -2752,6 +2759,7 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
   }, [calendar]);
 
   const handleAddHoliday = () => {
+    if (isPastMonth) return;
     if (newHoliday.date && newHoliday.name) {
       setHolidays([...holidays, newHoliday]);
       setNewHoliday({ date: '', name: '' });
@@ -2759,10 +2767,12 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
   };
 
   const handleRemoveHoliday = (index) => {
+    if (isPastMonth) return;
     setHolidays(holidays.filter((_, i) => i !== index));
   };
 
   const handleSave = () => {
+    if (isPastMonth) return;
     onUpdate({ 
       holidays, 
       working_days: workingDays,
@@ -2776,7 +2786,7 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
       {/* Month Selector */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <div>
               <Label className={textSecondary}>Month</Label>
               <select 
@@ -2804,6 +2814,15 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
             <Button onClick={onRefresh} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white mt-5">
               Load
             </Button>
+            {isPastMonth && (
+              <span className="text-yellow-500 text-sm mt-5 flex items-center gap-1">
+                <AlertCircle className="h-4 w-4" />
+                View Only (Past Month)
+              </span>
+            )}
+            {isCurrentMonth && (
+              <span className="text-green-500 text-sm mt-5">Current Month - Editable</span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -2821,8 +2840,9 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
                 <Input 
                   type="number"
                   value={workingDays}
-                  onChange={(e) => setWorkingDays(parseInt(e.target.value))}
-                  className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  onChange={(e) => !isPastMonth && setWorkingDays(parseInt(e.target.value))}
+                  disabled={isPastMonth}
+                  className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary} ${isPastMonth ? 'opacity-60 cursor-not-allowed' : ''}`}
                 />
               </div>
             </div>
@@ -2836,24 +2856,26 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* Add Holiday */}
-              <div className="flex gap-2">
-                <Input 
-                  type="date"
-                  value={newHoliday.date}
-                  onChange={(e) => setNewHoliday({...newHoliday, date: e.target.value})}
-                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                />
-                <Input 
-                  placeholder="Holiday name"
-                  value={newHoliday.name}
-                  onChange={(e) => setNewHoliday({...newHoliday, name: e.target.value})}
-                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                />
-                <Button onClick={handleAddHoliday} className="bg-[#10b981] hover:bg-[#059669] text-white">
-                  Add
-                </Button>
-              </div>
+              {/* Add Holiday - only show for current/future months */}
+              {!isPastMonth && (
+                <div className="flex gap-2">
+                  <Input 
+                    type="date"
+                    value={newHoliday.date}
+                    onChange={(e) => setNewHoliday({...newHoliday, date: e.target.value})}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                  <Input 
+                    placeholder="Holiday name"
+                    value={newHoliday.name}
+                    onChange={(e) => setNewHoliday({...newHoliday, name: e.target.value})}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                  <Button onClick={handleAddHoliday} className="bg-[#10b981] hover:bg-[#059669] text-white">
+                    Add
+                  </Button>
+                </div>
+              )}
               
               {/* Holiday List */}
               <div className="space-y-2 max-h-48 overflow-y-auto">
@@ -2863,9 +2885,11 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
                       <span className={textPrimary}>{h.name}</span>
                       <span className={`ml-2 text-sm ${textSecondary}`}>({h.date})</span>
                     </div>
-                    <Button variant="ghost" onClick={() => handleRemoveHoliday(idx)} className="text-red-400 hover:text-red-300">
-                      <XCircle className="h-4 w-4" />
-                    </Button>
+                    {!isPastMonth && (
+                      <Button variant="ghost" onClick={() => handleRemoveHoliday(idx)} className="text-red-400 hover:text-red-300">
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 ))}
                 {holidays.length === 0 && (
@@ -2894,11 +2918,11 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
                 min="0"
                 max="10"
                 value={monthlyCasualLeave}
-                onChange={(e) => setMonthlyCasualLeave(parseInt(e.target.value) || 0)}
-                className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                onChange={(e) => !isPastMonth && setMonthlyCasualLeave(parseInt(e.target.value) || 0)}
+                disabled={isPastMonth}
+                className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary} ${isPastMonth ? 'opacity-60 cursor-not-allowed' : ''}`}
                 data-testid="monthly-casual-leave-input"
               />
-              <p className={`text-xs ${textSecondary} mt-1`}>Default: 2 per month</p>
             </div>
             <div>
               <Label className={textSecondary}>Sick Leave (per month)</Label>
@@ -2907,22 +2931,24 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
                 min="0"
                 max="10"
                 value={monthlySickLeave}
-                onChange={(e) => setMonthlySickLeave(parseInt(e.target.value) || 0)}
-                className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                onChange={(e) => !isPastMonth && setMonthlySickLeave(parseInt(e.target.value) || 0)}
+                disabled={isPastMonth}
+                className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary} ${isPastMonth ? 'opacity-60 cursor-not-allowed' : ''}`}
                 data-testid="monthly-sick-leave-input"
               />
-              <p className={`text-xs ${textSecondary} mt-1`}>Default: 2 per month</p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={handleSave} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-8">
-          Save Calendar
-        </Button>
-      </div>
+      {/* Save Button - only show for current/future months */}
+      {!isPastMonth && (
+        <div className="flex justify-end">
+          <Button onClick={handleSave} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-8">
+            Save Calendar
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

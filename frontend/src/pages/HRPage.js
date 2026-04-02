@@ -426,8 +426,13 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const isClockedIn = attendance?.clock_in && !attendance?.clock_out;
   const isClockedOut = attendance?.clock_out;
   const notClockedIn = !attendance?.clock_in;
-  const isOnLunch = attendance?.lunch_start && !attendance?.lunch_end;
-  const lunchCompleted = attendance?.lunch_end;
+  // Multiple breaks support
+  const breaks = attendance?.breaks || [];
+  const isOnBreak = breaks.length > 0 && breaks[breaks.length - 1]?.end === null;
+  // Legacy support
+  const isOnLunch = isOnBreak || (attendance?.lunch_start && !attendance?.lunch_end);
+  const lunchCompleted = false; // Allow multiple breaks, so never "completed"
+  const totalBreakMinutes = attendance?.total_break_duration || attendance?.lunch_duration || 0;
   
   useEffect(() => {
     if (todayAttendance?.settings) {
@@ -481,29 +486,29 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
 
   const handleStartLunch = async () => {
     try {
-      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/lunch-start`, 
-        { lunch_start_time: lunchStartTime || null }, 
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/break-start`, 
+        { break_start_time: lunchStartTime || null }, 
         { headers }
       );
-      toast.success('Lunch break started');
+      toast.success('Break started');
       setShowLunchModal(false);
       window.location.reload();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to start lunch');
+      toast.error(error.response?.data?.detail || 'Failed to start break');
     }
   };
 
   const handleEndLunch = async () => {
     try {
-      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/lunch-end`, 
-        { lunch_end_time: lunchEndTime || null }, 
+      await axios.post(`${process.env.REACT_APP_BACKEND_URL}/api/hr/attendance/break-end`, 
+        { break_end_time: lunchEndTime || null }, 
         { headers }
       );
-      toast.success('Lunch break ended');
+      toast.success('Break ended');
       setShowLunchModal(false);
       window.location.reload();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to end lunch');
+      toast.error(error.response?.data?.detail || 'Failed to end break');
     }
   };
 
@@ -708,23 +713,27 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
             </div>
           )}
 
-          {/* Lunch & Clock Out Buttons */}
+          {/* Break & Clock Out Buttons */}
           {isClockedIn && !isClockedOut && (
             <div className="flex flex-col sm:flex-row gap-4">
-              {!isOnLunch && !lunchCompleted && (
+              {/* Start Break button - always visible when not on break */}
+              {!isOnBreak && (
                 <Button
                   onClick={() => { setLunchStartTime(getCurrentTimeString()); setShowLunchModal(true); }}
                   className="flex-1 bg-[#f59e0b] hover:bg-[#d97706] text-white py-4"
+                  data-testid="start-break-btn"
                 >
-                  🍽️ Start Lunch Break
+                  ☕ Start Break {totalBreakMinutes > 0 && `(${Math.round(totalBreakMinutes)} min today)`}
                 </Button>
               )}
-              {isOnLunch && (
+              {/* End Break button - visible when on break */}
+              {isOnBreak && (
                 <Button
                   onClick={() => { setLunchEndTime(getCurrentTimeString()); handleEndLunch(); }}
-                  className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white py-4"
+                  className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white py-4 animate-pulse"
+                  data-testid="end-break-btn"
                 >
-                  ✓ End Lunch Break
+                  ✓ End Break (Resume Work)
                 </Button>
               )}
               <Button
@@ -845,16 +854,22 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
         </div>
       )}
 
-      {/* Lunch Start Modal */}
+      {/* Break Start Modal */}
       {showLunchModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
             <CardHeader>
-              <CardTitle className={`${textPrimary}`}>🍽️ Lunch Break</CardTitle>
+              <CardTitle className={`${textPrimary}`}>☕ Start Break</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {totalBreakMinutes > 0 && (
+                <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                  <span className={textSecondary}>Previous breaks today: </span>
+                  <span className={`font-bold ${textPrimary}`}>{Math.round(totalBreakMinutes)} min</span>
+                </div>
+              )}
               <div>
-                <Label className={textSecondary}>Lunch Start Time</Label>
+                <Label className={textSecondary}>Break Start Time</Label>
                 <Input
                   type="time"
                   value={lunchStartTime}
@@ -867,7 +882,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                   Cancel
                 </Button>
                 <Button onClick={handleStartLunch} className="flex-1 bg-[#f59e0b] hover:bg-[#d97706] text-white">
-                  Start Lunch
+                  Start Break
                 </Button>
               </div>
             </CardContent>
