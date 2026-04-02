@@ -30,11 +30,11 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
-### Tasks Module (NEW - April 2026)
+### Tasks Module (NEW - April 2026, Updated with BDE-style Features)
 **Hierarchical Structure:**
 - **Departments** (SEO, Meta, Social Media, Design, ERP) - Admins can create more
 - **Projects** under each department with filters and grid/list views
-- **Tasks** inside projects with BDE-style task board features
+- **Tasks** inside projects with FULL BDE-style task board features
 
 **Department Features:**
 - Default departments created on first access
@@ -51,20 +51,39 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Task progress bar (completed/total)
 - Grid and List view with search and status filters
 
-**Task Features (like BDE Task Board):**
-- Task name, description
-- Priority: High, Medium, Low
-- Type: General, Meeting, Follow Up, Review
-- Status: Pending, In Progress, Completed, On Hold
-- Assignee, Due Date/Time, Work Link
-- Timer tracking with start/stop
-- Time spent accumulation
-- Status filters (All, Pending, In Progress, Completed, On Hold)
-- Click checkbox to toggle completed
+**Task Features (FULL BDE Task Board Style) - UPDATED:**
+- **Summary Stats Cards**: Total Tasks, Pending, In Progress, Completed - with icons
+- **Quick Filter Tabs**: All | My Tasks | Pending | In Progress | Completed
+- **Advanced Filters Panel** (collapsible):
+  - Date: All Time, Today, Single Date, Date Range
+  - Assigned To: All, Myself, or specific user
+  - Assigned By: All or specific user
+  - Type: All Types, General, Meeting, Follow Up, Proposal, Call
+  - Status: All Status, Pending, In Progress, Completed, On Hold
+  - Reset Filters button
+- **Table View** with columns:
+  - TASK: Name, description, type badge (general, meeting, etc.)
+  - STATUS: Badge with color
+  - CREATED/ASSIGNED: Shows "Created by you" or "Assigned to you" badges
+  - DUE DATE: Date + time + recurrence indicator
+  - LINK: Work link icon
+  - TIME: Accumulated time with timer icon
+  - TIMER: Start/Resume/Pause/Finish buttons
+  - ACTIONS: View, Edit, Delete
+- **Timer Functionality**:
+  - Start: Begins time tracking, changes status to in_progress
+  - Pause: Pauses timer, accumulates time
+  - Resume: Continues from paused state
+  - Finish: Completes tracking, shows "Done" badge
+- **Recurrence Support**:
+  - None (One-time), Daily, Weekly, Monthly, Yearly, Weekdays (Mon-Fri), Custom
+  - Custom: Repeat every X days/weeks/months/years, specific days (Mon-Sat)
+  - Recurrence indicator in Due Date column (e.g., "Every Mon, Tue, Wed, Thu, Fri")
+- Task Detail Modal: Shows all task info including time spent and recurrence
 
 **Documents:**
 - Add Google Sheets/Docs links with name
-- View embedded in split pane
+- View embedded in modal viewer
 - Remove document
 
 **API Endpoints:**
@@ -73,8 +92,7 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - GET/PUT/DELETE /api/departments/projects/{project_id} - Project CRUD
 - GET/POST/DELETE /api/departments/projects/{project_id}/tasks - Task CRUD
 - GET/POST/DELETE /api/departments/projects/{project_id}/documents - Document CRUD
-- POST /api/departments/tasks/{task_id}/timer/start - Start timer
-- POST /api/departments/tasks/{task_id}/timer/stop - Stop timer
+- **POST /api/departments/projects/{project_id}/tasks/{task_id}/time-tracking** - Timer actions (start/pause/resume/finish)
 - GET /api/departments/tasks/{task_id}/timer - Get timer status
 
 ---
