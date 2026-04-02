@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase,
-  Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays
+  Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
+  Repeat
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -75,9 +76,22 @@ export default function BDETasksPage() {
     type: 'general',
     assigned_to: '',
     due_date: '',
+    due_time: '',
+    all_day: false,
+    recurrence: 'none', // none, daily, weekly, monthly, yearly, weekdays, custom
+    custom_recurrence: {
+      repeat_every: 1,
+      repeat_unit: 'week', // day, week, month, year
+      repeat_on_days: [], // [0,1,2,3,4,5,6] for Sun-Sat
+      ends: 'never', // never, on_date, after_occurrences
+      end_date: '',
+      occurrences: 13
+    },
     status: 'pending',
     work_link: ''
   });
+  
+  const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
 
   // Load tasks
   const loadTasks = useCallback(async () => {
@@ -266,9 +280,21 @@ export default function BDETasksPage() {
       type: 'general',
       assigned_to: '',
       due_date: '',
+      due_time: '',
+      all_day: false,
+      recurrence: 'none',
+      custom_recurrence: {
+        repeat_every: 1,
+        repeat_unit: 'week',
+        repeat_on_days: [],
+        ends: 'never',
+        end_date: '',
+        occurrences: 13
+      },
       status: 'pending',
       work_link: ''
     });
+    setShowCustomRecurrence(false);
   };
 
   const openEditModal = (task) => {
@@ -279,6 +305,17 @@ export default function BDETasksPage() {
       type: task.type || 'general',
       assigned_to: task.assigned_to || '',
       due_date: task.due_date || '',
+      due_time: task.due_time || '',
+      all_day: task.all_day || false,
+      recurrence: task.recurrence || 'none',
+      custom_recurrence: task.custom_recurrence || {
+        repeat_every: 1,
+        repeat_unit: 'week',
+        repeat_on_days: [],
+        ends: 'never',
+        end_date: '',
+        occurrences: 13
+      },
       status: task.status,
       work_link: task.work_link || ''
     });
@@ -780,15 +817,98 @@ export default function BDETasksPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label className={textPrimary}>Due Date</Label>
-                    <Input
-                      type="date"
-                      value={formData.due_date}
-                      onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
-                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                    />
+                    <Label className={textPrimary}>Status</Label>
+                    <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="on_hold">On Hold</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
+
+                {/* Google Calendar Style Date & Time */}
+                <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary} space-y-4`}>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-[#6366f1]" />
+                    <span className={`text-sm font-medium ${textPrimary}`}>Date & Time</span>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Date Picker */}
+                    <div className="flex-1 min-w-[140px]">
+                      <Input
+                        type="date"
+                        value={formData.due_date}
+                        onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                        className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    
+                    {/* Time Picker - Hidden if All Day */}
+                    {!formData.all_day && (
+                      <div className="w-[110px]">
+                        <Input
+                          type="time"
+                          value={formData.due_time}
+                          onChange={(e) => setFormData(prev => ({ ...prev, due_time: e.target.value }))}
+                          className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* All Day Checkbox */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="all_day"
+                      checked={formData.all_day}
+                      onChange={(e) => setFormData(prev => ({ ...prev, all_day: e.target.checked, due_time: '' }))}
+                      className="h-4 w-4 rounded border-gray-300 text-[#6366f1] focus:ring-[#6366f1]"
+                    />
+                    <Label htmlFor="all_day" className={`text-sm ${textSecondary} cursor-pointer`}>All day</Label>
+                  </div>
+
+                  {/* Recurrence Dropdown */}
+                  <div>
+                    <Select 
+                      value={formData.recurrence} 
+                      onValueChange={(v) => {
+                        if (v === 'custom') {
+                          setShowCustomRecurrence(true);
+                        } else {
+                          setFormData(prev => ({ ...prev, recurrence: v }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor}`}>
+                        <SelectValue placeholder="Does not repeat" />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="none">Does not repeat</SelectItem>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">
+                          Weekly on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { weekday: 'long' }) : 'selected day'}
+                        </SelectItem>
+                        <SelectItem value="monthly">
+                          Monthly on the {formData.due_date ? new Date(formData.due_date).getDate() : 'selected date'}
+                        </SelectItem>
+                        <SelectItem value="yearly">
+                          Annually on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'selected date'}
+                        </SelectItem>
+                        <SelectItem value="weekdays">Every weekday (Monday to Friday)</SelectItem>
+                        <SelectItem value="custom">Custom...</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div>
                   <Label className={textPrimary}>Work Link (File/Project URL)</Label>
                   <Input
@@ -804,6 +924,174 @@ export default function BDETasksPage() {
                   </Button>
                   <Button onClick={editingTask ? handleUpdateTask : handleCreateTask} className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]">
                     {editingTask ? 'Update Task' : 'Create Task'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Custom Recurrence Modal */}
+        {showCustomRecurrence && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className={textPrimary}>Custom recurrence</CardTitle>
+                  <button onClick={() => setShowCustomRecurrence(false)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Repeat Every */}
+                <div className="flex items-center gap-3">
+                  <span className={textSecondary}>Repeat every</span>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={formData.custom_recurrence.repeat_every}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      custom_recurrence: { ...prev.custom_recurrence, repeat_every: parseInt(e.target.value) || 1 }
+                    }))}
+                    className={`w-16 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                  <Select 
+                    value={formData.custom_recurrence.repeat_unit}
+                    onValueChange={(v) => setFormData(prev => ({
+                      ...prev,
+                      custom_recurrence: { ...prev.custom_recurrence, repeat_unit: v }
+                    }))}
+                  >
+                    <SelectTrigger className={`w-24 ${bgSecondary} border ${borderColor}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={bgCard}>
+                      <SelectItem value="day">day</SelectItem>
+                      <SelectItem value="week">week</SelectItem>
+                      <SelectItem value="month">month</SelectItem>
+                      <SelectItem value="year">year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Repeat on (for weekly) */}
+                {formData.custom_recurrence.repeat_unit === 'week' && (
+                  <div>
+                    <span className={`text-sm ${textSecondary}`}>Repeat on</span>
+                    <div className="flex gap-2 mt-2">
+                      {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            const days = formData.custom_recurrence.repeat_on_days.includes(idx)
+                              ? formData.custom_recurrence.repeat_on_days.filter(d => d !== idx)
+                              : [...formData.custom_recurrence.repeat_on_days, idx];
+                            setFormData(prev => ({
+                              ...prev,
+                              custom_recurrence: { ...prev.custom_recurrence, repeat_on_days: days }
+                            }));
+                          }}
+                          className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${
+                            formData.custom_recurrence.repeat_on_days.includes(idx)
+                              ? 'bg-[#6366f1] text-white'
+                              : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                          }`}
+                        >
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Ends */}
+                <div className="space-y-3">
+                  <span className={`text-sm ${textSecondary}`}>Ends</span>
+                  
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="ends"
+                      checked={formData.custom_recurrence.ends === 'never'}
+                      onChange={() => setFormData(prev => ({
+                        ...prev,
+                        custom_recurrence: { ...prev.custom_recurrence, ends: 'never' }
+                      }))}
+                      className="text-[#6366f1]"
+                    />
+                    <span className={textPrimary}>Never</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="ends"
+                      checked={formData.custom_recurrence.ends === 'on_date'}
+                      onChange={() => setFormData(prev => ({
+                        ...prev,
+                        custom_recurrence: { ...prev.custom_recurrence, ends: 'on_date' }
+                      }))}
+                      className="text-[#6366f1]"
+                    />
+                    <span className={textPrimary}>On</span>
+                    <Input
+                      type="date"
+                      value={formData.custom_recurrence.end_date}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        custom_recurrence: { ...prev.custom_recurrence, end_date: e.target.value, ends: 'on_date' }
+                      }))}
+                      className={`w-40 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      disabled={formData.custom_recurrence.ends !== 'on_date'}
+                    />
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="radio"
+                      name="ends"
+                      checked={formData.custom_recurrence.ends === 'after_occurrences'}
+                      onChange={() => setFormData(prev => ({
+                        ...prev,
+                        custom_recurrence: { ...prev.custom_recurrence, ends: 'after_occurrences' }
+                      }))}
+                      className="text-[#6366f1]"
+                    />
+                    <span className={textPrimary}>After</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={formData.custom_recurrence.occurrences}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        custom_recurrence: { ...prev.custom_recurrence, occurrences: parseInt(e.target.value) || 1, ends: 'after_occurrences' }
+                      }))}
+                      className={`w-16 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      disabled={formData.custom_recurrence.ends !== 'after_occurrences'}
+                    />
+                    <span className={textSecondary}>occurrences</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowCustomRecurrence(false)}
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, recurrence: 'custom' }));
+                      setShowCustomRecurrence(false);
+                    }}
+                    className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]"
+                  >
+                    Done
                   </Button>
                 </div>
               </CardContent>
