@@ -946,35 +946,59 @@ export default function BDETasksPage() {
 
                   {/* Recurrence Dropdown */}
                   <div>
-                    <Select 
-                      value={formData.recurrence} 
-                      onValueChange={(v) => {
-                        if (v === 'custom') {
-                          setShowCustomRecurrence(true);
-                        } else {
-                          setFormData(prev => ({ ...prev, recurrence: v }));
-                        }
-                      }}
-                    >
-                      <SelectTrigger className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor}`}>
-                        <SelectValue placeholder="Does not repeat" />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="none">Does not repeat</SelectItem>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">
-                          Weekly on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { weekday: 'long' }) : 'selected day'}
-                        </SelectItem>
-                        <SelectItem value="monthly">
-                          Monthly on the {formData.due_date ? new Date(formData.due_date).getDate() : 'selected date'}
-                        </SelectItem>
-                        <SelectItem value="yearly">
-                          Annually on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'selected date'}
-                        </SelectItem>
-                        <SelectItem value="weekdays">Every weekday (Monday to Friday)</SelectItem>
-                        <SelectItem value="custom">Custom...</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2">
+                      <Select 
+                        value={formData.recurrence} 
+                        onValueChange={(v) => {
+                          if (v === 'custom' || v === 'edit_custom') {
+                            setShowCustomRecurrence(true);
+                          } else {
+                            setFormData(prev => ({ ...prev, recurrence: v }));
+                          }
+                        }}
+                      >
+                        <SelectTrigger className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor}`}>
+                          <SelectValue placeholder="Does not repeat">
+                            {formData.recurrence === 'custom' ? getRecurrenceLabel(formData) : undefined}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className={bgCard}>
+                          <SelectItem value="none">Does not repeat</SelectItem>
+                          <SelectItem value="daily">Daily</SelectItem>
+                          <SelectItem value="weekly">
+                            Weekly on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { weekday: 'long' }) : 'selected day'}
+                          </SelectItem>
+                          <SelectItem value="monthly">
+                            Monthly on the {formData.due_date ? new Date(formData.due_date).getDate() : 'selected date'}
+                          </SelectItem>
+                          <SelectItem value="yearly">
+                            Annually on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'selected date'}
+                          </SelectItem>
+                          <SelectItem value="weekdays">Every weekday (Monday to Friday)</SelectItem>
+                          <SelectItem value="custom">Custom...</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      {/* Edit Custom button when custom is selected */}
+                      {formData.recurrence === 'custom' && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowCustomRecurrence(true)}
+                          className={`${borderColor} text-[#6366f1]`}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {/* Show current custom recurrence summary */}
+                    {formData.recurrence === 'custom' && formData.custom_recurrence && (
+                      <p className="text-xs text-[#6366f1] mt-1">
+                        {getRecurrenceLabel(formData)}
+                      </p>
+                    )}
                   </div>
                 </div>
 
