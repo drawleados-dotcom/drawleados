@@ -57,11 +57,17 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 **Payslip Status Flow:** Draft → Operations Review → CEO Review → Approved → Generated
 
 **Payslip Details:**
-- Attendance Summary: Working Days, Present, Casual/Sick Leave, Absent (LOP), Holidays
+- Attendance Summary: Working Days, Present, Casual/Sick Leave, Absent (LOP), Holidays, **Extra Hours**, **Less Hours**
 - Earnings: Base Salary, Per Day, Days Paid, Earned Salary
-- Deductions: PF (12%), Professional Tax, LOP Deduction
+- Deductions: PF (configurable %), Professional Tax (configurable), LOP Deduction
 - Net Salary with HR Remarks
 - Reviews section shows Operations and CEO comments
+
+**Payroll Settings (HR Admin Configurable):**
+- **PF Configuration:** Enable/disable toggle, configurable percentage (default 12%)
+- **Professional Tax:** Enable/disable toggle, amount (default ₹200), threshold (default ₹15,000)
+- **Working Hours:** Standard hours per day (default 8.0) - used for Extra/Less hours calculation
+- Settings affect all new payslips created after change
 
 **Attendance-Based Payroll Calculation:**
 - **Attendance Summary:**
@@ -71,17 +77,29 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
   - Casual Leave (approved)
   - Sick Leave (approved)
   - Absent/LOP days (unpaid absences)
+  - **Extra Hours** (total hours worked - expected hours, if positive)
+  - **Less Hours** (expected hours - total hours worked, if positive)
 - **Salary Breakdown:**
   - Base Salary
   - Per Day Salary (Base / Working Days)
   - Days Paid (Present + Paid Leaves)
   - Earned Salary (Per Day × Days Paid)
-- **Deductions:**
-  - PF (12% of base)
-  - Professional Tax (₹200 if salary > ₹15K)
+- **Deductions (Configurable):**
+  - PF (configurable % of base, can be disabled)
+  - Professional Tax (configurable amount if salary > threshold, can be disabled)
   - LOP Deduction (Per Day × Absent Days)
   - Total Deductions
 - **Net Salary:** Earned Salary - Deductions
+
+**PDF Generation:**
+- Colorful single-page PDF with company branding
+- Includes: Company name/address, Employee details, Pay period
+- Attendance summary table with all columns
+- Earnings and Deductions side-by-side
+- Net Salary highlighted with border
+- Operations and CEO reviews
+- HR Remarks
+- Computer-generated footer
 
 **API Endpoints:**
 - GET `/api/payroll/hike-reasons` - List of hike reason types
@@ -100,6 +118,9 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - GET `/api/payroll/my-payslips` - Employee gets own payslips
 - GET `/api/payroll/company-settings` - Get company details for PDF
 - PUT `/api/payroll/company-settings` - Update company details (super admin)
+- **GET `/api/payroll/settings`** - Get payroll calculation settings
+- **PUT `/api/payroll/settings`** - Update payroll settings (HR Admin)
+- **GET `/api/payroll/payslip/{id}/pdf`** - Download payslip PDF
 
 ### Calendar Module (DONE - April 2026)
 **Full Calendar Page** accessible to ALL users from sidebar:
