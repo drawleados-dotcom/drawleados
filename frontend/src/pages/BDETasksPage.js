@@ -126,6 +126,11 @@ export default function BDETasksPage() {
       toast.error('Task name is required');
       return;
     }
+    // Require due_date when recurrence is set
+    if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
+      toast.error('Start date is required for recurring tasks');
+      return;
+    }
     try {
       await axios.post(`${API}/api/bde/tasks`, formData, { headers });
       toast.success('Task created successfully');
@@ -141,6 +146,11 @@ export default function BDETasksPage() {
   const handleUpdateTask = async () => {
     if (!formData.task_name.trim()) {
       toast.error('Task name is required');
+      return;
+    }
+    // Require due_date when recurrence is set
+    if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
+      toast.error('Start date is required for recurring tasks');
       return;
     }
     try {
@@ -367,6 +377,78 @@ export default function BDETasksPage() {
   };
 
   // Filter tasks with advanced filters
+  // Helper function to check if a recurring task occurs on a specific date
+  const taskOccursOnDate = (task, checkDate) => {
+    const recurrence = task.recurrence || 'none';
+    if (recurrence === 'none' || !recurrence) {
+      return task.due_date === checkDate;
+    }
+    
+    const startDateStr = task.due_date;
+    if (!startDateStr) return false;
+    
+    try {
+      const startDate = new Date(startDateStr);
+      const targetDate = new Date(checkDate);
+      
+      // Task hasn't started yet
+      if (targetDate < startDate) return false;
+      
+      // Check end conditions for custom recurrence
+      const customRec = task.custom_recurrence || {};
+      const ends = customRec.ends || 'never';
+      
+      if (ends === 'on_date' && customRec.end_date) {
+        const endDate = new Date(customRec.end_date);
+        if (targetDate > endDate) return false;
+      }
+      
+      const targetDayOfWeek = targetDate.getDay(); // 0=Sun, 6=Sat
+      
+      if (recurrence === 'daily') {
+        return true;
+      } else if (recurrence === 'weekly') {
+        return startDate.getDay() === targetDate.getDay();
+      } else if (recurrence === 'monthly') {
+        return startDate.getDate() === targetDate.getDate();
+      } else if (recurrence === 'yearly') {
+        return startDate.getMonth() === targetDate.getMonth() && startDate.getDate() === targetDate.getDate();
+      } else if (recurrence === 'weekdays') {
+        return targetDayOfWeek >= 1 && targetDayOfWeek <= 5; // Mon-Fri
+      } else if (recurrence === 'custom') {
+        const repeatUnit = customRec.repeat_unit || 'week';
+        const repeatEvery = customRec.repeat_every || 1;
+        const repeatOnDays = customRec.repeat_on_days || [];
+        
+        if (repeatUnit === 'day') {
+          const daysDiff = Math.floor((targetDate - startDate) / (1000 * 60 * 60 * 24));
+          return daysDiff >= 0 && daysDiff % repeatEvery === 0;
+        } else if (repeatUnit === 'week') {
+          // Check if day of week matches
+          if (repeatOnDays.length > 0) {
+            if (!repeatOnDays.includes(targetDayOfWeek)) return false;
+          }
+          // Check week interval
+          if (repeatEvery > 1) {
+            const weeksDiff = Math.floor((targetDate - startDate) / (1000 * 60 * 60 * 24 * 7));
+            return weeksDiff % repeatEvery === 0;
+          }
+          return true;
+        } else if (repeatUnit === 'month') {
+          const monthsDiff = (targetDate.getFullYear() - startDate.getFullYear()) * 12 + (targetDate.getMonth() - startDate.getMonth());
+          return monthsDiff >= 0 && monthsDiff % repeatEvery === 0 && startDate.getDate() === targetDate.getDate();
+        } else if (repeatUnit === 'year') {
+          const yearsDiff = targetDate.getFullYear() - startDate.getFullYear();
+          return yearsDiff >= 0 && yearsDiff % repeatEvery === 0 && startDate.getMonth() === targetDate.getMonth() && startDate.getDate() === targetDate.getDate();
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      return false;
+    }
+  };
+
   const filteredTasks = tasks.filter(task => {
     // Quick filter (tabs)
     if (filter === 'my' && !(task.created_by === user?.user_id || task.assigned_to === user?.user_id)) return false;
@@ -375,11 +457,17 @@ export default function BDETasksPage() {
     // Date filter
     if (filters.dateFilter === 'today') {
       const today = getTodayString();
-      const taskDate = task.due_date || task.created_at?.split('T')[0];
-      if (taskDate !== today) return false;
+      // Check both direct due_date match and recurring instances
+      if (!taskOccursOnDate(task, today)) {
+        const taskDate = task.due_date || task.created_at?.split('T')[0];
+        if (taskDate !== today) return false;
+      }
     } else if (filters.dateFilter === 'single' && filters.singleDate) {
-      const taskDate = task.due_date || task.created_at?.split('T')[0];
-      if (taskDate !== filters.singleDate) return false;
+      // Check both direct due_date match and recurring instances
+      if (!taskOccursOnDate(task, filters.singleDate)) {
+        const taskDate = task.due_date || task.created_at?.split('T')[0];
+        if (taskDate !== filters.singleDate) return false;
+      }
     } else if (filters.dateFilter === 'range' && (filters.dateFrom || filters.dateTo)) {
       const taskDate = task.due_date || task.created_at?.split('T')[0];
       if (filters.dateFrom && taskDate < filters.dateFrom) return false;
