@@ -1,14 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
+import { Switch } from '../ui/switch';
 import { 
   Users, Search, Plus, Eye, Trash2, CreditCard, 
   Send, CheckCircle, Clock, FileText, Download,
-  ChevronRight, User, Calendar
+  ChevronRight, User, Calendar, Settings, Timer
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -58,6 +59,69 @@ export default function PayrollManagementTab({
   const [reviewPayslip, setReviewPayslip] = useState(null);
   const [reviewText, setReviewText] = useState('');
   const [reviewType, setReviewType] = useState(''); // operations | ceo
+  
+  // Payroll Settings state
+  const [payrollSettings, setPayrollSettings] = useState({
+    pf_enabled: true,
+    pf_percentage: 12.0,
+    professional_tax_enabled: true,
+    professional_tax_amount: 200.0,
+    professional_tax_threshold: 15000.0,
+    standard_hours_per_day: 8.0
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+
+  const token = localStorage.getItem('session_token');
+  const headers = { Authorization: `Bearer ${token}` };
+
+  // Load payroll settings
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await axios.get(`${API}/api/payroll/settings`, { headers });
+        setPayrollSettings(res.data);
+      } catch (error) {
+        console.error('Error loading payroll settings:', error);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // Save payroll settings
+  const handleSaveSettings = async () => {
+    setSettingsLoading(true);
+    try {
+      await axios.put(`${API}/api/payroll/settings`, payrollSettings, { headers });
+      toast.success('Payroll settings saved!');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save settings');
+    }
+    setSettingsLoading(false);
+  };
+
+  // Download PDF
+  const handleDownloadPDF = async (payslip) => {
+    try {
+      const response = await axios.get(
+        `${API}/api/payroll/payslip/${payslip.payslip_id}/pdf`,
+        { headers, responseType: 'blob' }
+      );
+      
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payslip_${payslip.employee_name.replace(' ', '_')}_${months[payslip.month - 1]}_${payslip.year}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('PDF downloaded!');
+    } catch (error) {
+      toast.error('Failed to download PDF');
+      console.error(error);
+    }
+  };
   
   // Filter employees by search
   const filteredEmployees = employees.filter(emp => 
@@ -154,15 +218,10 @@ export default function PayrollManagementTab({
     setReviewPayslip(null);
   };
 
-  // Download PDF placeholder
-  const handleDownloadPDF = (payslip) => {
-    toast.info('PDF generation coming soon!');
-    // In a real implementation, this would generate and download a PDF
-  };
-
   const subTabs = [
     { id: 'employees', label: 'All Employees' },
     { id: 'employee-detail', label: selectedEmployee ? `${selectedEmployee.name}` : 'Employee Detail', disabled: !selectedEmployee },
+    { id: 'settings', label: 'Payroll Settings' },
   ];
 
   return (
@@ -396,6 +455,131 @@ export default function PayrollManagementTab({
         </div>
       )}
 
+      {/* Payroll Settings Tab */}
+      {activeSubTab === 'settings' && (
+        <div className="space-y-6">
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+                <Settings className="h-5 w-5" />
+                Payroll Configuration
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* PF Settings */}
+              <div className={`p-4 rounded-lg border ${borderColor}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className={`font-medium ${textPrimary}`}>Provident Fund (PF)</h4>
+                    <p className={`text-sm ${textSecondary}`}>Employee contribution deducted from salary</p>
+                  </div>
+                  <Switch
+                    checked={payrollSettings.pf_enabled}
+                    onCheckedChange={(checked) => setPayrollSettings({...payrollSettings, pf_enabled: checked})}
+                  />
+                </div>
+                {payrollSettings.pf_enabled && (
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <Label className={textPrimary}>PF Percentage (%)</Label>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="50"
+                        value={payrollSettings.pf_percentage}
+                        onChange={(e) => setPayrollSettings({...payrollSettings, pf_percentage: parseFloat(e.target.value) || 0})}
+                        className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                      />
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary}`}>Example (₹25,000 base)</p>
+                      <p className="text-lg font-bold text-red-400">-₹{((25000 * payrollSettings.pf_percentage) / 100).toLocaleString()}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Professional Tax Settings */}
+              <div className={`p-4 rounded-lg border ${borderColor}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className={`font-medium ${textPrimary}`}>Professional Tax</h4>
+                    <p className={`text-sm ${textSecondary}`}>Fixed amount deducted if salary exceeds threshold</p>
+                  </div>
+                  <Switch
+                    checked={payrollSettings.professional_tax_enabled}
+                    onCheckedChange={(checked) => setPayrollSettings({...payrollSettings, professional_tax_enabled: checked})}
+                  />
+                </div>
+                {payrollSettings.professional_tax_enabled && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className={textPrimary}>Tax Amount (₹)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={payrollSettings.professional_tax_amount}
+                        onChange={(e) => setPayrollSettings({...payrollSettings, professional_tax_amount: parseFloat(e.target.value) || 0})}
+                        className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Salary Threshold (₹)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={payrollSettings.professional_tax_threshold}
+                        onChange={(e) => setPayrollSettings({...payrollSettings, professional_tax_threshold: parseFloat(e.target.value) || 0})}
+                        className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                      />
+                      <p className={`text-xs ${textSecondary} mt-1`}>Tax applies only if base salary exceeds this amount</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Working Hours Settings */}
+              <div className={`p-4 rounded-lg border ${borderColor}`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Timer className="h-5 w-5 text-[#6366f1]" />
+                  <div>
+                    <h4 className={`font-medium ${textPrimary}`}>Working Hours</h4>
+                    <p className={`text-sm ${textSecondary}`}>Used to calculate extra/less hours</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Label className={textPrimary}>Standard Hours per Day</Label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      min="1"
+                      max="24"
+                      value={payrollSettings.standard_hours_per_day}
+                      onChange={(e) => setPayrollSettings({...payrollSettings, standard_hours_per_day: parseFloat(e.target.value) || 8})}
+                      className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                    />
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary}`}>22 working days</p>
+                    <p className={`font-medium ${textPrimary}`}>{payrollSettings.standard_hours_per_day * 22} hrs/month</p>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleSaveSettings}
+                disabled={settingsLoading}
+                className="bg-[#10b981] hover:bg-[#059669] text-white w-full"
+              >
+                {settingsLoading ? 'Saving...' : 'Save Settings'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Review Modal */}
       <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
         <DialogContent className={`${bgCard} border ${borderColor} max-w-md`}>
@@ -592,7 +776,7 @@ function SalaryPayslipView({
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Attendance Summary */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
             <div className={`p-3 rounded-lg ${bgSecondary} text-center`}>
               <p className={`text-xs ${textSecondary}`}>Working Days</p>
               <p className={`text-lg font-bold ${textPrimary}`}>{payslip.attendance?.total_working_days || 0}</p>
@@ -616,6 +800,14 @@ function SalaryPayslipView({
             <div className={`p-3 rounded-lg ${bgSecondary} text-center`}>
               <p className={`text-xs ${textSecondary}`}>Holidays</p>
               <p className={`text-lg font-bold ${textPrimary}`}>{payslip.attendance?.holidays || 0}</p>
+            </div>
+            <div className={`p-3 rounded-lg ${bgSecondary} text-center`}>
+              <p className={`text-xs ${textSecondary}`}>Extra Hours</p>
+              <p className="text-lg font-bold text-[#10b981]">{payslip.attendance?.extra_hours?.toFixed(1) || 0}</p>
+            </div>
+            <div className={`p-3 rounded-lg ${bgSecondary} text-center`}>
+              <p className={`text-xs ${textSecondary}`}>Less Hours</p>
+              <p className="text-lg font-bold text-[#f59e0b]">{payslip.attendance?.less_hours?.toFixed(1) || 0}</p>
             </div>
           </div>
 
@@ -646,18 +838,24 @@ function SalaryPayslipView({
             <div className={`p-4 rounded-lg border ${borderColor}`}>
               <h4 className={`font-medium ${textPrimary} mb-3`}>Deductions</h4>
               <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className={textSecondary}>PF (12%)</span>
-                  <span className="text-red-400">-₹{payslip.deductions?.pf?.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={textSecondary}>Professional Tax</span>
-                  <span className="text-red-400">-₹{payslip.deductions?.professional_tax?.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={textSecondary}>LOP Deduction</span>
-                  <span className="text-red-400">-₹{payslip.deductions?.lop_deduction?.toLocaleString()}</span>
-                </div>
+                {payslip.deductions?.pf_enabled !== false && payslip.deductions?.pf > 0 && (
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>PF ({payslip.deductions?.pf_percentage || 12}%)</span>
+                    <span className="text-red-400">-₹{payslip.deductions?.pf?.toLocaleString()}</span>
+                  </div>
+                )}
+                {payslip.deductions?.professional_tax_enabled !== false && payslip.deductions?.professional_tax > 0 && (
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Professional Tax</span>
+                    <span className="text-red-400">-₹{payslip.deductions?.professional_tax?.toLocaleString()}</span>
+                  </div>
+                )}
+                {payslip.deductions?.lop_deduction > 0 && (
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>LOP Deduction</span>
+                    <span className="text-red-400">-₹{payslip.deductions?.lop_deduction?.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className={`flex justify-between pt-2 border-t ${borderColor}`}>
                   <span className={`font-medium ${textPrimary}`}>Total Deductions</span>
                   <span className="font-bold text-red-400">-₹{payslip.deductions?.total_deductions?.toLocaleString()}</span>
@@ -667,11 +865,13 @@ function SalaryPayslipView({
           </div>
 
           {/* Net Salary */}
-          <div className={`p-4 rounded-lg border-2 border-[#10b981] ${bgSecondary}`}>
+          <div className={`p-4 rounded-lg border-2 ${payslip.net_salary >= 0 ? 'border-[#10b981]' : 'border-red-400'} ${bgSecondary}`}>
             <div className="flex items-center justify-between">
               <div>
                 <p className={`text-sm ${textSecondary}`}>Net Salary</p>
-                <p className="text-3xl font-bold text-[#10b981]">₹{payslip.net_salary?.toLocaleString()}</p>
+                <p className={`text-3xl font-bold ${payslip.net_salary >= 0 ? 'text-[#10b981]' : 'text-red-400'}`}>
+                  ₹{payslip.net_salary?.toLocaleString()}
+                </p>
               </div>
               <div className="text-right">
                 <p className={`text-xs ${textSecondary}`}>HR Remarks</p>

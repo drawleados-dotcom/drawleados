@@ -3,15 +3,18 @@ Payroll Management Routes
 - Salary history tracking
 - Salary hikes with conditions
 - Payroll details by month/year
+- PDF Generation
 """
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import uuid
+import io
 
 payroll_router = APIRouter(prefix="/payroll", tags=["payroll"])
 
@@ -52,6 +55,64 @@ class CompanySettingsRequest(BaseModel):
     company_phone: Optional[str] = ""
     company_email: Optional[str] = ""
     company_website: Optional[str] = ""
+
+class PayrollSettingsRequest(BaseModel):
+    pf_enabled: bool = True
+    pf_percentage: float = 12.0
+    professional_tax_enabled: bool = True
+    professional_tax_amount: float = 200.0
+    professional_tax_threshold: float = 15000.0
+    standard_hours_per_day: float = 8.0
+
+
+# ========== PAYROLL SETTINGS ==========
+
+@payroll_router.get("/settings")
+async def get_payroll_settings(request: Request):
+    """Get payroll calculation settings"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    settings = await db.payroll_settings.find_one({"type": "payroll_config"})
+    if not settings:
+        # Return defaults
+        return {
+            "pf_enabled": True,
+            "pf_percentage": 12.0,
+            "professional_tax_enabled": True,
+            "professional_tax_amount": 200.0,
+            "professional_tax_threshold": 15000.0,
+            "standard_hours_per_day": 8.0
+        }
+    
+    settings.pop("_id", None)
+    return settings
+
+@payroll_router.put("/settings")
+async def update_payroll_settings(data: PayrollSettingsRequest, request: Request):
+    """Update payroll calculation settings (HR Admin only)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Only HR can update payroll settings")
+    
+    await db.payroll_settings.update_one(
+        {"type": "payroll_config"},
+        {"$set": {
+            "type": "payroll_config",
+            "pf_enabled": data.pf_enabled,
+            "pf_percentage": data.pf_percentage,
+            "professional_tax_enabled": data.professional_tax_enabled,
+            "professional_tax_amount": data.professional_tax_amount,
+            "professional_tax_threshold": data.professional_tax_threshold,
+            "standard_hours_per_day": data.standard_hours_per_day,
+            "updated_at": datetime.now(timezone.utc)
+        }},
+        upsert=True
+    )
+    
+    return {"message": "Payroll settings updated successfully"}
 
 
 # ========== COMPANY SETTINGS ==========
@@ -125,6 +186,20 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
     if existing:
         raise HTTPException(status_code=400, detail="Payslip already exists for this month")
     
+    # Get payroll settings
+    payroll_settings = await db.payroll_settings.find_one({"type": "payroll_config"})
+    if not payroll_settings:
+        payroll_settings = {
+            "pf_enabled": True,
+            "pf_percentage": 12.0,
+            "professional_tax_enabled": True,
+            "professional_tax_amount": 200.0,
+            "professional_tax_threshold": 15000.0,
+            "standard_hours_per_day": 8.0
+        }
+    
+    standard_hours = payroll_settings.get("standard_hours_per_day", 8.0)
+    
     # Get salary at that date
     target_date = datetime(data.year, data.month, 1)
     salary_record = await db.salary_history.find_one(
@@ -154,6 +229,12 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
     
     days_present = len([r for r in attendance_records if r.get("status") == "present"])
     
+    # Calculate total hours worked and extra/less hours
+    total_hours_worked = sum(r.get("total_hours", 0) for r in attendance_records if r.get("status") == "present")
+    expected_hours = days_present * standard_hours
+    extra_hours = max(0, total_hours_worked - expected_hours)
+    less_hours = max(0, expected_hours - total_hours_worked)
+    
     # Get leave records
     leave_records = await db.leave_requests.find({
         "user_id": data.user_id,
@@ -174,9 +255,16 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
     days_paid = days_present + casual_leaves + sick_leaves
     earned_salary = round(per_day_salary * days_paid, 2)
     
-    # Deductions
-    pf_deduction = round(base_salary * 0.12, 2)
-    professional_tax = 200 if base_salary > 15000 else 0
+    # Deductions based on settings
+    pf_enabled = payroll_settings.get("pf_enabled", True)
+    pf_percentage = payroll_settings.get("pf_percentage", 12.0)
+    pf_deduction = round(base_salary * (pf_percentage / 100), 2) if pf_enabled else 0
+    
+    pt_enabled = payroll_settings.get("professional_tax_enabled", True)
+    pt_amount = payroll_settings.get("professional_tax_amount", 200.0)
+    pt_threshold = payroll_settings.get("professional_tax_threshold", 15000.0)
+    professional_tax = pt_amount if pt_enabled and base_salary > pt_threshold else 0
+    
     lop_deduction = round(per_day_salary * absent_days, 2)
     total_deductions = pf_deduction + professional_tax + lop_deduction
     net_salary = round(earned_salary - pf_deduction - professional_tax, 2)
@@ -202,7 +290,11 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
             "days_present": days_present,
             "casual_leaves": casual_leaves,
             "sick_leaves": sick_leaves,
-            "absent_days": absent_days
+            "absent_days": absent_days,
+            "total_hours_worked": round(total_hours_worked, 2),
+            "expected_hours": round(expected_hours, 2),
+            "extra_hours": round(extra_hours, 2),
+            "less_hours": round(less_hours, 2)
         },
         "calculation": {
             "per_day_salary": per_day_salary,
@@ -210,7 +302,10 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
             "earned_salary": earned_salary
         },
         "deductions": {
+            "pf_enabled": pf_enabled,
+            "pf_percentage": pf_percentage,
             "pf": pf_deduction,
+            "professional_tax_enabled": pt_enabled,
             "professional_tax": professional_tax,
             "lop_deduction": lop_deduction,
             "total_deductions": total_deductions
@@ -741,3 +836,249 @@ HIKE_REASONS = [
 async def get_hike_reasons():
     """Get list of hike reasons/conditions"""
     return HIKE_REASONS
+
+
+
+# ========== PDF GENERATION ==========
+
+@payroll_router.get("/payslip/{payslip_id}/pdf")
+async def generate_payslip_pdf(payslip_id: str, request: Request):
+    """Generate and download payslip PDF"""
+    from server import get_current_user
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch, mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+    
+    current_user = await get_current_user(request)
+    
+    # Get payslip
+    payslip = await db.payslips.find_one({"payslip_id": payslip_id})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    # Check access - only generated payslips can be downloaded
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+        if payslip["user_id"] != current_user.user_id or payslip["status"] != "generated":
+            raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get company settings
+    company = await db.company_settings.find_one({"type": "payroll"})
+    if not company:
+        company = {
+            "company_name": "Drawlead",
+            "company_address": "Chennai, India",
+            "company_phone": "",
+            "company_email": "",
+            "company_website": ""
+        }
+    
+    # Month names
+    months = ['January', 'February', 'March', 'April', 'May', 'June', 
+              'July', 'August', 'September', 'October', 'November', 'December']
+    month_name = months[payslip['month'] - 1]
+    
+    # Create PDF in memory
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=20*mm, bottomMargin=20*mm, leftMargin=15*mm, rightMargin=15*mm)
+    
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('Title', parent=styles['Title'], fontSize=18, textColor=colors.HexColor('#6366f1'), alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, textColor=colors.gray, alignment=TA_CENTER)
+    header_style = ParagraphStyle('Header', parent=styles['Heading2'], fontSize=12, textColor=colors.HexColor('#1f2937'))
+    normal_style = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10)
+    bold_style = ParagraphStyle('Bold', parent=styles['Normal'], fontSize=10, fontName='Helvetica-Bold')
+    amount_style = ParagraphStyle('Amount', parent=styles['Normal'], fontSize=10, alignment=TA_RIGHT)
+    green_style = ParagraphStyle('Green', parent=styles['Normal'], fontSize=14, textColor=colors.HexColor('#10b981'), fontName='Helvetica-Bold')
+    
+    elements = []
+    
+    # Header with company name
+    elements.append(Paragraph(company.get('company_name', 'Company'), title_style))
+    if company.get('company_address'):
+        elements.append(Paragraph(company['company_address'], subtitle_style))
+    elements.append(Spacer(1, 10*mm))
+    
+    # Payslip title
+    elements.append(Paragraph(f"PAYSLIP - {month_name} {payslip['year']}", ParagraphStyle('PayslipTitle', fontSize=14, fontName='Helvetica-Bold', alignment=TA_CENTER, textColor=colors.HexColor('#374151'))))
+    elements.append(Spacer(1, 8*mm))
+    
+    # Employee Info Table
+    emp_data = [
+        ['Employee Name:', payslip.get('employee_name', 'N/A'), 'Employee ID:', payslip.get('employee_id', 'N/A')],
+        ['Designation:', payslip.get('employee_designation', 'N/A'), 'Email:', payslip.get('employee_email', 'N/A')],
+        ['Pay Period:', f"{month_name} {payslip['year']}", 'Generated:', datetime.now().strftime('%d %b %Y')]
+    ]
+    emp_table = Table(emp_data, colWidths=[80, 150, 80, 150])
+    emp_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.gray),
+        ('TEXTCOLOR', (2, 0), (2, -1), colors.gray),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(emp_table)
+    elements.append(Spacer(1, 8*mm))
+    
+    # Attendance Summary
+    elements.append(Paragraph("ATTENDANCE SUMMARY", header_style))
+    attendance = payslip.get('attendance', {})
+    att_data = [
+        ['Working Days', 'Present', 'Casual Leave', 'Sick Leave', 'Absent (LOP)', 'Extra Hrs', 'Less Hrs'],
+        [
+            str(attendance.get('total_working_days', 0)),
+            str(attendance.get('days_present', 0)),
+            str(attendance.get('casual_leaves', 0)),
+            str(attendance.get('sick_leaves', 0)),
+            str(attendance.get('absent_days', 0)),
+            f"{attendance.get('extra_hours', 0):.1f}",
+            f"{attendance.get('less_hours', 0):.1f}"
+        ]
+    ]
+    att_table = Table(att_data, colWidths=[70, 60, 70, 60, 70, 50, 50])
+    att_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#374151')),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('TEXTCOLOR', (1, 1), (1, 1), colors.HexColor('#10b981')),  # Present - green
+        ('TEXTCOLOR', (4, 1), (4, 1), colors.HexColor('#ef4444')),  # Absent - red
+    ]))
+    elements.append(att_table)
+    elements.append(Spacer(1, 8*mm))
+    
+    # Earnings and Deductions side by side
+    calculation = payslip.get('calculation', {})
+    deductions = payslip.get('deductions', {})
+    
+    # Earnings
+    earnings_data = [
+        ['EARNINGS', ''],
+        ['Base Salary', f"₹{payslip.get('base_salary', 0):,.2f}"],
+        ['Per Day Salary', f"₹{calculation.get('per_day_salary', 0):,.2f}"],
+        ['Days Paid', str(calculation.get('days_paid', 0))],
+        ['Earned Salary', f"₹{calculation.get('earned_salary', 0):,.2f}"]
+    ]
+    
+    # Deductions
+    deductions_data = [['DEDUCTIONS', '']]
+    
+    if deductions.get('pf_enabled', True):
+        pf_pct = deductions.get('pf_percentage', 12)
+        deductions_data.append([f'PF ({pf_pct}%)', f"-₹{deductions.get('pf', 0):,.2f}"])
+    
+    if deductions.get('professional_tax_enabled', True) and deductions.get('professional_tax', 0) > 0:
+        deductions_data.append(['Professional Tax', f"-₹{deductions.get('professional_tax', 0):,.2f}"])
+    
+    if deductions.get('lop_deduction', 0) > 0:
+        deductions_data.append(['LOP Deduction', f"-₹{deductions.get('lop_deduction', 0):,.2f}"])
+    
+    deductions_data.append(['Total Deductions', f"-₹{deductions.get('total_deductions', 0):,.2f}"])
+    
+    # Create side-by-side tables
+    earn_table = Table(earnings_data, colWidths=[100, 100])
+    earn_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#dcfce7')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#166534')),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (1, -1), (1, -1), colors.HexColor('#10b981')),
+    ]))
+    
+    ded_table = Table(deductions_data, colWidths=[100, 100])
+    ded_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#fee2e2')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#991b1b')),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e5e7eb')),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('TEXTCOLOR', (1, -1), (1, -1), colors.HexColor('#ef4444')),
+    ]))
+    
+    # Combined table
+    combined_data = [[earn_table, Spacer(20, 0), ded_table]]
+    combined_table = Table(combined_data)
+    elements.append(combined_table)
+    elements.append(Spacer(1, 10*mm))
+    
+    # Net Salary Box
+    net_salary = payslip.get('net_salary', 0)
+    net_data = [
+        ['NET SALARY', f"₹{net_salary:,.2f}"]
+    ]
+    net_table = Table(net_data, colWidths=[200, 200])
+    net_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 14),
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0fdf4') if net_salary >= 0 else colors.HexColor('#fef2f2')),
+        ('TEXTCOLOR', (0, 0), (0, 0), colors.HexColor('#374151')),
+        ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor('#10b981') if net_salary >= 0 else colors.HexColor('#ef4444')),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ('BOX', (0, 0), (-1, -1), 2, colors.HexColor('#10b981') if net_salary >= 0 else colors.HexColor('#ef4444')),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 0), (-1, -1), 12),
+        ('LEFTPADDING', (0, 0), (-1, -1), 15),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 15),
+    ]))
+    elements.append(net_table)
+    elements.append(Spacer(1, 10*mm))
+    
+    # Reviews Section
+    if payslip.get('operations_review') or payslip.get('ceo_review'):
+        elements.append(Paragraph("REVIEWS", header_style))
+        
+        if payslip.get('operations_review'):
+            op_review = payslip['operations_review']
+            elements.append(Paragraph(f"<b>Operations Review</b> by {op_review.get('reviewer_name', 'N/A')}", normal_style))
+            elements.append(Paragraph(op_review.get('review_text', ''), normal_style))
+            elements.append(Spacer(1, 3*mm))
+        
+        if payslip.get('ceo_review'):
+            ceo_review = payslip['ceo_review']
+            elements.append(Paragraph(f"<b>CEO Review</b> by {ceo_review.get('reviewer_name', 'N/A')}", normal_style))
+            elements.append(Paragraph(ceo_review.get('review_text', ''), normal_style))
+        
+        elements.append(Spacer(1, 8*mm))
+    
+    # HR Remarks
+    if payslip.get('hr_remarks'):
+        elements.append(Paragraph("HR REMARKS", header_style))
+        elements.append(Paragraph(payslip['hr_remarks'], normal_style))
+        elements.append(Spacer(1, 8*mm))
+    
+    # Footer
+    elements.append(Spacer(1, 10*mm))
+    footer_text = "This is a computer-generated document. No signature required."
+    elements.append(Paragraph(footer_text, ParagraphStyle('Footer', fontSize=8, textColor=colors.gray, alignment=TA_CENTER)))
+    
+    # Build PDF
+    doc.build(elements)
+    buffer.seek(0)
+    
+    # Return PDF
+    filename = f"payslip_{payslip['employee_name'].replace(' ', '_')}_{month_name}_{payslip['year']}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
