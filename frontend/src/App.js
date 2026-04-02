@@ -25,6 +25,7 @@ import MetaAdsBoard from './pages/Operations/MetaAdsBoard';
 import DocumentationsPage from './pages/DocumentationsPage';
 import SEOBoardPage from './pages/SEOBoardPage';
 import AdminSignupPage from './pages/AdminSignupPage';
+import ProfilePage from './pages/ProfilePage';
 import './App.css';
 
 function AppRouter() {
@@ -172,6 +173,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <SEOBoardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
           </ProtectedRoute>
         }
       />

@@ -30,7 +30,6 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [otpToken, setOtpToken] = useState('');
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -45,7 +44,7 @@ export default function ProfilePage() {
 
   const loadProfile = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/hr/profile/my`, { headers });
+      const res = await axios.get(`${API}/api/hr/profile`, { headers });
       setProfile(res.data);
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -68,11 +67,10 @@ export default function ProfilePage() {
 
   const handleRequestOTP = async () => {
     try {
-      const res = await axios.post(`${API}/api/auth/password-reset/request-otp`, {}, { headers });
+      const res = await axios.post(`${API}/api/auth/request-otp`, {}, { headers });
       setOtpSent(true);
-      setOtpToken(res.data.reset_token || '');
       setPasswordStep('verify');
-      toast.success('OTP sent to your registered email!');
+      toast.success(res.data.message || 'OTP sent to your registered email!');
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to send OTP');
     }
@@ -83,16 +81,9 @@ export default function ProfilePage() {
       toast.error('Please enter a valid 6-digit OTP');
       return;
     }
-    try {
-      await axios.post(`${API}/api/auth/password-reset/verify-otp`, { 
-        otp, 
-        reset_token: otpToken 
-      }, { headers });
-      setPasswordStep('change');
-      toast.success('OTP verified! Enter your new password.');
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Invalid OTP');
-    }
+    // Backend combines verify and change, so we go to change step
+    setPasswordStep('change');
+    toast.success('Now enter your new password.');
   };
 
   const handleChangePassword = async () => {
@@ -105,10 +96,10 @@ export default function ProfilePage() {
       return;
     }
     try {
-      await axios.post(`${API}/api/auth/password-reset/change`, { 
+      await axios.post(`${API}/api/auth/verify-otp-change-password`, { 
         otp,
-        reset_token: otpToken,
-        new_password: newPassword 
+        new_password: newPassword,
+        confirm_password: confirmPassword
       }, { headers });
       toast.success('Password changed successfully!');
       setShowPasswordModal(false);
@@ -124,7 +115,6 @@ export default function ProfilePage() {
     setOtp('');
     setNewPassword('');
     setConfirmPassword('');
-    setOtpToken('');
   };
 
   const formatDate = (dateStr) => {

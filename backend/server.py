@@ -809,7 +809,12 @@ async def verify_otp_and_change_password(request: Request, current_user: User = 
     if not otp_doc:
         raise HTTPException(status_code=400, detail="Invalid OTP")
     
-    if datetime.now(timezone.utc) > otp_doc["expires_at"]:
+    # Handle timezone-aware comparison
+    expires_at = otp_doc["expires_at"]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if datetime.now(timezone.utc) > expires_at:
         await db.password_otps.delete_one({"_id": otp_doc["_id"]})
         raise HTTPException(status_code=400, detail="OTP has expired")
     
