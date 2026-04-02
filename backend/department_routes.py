@@ -59,14 +59,25 @@ class ProjectDocumentCreate(BaseModel):
     link: str
     doc_type: str = "sheet"  # sheet, doc, other
 
+class CustomRecurrence(BaseModel):
+    repeat_every: int = 1
+    repeat_unit: str = "week"  # day, week, month, year
+    repeat_on_days: List[int] = []  # 0-6 for Sun-Sat
+    ends: str = "never"  # never, on_date, after_occurrences
+    end_date: Optional[str] = None
+    occurrences: int = 13
+
 class ProjectTaskCreate(BaseModel):
     task_name: str
     description: Optional[str] = ""
     priority: str = "medium"  # high, medium, low
-    type: str = "general"  # general, meeting, follow_up, review
+    type: str = "general"  # general, meeting, follow_up, proposal, call
     assigned_to: Optional[str] = None
     due_date: Optional[str] = None
     due_time: Optional[str] = None
+    all_day: bool = False
+    recurrence: str = "none"  # none, daily, weekly, monthly, yearly, weekdays, custom
+    custom_recurrence: Optional[Dict[str, Any]] = None
     status: str = "pending"  # pending, in_progress, completed, on_hold
     work_link: Optional[str] = ""
 
@@ -78,8 +89,14 @@ class ProjectTaskUpdate(BaseModel):
     assigned_to: Optional[str] = None
     due_date: Optional[str] = None
     due_time: Optional[str] = None
+    all_day: Optional[bool] = None
+    recurrence: Optional[str] = None
+    custom_recurrence: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     work_link: Optional[str] = None
+
+class TimeTrackingAction(BaseModel):
+    action: str  # start, pause, resume, finish
 
 
 # ========== DEPARTMENTS ==========
@@ -400,17 +417,29 @@ async def get_project_tasks(project_id: str, status: Optional[str] = None, reque
     
     tasks = await db.project_tasks.find(query).sort("created_at", -1).to_list(500)
     
-    # Get user details for assigned_to
-    user_ids = list(set([t.get("assigned_to") for t in tasks if t.get("assigned_to")]))
+    # Get all user IDs (assigned_to, assigned_by, created_by)
+    user_ids = set()
+    for t in tasks:
+        if t.get("assigned_to"):
+            user_ids.add(t["assigned_to"])
+        if t.get("assigned_by"):
+            user_ids.add(t["assigned_by"])
+        if t.get("created_by"):
+            user_ids.add(t["created_by"])
+    
     users_map = {}
     if user_ids:
-        users = await db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1}).to_list(100)
+        users = await db.users.find({"user_id": {"$in": list(user_ids)}}, {"_id": 0, "user_id": 1, "name": 1}).to_list(100)
         users_map = {u["user_id"]: u["name"] for u in users}
     
     for t in tasks:
         t.pop("_id", None)
         if t.get("assigned_to") and t["assigned_to"] in users_map:
             t["assigned_to_name"] = users_map[t["assigned_to"]]
+        if t.get("assigned_by") and t["assigned_by"] in users_map:
+            t["assigned_by_name"] = users_map[t["assigned_by"]]
+        if t.get("created_by") and t["created_by"] in users_map:
+            t["created_by_name"] = users_map[t["created_by"]]
     
     return tasks
 
@@ -426,6 +455,10 @@ async def create_project_task(project_id: str, data: ProjectTaskCreate, request:
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Get creator name
+    creator = await db.users.find_one({"user_id": current_user.user_id}, {"_id": 0, "name": 1})
+    creator_name = creator.get("name", "Unknown") if creator else "Unknown"
+    
     task_id = f"task_{uuid.uuid4().hex[:12]}"
     task_doc = {
         "task_id": task_id,
@@ -439,11 +472,18 @@ async def create_project_task(project_id: str, data: ProjectTaskCreate, request:
         "assigned_by": current_user.user_id,
         "due_date": data.due_date,
         "due_time": data.due_time,
+        "all_day": data.all_day,
+        "recurrence": data.recurrence,
+        "custom_recurrence": data.custom_recurrence,
         "status": data.status,
         "work_link": data.work_link,
-        "time_spent": 0,
-        "time_logs": [],
+        "time_tracking": {
+            "status": "not_started",
+            "total_seconds": 0,
+            "sessions": []
+        },
         "created_by": current_user.user_id,
+        "created_by_name": creator_name,
         "created_at": datetime.now(timezone.utc)
     }
     
@@ -496,93 +536,121 @@ async def delete_project_task(project_id: str, task_id: str, request: Request):
     return {"message": "Task deleted"}
 
 
-# ========== TASK TIME TRACKING ==========
+# ========== TASK TIME TRACKING (BDE-style) ==========
 
-@department_router.post("/tasks/{task_id}/timer/start")
-async def start_task_timer(task_id: str, request: Request):
-    """Start timer for a task"""
+@department_router.post("/projects/{project_id}/tasks/{task_id}/time-tracking")
+async def task_time_tracking(project_id: str, task_id: str, data: TimeTrackingAction, request: Request):
+    """Handle time tracking actions: start, pause, resume, finish"""
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    task = await db.project_tasks.find_one({"task_id": task_id})
+    task = await db.project_tasks.find_one({"task_id": task_id, "project_id": project_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Check if there's already a running timer
-    running = await db.task_timers.find_one({
-        "task_id": task_id,
-        "user_id": current_user.user_id,
-        "end_time": None
-    })
+    action = data.action
+    time_tracking = task.get("time_tracking", {"status": "not_started", "total_seconds": 0, "sessions": []})
+    current_status = time_tracking.get("status", "not_started")
+    now = datetime.now(timezone.utc)
     
-    if running:
-        raise HTTPException(status_code=400, detail="Timer already running")
-    
-    timer_id = f"timer_{uuid.uuid4().hex[:12]}"
-    timer_doc = {
-        "timer_id": timer_id,
-        "task_id": task_id,
-        "user_id": current_user.user_id,
-        "start_time": datetime.now(timezone.utc),
-        "end_time": None
-    }
-    
-    await db.task_timers.insert_one(timer_doc)
-    
-    # Update task status to in_progress if pending
-    if task.get("status") == "pending":
+    if action == "start":
+        if current_status != "not_started":
+            raise HTTPException(status_code=400, detail="Timer already started. Use resume to continue.")
+        
+        time_tracking["status"] = "running"
+        time_tracking["current_session_start"] = now
+        time_tracking["sessions"] = time_tracking.get("sessions", [])
+        
+        # Update task status to in_progress if pending
+        update_data = {"time_tracking": time_tracking}
+        if task.get("status") == "pending":
+            update_data["status"] = "in_progress"
+        
         await db.project_tasks.update_one(
             {"task_id": task_id},
-            {"$set": {"status": "in_progress"}}
+            {"$set": update_data}
         )
+        return {"message": "Timer started", "time_tracking": time_tracking}
     
-    return {"timer_id": timer_id, "start_time": timer_doc["start_time"]}
-
-
-@department_router.post("/tasks/{task_id}/timer/stop")
-async def stop_task_timer(task_id: str, request: Request):
-    """Stop timer for a task"""
-    from server import get_current_user
-    current_user = await get_current_user(request)
+    elif action == "pause":
+        if current_status != "running":
+            raise HTTPException(status_code=400, detail="Timer is not running")
+        
+        # Calculate duration of this session
+        session_start = time_tracking.get("current_session_start")
+        if session_start:
+            if isinstance(session_start, str):
+                session_start = datetime.fromisoformat(session_start.replace('Z', '+00:00'))
+            if session_start.tzinfo is None:
+                session_start = session_start.replace(tzinfo=timezone.utc)
+            session_duration = int((now - session_start).total_seconds())
+            
+            time_tracking["sessions"].append({
+                "start": session_start,
+                "end": now,
+                "duration": session_duration,
+                "user_id": current_user.user_id
+            })
+            time_tracking["total_seconds"] = time_tracking.get("total_seconds", 0) + session_duration
+        
+        time_tracking["status"] = "paused"
+        time_tracking["current_session_start"] = None
+        
+        await db.project_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"time_tracking": time_tracking}}
+        )
+        return {"message": "Timer paused", "time_tracking": time_tracking}
     
-    # Find running timer
-    timer = await db.task_timers.find_one({
-        "task_id": task_id,
-        "user_id": current_user.user_id,
-        "end_time": None
-    })
+    elif action == "resume":
+        if current_status not in ["paused", "not_started"]:
+            raise HTTPException(status_code=400, detail="Timer cannot be resumed from current state")
+        
+        time_tracking["status"] = "running"
+        time_tracking["current_session_start"] = now
+        
+        # Update task status to in_progress if not already
+        update_data = {"time_tracking": time_tracking}
+        if task.get("status") in ["pending", "on_hold"]:
+            update_data["status"] = "in_progress"
+        
+        await db.project_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": update_data}
+        )
+        return {"message": "Timer resumed", "time_tracking": time_tracking}
     
-    if not timer:
-        raise HTTPException(status_code=400, detail="No running timer found")
+    elif action == "finish":
+        # If running, close the current session first
+        if current_status == "running":
+            session_start = time_tracking.get("current_session_start")
+            if session_start:
+                if isinstance(session_start, str):
+                    session_start = datetime.fromisoformat(session_start.replace('Z', '+00:00'))
+                if session_start.tzinfo is None:
+                    session_start = session_start.replace(tzinfo=timezone.utc)
+                session_duration = int((now - session_start).total_seconds())
+                
+                time_tracking["sessions"].append({
+                    "start": session_start,
+                    "end": now,
+                    "duration": session_duration,
+                    "user_id": current_user.user_id
+                })
+                time_tracking["total_seconds"] = time_tracking.get("total_seconds", 0) + session_duration
+        
+        time_tracking["status"] = "finished"
+        time_tracking["current_session_start"] = None
+        time_tracking["finished_at"] = now
+        
+        await db.project_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"time_tracking": time_tracking}}
+        )
+        return {"message": "Timer finished", "time_tracking": time_tracking}
     
-    end_time = datetime.now(timezone.utc)
-    # Handle timezone-aware vs naive datetime comparison
-    start_time = timer["start_time"]
-    if start_time.tzinfo is None:
-        start_time = start_time.replace(tzinfo=timezone.utc)
-    duration_seconds = (end_time - start_time).total_seconds()
-    
-    await db.task_timers.update_one(
-        {"timer_id": timer["timer_id"]},
-        {"$set": {"end_time": end_time, "duration": duration_seconds}}
-    )
-    
-    # Update task total time
-    await db.project_tasks.update_one(
-        {"task_id": task_id},
-        {
-            "$inc": {"time_spent": duration_seconds},
-            "$push": {"time_logs": {
-                "timer_id": timer["timer_id"],
-                "user_id": current_user.user_id,
-                "start": timer["start_time"],
-                "end": end_time,
-                "duration": duration_seconds
-            }}
-        }
-    )
-    
-    return {"duration": duration_seconds, "end_time": end_time}
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {action}")
 
 
 @department_router.get("/tasks/{task_id}/timer")
@@ -591,14 +659,9 @@ async def get_task_timer_status(task_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    timer = await db.task_timers.find_one({
-        "task_id": task_id,
-        "user_id": current_user.user_id,
-        "end_time": None
-    })
+    task = await db.project_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
     
-    if timer:
-        timer.pop("_id", None)
-        return {"running": True, "timer": timer}
-    
-    return {"running": False, "timer": None}
+    time_tracking = task.get("time_tracking", {"status": "not_started", "total_seconds": 0, "sessions": []})
+    return {"time_tracking": time_tracking}
