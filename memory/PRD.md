@@ -42,14 +42,26 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Example: Aug 2024 shows ₹15K joining salary, Apr 2026 shows current ₹25K
 
 **HR Admin Payroll Management (DONE - April 2026):**
-- List of all employees with current salary and total hikes
+- Employee grid cards with: Name, Designation, Current Salary, Payslip Status Badge
+- Click employee opens detail view with tabs: Salary/Payslip | Salary History
 - Search employees by name, email, or designation
-- "View History" button to see complete salary history per employee
-- "Add Salary" button to add new salary record for any employee
-- Employee cards showing: Name, Email, Designation, Join Date, Current Salary, Total Hikes
-- Salary history table with: #, Effective From, Amount, Duration, Reason (badge), Hike (+amount, %), Delete action
-- Statistics: Current Salary, Total Hikes, Initial Salary, Total Growth %
-- Hike conditions legend with color badges
+- Month/Year filter for payslip periods
+
+**Payslip Workflow (DONE - April 2026):**
+1. **HR Creates Payslip:** Auto-calculates from attendance + salary records
+2. **Operations Review:** Manager reviews without seeing salary details, adds performance notes
+3. **CEO Review:** Final approval with visibility into all details and reviews
+4. **Generate Payslip:** HR marks as ready for employee
+5. **Download PDF:** Employee can download from their Payroll tab
+
+**Payslip Status Flow:** Draft → Operations Review → CEO Review → Approved → Generated
+
+**Payslip Details:**
+- Attendance Summary: Working Days, Present, Casual/Sick Leave, Absent (LOP), Holidays
+- Earnings: Base Salary, Per Day, Days Paid, Earned Salary
+- Deductions: PF (12%), Professional Tax, LOP Deduction
+- Net Salary with HR Remarks
+- Reviews section shows Operations and CEO comments
 
 **Attendance-Based Payroll Calculation:**
 - **Attendance Summary:**
@@ -79,6 +91,15 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - POST `/api/payroll/salary/add` - Add new salary record
 - DELETE `/api/payroll/salary/{record_id}` - Delete salary record
 - GET `/api/payroll/employees` - All employees salary overview (admin)
+- POST `/api/payroll/payslip/create` - Create payslip for employee
+- GET `/api/payroll/payslips?month=X&year=Y` - Get payslips for month
+- PUT `/api/payroll/payslip/{id}/submit-for-operations` - HR submits to Operations
+- PUT `/api/payroll/payslip/{id}/operations-review` - Operations adds review
+- PUT `/api/payroll/payslip/{id}/ceo-review` - CEO approves
+- PUT `/api/payroll/payslip/{id}/generate` - HR generates final payslip
+- GET `/api/payroll/my-payslips` - Employee gets own payslips
+- GET `/api/payroll/company-settings` - Get company details for PDF
+- PUT `/api/payroll/company-settings` - Update company details (super admin)
 
 ### Calendar Module (DONE - April 2026)
 **Full Calendar Page** accessible to ALL users from sidebar:
