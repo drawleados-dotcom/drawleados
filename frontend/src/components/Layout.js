@@ -47,14 +47,32 @@ const Layout = ({ children }) => {
   const [showLunchOutModal, setShowLunchOutModal] = useState(false);
   const [showLunchInModal, setShowLunchInModal] = useState(false);
   
-  // Form data for modals
-  const [clockInData, setClockInData] = useState({ time: '', workMode: 'office' });
-  const [clockOutData, setClockOutData] = useState({ time: '' });
-  const [lunchOutData, setLunchOutData] = useState({ time: '' });
-  const [lunchInData, setLunchInData] = useState({ time: '' });
+  // Form data for modals - now with separate hour, minute, period
+  const [clockInData, setClockInData] = useState({ hour: 9, minute: 0, period: 'AM', workMode: 'office' });
+  const [clockOutData, setClockOutData] = useState({ hour: 6, minute: 0, period: 'PM' });
+  const [lunchOutData, setLunchOutData] = useState({ hour: 1, minute: 0, period: 'PM' });
+  const [lunchInData, setLunchInData] = useState({ hour: 2, minute: 0, period: 'PM' });
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
+
+  // Get current time parts
+  const getCurrentTimeParts = () => {
+    const now = new Date();
+    let hour = now.getHours();
+    const minute = now.getMinutes();
+    const period = hour >= 12 ? 'PM' : 'AM';
+    if (hour > 12) hour -= 12;
+    if (hour === 0) hour = 12;
+    return { hour, minute, period };
+  };
+
+  // Format time parts to string for API
+  const formatTimeForAPI = (hour, minute, period) => {
+    const h = hour.toString().padStart(2, '0');
+    const m = minute.toString().padStart(2, '0');
+    return `${h}:${m} ${period}`;
+  };
 
   // Get current date info
   const getCurrentDateInfo = () => {
@@ -93,22 +111,26 @@ const Layout = ({ children }) => {
 
   // Initialize modal times when opening
   const openClockInModal = () => {
-    setClockInData({ time: currentDateTime.time, workMode: 'office' });
+    const { hour, minute, period } = getCurrentTimeParts();
+    setClockInData({ hour, minute, period, workMode: 'office' });
     setShowClockInModal(true);
   };
 
   const openClockOutModal = () => {
-    setClockOutData({ time: currentDateTime.time });
+    const { hour, minute, period } = getCurrentTimeParts();
+    setClockOutData({ hour, minute, period });
     setShowClockOutModal(true);
   };
 
   const openLunchOutModal = () => {
-    setLunchOutData({ time: currentDateTime.time });
+    const { hour, minute, period } = getCurrentTimeParts();
+    setLunchOutData({ hour, minute, period });
     setShowLunchOutModal(true);
   };
 
   const openLunchInModal = () => {
-    setLunchInData({ time: currentDateTime.time });
+    const { hour, minute, period } = getCurrentTimeParts();
+    setLunchInData({ hour, minute, period });
     setShowLunchInModal(true);
   };
 
@@ -117,7 +139,7 @@ const Layout = ({ children }) => {
     setLoading(true);
     try {
       await axios.post(`${API}/api/hr/attendance/clock-in`, {
-        time: clockInData.time,
+        time: formatTimeForAPI(clockInData.hour, clockInData.minute, clockInData.period),
         work_mode: clockInData.workMode
       }, { headers });
       toast.success('Clocked in successfully!');
@@ -134,7 +156,7 @@ const Layout = ({ children }) => {
     setLoading(true);
     try {
       await axios.put(`${API}/api/hr/attendance/clock-out`, {
-        time: clockOutData.time
+        time: formatTimeForAPI(clockOutData.hour, clockOutData.minute, clockOutData.period)
       }, { headers });
       toast.success('Clocked out successfully!');
       setShowClockOutModal(false);
@@ -150,7 +172,7 @@ const Layout = ({ children }) => {
     setLoading(true);
     try {
       await axios.post(`${API}/api/hr/attendance/lunch-out`, {
-        time: lunchOutData.time
+        time: formatTimeForAPI(lunchOutData.hour, lunchOutData.minute, lunchOutData.period)
       }, { headers });
       toast.success('Lunch break started!');
       setShowLunchOutModal(false);
@@ -166,7 +188,7 @@ const Layout = ({ children }) => {
     setLoading(true);
     try {
       await axios.put(`${API}/api/hr/attendance/lunch-in`, {
-        time: lunchInData.time
+        time: formatTimeForAPI(lunchInData.hour, lunchInData.minute, lunchInData.period)
       }, { headers });
       toast.success('Back from lunch!');
       setShowLunchInModal(false);
@@ -240,7 +262,8 @@ const Layout = ({ children }) => {
   const getLunchDuration = () => {
     const lunchOutTime = getLunchOutTime();
     if (!lunchOutTime) return null;
-    return calculateDuration(lunchOutTime, lunchInData.time);
+    const currentTime = formatTimeForAPI(lunchInData.hour, lunchInData.minute, lunchInData.period);
+    return calculateDuration(lunchOutTime, currentTime);
   };
 
   // Calculate work duration for Clock Out modal (includes lunch deduction)
@@ -248,7 +271,8 @@ const Layout = ({ children }) => {
     const clockInTime = getClockInTime();
     if (!clockInTime) return null;
     
-    const totalDuration = calculateDuration(clockInTime, clockOutData.time);
+    const currentTime = formatTimeForAPI(clockOutData.hour, clockOutData.minute, clockOutData.period);
+    const totalDuration = calculateDuration(clockInTime, currentTime);
     if (!totalDuration) return null;
     
     // Deduct lunch duration if lunch was taken
@@ -271,6 +295,120 @@ const Layout = ({ children }) => {
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
   const bgInput = isDark ? 'bg-[#27272a]' : 'bg-gray-50';
+
+  // Time Picker Component - Real-time with hour/minute/AM-PM inputs
+  const TimePickerInput = ({ hour, minute, period, onChange, label }) => {
+    const handleHourChange = (delta) => {
+      let newHour = hour + delta;
+      if (newHour > 12) newHour = 1;
+      if (newHour < 1) newHour = 12;
+      onChange({ hour: newHour, minute, period });
+    };
+
+    const handleMinuteChange = (delta) => {
+      let newMinute = minute + delta;
+      if (newMinute >= 60) newMinute = 0;
+      if (newMinute < 0) newMinute = 59;
+      onChange({ hour, minute: newMinute, period });
+    };
+
+    const handleHourInput = (value) => {
+      const num = parseInt(value) || 0;
+      if (num >= 1 && num <= 12) {
+        onChange({ hour: num, minute, period });
+      } else if (value === '') {
+        onChange({ hour: 12, minute, period });
+      }
+    };
+
+    const handleMinuteInput = (value) => {
+      const num = parseInt(value) || 0;
+      if (num >= 0 && num <= 59) {
+        onChange({ hour, minute: num, period });
+      } else if (value === '') {
+        onChange({ hour, minute: 0, period });
+      }
+    };
+
+    const togglePeriod = () => {
+      onChange({ hour, minute, period: period === 'AM' ? 'PM' : 'AM' });
+    };
+
+    return (
+      <div>
+        <Label className={`${textPrimary} mb-2 block`}>{label}</Label>
+        <div className="flex items-center gap-2">
+          {/* Hour */}
+          <div className="flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => handleHourChange(1)}
+              className={`w-14 h-8 flex items-center justify-center rounded-t-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
+            >
+              ▲
+            </button>
+            <input
+              type="text"
+              value={hour.toString().padStart(2, '0')}
+              onChange={(e) => handleHourInput(e.target.value)}
+              className={`w-14 h-14 text-center text-2xl font-bold ${bgInput} ${textPrimary} border-x ${borderColor} focus:outline-none focus:ring-2 focus:ring-[#6366f1]`}
+              data-testid="time-hour-input"
+            />
+            <button
+              type="button"
+              onClick={() => handleHourChange(-1)}
+              className={`w-14 h-8 flex items-center justify-center rounded-b-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
+            >
+              ▼
+            </button>
+          </div>
+
+          <span className={`text-3xl font-bold ${textPrimary}`}>:</span>
+
+          {/* Minute */}
+          <div className="flex flex-col items-center">
+            <button
+              type="button"
+              onClick={() => handleMinuteChange(1)}
+              className={`w-14 h-8 flex items-center justify-center rounded-t-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
+            >
+              ▲
+            </button>
+            <input
+              type="text"
+              value={minute.toString().padStart(2, '0')}
+              onChange={(e) => handleMinuteInput(e.target.value)}
+              className={`w-14 h-14 text-center text-2xl font-bold ${bgInput} ${textPrimary} border-x ${borderColor} focus:outline-none focus:ring-2 focus:ring-[#6366f1]`}
+              data-testid="time-minute-input"
+            />
+            <button
+              type="button"
+              onClick={() => handleMinuteChange(-1)}
+              className={`w-14 h-8 flex items-center justify-center rounded-b-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
+            >
+              ▼
+            </button>
+          </div>
+
+          {/* AM/PM Toggle */}
+          <div className="flex flex-col items-center ml-2">
+            <button
+              type="button"
+              onClick={togglePeriod}
+              className={`px-4 h-14 rounded-lg font-bold text-xl transition-colors ${
+                period === 'AM' 
+                  ? 'bg-[#6366f1] text-white' 
+                  : 'bg-[#f59e0b] text-white'
+              }`}
+              data-testid="time-period-toggle"
+            >
+              {period}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Attendance Modal Component
   const AttendanceModal = ({ isOpen, onClose, title, icon: Icon, iconColor, children, onSubmit, submitText, submitColor }) => {
@@ -411,18 +549,14 @@ const Layout = ({ children }) => {
         submitText="Clock In"
         submitColor="bg-[#10b981] hover:bg-[#059669]"
       >
-        {/* Time Input */}
-        <div>
-          <Label className={textPrimary}>Time</Label>
-          <Input
-            type="text"
-            value={clockInData.time}
-            onChange={(e) => setClockInData(prev => ({ ...prev, time: e.target.value }))}
-            placeholder="e.g., 09:30 AM"
-            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
-          />
-          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
-        </div>
+        {/* Time Picker */}
+        <TimePickerInput
+          hour={clockInData.hour}
+          minute={clockInData.minute}
+          period={clockInData.period}
+          onChange={(time) => setClockInData(prev => ({ ...prev, ...time }))}
+          label="Clock In Time"
+        />
         
         {/* Work Mode */}
         <div>
@@ -501,18 +635,14 @@ const Layout = ({ children }) => {
           <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
         </div>
         
-        {/* Time Input */}
-        <div>
-          <Label className={textPrimary}>Time</Label>
-          <Input
-            type="text"
-            value={clockOutData.time}
-            onChange={(e) => setClockOutData(prev => ({ ...prev, time: e.target.value }))}
-            placeholder="e.g., 06:30 PM"
-            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
-          />
-          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
-        </div>
+        {/* Time Picker */}
+        <TimePickerInput
+          hour={clockOutData.hour}
+          minute={clockOutData.minute}
+          period={clockOutData.period}
+          onChange={(time) => setClockOutData(prev => ({ ...prev, ...time }))}
+          label="Clock Out Time"
+        />
       </AttendanceModal>
 
       {/* Lunch Out Modal */}
@@ -536,18 +666,14 @@ const Layout = ({ children }) => {
           <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
         </div>
         
-        {/* Time Input */}
-        <div>
-          <Label className={textPrimary}>Time</Label>
-          <Input
-            type="text"
-            value={lunchOutData.time}
-            onChange={(e) => setLunchOutData(prev => ({ ...prev, time: e.target.value }))}
-            placeholder="e.g., 01:00 PM"
-            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
-          />
-          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
-        </div>
+        {/* Time Picker */}
+        <TimePickerInput
+          hour={lunchOutData.hour}
+          minute={lunchOutData.minute}
+          period={lunchOutData.period}
+          onChange={(time) => setLunchOutData(prev => ({ ...prev, ...time }))}
+          label="Lunch Out Time"
+        />
       </AttendanceModal>
 
       {/* Lunch In Modal */}
@@ -589,18 +715,14 @@ const Layout = ({ children }) => {
           <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
         </div>
         
-        {/* Time Input */}
-        <div>
-          <Label className={textPrimary}>Time</Label>
-          <Input
-            type="text"
-            value={lunchInData.time}
-            onChange={(e) => setLunchInData(prev => ({ ...prev, time: e.target.value }))}
-            placeholder="e.g., 02:00 PM"
-            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
-          />
-          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
-        </div>
+        {/* Time Picker */}
+        <TimePickerInput
+          hour={lunchInData.hour}
+          minute={lunchInData.minute}
+          period={lunchInData.period}
+          onChange={(time) => setLunchInData(prev => ({ ...prev, ...time }))}
+          label="Lunch In Time"
+        />
       </AttendanceModal>
     </div>
   );
