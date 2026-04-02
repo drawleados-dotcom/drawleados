@@ -782,7 +782,13 @@ export default function HRAdminPage() {
                       // View Mode
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
-                          <h3 className={`text-lg font-semibold ${textPrimary}`}>{desg.title}</h3>
+                          <div className="flex items-center gap-3">
+                            <h3 className={`text-lg font-semibold ${textPrimary}`}>{desg.title}</h3>
+                            <Badge className="bg-[#10b981]/20 text-[#10b981]">
+                              <Users className="h-3 w-3 mr-1" />
+                              {desg.employee_count || 0} Employees
+                            </Badge>
+                          </div>
                           {desg.description && <p className={`text-sm ${textSecondary} mt-1`}>{desg.description}</p>}
                           {desg.roles_responsibilities && (
                             <div className="mt-2">

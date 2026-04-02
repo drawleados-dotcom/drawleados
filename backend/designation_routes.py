@@ -30,11 +30,17 @@ async def get_db():
     from server import db
     return db
 
-# Get all designations
+# Get all designations with employee count
 @designation_router.get("/")
 async def get_designations(db=Depends(get_db)):
     try:
         designations = await db.designations.find({}, {"_id": 0}).to_list(1000)
+        
+        # Add employee count for each designation
+        for designation in designations:
+            count = await db.users.count_documents({"designation": designation["title"]})
+            designation["employee_count"] = count
+        
         return designations
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

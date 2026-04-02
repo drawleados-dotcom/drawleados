@@ -875,6 +875,181 @@ async def get_attendance_report(request: Request, user_id: Optional[str] = None)
         "monthly_summary": monthly_summary
     }
 
+# Get attendance detail for a specific date with tasks
+@hr_router.get("/attendance/date-detail/{date}")
+async def get_attendance_date_detail(date: str, request: Request, user_id: Optional[str] = None):
+    """Get attendance details for a specific date including tasks completed"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    target_user_id = user_id or current_user.user_id
+    
+    # Non-admins can only see their own detail
+    if current_user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+        target_user_id = current_user.user_id
+    
+    try:
+        # Parse date
+        target_date = datetime.strptime(date, "%Y-%m-%d")
+        next_date = target_date + timedelta(days=1)
+        
+        # Get attendance record for that date
+        attendance = await db.attendance.find_one({
+            "user_id": target_user_id,
+            "date": {
+                "$gte": target_date,
+                "$lt": next_date
+            }
+        }, {"_id": 0})
+        
+        # Get tasks worked on that day (from time_tracking sessions)
+        tasks = await db.bde_tasks.find({
+            "$or": [
+                {"created_by": target_user_id},
+                {"assigned_to": target_user_id}
+            ],
+            "time_tracking.sessions": {
+                "$elemMatch": {
+                    "start": {"$gte": target_date.isoformat(), "$lt": next_date.isoformat()}
+                }
+            }
+        }, {"_id": 0}).to_list(100)
+        
+        # Also get tasks that were updated/worked on that day
+        tasks_updated = await db.bde_tasks.find({
+            "$or": [
+                {"created_by": target_user_id},
+                {"assigned_to": target_user_id}
+            ],
+            "updated_at": {
+                "$gte": target_date.isoformat(),
+                "$lt": next_date.isoformat()
+            }
+        }, {"_id": 0}).to_list(100)
+        
+        # Merge and dedupe tasks
+        task_ids = set()
+        all_tasks = []
+        for task in tasks + tasks_updated:
+            if task["task_id"] not in task_ids:
+                task_ids.add(task["task_id"])
+                # Calculate time spent on this day
+                day_seconds = 0
+                if task.get("time_tracking", {}).get("sessions"):
+                    for session in task["time_tracking"]["sessions"]:
+                        session_start = session.get("start", "")
+                        if session_start.startswith(date):
+                            day_seconds += session.get("duration_seconds", 0)
+                task["day_seconds"] = day_seconds
+                task["day_time_formatted"] = f"{day_seconds // 3600}h {(day_seconds % 3600) // 60}m"
+                all_tasks.append(task)
+        
+        # Get user info
+        user_info = await db.users.find_one({"user_id": target_user_id}, {"_id": 0, "name": 1, "email": 1, "designation": 1})
+        
+        # Calculate work summary
+        work_summary = {
+            "total_work_hours": 0,
+            "lunch_duration": 0,
+            "extra_hours": 0
+        }
+        
+        if attendance:
+            work_summary["total_work_hours"] = attendance.get("total_hours", 0)
+            work_summary["lunch_duration"] = attendance.get("lunch_duration", 0)
+            work_summary["extra_hours"] = attendance.get("extra_hours", 0)
+        
+        return {
+            "date": date,
+            "user": user_info,
+            "attendance": attendance,
+            "tasks": all_tasks,
+            "work_summary": work_summary
+        }
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Get calendar attendance for a specific user (monthly view)
+@hr_router.get("/attendance/calendar/{year}/{month}")
+async def get_attendance_calendar(year: int, month: int, request: Request, user_id: Optional[str] = None):
+    """Get attendance calendar view for a month"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    target_user_id = user_id or current_user.user_id
+    
+    # Non-admins can only see their own calendar
+    if current_user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+        target_user_id = current_user.user_id
+    
+    try:
+        import calendar as cal
+        
+        # Get first and last day of month
+        first_day = datetime(year, month, 1, tzinfo=timezone.utc)
+        last_day_num = cal.monthrange(year, month)[1]
+        last_day = datetime(year, month, last_day_num, 23, 59, 59, tzinfo=timezone.utc)
+        
+        # Get all attendance records for the month
+        records = await db.attendance.find({
+            "user_id": target_user_id,
+            "date": {"$gte": first_day, "$lte": last_day}
+        }, {"_id": 0}).to_list(31)
+        
+        # Create calendar data
+        calendar_data = {}
+        for record in records:
+            date = record.get("date")
+            if isinstance(date, datetime):
+                date_str = date.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date)[:10]
+            
+            calendar_data[date_str] = {
+                "status": record.get("status", "unknown"),
+                "clock_in": record.get("clock_in"),
+                "clock_out": record.get("clock_out"),
+                "total_hours": record.get("total_hours", 0),
+                "work_mode": record.get("work_mode", "office"),
+                "approval_status": record.get("approval_status", "auto")
+            }
+        
+        # Get leave records for the month
+        leaves = await db.leave_requests.find({
+            "user_id": target_user_id,
+            "status": "approved",
+            "$or": [
+                {"start_date": {"$gte": first_day.strftime("%Y-%m-%d"), "$lte": last_day.strftime("%Y-%m-%d")}},
+                {"end_date": {"$gte": first_day.strftime("%Y-%m-%d"), "$lte": last_day.strftime("%Y-%m-%d")}}
+            ]
+        }, {"_id": 0}).to_list(50)
+        
+        # Get user info
+        user_info = await db.users.find_one({"user_id": target_user_id}, {"_id": 0, "name": 1, "email": 1, "designation": 1})
+        
+        # Calculate summary
+        total_present = len([r for r in records if r.get("status") == "present"])
+        total_hours = sum(r.get("total_hours", 0) for r in records)
+        
+        return {
+            "year": year,
+            "month": month,
+            "user": user_info,
+            "calendar_data": calendar_data,
+            "leaves": leaves,
+            "summary": {
+                "total_present": total_present,
+                "total_hours": round(total_hours, 2),
+                "avg_hours_per_day": round(total_hours / max(total_present, 1), 2)
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ============== PERMISSION REQUEST ROUTES ==============
 
 @hr_router.post("/permission/request")

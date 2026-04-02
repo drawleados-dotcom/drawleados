@@ -56,6 +56,13 @@ export default function HRPage() {
   // Reviews state
   const [reviews, setReviews] = useState([]);
 
+  // Calendar state
+  const [calendarData, setCalendarData] = useState({});
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [dateDetail, setDateDetail] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth() + 1);
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+
   const headers = { Authorization: `Bearer ${token}` };
 
   const loadTodayAttendance = useCallback(async () => {
@@ -122,10 +129,32 @@ export default function HRPage() {
     }
   }, [token]);
 
+  // Load calendar data
+  const loadCalendarData = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/hr/attendance/calendar/${calendarYear}/${calendarMonth}`, { headers });
+      setCalendarData(res.data);
+    } catch (error) {
+      console.error('Error loading calendar:', error);
+    }
+  }, [token, calendarYear, calendarMonth]);
+
+  // Load date detail when a date is selected
+  const loadDateDetail = useCallback(async (date) => {
+    try {
+      const res = await axios.get(`${API}/api/hr/attendance/date-detail/${date}`, { headers });
+      setDateDetail(res.data);
+    } catch (error) {
+      console.error('Error loading date detail:', error);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (activeTab === 'attendance') {
       loadTodayAttendance();
       loadAttendanceHistory();
+    } else if (activeTab === 'calendar') {
+      loadCalendarData();
     } else if (activeTab === 'profile') {
       loadProfile();
     } else if (activeTab === 'leave') {
@@ -136,7 +165,7 @@ export default function HRPage() {
     } else if (activeTab === 'reviews') {
       loadReviews();
     }
-  }, [activeTab, loadTodayAttendance, loadAttendanceHistory, loadProfile, loadLeaveRequests, loadLeaveBalance, loadPayslips, loadReviews]);
+  }, [activeTab, loadTodayAttendance, loadAttendanceHistory, loadCalendarData, loadProfile, loadLeaveRequests, loadLeaveBalance, loadPayslips, loadReviews]);
 
   const handleClockIn = async (location) => {
     try {
@@ -192,6 +221,7 @@ export default function HRPage() {
 
   const tabs = [
     { id: 'attendance', label: 'Attendance', icon: Clock },
+    { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'leave', label: 'Leave', icon: Calendar },
     { id: 'payslips', label: 'Payslips', icon: FileText },
@@ -246,6 +276,27 @@ export default function HRPage() {
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+          />
+        )}
+
+        {activeTab === 'calendar' && (
+          <CalendarTab
+            calendarData={calendarData}
+            calendarMonth={calendarMonth}
+            calendarYear={calendarYear}
+            setCalendarMonth={setCalendarMonth}
+            setCalendarYear={setCalendarYear}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            dateDetail={dateDetail}
+            loadDateDetail={loadDateDetail}
+            loadCalendarData={loadCalendarData}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+            isDark={isDark}
           />
         )}
 
@@ -949,6 +1000,244 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// Calendar Tab Component
+function CalendarTab({ 
+  calendarData, calendarMonth, calendarYear, setCalendarMonth, setCalendarYear,
+  selectedDate, setSelectedDate, dateDetail, loadDateDetail, loadCalendarData,
+  bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark
+}) {
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  // Generate calendar days
+  const generateCalendarDays = () => {
+    const firstDay = new Date(calendarYear, calendarMonth - 1, 1);
+    const lastDay = new Date(calendarYear, calendarMonth, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay();
+    
+    const days = [];
+    
+    // Empty cells for days before the month starts
+    for (let i = 0; i < startingDay; i++) {
+      days.push({ day: null, date: null });
+    }
+    
+    // Days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateStr = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const dayData = calendarData?.calendar_data?.[dateStr];
+      days.push({
+        day: i,
+        date: dateStr,
+        data: dayData
+      });
+    }
+    
+    return days;
+  };
+
+  const handlePrevMonth = () => {
+    if (calendarMonth === 1) {
+      setCalendarMonth(12);
+      setCalendarYear(calendarYear - 1);
+    } else {
+      setCalendarMonth(calendarMonth - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (calendarMonth === 12) {
+      setCalendarMonth(1);
+      setCalendarYear(calendarYear + 1);
+    } else {
+      setCalendarMonth(calendarMonth + 1);
+    }
+  };
+
+  const handleDateClick = (dateStr) => {
+    setSelectedDate(dateStr);
+    loadDateDetail(dateStr);
+  };
+
+  const formatTime = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
+  const getDayStatusColor = (dayData) => {
+    if (!dayData) return '';
+    if (dayData.status === 'present') {
+      if (dayData.work_mode === 'remote') return 'bg-[#10b981]/20 border-[#10b981]';
+      return 'bg-[#6366f1]/20 border-[#6366f1]';
+    }
+    if (dayData.status === 'leave') return 'bg-[#f59e0b]/20 border-[#f59e0b]';
+    if (dayData.status === 'absent') return 'bg-[#ef4444]/20 border-[#ef4444]';
+    return '';
+  };
+
+  const days = generateCalendarDays();
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Calendar */}
+        <div className="lg:col-span-2">
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <Button variant="ghost" onClick={handlePrevMonth}>&lt;</Button>
+              <CardTitle className={textPrimary}>
+                {monthNames[calendarMonth - 1]} {calendarYear}
+              </CardTitle>
+              <Button variant="ghost" onClick={handleNextMonth}>&gt;</Button>
+            </CardHeader>
+            <CardContent>
+              {/* Day headers */}
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className={`text-center text-xs font-medium ${textSecondary} py-2`}>
+                    {d}
+                  </div>
+                ))}
+              </div>
+              {/* Calendar grid */}
+              <div className="grid grid-cols-7 gap-1">
+                {days.map((dayObj, idx) => (
+                  <div key={idx} className="aspect-square">
+                    {dayObj.day ? (
+                      <button
+                        onClick={() => handleDateClick(dayObj.date)}
+                        className={`w-full h-full rounded-lg border-2 transition-all flex flex-col items-center justify-center
+                          ${selectedDate === dayObj.date ? 'ring-2 ring-[#6366f1]' : ''}
+                          ${getDayStatusColor(dayObj.data) || (isDark ? 'border-[#27272a] hover:border-[#3f3f46]' : 'border-gray-200 hover:border-gray-300')}
+                        `}
+                      >
+                        <span className={`text-sm font-medium ${textPrimary}`}>{dayObj.day}</span>
+                        {dayObj.data?.total_hours > 0 && (
+                          <span className="text-xs text-[#6366f1]">{dayObj.data.total_hours.toFixed(1)}h</span>
+                        )}
+                      </button>
+                    ) : (
+                      <div className={`w-full h-full ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'} rounded-lg`}></div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Legend */}
+              <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-dashed">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-[#6366f1]/20 border-2 border-[#6366f1]"></div>
+                  <span className={`text-xs ${textSecondary}`}>Office</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-[#10b981]/20 border-2 border-[#10b981]"></div>
+                  <span className={`text-xs ${textSecondary}`}>WFH</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-[#f59e0b]/20 border-2 border-[#f59e0b]"></div>
+                  <span className={`text-xs ${textSecondary}`}>Leave</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Summary & Date Detail */}
+        <div className="space-y-4">
+          {/* Monthly Summary */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="pb-2">
+              <CardTitle className={`text-lg ${textPrimary}`}>Monthly Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between">
+                <span className={textSecondary}>Days Present</span>
+                <span className={`font-medium ${textPrimary}`}>{calendarData?.summary?.total_present || 0}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className={textSecondary}>Total Hours</span>
+                <span className={`font-medium ${textPrimary}`}>{calendarData?.summary?.total_hours?.toFixed(1) || 0}h</span>
+              </div>
+              <div className="flex justify-between">
+                <span className={textSecondary}>Avg Hours/Day</span>
+                <span className={`font-medium ${textPrimary}`}>{calendarData?.summary?.avg_hours_per_day?.toFixed(1) || 0}h</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Selected Date Detail */}
+          {selectedDate && dateDetail && (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardHeader className="pb-2">
+                <CardTitle className={`text-lg ${textPrimary}`}>
+                  {new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {dateDetail.attendance ? (
+                  <>
+                    {/* Time Summary */}
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className={textSecondary}>Login:</span>
+                          <span className={`ml-2 font-medium ${textPrimary}`}>{formatTime(dateDetail.attendance.clock_in)}</span>
+                        </div>
+                        <div>
+                          <span className={textSecondary}>Logout:</span>
+                          <span className={`ml-2 font-medium ${textPrimary}`}>{formatTime(dateDetail.attendance.clock_out)}</span>
+                        </div>
+                        <div>
+                          <span className={textSecondary}>Work Hours:</span>
+                          <span className={`ml-2 font-medium ${textPrimary}`}>{dateDetail.work_summary.total_work_hours?.toFixed(1) || 0}h</span>
+                        </div>
+                        <div>
+                          <span className={textSecondary}>Mode:</span>
+                          <Badge className={`ml-2 ${dateDetail.attendance.work_mode === 'remote' ? 'bg-[#10b981]/20 text-[#10b981]' : 'bg-[#6366f1]/20 text-[#6366f1]'}`}>
+                            {dateDetail.attendance.work_mode === 'remote' ? 'WFH' : 'Office'}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tasks Worked On */}
+                    {dateDetail.tasks?.length > 0 && (
+                      <div>
+                        <h4 className={`text-sm font-medium ${textPrimary} mb-2`}>Tasks Completed</h4>
+                        <div className="space-y-2">
+                          {dateDetail.tasks.map(task => (
+                            <div key={task.task_id} className={`p-2 rounded-lg ${bgSecondary} flex justify-between items-center`}>
+                              <div>
+                                <p className={`text-sm font-medium ${textPrimary}`}>{task.task_name}</p>
+                                <p className={`text-xs ${textSecondary}`}>{task.type}</p>
+                              </div>
+                              <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">
+                                {task.day_time_formatted}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {dateDetail.tasks?.length === 0 && (
+                      <p className={`text-sm ${textSecondary} text-center py-2`}>No tasks tracked this day</p>
+                    )}
+                  </>
+                ) : (
+                  <p className={`text-sm ${textSecondary} text-center py-4`}>No attendance record for this date</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -11,7 +11,8 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
-  MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase
+  MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase,
+  Play, Pause, Square, Timer
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -40,6 +41,8 @@ export default function BDETasksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [viewingTask, setViewingTask] = useState(null);
+  const [runningTimers, setRunningTimers] = useState({});
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -142,6 +145,102 @@ export default function BDETasksPage() {
       loadTasks();
     } catch (error) {
       toast.error('Failed to update status');
+    }
+  };
+
+  // Time tracking actions
+  const handleTimeTracking = async (taskId, action) => {
+    try {
+      const res = await axios.post(`${API}/api/bde/tasks/${taskId}/time-tracking`, { action }, { headers });
+      toast.success(res.data.message);
+      loadTasks();
+      
+      // Update running timers
+      if (action === 'start' || action === 'resume') {
+        setRunningTimers(prev => ({ ...prev, [taskId]: Date.now() }));
+      } else {
+        setRunningTimers(prev => {
+          const { [taskId]: removed, ...rest } = prev;
+          return rest;
+        });
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || `Failed to ${action} timer`);
+    }
+  };
+
+  // Format seconds to readable time
+  const formatDuration = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  };
+
+  // Get time tracking button based on status
+  const getTimeTrackingButton = (task) => {
+    const tracking = task.time_tracking || { status: 'not_started', total_seconds: 0 };
+    const status = tracking.status;
+    
+    switch (status) {
+      case 'not_started':
+        return (
+          <Button
+            size="sm"
+            onClick={() => handleTimeTracking(task.task_id, 'start')}
+            className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
+          >
+            <Play className="h-3 w-3 mr-1" /> Start
+          </Button>
+        );
+      case 'running':
+        return (
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              onClick={() => handleTimeTracking(task.task_id, 'pause')}
+              className="bg-[#f59e0b] hover:bg-[#d97706] text-white h-8 px-3"
+            >
+              <Pause className="h-3 w-3 mr-1" /> Pause
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleTimeTracking(task.task_id, 'finish')}
+              className="bg-[#ef4444] hover:bg-[#dc2626] text-white h-8 px-3"
+            >
+              <Square className="h-3 w-3 mr-1" /> Finish
+            </Button>
+          </div>
+        );
+      case 'paused':
+        return (
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              onClick={() => handleTimeTracking(task.task_id, 'resume')}
+              className="bg-[#3b82f6] hover:bg-[#2563eb] text-white h-8 px-3"
+            >
+              <Play className="h-3 w-3 mr-1" /> Resume
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleTimeTracking(task.task_id, 'finish')}
+              className="bg-[#ef4444] hover:bg-[#dc2626] text-white h-8 px-3"
+            >
+              <Square className="h-3 w-3 mr-1" /> Finish
+            </Button>
+          </div>
+        );
+      case 'finished':
+        return (
+          <Badge className="bg-[#10b981]/20 text-[#10b981]">
+            <CheckCircle2 className="h-3 w-3 mr-1" /> Done
+          </Badge>
+        );
+      default:
+        return null;
     }
   };
 
@@ -275,23 +374,24 @@ export default function BDETasksPage() {
               <table className="w-full">
                 <thead className={bgSecondary}>
                   <tr>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Date</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Task Name</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Priority</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Type</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Created By</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Assigned To</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Due Date</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Priority</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Time Spent</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Timer</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
+                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
                     </tr>
                   ) : filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>
+                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                         <p>No tasks found</p>
                         <p className="text-sm">Create a new task to get started</p>
@@ -299,13 +399,29 @@ export default function BDETasksPage() {
                     </tr>
                   ) : filteredTasks.map(task => (
                     <tr key={task.task_id} className={`${bgCard} hover:${bgSecondary}`}>
-                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>
-                        {formatDate(task.created_at)}
-                      </td>
                       <td className={`px-4 py-3`}>
                         <div className={`font-medium ${textPrimary}`}>{task.task_name}</div>
                         {task.description && (
                           <div className={`text-xs ${textSecondary} truncate max-w-xs`}>{task.description}</div>
+                        )}
+                        <div className={`text-xs ${textSecondary} mt-1`}>
+                          <Badge className="text-xs" variant="outline">{task.type || 'General'}</Badge>
+                        </div>
+                      </td>
+                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>
+                        {task.created_by_name || '-'}
+                        <div className={`text-xs ${textSecondary}`}>{formatDate(task.created_at)}</div>
+                      </td>
+                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>
+                        {task.assigned_to_name || '-'}
+                      </td>
+                      <td className={`px-4 py-3 text-sm`}>
+                        {task.due_date ? (
+                          <span className={new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'text-[#ef4444]' : textPrimary}>
+                            {formatDate(task.due_date)}
+                          </span>
+                        ) : (
+                          <span className={textSecondary}>-</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -313,24 +429,19 @@ export default function BDETasksPage() {
                           {task.priority}
                         </Badge>
                       </td>
-                      <td className={`px-4 py-3 text-sm ${textPrimary} capitalize`}>
-                        {task.type || 'General'}
-                      </td>
-                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>
-                        {task.assigned_to_name || '-'}
+                      <td className={`px-4 py-3`}>
+                        <div className="flex items-center gap-2">
+                          <Timer className={`h-4 w-4 ${task.time_tracking?.status === 'running' ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
+                          <span className={`text-sm font-medium ${textPrimary}`}>
+                            {formatDuration(task.time_tracking?.total_seconds || 0)}
+                          </span>
+                        </div>
+                        {task.time_tracking?.status === 'running' && (
+                          <div className="text-xs text-[#10b981] mt-1">Running...</div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        <Select value={task.status} onValueChange={(v) => handleStatusChange(task.task_id, v)}>
-                          <SelectTrigger className={`w-32 h-8 ${statusColors[task.status]}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className={bgCard}>
-                            <SelectItem value="pending">Pending</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="on_hold">On Hold</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {getTimeTrackingButton(task)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1">
