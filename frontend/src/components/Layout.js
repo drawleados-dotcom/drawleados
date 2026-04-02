@@ -18,7 +18,8 @@ const routeToContext = {
   '/services': 'general',
   '/settings': 'general',
   '/sop-works': 'operations',
-  '/website-projects': 'operations'
+  '/website-projects': 'operations',
+  '/profile': 'general'
 };
 
 const Layout = ({ children }) => {

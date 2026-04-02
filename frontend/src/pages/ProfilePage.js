@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -147,8 +148,9 @@ export default function ProfilePage() {
   ];
 
   return (
-    <div className={`min-h-screen ${bgMain} p-6`}>
-      <div className="max-w-5xl mx-auto">
+    <Layout>
+      <div className={`min-h-screen ${bgMain} p-6`}>
+        <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -487,5 +489,6 @@ export default function ProfilePage() {
         )}
       </div>
     </div>
+    </Layout>
   );
 }
