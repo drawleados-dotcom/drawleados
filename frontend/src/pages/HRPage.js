@@ -20,6 +20,7 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 export default function HRPage() {
   const { isDark } = useTheme();
+  const { user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
   
   // Theme classes
@@ -316,6 +317,7 @@ export default function HRPage() {
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            currentUser={authUser}
           />
         )}
 
@@ -1585,7 +1587,7 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
   );
 }
 
-function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderColor, currentUser }) {
   const [activeSubTab, setActiveSubTab] = useState('current');
   const [salaryHistory, setSalaryHistory] = useState([]);
   const [currentSalary, setCurrentSalary] = useState(0);
@@ -1597,17 +1599,16 @@ function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCol
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
-  const userStr = localStorage.getItem('user');
-  const user = userStr ? JSON.parse(userStr) : {};
   
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const years = [2023, 2024, 2025, 2026, 2027];
   
   // Load salary history
   const loadSalaryHistory = async () => {
+    if (!currentUser?.user_id) return;
     try {
       const res = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/payroll/salary-history/${user.user_id}`,
+        `${process.env.REACT_APP_BACKEND_URL}/api/payroll/salary-history/${currentUser.user_id}`,
         { headers }
       );
       setSalaryHistory(res.data.salary_history || []);
@@ -1619,10 +1620,11 @@ function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCol
   
   // Load payroll details for selected month/year
   const loadPayrollDetails = async () => {
+    if (!currentUser?.user_id) return;
     setIsLoading(true);
     try {
       const res = await axios.get(
-        `${process.env.REACT_APP_BACKEND_URL}/api/payroll/details/${user.user_id}?month=${selectedMonth}&year=${selectedYear}`,
+        `${process.env.REACT_APP_BACKEND_URL}/api/payroll/details/${currentUser.user_id}?month=${selectedMonth}&year=${selectedYear}`,
         { headers }
       );
       setPayrollDetails(res.data);
@@ -1646,13 +1648,17 @@ function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCol
   };
   
   useEffect(() => {
-    loadSalaryHistory();
-    loadHikeReasons();
-  }, []);
+    if (currentUser?.user_id) {
+      loadSalaryHistory();
+      loadHikeReasons();
+    }
+  }, [currentUser?.user_id]);
   
   useEffect(() => {
-    loadPayrollDetails();
-  }, [selectedMonth, selectedYear]);
+    if (currentUser?.user_id) {
+      loadPayrollDetails();
+    }
+  }, [selectedMonth, selectedYear, currentUser?.user_id]);
   
   // Calculate months at each salary level
   const calculateSalaryDuration = (index) => {

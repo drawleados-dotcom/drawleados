@@ -13,7 +13,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import uuid
 
-payroll_router = APIRouter(prefix="/api/payroll", tags=["payroll"])
+payroll_router = APIRouter(prefix="/payroll", tags=["payroll"])
 
 # MongoDB connection
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
