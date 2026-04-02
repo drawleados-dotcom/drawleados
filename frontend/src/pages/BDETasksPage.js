@@ -44,11 +44,11 @@ export default function BDETasksPage() {
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true); // Show filters by default
   
   // Advanced filters
   const [filters, setFilters] = useState({
-    dateFilter: 'today', // today, all, range
+    dateFilter: 'all', // all, today, range - default to all
     dateFrom: '',
     dateTo: '',
     assignedTo: 'all', // all, myself, or user_id
@@ -332,7 +332,7 @@ export default function BDETasksPage() {
   // Reset filters
   const resetFilters = () => {
     setFilters({
-      dateFilter: 'today',
+      dateFilter: 'all',
       dateFrom: '',
       dateTo: '',
       assignedTo: 'all',
