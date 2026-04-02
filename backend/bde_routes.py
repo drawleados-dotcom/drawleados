@@ -3,13 +3,21 @@ BDE Tasks Routes - Task management for Business Development
 """
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import uuid
 
 bde_router = APIRouter(prefix="/bde", tags=["BDE Tasks"])
 
 # Models
+class CustomRecurrence(BaseModel):
+    repeat_every: int = 1
+    repeat_unit: str = "week"  # day, week, month, year
+    repeat_on_days: List[int] = []  # 0-6 for Sun-Sat
+    ends: str = "never"  # never, on_date, after_occurrences
+    end_date: Optional[str] = None
+    occurrences: int = 13
+
 class TaskCreate(BaseModel):
     task_name: str
     description: Optional[str] = ""
@@ -18,6 +26,10 @@ class TaskCreate(BaseModel):
     assigned_to: Optional[str] = None
     assigned_by: Optional[str] = None
     due_date: Optional[str] = None
+    due_time: Optional[str] = None
+    all_day: bool = False
+    recurrence: str = "none"  # none, daily, weekly, monthly, yearly, weekdays, custom
+    custom_recurrence: Optional[CustomRecurrence] = None
     status: str = "pending"  # pending, in_progress, completed, on_hold
     work_link: Optional[str] = None  # Link to work file/project
 
@@ -29,6 +41,10 @@ class TaskUpdate(BaseModel):
     assigned_to: Optional[str] = None
     assigned_by: Optional[str] = None
     due_date: Optional[str] = None
+    due_time: Optional[str] = None
+    all_day: Optional[bool] = None
+    recurrence: Optional[str] = None
+    custom_recurrence: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     work_link: Optional[str] = None
 
@@ -42,6 +58,132 @@ class TimeTrackingAction(BaseModel):
 async def get_db():
     from server import db
     return db
+
+# Helper function to check if a task should appear on a specific date based on recurrence
+def task_occurs_on_date(task: dict, check_date: str) -> bool:
+    """Check if a recurring task occurs on the given date"""
+    recurrence = task.get("recurrence", "none")
+    if recurrence == "none":
+        return task.get("due_date") == check_date
+    
+    start_date_str = task.get("due_date")
+    if not start_date_str:
+        return False
+    
+    try:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+        target_date = datetime.strptime(check_date, "%Y-%m-%d")
+        
+        # Task hasn't started yet
+        if target_date < start_date:
+            return False
+        
+        # Check end conditions
+        custom_rec = task.get("custom_recurrence", {})
+        ends = custom_rec.get("ends", "never") if recurrence == "custom" else "never"
+        
+        if ends == "on_date":
+            end_date_str = custom_rec.get("end_date")
+            if end_date_str:
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+                if target_date > end_date:
+                    return False
+        
+        day_of_week = target_date.weekday()  # 0=Monday, 6=Sunday
+        # Convert to Sunday=0 format
+        day_of_week_sun = (day_of_week + 1) % 7
+        
+        if recurrence == "daily":
+            return True
+        
+        elif recurrence == "weekly":
+            # Same day of week as start date
+            return start_date.weekday() == target_date.weekday()
+        
+        elif recurrence == "monthly":
+            # Same day of month
+            return start_date.day == target_date.day
+        
+        elif recurrence == "yearly":
+            # Same month and day
+            return start_date.month == target_date.month and start_date.day == target_date.day
+        
+        elif recurrence == "weekdays":
+            # Monday to Friday (weekday 0-4)
+            return target_date.weekday() < 5
+        
+        elif recurrence == "custom":
+            repeat_unit = custom_rec.get("repeat_unit", "week")
+            repeat_every = custom_rec.get("repeat_every", 1)
+            repeat_on_days = custom_rec.get("repeat_on_days", [])
+            
+            if repeat_unit == "day":
+                days_diff = (target_date - start_date).days
+                return days_diff >= 0 and days_diff % repeat_every == 0
+            
+            elif repeat_unit == "week":
+                # Check if day of week matches
+                if repeat_on_days:
+                    if day_of_week_sun not in repeat_on_days:
+                        return False
+                
+                # Check week interval
+                weeks_diff = (target_date - start_date).days // 7
+                if repeat_every > 1:
+                    # Find start of week for both dates
+                    start_week = start_date - timedelta(days=start_date.weekday())
+                    target_week = target_date - timedelta(days=target_date.weekday())
+                    weeks_diff = (target_week - start_week).days // 7
+                    return weeks_diff % repeat_every == 0
+                return True
+            
+            elif repeat_unit == "month":
+                months_diff = (target_date.year - start_date.year) * 12 + (target_date.month - start_date.month)
+                return months_diff >= 0 and months_diff % repeat_every == 0 and start_date.day == target_date.day
+            
+            elif repeat_unit == "year":
+                years_diff = target_date.year - start_date.year
+                return years_diff >= 0 and years_diff % repeat_every == 0 and start_date.month == target_date.month and start_date.day == target_date.day
+        
+        return False
+    except Exception:
+        return False
+
+def get_recurrence_label(task: dict) -> str:
+    """Get a human-readable label for the recurrence pattern"""
+    recurrence = task.get("recurrence", "none")
+    if recurrence == "none":
+        return "One-time"
+    elif recurrence == "daily":
+        return "Daily"
+    elif recurrence == "weekly":
+        return "Weekly"
+    elif recurrence == "monthly":
+        return "Monthly"
+    elif recurrence == "yearly":
+        return "Yearly"
+    elif recurrence == "weekdays":
+        return "Weekdays (Mon-Fri)"
+    elif recurrence == "custom":
+        custom_rec = task.get("custom_recurrence", {})
+        repeat_every = custom_rec.get("repeat_every", 1)
+        repeat_unit = custom_rec.get("repeat_unit", "week")
+        repeat_on_days = custom_rec.get("repeat_on_days", [])
+        
+        day_names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        
+        if repeat_on_days:
+            days_str = ", ".join([day_names[d] for d in sorted(repeat_on_days)])
+            if repeat_every == 1:
+                return f"Every {days_str}"
+            else:
+                return f"Every {repeat_every} {repeat_unit}s on {days_str}"
+        else:
+            if repeat_every == 1:
+                return f"Every {repeat_unit}"
+            else:
+                return f"Every {repeat_every} {repeat_unit}s"
+    return "Unknown"
 
 # Get all tasks (visible to user based on role)
 @bde_router.get("/tasks")
@@ -193,58 +335,120 @@ async def get_tasks_by_date(date: str, request: Request):
 # Get all tasks for a month (for calendar view)
 @bde_router.get("/tasks/month/{year}/{month}")
 async def get_tasks_for_month(year: int, month: int, request: Request):
-    """Get all tasks grouped by date for a specific month - optimized for calendar view"""
+    """Get all tasks grouped by date for a specific month - includes recurring tasks"""
     from server import get_current_user, db
     user = await get_current_user(request)
     
     try:
-        # Get start and end of month
         from calendar import monthrange
         last_day = monthrange(year, month)[1]
         start_date = f"{year}-{str(month).zfill(2)}-01"
         end_date = f"{year}-{str(month).zfill(2)}-{str(last_day).zfill(2)}"
         
-        # Build query - get all tasks with due_date in this month
-        base_query = {
-            "due_date": {"$gte": start_date, "$lte": end_date}
-        }
-        
-        # Filter by user access
+        # Build base access filter
+        access_filter = {}
         if user.role not in ["super_admin", "admin", "hr_manager"]:
-            base_query = {
-                "$and": [
-                    base_query,
-                    {"$or": [
-                        {"created_by": user.user_id},
-                        {"assigned_to": user.user_id}
-                    ]}
+            access_filter = {
+                "$or": [
+                    {"created_by": user.user_id},
+                    {"assigned_to": user.user_id}
                 ]
             }
         
-        tasks = await db.bde_tasks.find(base_query, {
+        # Get non-recurring tasks with due_date in this month
+        non_recurring_query = {
+            "due_date": {"$gte": start_date, "$lte": end_date},
+            "$or": [
+                {"recurrence": {"$exists": False}},
+                {"recurrence": "none"},
+                {"recurrence": None}
+            ]
+        }
+        if access_filter:
+            non_recurring_query = {"$and": [non_recurring_query, access_filter]}
+        
+        non_recurring_tasks = await db.bde_tasks.find(non_recurring_query, {
             "_id": 0,
             "task_id": 1,
             "task_name": 1,
             "priority": 1,
             "status": 1,
             "due_date": 1,
-            "type": 1
-        }).sort("due_date", 1).to_list(500)
+            "due_time": 1,
+            "type": 1,
+            "recurrence": 1
+        }).to_list(500)
+        
+        # Get all recurring tasks that could appear in this month
+        recurring_query = {
+            "recurrence": {"$nin": ["none", None]},
+            "due_date": {"$lte": end_date}  # Started before or during this month
+        }
+        if access_filter:
+            recurring_query = {"$and": [recurring_query, access_filter]}
+        
+        recurring_tasks = await db.bde_tasks.find(recurring_query, {
+            "_id": 0,
+            "task_id": 1,
+            "task_name": 1,
+            "priority": 1,
+            "status": 1,
+            "due_date": 1,
+            "due_time": 1,
+            "type": 1,
+            "recurrence": 1,
+            "custom_recurrence": 1
+        }).to_list(500)
         
         # Group tasks by date
         tasks_by_date = {}
-        for task in tasks:
+        
+        # Add non-recurring tasks
+        for task in non_recurring_tasks:
             date = task.get("due_date")
             if date:
+                task["recurrence_label"] = "One-time"
                 if date not in tasks_by_date:
                     tasks_by_date[date] = []
                 tasks_by_date[date].append(task)
+        
+        # Check each day of the month for recurring tasks
+        for day in range(1, last_day + 1):
+            check_date = f"{year}-{str(month).zfill(2)}-{str(day).zfill(2)}"
+            
+            for task in recurring_tasks:
+                if task_occurs_on_date(task, check_date):
+                    # Create a copy with this specific date
+                    task_instance = {
+                        "task_id": task["task_id"],
+                        "task_name": task["task_name"],
+                        "priority": task.get("priority", "medium"),
+                        "status": task.get("status", "pending"),
+                        "due_date": check_date,
+                        "due_time": task.get("due_time"),
+                        "type": task.get("type", "general"),
+                        "recurrence": task.get("recurrence"),
+                        "recurrence_label": get_recurrence_label(task),
+                        "is_recurring_instance": True,
+                        "original_due_date": task.get("due_date")
+                    }
+                    
+                    if check_date not in tasks_by_date:
+                        tasks_by_date[check_date] = []
+                    
+                    # Avoid duplicates
+                    existing_ids = [t["task_id"] for t in tasks_by_date[check_date]]
+                    if task["task_id"] not in existing_ids:
+                        tasks_by_date[check_date].append(task_instance)
+        
+        # Count total tasks
+        total_tasks = sum(len(tasks) for tasks in tasks_by_date.values())
         
         return {
             "year": year,
             "month": month,
             "tasks_by_date": tasks_by_date,
-            "total_tasks": len(tasks)
+            "total_tasks": total_tasks
         }
         
     except Exception as e:
@@ -262,6 +466,11 @@ async def create_task(data: TaskCreate, request: Request):
         # If assigned_to is provided, set assigned_by to current user
         assigned_by = data.assigned_by or (user.user_id if data.assigned_to else None)
         
+        # Prepare custom_recurrence dict if provided
+        custom_rec = None
+        if data.custom_recurrence:
+            custom_rec = data.custom_recurrence.dict() if hasattr(data.custom_recurrence, 'dict') else data.custom_recurrence
+        
         task = {
             "task_id": task_id,
             "task_name": data.task_name,
@@ -271,6 +480,10 @@ async def create_task(data: TaskCreate, request: Request):
             "assigned_to": data.assigned_to,
             "assigned_by": assigned_by,
             "due_date": data.due_date,
+            "due_time": data.due_time,
+            "all_day": data.all_day,
+            "recurrence": data.recurrence,
+            "custom_recurrence": custom_rec,
             "status": data.status,
             "work_link": data.work_link,
             "created_by": user.user_id,

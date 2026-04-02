@@ -272,6 +272,38 @@ export default function BDETasksPage() {
     }
   };
 
+  // Helper function to get recurrence label
+  const getRecurrenceLabel = (task) => {
+    const recurrence = task?.recurrence || 'none';
+    if (recurrence === 'none') return 'One-time';
+    if (recurrence === 'daily') return 'Daily';
+    if (recurrence === 'weekly') return 'Weekly';
+    if (recurrence === 'monthly') return 'Monthly';
+    if (recurrence === 'yearly') return 'Yearly';
+    if (recurrence === 'weekdays') return 'Weekdays (Mon-Fri)';
+    if (recurrence === 'custom') {
+      const customRec = task?.custom_recurrence || {};
+      const repeatEvery = customRec.repeat_every || 1;
+      const repeatUnit = customRec.repeat_unit || 'week';
+      const repeatOnDays = customRec.repeat_on_days || [];
+      
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      
+      if (repeatOnDays.length > 0) {
+        const daysStr = repeatOnDays.sort((a, b) => a - b).map(d => dayNames[d]).join(', ');
+        if (repeatEvery === 1) {
+          return `Every ${daysStr}`;
+        }
+        return `Every ${repeatEvery} ${repeatUnit}s on ${daysStr}`;
+      }
+      if (repeatEvery === 1) {
+        return `Every ${repeatUnit}`;
+      }
+      return `Every ${repeatEvery} ${repeatUnit}s`;
+    }
+    return 'Unknown';
+  };
+
   const resetForm = () => {
     setFormData({
       task_name: '',
@@ -676,9 +708,23 @@ export default function BDETasksPage() {
                       </td>
                       <td className={`px-4 py-3 text-sm`}>
                         {task.due_date ? (
-                          <span className={new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'text-[#ef4444]' : textPrimary}>
-                            {formatDate(task.due_date)}
-                          </span>
+                          <div>
+                            <span className={new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'text-[#ef4444]' : textPrimary}>
+                              {formatDate(task.due_date)}
+                            </span>
+                            {task.due_time && (
+                              <span className={`text-xs ${textSecondary} ml-1`}>at {task.due_time}</span>
+                            )}
+                            {/* Recurrence indicator */}
+                            {task.recurrence && task.recurrence !== 'none' && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <Repeat className="h-3 w-3 text-[#6366f1]" />
+                                <span className="text-[10px] text-[#6366f1]">
+                                  {task.recurrence_label || getRecurrenceLabel(task)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className={textSecondary}>-</span>
                         )}
@@ -1164,7 +1210,17 @@ export default function BDETasksPage() {
                     </p>
                     <p className={`font-medium ${viewingTask.due_date && new Date(viewingTask.due_date) < new Date() && viewingTask.status !== 'completed' ? 'text-[#ef4444]' : textPrimary}`}>
                       {viewingTask.due_date ? formatDate(viewingTask.due_date) : 'No due date'}
+                      {viewingTask.due_time && ` at ${viewingTask.due_time}`}
                     </p>
+                    {/* Recurrence Info */}
+                    {viewingTask.recurrence && viewingTask.recurrence !== 'none' && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <Repeat className="h-3 w-3 text-[#6366f1]" />
+                        <span className="text-xs text-[#6366f1]">
+                          {viewingTask.recurrence_label || getRecurrenceLabel(viewingTask)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className={`p-4 rounded-lg ${bgSecondary}`}>
                     <p className={`text-xs ${textSecondary} mb-1 flex items-center gap-1`}>
