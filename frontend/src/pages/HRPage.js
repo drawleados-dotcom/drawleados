@@ -591,7 +591,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Total Absent</p>
           <p className="text-2xl font-bold text-[#ef4444]">{monthlyStats?.absent || 0}</p>
-          <p className={`text-xs ${textSecondary} mt-1`}>excluding pending</p>
+          <p className={`text-xs ${textSecondary} mt-1`}>extra/unpaid leaves</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>

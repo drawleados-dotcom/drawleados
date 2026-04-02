@@ -780,14 +780,21 @@ async def get_attendance_history(
     holidays = calendar.get("holidays", []) if calendar else []
     
     present_days = len([r for r in records if r.get("status") == "present" and r.get("approval_status") in ["auto", "approved"]])
-    absent_days = total_working_days - present_days - len([l for l in leaves if l.get("leave_type") in ["casual", "sick", "earned"]])
-    
-    total_hours = sum(r.get("total_hours", 0) for r in records)
-    extra_hours = sum(r.get("extra_hours", 0) for r in records)
     
     # Count leaves by type
     casual_used = len([l for l in leaves if l.get("leave_type") == "casual"])
     sick_used = len([l for l in leaves if l.get("leave_type") == "sick"])
+    unpaid_used = len([l for l in leaves if l.get("leave_type") == "unpaid"])
+    
+    # Total Absent should ONLY count actual absences:
+    # 1. Unpaid leaves (extra leaves beyond allocation)
+    # 2. Days explicitly marked as "absent" in attendance records
+    # NOT pending/future working days
+    actual_absent_records = len([r for r in records if r.get("status") == "absent"])
+    total_absent = actual_absent_records + unpaid_used
+    
+    total_hours = sum(r.get("total_hours", 0) for r in records)
+    extra_hours = sum(r.get("extra_hours", 0) for r in records)
     
     # Get leave balance
     balance = await db.leave_balance.find_one({
@@ -806,7 +813,7 @@ async def get_attendance_history(
         "summary": {
             "total_working_days": total_working_days,
             "present": present_days,
-            "absent": max(0, absent_days),
+            "absent": total_absent,  # Only actual absences (unpaid/extra leaves, marked absent)
             "casual_leave": casual_used,
             "sick_leave": sick_used,
             "total_hours": round(total_hours, 2),
