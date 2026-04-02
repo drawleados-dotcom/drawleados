@@ -86,8 +86,8 @@ const Sidebar = () => {
   const isEmployee = userRole === 'employee';
   const isBDE = userRole === 'business_development' || userRole === 'bde';
   const isProjectManager = userRole === 'project_manager';
-  // HR Admin access: Only for admins, project managers, and HR managers
-  const canManageHR = isAdmin || isProjectManager || userRole === 'hr_manager';
+  // HR Admin access: Admins, project managers, HR managers, and users with HR module access
+  const canManageHR = isAdmin || isProjectManager || userRole === 'hr_manager' || hasAccess('hr');
   const canManageUsers = user?.can_manage_users || false;
 
   // Load databases for operations submenu
