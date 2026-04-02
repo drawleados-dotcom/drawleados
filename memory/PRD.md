@@ -55,6 +55,8 @@ The system sends email notifications with "View" buttons for:
 - POST `/api/auth/login` - Login with email/password
 - POST `/api/auth/register` - Register new user
 - GET `/api/auth/me` - Get current user
+- POST `/api/auth/request-otp` - Request OTP for password change (sends to registered email)
+- POST `/api/auth/verify-otp-change-password` - Verify OTP and change password
 
 ### Leads (V2)
 - GET/POST `/api/leads` - List/create leads
@@ -262,12 +264,25 @@ The system sends email notifications with "View" buttons for:
 - ✅ HR leave management with approval workflow
 - ✅ Operations Kanban board
 
+#### April 2026
+- ✅ **Employee Profile Page** - `/profile` route with three tabs:
+  - My Details: Personal info (name, email, phone) + Employment details (department, designation, joining date)
+  - Attendance Summary: Days present/absent, total/extra hours, average hours/day
+  - Security: OTP-based password change
+- ✅ **OTP Password Change Flow**: 
+  - Backend routes: `POST /api/auth/request-otp`, `POST /api/auth/verify-otp-change-password`
+  - 6-digit OTP sent to registered email (mocked in logs)
+  - OTP valid for 10 minutes
+- ✅ **Employee Sidebar Access**: All employees can now see HR, Operations, and Profile links regardless of explicit `module_access` array
+- ✅ Fixed datetime timezone comparison bug in OTP verification
+
 ---
 
 ## Prioritized Backlog
 
 ### P0 - Critical
 - [x] **SEO Board** - DONE (Dec 2025)
+- [x] **Employee Profile Page & OTP Password Change** - DONE (Apr 2026)
 - [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
 - [ ] Leads Custom Fields - Notion-style custom fields for leads
 
@@ -290,6 +305,7 @@ The system sends email notifications with "View" buttons for:
 
 ## Test Credentials
 - **Admin**: vinoth@drawlead.com / admin123
+- **Employee**: Praveenkumar6361@gmail.com / praveenps
 
 ## 3rd Party Integrations
 - Emergent-managed Google Auth
