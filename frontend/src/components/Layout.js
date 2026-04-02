@@ -296,116 +296,40 @@ const Layout = ({ children }) => {
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
   const bgInput = isDark ? 'bg-[#27272a]' : 'bg-gray-50';
 
-  // Time Picker Component - Real-time with hour/minute/AM-PM inputs
-  const TimePickerInput = ({ hour, minute, period, onChange, label }) => {
-    const handleHourChange = (delta) => {
-      let newHour = hour + delta;
-      if (newHour > 12) newHour = 1;
-      if (newHour < 1) newHour = 12;
-      onChange({ hour: newHour, minute, period });
-    };
-
-    const handleMinuteChange = (delta) => {
-      let newMinute = minute + delta;
-      if (newMinute >= 60) newMinute = 0;
-      if (newMinute < 0) newMinute = 59;
-      onChange({ hour, minute: newMinute, period });
-    };
-
-    const handleHourInput = (value) => {
-      const num = parseInt(value) || 0;
-      if (num >= 1 && num <= 12) {
-        onChange({ hour: num, minute, period });
-      } else if (value === '') {
-        onChange({ hour: 12, minute, period });
-      }
-    };
-
-    const handleMinuteInput = (value) => {
-      const num = parseInt(value) || 0;
-      if (num >= 0 && num <= 59) {
-        onChange({ hour, minute: num, period });
-      } else if (value === '') {
-        onChange({ hour, minute: 0, period });
-      }
-    };
-
-    const togglePeriod = () => {
-      onChange({ hour, minute, period: period === 'AM' ? 'PM' : 'AM' });
-    };
-
+  // Read-Only Time Display Component - Shows auto-captured time (no editing)
+  const ReadOnlyTimeDisplay = ({ hour, minute, period, label }) => {
     return (
       <div>
         <Label className={`${textPrimary} mb-2 block`}>{label}</Label>
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center justify-center gap-3 p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
           {/* Hour */}
-          <div className="flex flex-col items-center">
-            <button
-              type="button"
-              onClick={() => handleHourChange(1)}
-              className={`w-14 h-8 flex items-center justify-center rounded-t-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
-            >
-              ▲
-            </button>
-            <input
-              type="text"
-              value={hour.toString().padStart(2, '0')}
-              onChange={(e) => handleHourInput(e.target.value)}
-              className={`w-14 h-14 text-center text-2xl font-bold ${bgInput} ${textPrimary} border-x ${borderColor} focus:outline-none focus:ring-2 focus:ring-[#6366f1]`}
-              data-testid="time-hour-input"
-            />
-            <button
-              type="button"
-              onClick={() => handleHourChange(-1)}
-              className={`w-14 h-8 flex items-center justify-center rounded-b-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
-            >
-              ▼
-            </button>
+          <div className={`w-16 h-16 flex items-center justify-center rounded-lg ${isDark ? 'bg-[#3f3f46]' : 'bg-white'} shadow-sm`}>
+            <span className={`text-3xl font-bold ${textPrimary}`} data-testid="time-hour-display">
+              {hour.toString().padStart(2, '0')}
+            </span>
           </div>
 
           <span className={`text-3xl font-bold ${textPrimary}`}>:</span>
 
           {/* Minute */}
-          <div className="flex flex-col items-center">
-            <button
-              type="button"
-              onClick={() => handleMinuteChange(1)}
-              className={`w-14 h-8 flex items-center justify-center rounded-t-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
-            >
-              ▲
-            </button>
-            <input
-              type="text"
-              value={minute.toString().padStart(2, '0')}
-              onChange={(e) => handleMinuteInput(e.target.value)}
-              className={`w-14 h-14 text-center text-2xl font-bold ${bgInput} ${textPrimary} border-x ${borderColor} focus:outline-none focus:ring-2 focus:ring-[#6366f1]`}
-              data-testid="time-minute-input"
-            />
-            <button
-              type="button"
-              onClick={() => handleMinuteChange(-1)}
-              className={`w-14 h-8 flex items-center justify-center rounded-b-lg ${isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${textPrimary} transition-colors`}
-            >
-              ▼
-            </button>
+          <div className={`w-16 h-16 flex items-center justify-center rounded-lg ${isDark ? 'bg-[#3f3f46]' : 'bg-white'} shadow-sm`}>
+            <span className={`text-3xl font-bold ${textPrimary}`} data-testid="time-minute-display">
+              {minute.toString().padStart(2, '0')}
+            </span>
           </div>
 
-          {/* AM/PM Toggle */}
-          <div className="flex flex-col items-center ml-2">
-            <button
-              type="button"
-              onClick={togglePeriod}
-              className={`px-4 h-14 rounded-lg font-bold text-xl transition-colors ${
-                period === 'AM' 
-                  ? 'bg-[#6366f1] text-white' 
-                  : 'bg-[#f59e0b] text-white'
-              }`}
-              data-testid="time-period-toggle"
-            >
-              {period}
-            </button>
+          {/* AM/PM */}
+          <div className={`px-4 h-16 flex items-center justify-center rounded-lg font-bold text-xl ${
+            period === 'AM' 
+              ? 'bg-[#6366f1] text-white' 
+              : 'bg-[#f59e0b] text-white'
+          }`} data-testid="time-period-display">
+            {period}
           </div>
         </div>
+        <p className={`text-xs mt-2 text-center ${textSecondary}`}>
+          Time auto-captured • Cannot be edited
+        </p>
       </div>
     );
   };
@@ -549,12 +473,11 @@ const Layout = ({ children }) => {
         submitText="Clock In"
         submitColor="bg-[#10b981] hover:bg-[#059669]"
       >
-        {/* Time Picker */}
-        <TimePickerInput
+        {/* Read-Only Time Display */}
+        <ReadOnlyTimeDisplay
           hour={clockInData.hour}
           minute={clockInData.minute}
           period={clockInData.period}
-          onChange={(time) => setClockInData(prev => ({ ...prev, ...time }))}
           label="Clock In Time"
         />
         
@@ -635,12 +558,11 @@ const Layout = ({ children }) => {
           <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
         </div>
         
-        {/* Time Picker */}
-        <TimePickerInput
+        {/* Read-Only Time Display */}
+        <ReadOnlyTimeDisplay
           hour={clockOutData.hour}
           minute={clockOutData.minute}
           period={clockOutData.period}
-          onChange={(time) => setClockOutData(prev => ({ ...prev, ...time }))}
           label="Clock Out Time"
         />
       </AttendanceModal>
@@ -666,12 +588,11 @@ const Layout = ({ children }) => {
           <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
         </div>
         
-        {/* Time Picker */}
-        <TimePickerInput
+        {/* Read-Only Time Display */}
+        <ReadOnlyTimeDisplay
           hour={lunchOutData.hour}
           minute={lunchOutData.minute}
           period={lunchOutData.period}
-          onChange={(time) => setLunchOutData(prev => ({ ...prev, ...time }))}
           label="Lunch Out Time"
         />
       </AttendanceModal>
@@ -715,12 +636,11 @@ const Layout = ({ children }) => {
           <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
         </div>
         
-        {/* Time Picker */}
-        <TimePickerInput
+        {/* Read-Only Time Display */}
+        <ReadOnlyTimeDisplay
           hour={lunchInData.hour}
           minute={lunchInData.minute}
           period={lunchInData.period}
-          onChange={(time) => setLunchInData(prev => ({ ...prev, ...time }))}
           label="Lunch In Time"
         />
       </AttendanceModal>
