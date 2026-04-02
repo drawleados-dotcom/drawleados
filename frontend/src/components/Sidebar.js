@@ -62,10 +62,23 @@ const Sidebar = () => {
   // Role-based access control
   const userRole = user?.role || 'employee';
   const moduleAccess = user?.module_access || [];
+  const userDepartment = user?.department || '';
   
   // Check access permissions
   const hasAccess = (module) => {
+    // Super Admin and Admin have full access
     if (userRole === 'super_admin' || userRole === 'admin') return true;
+    
+    // ALL employees get HR access (for their own attendance/leave/profile)
+    if (module === 'hr') return true;
+    
+    // ALL employees get Operations access (filtered by department)
+    if (module === 'operations') return true;
+    
+    // ALL employees get Profile access
+    if (module === 'profile') return true;
+    
+    // Check explicit module access for other modules
     return moduleAccess.includes(module);
   };
   
@@ -73,8 +86,8 @@ const Sidebar = () => {
   const isEmployee = userRole === 'employee';
   const isBDE = userRole === 'business_development' || userRole === 'bde';
   const isProjectManager = userRole === 'project_manager';
-  // HR Admin access: Only for admins and project managers, NOT for BDE
-  const canManageHR = isAdmin || isProjectManager;
+  // HR Admin access: Only for admins, project managers, and HR managers
+  const canManageHR = isAdmin || isProjectManager || userRole === 'hr_manager';
   const canManageUsers = user?.can_manage_users || false;
 
   // Load databases for operations submenu
@@ -383,6 +396,17 @@ const Sidebar = () => {
             {!isCollapsed && 'Settings'}
           </Link>
         )}
+
+        {/* My Profile - visible for all users */}
+        <Link
+          to="/profile"
+          data-testid="nav-profile"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/profile' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'My Profile' : ''}
+        >
+          <UserCircle className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'My Profile'}
+        </Link>
 
         {/* Documentations - visible for business_development and admins */}
         {(hasAccess('leads') || isBDE) && (
