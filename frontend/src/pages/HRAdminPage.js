@@ -353,12 +353,17 @@ export default function HRAdminPage() {
 
   const handleCreateEmployee = async (employeeData) => {
     try {
-      await axios.post(`${API}/api/hr/admin/create-employee`, employeeData, { headers });
-      toast.success('Employee created successfully! Login credentials sent.');
+      console.log('Creating employee:', employeeData);
+      const res = await axios.post(`${API}/api/hr/admin/create-employee`, employeeData, { headers });
+      console.log('Create response:', res.data);
+      toast.success(`Employee ${employeeData.full_name} created successfully! Credentials: ${employeeData.email} / ${employeeData.password}`);
       setShowAddModal(false);
       loadEmployees();
+      loadStats();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create employee');
+      console.error('Create employee error:', error.response?.data || error.message);
+      const errorMsg = error.response?.data?.detail || error.message || 'Failed to create employee';
+      toast.error(errorMsg);
     }
   };
 
@@ -683,10 +688,19 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
   };
 
   const handleSubmit = () => {
-    if (!formData.full_name || !formData.email || !formData.password) {
-      toast.error('Name, Email and Password are required');
+    if (!formData.full_name || !formData.full_name.trim()) {
+      toast.error('Full Name is required');
       return;
     }
+    if (!formData.email || !formData.email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+    if (!formData.password || formData.password.length < 6) {
+      toast.error('Password is required (minimum 6 characters)');
+      return;
+    }
+    console.log('Submitting form data:', formData);
     onSave(formData);
   };
 
