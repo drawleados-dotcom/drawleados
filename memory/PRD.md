@@ -310,6 +310,12 @@ The system sends email notifications with "View" buttons for:
   - Warning displayed if <9 hours worked (requires approval)
   - Lunch In modal shows "Lunch Duration" dynamically
   - Duration updates in real-time as user changes time
+- [x] **New Time Picker UI for Attendance** - DONE (Apr 2026)
+  - Separate Hour input (1-12) with up/down arrow buttons
+  - Separate Minute input (0-59) with up/down arrow buttons
+  - AM/PM toggle button (Blue for AM, Orange for PM)
+  - Manual number entry supported
+  - Real-time duration recalculation as values change
 - [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
 - [ ] Leads Custom Fields - Notion-style custom fields for leads
 
