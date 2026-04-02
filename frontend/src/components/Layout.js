@@ -5,8 +5,11 @@ import DrawleadAI from './DrawleadAI';
 import ThemeToggle from './ThemeToggle';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, LogIn, LogOut } from 'lucide-react';
+import { Clock, LogIn, LogOut, Coffee, Play, Building, Home, X, Calendar } from 'lucide-react';
 import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -38,8 +41,40 @@ const Layout = ({ children }) => {
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [loading, setLoading] = useState(false);
   
+  // Modal states
+  const [showClockInModal, setShowClockInModal] = useState(false);
+  const [showClockOutModal, setShowClockOutModal] = useState(false);
+  const [showLunchOutModal, setShowLunchOutModal] = useState(false);
+  const [showLunchInModal, setShowLunchInModal] = useState(false);
+  
+  // Form data for modals
+  const [clockInData, setClockInData] = useState({ time: '', workMode: 'office' });
+  const [clockOutData, setClockOutData] = useState({ time: '' });
+  const [lunchOutData, setLunchOutData] = useState({ time: '' });
+  const [lunchInData, setLunchInData] = useState({ time: '' });
+  
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
+
+  // Get current date info
+  const getCurrentDateInfo = () => {
+    const now = new Date();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return {
+      date: now.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      day: days[now.getDay()],
+      time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+    };
+  };
+
+  const [currentDateTime, setCurrentDateTime] = useState(getCurrentDateInfo());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentDateTime(getCurrentDateInfo());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Load today's attendance
   const loadTodayAttendance = useCallback(async () => {
@@ -56,11 +91,37 @@ const Layout = ({ children }) => {
     loadTodayAttendance();
   }, [loadTodayAttendance]);
 
+  // Initialize modal times when opening
+  const openClockInModal = () => {
+    setClockInData({ time: currentDateTime.time, workMode: 'office' });
+    setShowClockInModal(true);
+  };
+
+  const openClockOutModal = () => {
+    setClockOutData({ time: currentDateTime.time });
+    setShowClockOutModal(true);
+  };
+
+  const openLunchOutModal = () => {
+    setLunchOutData({ time: currentDateTime.time });
+    setShowLunchOutModal(true);
+  };
+
+  const openLunchInModal = () => {
+    setLunchInData({ time: currentDateTime.time });
+    setShowLunchInModal(true);
+  };
+
+  // Handle Clock In
   const handleClockIn = async () => {
     setLoading(true);
     try {
-      await axios.post(`${API}/api/hr/attendance/clock-in`, {}, { headers });
+      await axios.post(`${API}/api/hr/attendance/clock-in`, {
+        time: clockInData.time,
+        work_mode: clockInData.workMode
+      }, { headers });
       toast.success('Clocked in successfully!');
+      setShowClockInModal(false);
       loadTodayAttendance();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to clock in');
@@ -68,11 +129,15 @@ const Layout = ({ children }) => {
     setLoading(false);
   };
 
+  // Handle Clock Out
   const handleClockOut = async () => {
     setLoading(true);
     try {
-      await axios.put(`${API}/api/hr/attendance/clock-out`, {}, { headers });
+      await axios.put(`${API}/api/hr/attendance/clock-out`, {
+        time: clockOutData.time
+      }, { headers });
       toast.success('Clocked out successfully!');
+      setShowClockOutModal(false);
       loadTodayAttendance();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to clock out');
@@ -80,14 +145,100 @@ const Layout = ({ children }) => {
     setLoading(false);
   };
 
+  // Handle Lunch Out
+  const handleLunchOut = async () => {
+    setLoading(true);
+    try {
+      await axios.post(`${API}/api/hr/attendance/lunch-out`, {
+        time: lunchOutData.time
+      }, { headers });
+      toast.success('Lunch break started!');
+      setShowLunchOutModal(false);
+      loadTodayAttendance();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to start lunch break');
+    }
+    setLoading(false);
+  };
+
+  // Handle Lunch In
+  const handleLunchIn = async () => {
+    setLoading(true);
+    try {
+      await axios.put(`${API}/api/hr/attendance/lunch-in`, {
+        time: lunchInData.time
+      }, { headers });
+      toast.success('Back from lunch!');
+      setShowLunchInModal(false);
+      loadTodayAttendance();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to end lunch break');
+    }
+    setLoading(false);
+  };
+
   const formatTime = (dateStr) => {
     if (!dateStr) return '--:--';
     const date = new Date(dateStr);
-    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
   const isClockedIn = todayAttendance?.clock_in && !todayAttendance?.clock_out;
   const isClockedOut = todayAttendance?.clock_out;
+  const isOnLunch = todayAttendance?.lunch_out && !todayAttendance?.lunch_in;
+
+  // Theme classes
+  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
+  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
+  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+  const bgInput = isDark ? 'bg-[#27272a]' : 'bg-gray-50';
+
+  // Attendance Modal Component
+  const AttendanceModal = ({ isOpen, onClose, title, icon: Icon, iconColor, children, onSubmit, submitText, submitColor }) => {
+    if (!isOpen) return null;
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4 shadow-xl`}>
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className={`flex items-center gap-3 ${textPrimary}`}>
+                <div className={`p-2 rounded-lg ${iconColor}`}>
+                  <Icon className="h-5 w-5 text-white" />
+                </div>
+                {title}
+              </CardTitle>
+              <button onClick={onClose} className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 ${textSecondary}`}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Date & Day Info */}
+            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-4`}>
+              <Calendar className={`h-10 w-10 ${textSecondary}`} />
+              <div>
+                <p className={`text-lg font-semibold ${textPrimary}`}>{currentDateTime.date}</p>
+                <p className={`text-sm ${textSecondary}`}>{currentDateTime.day}</p>
+              </div>
+            </div>
+            
+            {children}
+            
+            <div className="flex gap-3 pt-4">
+              <Button variant="outline" onClick={onClose} className={`flex-1 ${borderColor}`}>
+                Cancel
+              </Button>
+              <Button onClick={onSubmit} disabled={loading} className={`flex-1 ${submitColor} text-white`}>
+                {submitText}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
@@ -104,46 +255,233 @@ const Layout = ({ children }) => {
               <span>Out: <strong className={isDark ? 'text-[#fafafa]' : 'text-gray-900'}>{formatTime(todayAttendance?.clock_out)}</strong></span>
             </div>
             
-            {/* Clock In/Out Button */}
-            {!isClockedOut && (
-              <Button
-                size="sm"
-                onClick={isClockedIn ? handleClockOut : handleClockIn}
-                disabled={loading}
-                className={`h-8 px-3 text-xs ${
-                  isClockedIn 
-                    ? 'bg-[#ef4444] hover:bg-[#dc2626] text-white' 
-                    : 'bg-[#10b981] hover:bg-[#059669] text-white'
-                }`}
-              >
-                {isClockedIn ? (
-                  <>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
+              {/* Clock In Button - Only show if not clocked in */}
+              {!todayAttendance?.clock_in && (
+                <Button
+                  size="sm"
+                  onClick={openClockInModal}
+                  className="h-8 px-3 text-xs bg-[#10b981] hover:bg-[#059669] text-white"
+                >
+                  <LogIn className="h-3 w-3 mr-1" />
+                  Clock In
+                </Button>
+              )}
+              
+              {/* Lunch & Clock Out Buttons - Show if clocked in but not clocked out */}
+              {isClockedIn && !isClockedOut && (
+                <>
+                  {!isOnLunch && !todayAttendance?.lunch_in && (
+                    <Button
+                      size="sm"
+                      onClick={openLunchOutModal}
+                      className="h-8 px-3 text-xs bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                    >
+                      <Coffee className="h-3 w-3 mr-1" />
+                      Lunch Out
+                    </Button>
+                  )}
+                  
+                  {isOnLunch && (
+                    <Button
+                      size="sm"
+                      onClick={openLunchInModal}
+                      className="h-8 px-3 text-xs bg-[#8b5cf6] hover:bg-[#7c3aed] text-white"
+                    >
+                      <Play className="h-3 w-3 mr-1" />
+                      Lunch In
+                    </Button>
+                  )}
+                  
+                  <Button
+                    size="sm"
+                    onClick={openClockOutModal}
+                    className="h-8 px-3 text-xs bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                  >
                     <LogOut className="h-3 w-3 mr-1" />
                     Clock Out
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="h-3 w-3 mr-1" />
-                    Clock In
-                  </>
-                )}
-              </Button>
-            )}
-            
-            {isClockedOut && (
-              <span className="text-xs text-[#10b981] font-medium">✓ Day Complete</span>
-            )}
+                  </Button>
+                </>
+              )}
+              
+              {isClockedOut && (
+                <span className="text-xs text-[#10b981] font-medium">✓ Day Complete</span>
+              )}
+            </div>
           </div>
           
           {/* Right: Theme Toggle */}
           <ThemeToggle />
         </header>
+        
         {/* Main Content */}
         <div className="flex-1 overflow-auto">
           <div className="p-8">{children}</div>
         </div>
       </div>
       <DrawleadAI currentModule={currentModule} />
+
+      {/* Clock In Modal */}
+      <AttendanceModal
+        isOpen={showClockInModal}
+        onClose={() => setShowClockInModal(false)}
+        title="Clock In"
+        icon={LogIn}
+        iconColor="bg-[#10b981]"
+        onSubmit={handleClockIn}
+        submitText="Clock In"
+        submitColor="bg-[#10b981] hover:bg-[#059669]"
+      >
+        {/* Time Input */}
+        <div>
+          <Label className={textPrimary}>Time</Label>
+          <Input
+            type="text"
+            value={clockInData.time}
+            onChange={(e) => setClockInData(prev => ({ ...prev, time: e.target.value }))}
+            placeholder="e.g., 09:30 AM"
+            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
+          />
+          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
+        </div>
+        
+        {/* Work Mode */}
+        <div>
+          <Label className={`${textPrimary} mb-2 block`}>Work Mode</Label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setClockInData(prev => ({ ...prev, workMode: 'office' }))}
+              className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                clockInData.workMode === 'office'
+                  ? 'border-[#6366f1] bg-[#6366f1]/10'
+                  : `border-[#3f3f46] ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`
+              }`}
+            >
+              <Building className={`h-5 w-5 ${clockInData.workMode === 'office' ? 'text-[#6366f1]' : textSecondary}`} />
+              <span className={`font-medium ${clockInData.workMode === 'office' ? 'text-[#6366f1]' : textPrimary}`}>Office</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setClockInData(prev => ({ ...prev, workMode: 'remote' }))}
+              className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all ${
+                clockInData.workMode === 'remote'
+                  ? 'border-[#10b981] bg-[#10b981]/10'
+                  : `border-[#3f3f46] ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`
+              }`}
+            >
+              <Home className={`h-5 w-5 ${clockInData.workMode === 'remote' ? 'text-[#10b981]' : textSecondary}`} />
+              <span className={`font-medium ${clockInData.workMode === 'remote' ? 'text-[#10b981]' : textPrimary}`}>Remote</span>
+            </button>
+          </div>
+        </div>
+      </AttendanceModal>
+
+      {/* Clock Out Modal */}
+      <AttendanceModal
+        isOpen={showClockOutModal}
+        onClose={() => setShowClockOutModal(false)}
+        title="Clock Out"
+        icon={LogOut}
+        iconColor="bg-[#ef4444]"
+        onSubmit={handleClockOut}
+        submitText="Clock Out"
+        submitColor="bg-[#ef4444] hover:bg-[#dc2626]"
+      >
+        {/* Work Mode Display */}
+        <div className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-3`}>
+          {todayAttendance?.work_mode === 'remote' ? (
+            <Home className="h-5 w-5 text-[#10b981]" />
+          ) : (
+            <Building className="h-5 w-5 text-[#6366f1]" />
+          )}
+          <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
+        </div>
+        
+        {/* Time Input */}
+        <div>
+          <Label className={textPrimary}>Time</Label>
+          <Input
+            type="text"
+            value={clockOutData.time}
+            onChange={(e) => setClockOutData(prev => ({ ...prev, time: e.target.value }))}
+            placeholder="e.g., 06:30 PM"
+            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
+          />
+          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
+        </div>
+      </AttendanceModal>
+
+      {/* Lunch Out Modal */}
+      <AttendanceModal
+        isOpen={showLunchOutModal}
+        onClose={() => setShowLunchOutModal(false)}
+        title="Lunch Break"
+        icon={Coffee}
+        iconColor="bg-[#f59e0b]"
+        onSubmit={handleLunchOut}
+        submitText="Start Lunch"
+        submitColor="bg-[#f59e0b] hover:bg-[#d97706]"
+      >
+        {/* Work Mode Display */}
+        <div className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-3`}>
+          {todayAttendance?.work_mode === 'remote' ? (
+            <Home className="h-5 w-5 text-[#10b981]" />
+          ) : (
+            <Building className="h-5 w-5 text-[#6366f1]" />
+          )}
+          <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
+        </div>
+        
+        {/* Time Input */}
+        <div>
+          <Label className={textPrimary}>Time</Label>
+          <Input
+            type="text"
+            value={lunchOutData.time}
+            onChange={(e) => setLunchOutData(prev => ({ ...prev, time: e.target.value }))}
+            placeholder="e.g., 01:00 PM"
+            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
+          />
+          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
+        </div>
+      </AttendanceModal>
+
+      {/* Lunch In Modal */}
+      <AttendanceModal
+        isOpen={showLunchInModal}
+        onClose={() => setShowLunchInModal(false)}
+        title="Back to Work"
+        icon={Play}
+        iconColor="bg-[#8b5cf6]"
+        onSubmit={handleLunchIn}
+        submitText="Resume Work"
+        submitColor="bg-[#8b5cf6] hover:bg-[#7c3aed]"
+      >
+        {/* Work Mode Display */}
+        <div className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-3`}>
+          {todayAttendance?.work_mode === 'remote' ? (
+            <Home className="h-5 w-5 text-[#10b981]" />
+          ) : (
+            <Building className="h-5 w-5 text-[#6366f1]" />
+          )}
+          <span className={textPrimary}>Work Mode: <strong className="capitalize">{todayAttendance?.work_mode || 'Office'}</strong></span>
+        </div>
+        
+        {/* Time Input */}
+        <div>
+          <Label className={textPrimary}>Time</Label>
+          <Input
+            type="text"
+            value={lunchInData.time}
+            onChange={(e) => setLunchInData(prev => ({ ...prev, time: e.target.value }))}
+            placeholder="e.g., 02:00 PM"
+            className={`mt-1 ${bgInput} ${textPrimary} border ${borderColor}`}
+          />
+          <p className={`text-xs mt-1 ${textSecondary}`}>Format: HH:MM AM/PM</p>
+        </div>
+      </AttendanceModal>
     </div>
   );
 };

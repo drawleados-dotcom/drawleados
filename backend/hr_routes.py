@@ -131,18 +131,23 @@ class AttendanceRecord(BaseModel):
     created_at: datetime
 
 class ClockInRequest(BaseModel):
-    work_location: str = "office"  # office, home
+    work_location: str = "office"  # office, remote
+    work_mode: Optional[str] = None  # Alternative field name for work_location
     login_time: Optional[str] = None  # HH:MM format - employee enters their time
+    time: Optional[str] = None  # Alternative field name for login_time
 
 class ClockOutRequest(BaseModel):
     notes: Optional[str] = ""
     logout_time: Optional[str] = None  # HH:MM format
+    time: Optional[str] = None  # Alternative field name for logout_time
 
 class LunchStartRequest(BaseModel):
     lunch_start_time: Optional[str] = None  # HH:MM format
+    time: Optional[str] = None  # Alternative field name for lunch_start_time
 
 class LunchEndRequest(BaseModel):
     lunch_end_time: Optional[str] = None  # HH:MM format
+    time: Optional[str] = None  # Alternative field name for lunch_end_time
 
 class PermissionRequest(BaseModel):
     permission_id: str
@@ -428,12 +433,30 @@ async def get_hr_settings():
     return settings
 
 def parse_time_string(time_str: str, base_date: datetime) -> datetime:
-    """Parse HH:MM time string and combine with date"""
+    """Parse time string and combine with date. Supports HH:MM, HH:MM AM/PM formats"""
     try:
-        hours, minutes = map(int, time_str.split(':'))
-        return base_date.replace(hour=hours, minute=minutes, second=0, microsecond=0)
-    except:
-        raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM")
+        time_str = time_str.strip().upper()
+        
+        # Handle AM/PM format (e.g., "09:30 AM", "06:49 am")
+        if 'AM' in time_str or 'PM' in time_str:
+            # Remove AM/PM and parse
+            is_pm = 'PM' in time_str
+            time_str = time_str.replace('AM', '').replace('PM', '').strip()
+            hours, minutes = map(int, time_str.split(':'))
+            
+            # Convert to 24-hour format
+            if is_pm and hours != 12:
+                hours += 12
+            elif not is_pm and hours == 12:
+                hours = 0
+            
+            return base_date.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+        else:
+            # Standard HH:MM format
+            hours, minutes = map(int, time_str.split(':'))
+            return base_date.replace(hour=hours, minute=minutes, second=0, microsecond=0)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid time format. Use HH:MM or HH:MM AM/PM")
 
 @hr_router.post("/attendance/clock-in")
 async def clock_in(clock_data: ClockInRequest, request: Request):
@@ -453,11 +476,15 @@ async def clock_in(clock_data: ClockInRequest, request: Request):
     if existing and existing.get("clock_in"):
         raise HTTPException(status_code=400, detail="Already clocked in today")
     
-    # Determine login time
-    if clock_data.login_time:
-        now = parse_time_string(clock_data.login_time, today)
+    # Determine login time (support both field names)
+    login_time_str = clock_data.login_time or clock_data.time
+    if login_time_str:
+        now = parse_time_string(login_time_str, today)
     else:
         now = datetime.now(timezone.utc)
+    
+    # Determine work location/mode (support both field names)
+    work_mode = clock_data.work_mode or clock_data.work_location or "office"
     
     # Check if early login needs approval
     standard_login = parse_time_string(settings["standard_login_time"], today)
@@ -478,7 +505,8 @@ async def clock_in(clock_data: ClockInRequest, request: Request):
         "lunch_start": None,
         "lunch_end": None,
         "lunch_duration": 0.0,
-        "work_location": clock_data.work_location,
+        "work_location": work_mode,
+        "work_mode": work_mode,
         "total_hours": 0.0,
         "extra_hours": 0.0,
         "permission_hours": 0.0,
@@ -515,6 +543,7 @@ async def clock_in(clock_data: ClockInRequest, request: Request):
     return result
 
 @hr_router.post("/attendance/lunch-start")
+@hr_router.post("/attendance/lunch-out")
 async def lunch_start(lunch_data: LunchStartRequest, request: Request):
     """Record lunch start time"""
     from server import get_current_user
@@ -533,19 +562,22 @@ async def lunch_start(lunch_data: LunchStartRequest, request: Request):
     if existing.get("lunch_start"):
         raise HTTPException(status_code=400, detail="Lunch already started")
     
-    if lunch_data.lunch_start_time:
-        lunch_time = parse_time_string(lunch_data.lunch_start_time, today)
+    # Support both field names
+    lunch_time_str = lunch_data.lunch_start_time or lunch_data.time
+    if lunch_time_str:
+        lunch_time = parse_time_string(lunch_time_str, today)
     else:
         lunch_time = datetime.now(timezone.utc)
     
     await db.attendance.update_one(
         {"attendance_id": existing["attendance_id"]},
-        {"$set": {"lunch_start": lunch_time}}
+        {"$set": {"lunch_start": lunch_time, "lunch_out": lunch_time}}
     )
     
     return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
 
 @hr_router.post("/attendance/lunch-end")
+@hr_router.put("/attendance/lunch-in")
 async def lunch_end(lunch_data: LunchEndRequest, request: Request):
     """Record lunch end time"""
     from server import get_current_user
@@ -567,7 +599,9 @@ async def lunch_end(lunch_data: LunchEndRequest, request: Request):
     if existing.get("lunch_end"):
         raise HTTPException(status_code=400, detail="Lunch already ended")
     
-    if lunch_data.lunch_end_time:
+    # Support both field names
+    lunch_end_str = lunch_data.lunch_end_time or lunch_data.time
+    if lunch_end_str:
         end_time = parse_time_string(lunch_data.lunch_end_time, today)
     else:
         end_time = datetime.now(timezone.utc)
@@ -584,6 +618,7 @@ async def lunch_end(lunch_data: LunchEndRequest, request: Request):
         {"attendance_id": existing["attendance_id"]},
         {"$set": {
             "lunch_end": end_time,
+            "lunch_in": end_time,
             "lunch_duration": round(lunch_duration, 0)
         }}
     )
@@ -591,6 +626,7 @@ async def lunch_end(lunch_data: LunchEndRequest, request: Request):
     return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
 
 @hr_router.post("/attendance/clock-out")
+@hr_router.put("/attendance/clock-out")
 async def clock_out(clock_data: ClockOutRequest, request: Request):
     """Clock out for the day"""
     from server import get_current_user
@@ -610,9 +646,10 @@ async def clock_out(clock_data: ClockOutRequest, request: Request):
     if existing.get("clock_out"):
         raise HTTPException(status_code=400, detail="Already clocked out today")
     
-    # Determine logout time
-    if clock_data.logout_time:
-        now = parse_time_string(clock_data.logout_time, today)
+    # Determine logout time (support both field names)
+    logout_time_str = clock_data.logout_time or clock_data.time
+    if logout_time_str:
+        now = parse_time_string(logout_time_str, today)
     else:
         now = datetime.now(timezone.utc)
     
