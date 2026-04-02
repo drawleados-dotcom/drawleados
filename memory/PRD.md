@@ -47,14 +47,26 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Search employees by name, email, or designation
 - Month/Year filter for payslip periods
 
-**Payslip Workflow (DONE - April 2026):**
-1. **HR Creates Payslip:** Auto-calculates from attendance + salary records
-2. **Operations Review:** Manager reviews without seeing salary details, adds performance notes
-3. **CEO Review:** Final approval with visibility into all details and reviews
+**Payslip Workflow (DONE - April 2026, Enhanced December 2025):**
+1. **HR Creates Payslip:** Opens Create Payslip Modal with optional HR Remarks field, auto-calculates from attendance + salary records
+2. **Operations Review:** Manager reviews without seeing salary details, adds performance notes **(OPTIONAL - can skip and forward to CEO)**
+3. **CEO Review:** Final approval with visibility into all details **(OPTIONAL - can approve without comment)**
 4. **Generate Payslip:** HR marks as ready for employee
 5. **Download PDF:** Employee can download from their Payroll tab
 
 **Payslip Status Flow:** Draft → Operations Review → CEO Review → Approved → Generated
+
+**HR Remarks & Optional Reviews Enhancement (DONE - December 2025):**
+- **Create Payslip Modal:** Opens when clicking "Create Payslip" button, shows employee info, base salary, and HR Remarks textarea (optional)
+- **HR Remarks:** Saved with payslip, displayed in payslip details, and included in generated PDF
+- **Optional Reviews:** Both Operations and CEO review text fields are optional - users can skip and proceed without entering text
+- **Review UI Changes:** 
+  - Label shows "Your Review (Optional)"
+  - Placeholder: "Enter your review or leave empty to skip..."
+  - Helper text: "You can skip the review and just forward to CEO"
+  - Button changes to "Skip & Forward to CEO" or "Approve" when review is empty
+- **Previous Payslips Section:** Shows below current payslip in employee detail view, collapsible list with badge showing record count, sorted by date descending, includes download PDF button for generated payslips
+- **PDF Excludes Reviews:** Operations and CEO review comments are NOT included in the generated PDF (only HR Remarks appear)
 
 **Payslip Details:**
 - Attendance Summary: Working Days, Present, Casual/Sick Leave, Absent (LOP), Holidays, **Extra Hours**, **Less Hours**
@@ -97,9 +109,9 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Attendance summary table with all columns
 - Earnings and Deductions side-by-side
 - Net Salary highlighted with border
-- Operations and CEO reviews
-- HR Remarks
+- HR Remarks (if provided)
 - Computer-generated footer
+- **Note:** Operations and CEO reviews are NOT included in PDF (professional salary document only)
 
 **API Endpoints:**
 - GET `/api/payroll/hike-reasons` - List of hike reason types
@@ -116,6 +128,7 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - PUT `/api/payroll/payslip/{id}/ceo-review` - CEO approves
 - PUT `/api/payroll/payslip/{id}/generate` - HR generates final payslip
 - GET `/api/payroll/my-payslips` - Employee gets own payslips
+- **GET `/api/payroll/employee-payslips/{user_id}`** - Get all payslips for a specific employee (for Previous Payslips display)
 - GET `/api/payroll/company-settings` - Get company details for PDF
 - PUT `/api/payroll/company-settings` - Update company details (super admin)
 - **GET `/api/payroll/settings`** - Get payroll calculation settings
