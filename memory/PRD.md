@@ -7,10 +7,11 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 1. **Leads Module** - Lead management with stages, Kanban view, custom fields, CSV import/export
 2. **HR Module** - Attendance tracking, leave management, payroll management, performance reviews
 3. **Operations Module** - Project and task management with Kanban view
-4. **Documentation Module** - Google Sheets and Docs link management for Business Dev users
-5. **Settings** - User management, role management, services, company profile
-6. **Role-Based Access Control** - Different roles (Admin, BDE, Employee, etc.) with granular permissions
-7. **Calendar Module** - Full calendar view with holidays, leaves, tasks, and Google Calendar integration
+4. **Tasks Module** - Hierarchical task management: Departments → Projects → Tasks (NEW - April 2026)
+5. **Documentation Module** - Google Sheets and Docs link management for Business Dev users
+6. **Settings** - User management, role management, services, company profile
+7. **Role-Based Access Control** - Different roles (Admin, BDE, Employee, etc.) with granular permissions
+8. **Calendar Module** - Full calendar view with holidays, leaves, tasks, and Google Calendar integration
 
 ## User Personas
 - **Super Admin**: Full access to all modules, user management, system configuration
@@ -23,11 +24,60 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - **Backend**: FastAPI with MongoDB (motor async driver)
 - **Frontend**: React with Tailwind CSS, Shadcn UI components
 - **Authentication**: JWT-based with Emergent-managed Google Auth option
-- **Database**: MongoDB with collections for users, leads, attendance, leave, documentation, calendar_connections, salary_history, etc.
+- **Database**: MongoDB with collections for users, leads, attendance, leave, documentation, calendar_connections, salary_history, departments, department_projects, project_tasks, project_documents, task_timers, etc.
 
 ---
 
 ## Implemented Features
+
+### Tasks Module (NEW - April 2026)
+**Hierarchical Structure:**
+- **Departments** (SEO, Meta, Social Media, Design, ERP) - Admins can create more
+- **Projects** under each department with filters and grid/list views
+- **Tasks** inside projects with BDE-style task board features
+
+**Department Features:**
+- Default departments created on first access
+- Custom icon and color per department
+- Project count displayed on card
+- Admin-only creation of new departments
+
+**Project Features:**
+- Name, Client/Company, Description
+- Start Date, End Date
+- Status: Active, Completed, On Hold
+- Team Members assignment
+- Multiple Documents (Google Sheets/Docs links)
+- Task progress bar (completed/total)
+- Grid and List view with search and status filters
+
+**Task Features (like BDE Task Board):**
+- Task name, description
+- Priority: High, Medium, Low
+- Type: General, Meeting, Follow Up, Review
+- Status: Pending, In Progress, Completed, On Hold
+- Assignee, Due Date/Time, Work Link
+- Timer tracking with start/stop
+- Time spent accumulation
+- Status filters (All, Pending, In Progress, Completed, On Hold)
+- Click checkbox to toggle completed
+
+**Documents:**
+- Add Google Sheets/Docs links with name
+- View embedded in split pane
+- Remove document
+
+**API Endpoints:**
+- GET/POST /api/departments - List/Create departments
+- GET/POST /api/departments/{dept_id}/projects - List/Create projects
+- GET/PUT/DELETE /api/departments/projects/{project_id} - Project CRUD
+- GET/POST/DELETE /api/departments/projects/{project_id}/tasks - Task CRUD
+- GET/POST/DELETE /api/departments/projects/{project_id}/documents - Document CRUD
+- POST /api/departments/tasks/{task_id}/timer/start - Start timer
+- POST /api/departments/tasks/{task_id}/timer/stop - Stop timer
+- GET /api/departments/tasks/{task_id}/timer - Get timer status
+
+---
 
 ### Payroll Management Module (DONE - April 2026)
 **Salary History & Hikes Tracking:**
