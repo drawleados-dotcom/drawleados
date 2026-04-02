@@ -399,6 +399,62 @@ async def get_current_user(request: Request) -> User:
 
 # ============== AUTH ROUTES ==============
 
+# Admin signup secret code - change this to your own secret
+ADMIN_SIGNUP_CODE = "DRAWLEAD2025"
+
+class AdminSignup(BaseModel):
+    name: str
+    email: str
+    password: str
+    admin_code: str
+
+@api_router.post("/auth/admin-signup")
+async def admin_signup(data: AdminSignup):
+    """Create a new admin/super_admin account with secret code"""
+    
+    # Verify admin code
+    if data.admin_code != ADMIN_SIGNUP_CODE:
+        raise HTTPException(status_code=403, detail="Invalid admin access code")
+    
+    # Check if user exists
+    existing = await db.users.find_one({"email": data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create admin user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    user_doc = {
+        "user_id": user_id,
+        "email": data.email,
+        "name": data.name,
+        "role": "super_admin",
+        "password_hash": hash_password(data.password),
+        "is_active": True,
+        "module_access": ["leads", "operations", "finance", "reports", "settings", "hr"],
+        "project_access": [],
+        "can_create_projects": True,
+        "can_delete_tasks": True,
+        "can_manage_users": True,
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.users.insert_one(user_doc)
+    
+    # Create session
+    session_token = f"session_{uuid.uuid4().hex}"
+    session_doc = {
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.user_sessions.insert_one(session_doc)
+    
+    user_response = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    
+    return {"user": user_response, "session_token": session_token, "message": "Admin account created successfully"}
+
 @api_router.post("/auth/register")
 async def register(user_data: UserCreate):
     # Check if user exists

@@ -24,6 +24,7 @@ import CreativeDesignBoard from './pages/CreativeDesignBoard';
 import MetaAdsBoard from './pages/Operations/MetaAdsBoard';
 import DocumentationsPage from './pages/DocumentationsPage';
 import SEOBoardPage from './pages/SEOBoardPage';
+import AdminSignupPage from './pages/AdminSignupPage';
 import './App.css';
 
 function AppRouter() {
@@ -37,6 +38,7 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/admin" element={<AdminSignupPage />} />
       <Route
         path="/dashboard"
         element={
