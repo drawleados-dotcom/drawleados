@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -8,8 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { 
   User, Clock, Calendar, FileText, Award, Download, 
-  Home, Building, Square, Send,
-  CheckCircle, XCircle, AlertCircle, ChevronRight
+  Home, Building, Square, Send, Shield, Lock, Eye, EyeOff,
+  CheckCircle, XCircle, AlertCircle, ChevronRight, Key
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -195,6 +196,7 @@ export default function HRPage() {
     { id: 'leave', label: 'Leave', icon: Calendar },
     { id: 'payslips', label: 'Payslips', icon: FileText },
     { id: 'reviews', label: 'Reviews', icon: Award },
+    { id: 'security', label: 'Security', icon: Shield },
   ];
 
   return (
@@ -290,6 +292,16 @@ export default function HRPage() {
         {activeTab === 'reviews' && (
           <ReviewsTab 
             reviews={reviews}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {activeTab === 'security' && (
+          <SecurityTab 
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -1333,6 +1345,206 @@ function ReviewsTab({ reviews, bgCard, bgSecondary, textPrimary, textSecondary, 
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+
+// Security Tab - Password Change with OTP
+function SecurityTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const { user } = useAuth();
+  const token = localStorage.getItem('session_token');
+  const headers = { Authorization: `Bearer ${token}` };
+  
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordStep, setPasswordStep] = useState('request'); // request, verify, change
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  const resetPasswordFlow = () => {
+    setPasswordStep('request');
+    setOtp('');
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleRequestOTP = async () => {
+    try {
+      const res = await axios.post(`${API}/api/auth/request-otp`, {}, { headers });
+      setPasswordStep('verify');
+      toast.success(res.data.message || 'OTP sent to your registered email!');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to send OTP');
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter a valid 6-digit OTP');
+      return;
+    }
+    setPasswordStep('change');
+    toast.success('Now enter your new password.');
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/auth/verify-otp-change-password`, { 
+        otp,
+        new_password: newPassword,
+        confirm_password: confirmPassword
+      }, { headers });
+      toast.success('Password changed successfully!');
+      setShowPasswordModal(false);
+      resetPasswordFlow();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to change password');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader>
+          <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+            <Lock className="h-5 w-5 text-[#ef4444]" />
+            Change Password
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className={`mb-4 ${textSecondary}`}>
+            Secure your account by changing your password. We'll send a verification OTP to your registered email.
+          </p>
+          <Button 
+            onClick={() => setShowPasswordModal(true)}
+            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+          >
+            <Key className="h-4 w-4 mr-2" />
+            Change Password
+          </Button>
+
+          {/* Password Requirements */}
+          <div className={`mt-6 p-4 rounded-lg ${bgSecondary}`}>
+            <h4 className={`font-medium mb-2 ${textPrimary}`}>Password Requirements</h4>
+            <ul className={`text-sm space-y-1 ${textSecondary}`}>
+              <li>• Minimum 6 characters</li>
+              <li>• OTP will be sent to your registered email</li>
+              <li>• OTP is valid for 10 minutes</li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Password Change Modal */}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
+            <CardHeader>
+              <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                <Lock className="h-5 w-5" />
+                Change Password
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {passwordStep === 'request' && (
+                <>
+                  <p className={textSecondary}>
+                    We'll send a 6-digit OTP to your registered email: <strong>{user?.email}</strong>
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setShowPasswordModal(false)} className={borderColor}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleRequestOTP} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white">
+                      Send OTP
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {passwordStep === 'verify' && (
+                <>
+                  <div className="flex items-center gap-2 text-[#10b981]">
+                    <CheckCircle className="h-5 w-5" />
+                    <span>OTP sent to {user?.email}</span>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Enter 6-digit OTP</Label>
+                    <Input
+                      type="text"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="000000"
+                      className={`mt-1 text-center text-2xl tracking-widest ${bgSecondary} ${textPrimary}`}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setPasswordStep('request')} className={borderColor}>
+                      Back
+                    </Button>
+                    <Button onClick={handleVerifyOTP} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white">
+                      Verify OTP
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {passwordStep === 'change' && (
+                <>
+                  <div>
+                    <Label className={textPrimary}>New Password</Label>
+                    <div className="relative mt-1">
+                      <Input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Enter new password"
+                        className={`${bgSecondary} ${textPrimary} pr-10`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className={`absolute right-3 top-1/2 -translate-y-1/2 ${textSecondary}`}
+                      >
+                        {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Confirm Password</Label>
+                    <Input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm new password"
+                      className={`mt-1 ${bgSecondary} ${textPrimary}`}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setPasswordStep('verify')} className={borderColor}>
+                      Back
+                    </Button>
+                    <Button onClick={handleChangePassword} className="bg-[#10b981] hover:bg-[#059669] text-white">
+                      Change Password
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

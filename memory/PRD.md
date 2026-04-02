@@ -283,6 +283,10 @@ The system sends email notifications with "View" buttons for:
 ### P0 - Critical
 - [x] **SEO Board** - DONE (Dec 2025)
 - [x] **Employee Profile Page & OTP Password Change** - DONE (Apr 2026)
+- [x] **Business Development Sidebar Updates** - DONE (Apr 2026)
+  - HR renamed to "My Profile" for BDE users
+  - Security tab added to HR page with OTP password change
+  - Top header with Clock In/Out functionality
 - [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
 - [ ] Leads Custom Fields - Notion-style custom fields for leads
 

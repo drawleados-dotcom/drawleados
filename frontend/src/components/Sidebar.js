@@ -346,15 +346,16 @@ const Sidebar = () => {
         )}
 
         {/* HR - visible if user has hr access */}
+        {/* For BDE: Show as "My Profile" combining HR + Security */}
         {hasAccess('hr') && (
         <Link
           to="/hr"
           data-testid="nav-hr"
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'HR' : ''}
+          title={isCollapsed ? (isBDE ? 'My Profile' : 'HR') : ''}
         >
           <UserCircle className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'HR'}
+          {!isCollapsed && (isBDE ? 'My Profile' : 'HR')}
         </Link>
         )}
 
@@ -397,7 +398,8 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* My Profile - visible for all users */}
+        {/* My Profile - visible for all users EXCEPT BDE (they use HR as My Profile) */}
+        {!isBDE && (
         <Link
           to="/profile"
           data-testid="nav-profile"
@@ -407,6 +409,7 @@ const Sidebar = () => {
           <UserCircle className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'My Profile'}
         </Link>
+        )}
 
         {/* Documentations - visible for business_development and admins */}
         {(hasAccess('leads') || isBDE) && (
