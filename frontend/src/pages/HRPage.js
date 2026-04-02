@@ -223,10 +223,9 @@ export default function HRPage() {
 
   const tabs = [
     { id: 'attendance', label: 'Attendance', icon: Clock },
-    { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'profile', label: 'My Profile', icon: User },
     { id: 'leave', label: 'Leave', icon: Calendar },
-    { id: 'payslips', label: 'Payslips', icon: FileText },
+    { id: 'payroll', label: 'Payroll', icon: FileText },
     { id: 'reviews', label: 'Reviews', icon: Award },
     { id: 'security', label: 'Security', icon: Shield },
   ];
@@ -281,28 +280,6 @@ export default function HRPage() {
           />
         )}
 
-        {activeTab === 'calendar' && (
-          <CalendarTab
-            calendarData={calendarData}
-            calendarMonth={calendarMonth}
-            calendarYear={calendarYear}
-            setCalendarMonth={setCalendarMonth}
-            setCalendarYear={setCalendarYear}
-            selectedDate={selectedDate}
-            setSelectedDate={setSelectedDate}
-            dateDetail={dateDetail}
-            loadDateDetail={loadDateDetail}
-            loadCalendarData={loadCalendarData}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-            isDark={isDark}
-            navigate={navigate}
-          />
-        )}
-
         {activeTab === 'profile' && (
           <ProfileTab 
             profile={profile}
@@ -332,9 +309,8 @@ export default function HRPage() {
           />
         )}
 
-        {activeTab === 'payslips' && (
-          <PayslipsTab 
-            payslips={payslips}
+        {activeTab === 'payroll' && (
+          <PayrollTab 
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -1609,61 +1585,365 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
   );
 }
 
-function PayslipsTab({ payslips, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [activeSubTab, setActiveSubTab] = useState('current');
+  const [salaryHistory, setSalaryHistory] = useState([]);
+  const [currentSalary, setCurrentSalary] = useState(0);
+  const [payrollDetails, setPayrollDetails] = useState(null);
+  const [hikeReasons, setHikeReasons] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const token = localStorage.getItem('session_token');
+  const headers = { Authorization: `Bearer ${token}` };
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : {};
+  
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const years = [2023, 2024, 2025, 2026, 2027];
+  
+  // Load salary history
+  const loadSalaryHistory = async () => {
+    try {
+      const res = await axios.get(
+        `${process.env.REACT_APP_BACKEND_URL}/api/payroll/salary-history/${user.user_id}`,
+        { headers }
+      );
+      setSalaryHistory(res.data.salary_history || []);
+      setCurrentSalary(res.data.current_salary || 0);
+    } catch (error) {
+      console.error('Error loading salary history:', error);
+    }
+  };
+  
+  // Load payroll details for selected month/year
+  const loadPayrollDetails = async () => {
+    setIsLoading(true);
+    try {
+      const res = await axios.get(
+        `${process.env.REACT_APP_BACKEND_URL}/api/payroll/details/${user.user_id}?month=${selectedMonth}&year=${selectedYear}`,
+        { headers }
+      );
+      setPayrollDetails(res.data);
+    } catch (error) {
+      console.error('Error loading payroll details:', error);
+    }
+    setIsLoading(false);
+  };
+  
+  // Load hike reasons
+  const loadHikeReasons = async () => {
+    try {
+      const res = await axios.get(
+        `${process.env.REACT_APP_BACKEND_URL}/api/payroll/hike-reasons`,
+        { headers }
+      );
+      setHikeReasons(res.data || []);
+    } catch (error) {
+      console.error('Error loading hike reasons:', error);
+    }
+  };
+  
+  useEffect(() => {
+    loadSalaryHistory();
+    loadHikeReasons();
+  }, []);
+  
+  useEffect(() => {
+    loadPayrollDetails();
+  }, [selectedMonth, selectedYear]);
+  
+  // Calculate months at each salary level
+  const calculateSalaryDuration = (index) => {
+    if (index === 0) {
+      // Current salary - from effective date to now
+      const effectiveDate = new Date(salaryHistory[0]?.effective_from);
+      const now = new Date();
+      const diffMonths = (now.getFullYear() - effectiveDate.getFullYear()) * 12 + (now.getMonth() - effectiveDate.getMonth());
+      return `${diffMonths} months (current)`;
+    } else {
+      // Previous salary - from its effective date to next salary's effective date
+      const startDate = new Date(salaryHistory[index]?.effective_from);
+      const endDate = new Date(salaryHistory[index - 1]?.effective_from);
+      const diffMonths = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth());
+      return `${diffMonths} months`;
+    }
+  };
+  
+  // Get reason label
+  const getReasonLabel = (reasonId) => {
+    const reason = hikeReasons.find(r => r.id === reasonId);
+    return reason ? reason.label : reasonId;
+  };
+  
+  // Get reason color
+  const getReasonColor = (reasonId) => {
+    const colors = {
+      'initial': 'bg-gray-500/20 text-gray-400',
+      'performance': 'bg-[#10b981]/20 text-[#10b981]',
+      'confirmation': 'bg-[#6366f1]/20 text-[#6366f1]',
+      'annual_increase': 'bg-[#f59e0b]/20 text-[#f59e0b]',
+      '6_month_review': 'bg-[#8b5cf6]/20 text-[#8b5cf6]',
+      '3_month_review': 'bg-[#ec4899]/20 text-[#ec4899]',
+      'promotion': 'bg-[#14b8a6]/20 text-[#14b8a6]',
+      'market_adjustment': 'bg-[#3b82f6]/20 text-[#3b82f6]'
+    };
+    return colors[reasonId] || 'bg-gray-500/20 text-gray-400';
+  };
+
+  const subTabs = [
+    { id: 'current', label: 'Current Payroll' },
+    { id: 'history', label: 'Salary History' },
+  ];
 
   return (
     <div className="space-y-6">
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardHeader>
-          <CardTitle className={textPrimary}>Payslips</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {payslips.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {payslips.map((payslip) => (
-                <div key={payslip.payslip_id} className={`p-4 ${bgSecondary} rounded-lg`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className={`font-semibold ${textPrimary}`}>
-                        {months[payslip.month - 1]} {payslip.year}
-                      </p>
-                      <Badge className={payslip.payment_status === 'paid' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}>
-                        {payslip.payment_status}
-                      </Badge>
-                    </div>
-                    <FileText className="h-8 w-8 text-[#6366f1]" />
-                  </div>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className={textSecondary}>Gross</span>
-                      <span className={textPrimary}>₹{payslip.gross_salary?.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className={textSecondary}>Deductions</span>
-                      <span className="text-red-400">-₹{(payslip.pf_deduction + payslip.tax_deduction + payslip.other_deductions)?.toLocaleString()}</span>
-                    </div>
-                    <div className={`flex justify-between pt-2 border-t ${borderColor}`}>
-                      <span className={`font-medium ${textPrimary}`}>Net Pay</span>
-                      <span className="font-bold text-[#10b981]">₹{payslip.net_salary?.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  <Button className="w-full mt-4 bg-[#6366f1] hover:bg-[#4f46e5] text-white text-sm">
-                    <Download className="mr-2 h-4 w-4" />
-                    Download PDF
-                  </Button>
+      {/* Sub-tabs */}
+      <div className="flex gap-2 border-b border-[#27272a] pb-2">
+        {subTabs.map((tab) => (
+          <Button
+            key={tab.id}
+            onClick={() => setActiveSubTab(tab.id)}
+            variant={activeSubTab === tab.id ? 'default' : 'ghost'}
+            className={activeSubTab === tab.id 
+              ? 'bg-[#10b981] text-white' 
+              : `${textSecondary} hover:bg-[#27272a]`
+            }
+            size="sm"
+          >
+            {tab.label}
+          </Button>
+        ))}
+      </div>
+
+      {/* Current Payroll Tab */}
+      {activeSubTab === 'current' && (
+        <div className="space-y-6">
+          {/* Current Salary Card */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm ${textSecondary}`}>Current Monthly Salary</p>
+                  <p className="text-4xl font-bold text-[#10b981]">₹{currentSalary.toLocaleString()}</p>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <FileText className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
-              <p className={textSecondary}>No payslips available yet</p>
-              <p className={`text-sm ${textSecondary}`}>Your payslips will appear here once generated</p>
+                <div className="h-16 w-16 rounded-full bg-[#10b981]/20 flex items-center justify-center">
+                  <FileText className="h-8 w-8 text-[#10b981]" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Month/Year Filter */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="pt-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-[#6366f1]" />
+                  <span className={`font-medium ${textPrimary}`}>View Payroll for:</span>
+                </div>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                  className={`p-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                >
+                  {months.map((month, idx) => (
+                    <option key={idx} value={idx + 1}>{month}</option>
+                  ))}
+                </select>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                  className={`p-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                >
+                  {years.map(year => (
+                    <option key={year} value={year}>{year}</option>
+                  ))}
+                </select>
+                {isLoading && <span className={textSecondary}>Loading...</span>}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payroll Details */}
+          {payrollDetails && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Earnings Card */}
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <CardHeader>
+                  <CardTitle className={`${textPrimary} text-lg`}>Earnings</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Basic Salary</span>
+                    <span className={textPrimary}>₹{payrollDetails.earnings?.basic?.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>HRA (40%)</span>
+                    <span className={textPrimary}>₹{payrollDetails.earnings?.hra?.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Special Allowance</span>
+                    <span className={textPrimary}>₹{payrollDetails.earnings?.special_allowance?.toLocaleString()}</span>
+                  </div>
+                  <div className={`flex justify-between pt-3 border-t ${borderColor}`}>
+                    <span className={`font-medium ${textPrimary}`}>Gross Salary</span>
+                    <span className="font-bold text-[#10b981]">₹{payrollDetails.gross_salary?.toLocaleString()}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Deductions Card */}
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <CardHeader>
+                  <CardTitle className={`${textPrimary} text-lg`}>Deductions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>PF (12%)</span>
+                    <span className="text-red-400">-₹{payrollDetails.deductions?.pf?.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Professional Tax</span>
+                    <span className="text-red-400">-₹{payrollDetails.deductions?.professional_tax?.toLocaleString()}</span>
+                  </div>
+                  <div className={`flex justify-between pt-3 border-t ${borderColor}`}>
+                    <span className={`font-medium ${textPrimary}`}>Total Deductions</span>
+                    <span className="font-bold text-red-400">-₹{payrollDetails.total_deductions?.toLocaleString()}</span>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
-        </CardContent>
-      </Card>
+
+          {/* Net Salary */}
+          {payrollDetails && (
+            <Card className={`${bgCard} border ${borderColor} border-[#10b981]`}>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className={`text-sm ${textSecondary}`}>Net Salary for {months[selectedMonth - 1]} {selectedYear}</p>
+                    <p className="text-3xl font-bold text-[#10b981]">₹{payrollDetails.net_salary?.toLocaleString()}</p>
+                  </div>
+                  <Button className="bg-[#6366f1] hover:bg-[#4f46e5] text-white">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Payslip
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Salary History Tab */}
+      {activeSubTab === 'history' && (
+        <div className="space-y-6">
+          {/* Summary Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Current Salary</p>
+              <p className="text-2xl font-bold text-[#10b981]">₹{currentSalary.toLocaleString()}</p>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Total Hikes</p>
+              <p className="text-2xl font-bold text-[#6366f1]">{Math.max(0, salaryHistory.length - 1)}</p>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Initial Salary</p>
+              <p className="text-2xl font-bold text-[#f59e0b]">
+                ₹{salaryHistory.length > 0 ? salaryHistory[salaryHistory.length - 1]?.amount?.toLocaleString() : 0}
+              </p>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Total Growth</p>
+              <p className="text-2xl font-bold text-[#8b5cf6]">
+                {salaryHistory.length > 1 
+                  ? `+${Math.round(((currentSalary - salaryHistory[salaryHistory.length - 1]?.amount) / salaryHistory[salaryHistory.length - 1]?.amount) * 100)}%`
+                  : '0%'}
+              </p>
+            </Card>
+          </div>
+
+          {/* Salary History Table */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>Salary History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {salaryHistory.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${borderColor}`}>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>#</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Effective From</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Amount</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Duration</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Reason</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Hike</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salaryHistory.map((record, index) => {
+                        const prevSalary = index < salaryHistory.length - 1 ? salaryHistory[index + 1]?.amount : 0;
+                        const hikeAmount = prevSalary > 0 ? record.amount - prevSalary : 0;
+                        const hikePercent = prevSalary > 0 ? ((hikeAmount / prevSalary) * 100).toFixed(1) : 0;
+                        
+                        return (
+                          <tr key={record.record_id} className={`border-b ${borderColor}`}>
+                            <td className={`p-3 ${textSecondary}`}>{salaryHistory.length - index}</td>
+                            <td className={`p-3 ${textPrimary}`}>
+                              {new Date(record.effective_from).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className={`p-3 font-semibold text-[#10b981]`}>₹{record.amount?.toLocaleString()}</td>
+                            <td className={`p-3 ${textSecondary}`}>{calculateSalaryDuration(index)}</td>
+                            <td className="p-3">
+                              <Badge className={getReasonColor(record.reason)}>
+                                {getReasonLabel(record.reason)}
+                              </Badge>
+                            </td>
+                            <td className={`p-3`}>
+                              {hikeAmount > 0 ? (
+                                <span className="text-[#10b981]">+₹{hikeAmount.toLocaleString()} ({hikePercent}%)</span>
+                              ) : (
+                                <span className={textSecondary}>-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
+                  <p className={textSecondary}>No salary history available</p>
+                  <p className={`text-sm ${textSecondary}`}>Your salary history will appear here once added</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Hike Conditions Legend */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={`${textPrimary} text-lg`}>Hike Conditions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {hikeReasons.map((reason) => (
+                  <div key={reason.id} className="flex items-center gap-2">
+                    <Badge className={getReasonColor(reason.id)}>{reason.label}</Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
