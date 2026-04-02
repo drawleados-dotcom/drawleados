@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase,
-  Play, Pause, Square, Timer
+  Play, Pause, Square, Timer, Eye, FileText, Tag, Users
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -42,6 +42,7 @@ export default function BDETasksPage() {
   const [editingTask, setEditingTask] = useState(null);
   const [filter, setFilter] = useState('all');
   const [viewingTask, setViewingTask] = useState(null);
+  const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
   
   const token = localStorage.getItem('session_token');
@@ -375,6 +376,7 @@ export default function BDETasksPage() {
                 <thead className={bgSecondary}>
                   <tr>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Task Name</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Created By</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Assigned To</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Due Date</th>
@@ -387,18 +389,22 @@ export default function BDETasksPage() {
                 <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
+                      <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
                     </tr>
                   ) : filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
+                      <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                         <p>No tasks found</p>
                         <p className="text-sm">Create a new task to get started</p>
                       </td>
                     </tr>
                   ) : filteredTasks.map(task => (
-                    <tr key={task.task_id} className={`${bgCard} hover:${bgSecondary}`}>
+                    <tr 
+                      key={task.task_id} 
+                      className={`${bgCard} hover:${bgSecondary} cursor-pointer transition-colors`}
+                      onClick={() => { setViewingTask(task); setShowTaskDetailModal(true); }}
+                    >
                       <td className={`px-4 py-3`}>
                         <div className={`font-medium ${textPrimary}`}>{task.task_name}</div>
                         {task.description && (
@@ -407,6 +413,11 @@ export default function BDETasksPage() {
                         <div className={`text-xs ${textSecondary} mt-1`}>
                           <Badge className="text-xs" variant="outline">{task.type || 'General'}</Badge>
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className={statusColors[task.status] || statusColors.pending}>
+                          {task.status?.replace('_', ' ') || 'Pending'}
+                        </Badge>
                       </td>
                       <td className={`px-4 py-3 text-sm ${textPrimary}`}>
                         {task.created_by_name || '-'}
@@ -440,15 +451,23 @@ export default function BDETasksPage() {
                           <div className="text-xs text-[#10b981] mt-1">Running...</div>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {getTimeTrackingButton(task)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditModal(task)}>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-[#6366f1]"
+                            onClick={(e) => { e.stopPropagation(); setViewingTask(task); setShowTaskDetailModal(true); }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEditModal(task); }}>
                             <Edit2 className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => handleDeleteTask(task.task_id)}>
+                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.task_id); }}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -556,6 +575,157 @@ export default function BDETasksPage() {
                   </Button>
                   <Button onClick={editingTask ? handleUpdateTask : handleCreateTask} className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]">
                     {editingTask ? 'Update Task' : 'Create Task'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Task Detail Modal - Comprehensive View */}
+        {showTaskDetailModal && viewingTask && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[90vh] overflow-y-auto`}>
+              <CardHeader className="sticky top-0 z-10" style={{ backgroundColor: isDark ? '#18181b' : 'white' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${isDark ? 'bg-[#6366f1]/20' : 'bg-indigo-100'}`}>
+                      <FileText className="h-6 w-6 text-[#6366f1]" />
+                    </div>
+                    <div>
+                      <CardTitle className={textPrimary}>{viewingTask.task_name}</CardTitle>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge className={statusColors[viewingTask.status] || statusColors.pending}>
+                          {viewingTask.status?.replace('_', ' ') || 'Pending'}
+                        </Badge>
+                        <Badge className={priorityColors[viewingTask.priority]}>
+                          {viewingTask.priority}
+                        </Badge>
+                        <Badge variant="outline">{viewingTask.type || 'General'}</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => { setShowTaskDetailModal(false); setViewingTask(null); }} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Description */}
+                <div>
+                  <h4 className={`text-sm font-medium ${textSecondary} mb-2 flex items-center gap-2`}>
+                    <FileText className="h-4 w-4" /> Description
+                  </h4>
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <p className={`${textPrimary} whitespace-pre-wrap`}>
+                      {viewingTask.description || 'No description provided'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1 flex items-center gap-1`}>
+                      <User className="h-3 w-3" /> Created By
+                    </p>
+                    <p className={`font-medium ${textPrimary}`}>{viewingTask.created_by_name || '-'}</p>
+                    <p className={`text-xs ${textSecondary}`}>{formatDate(viewingTask.created_at)}</p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1 flex items-center gap-1`}>
+                      <Users className="h-3 w-3" /> Assigned To
+                    </p>
+                    <p className={`font-medium ${textPrimary}`}>{viewingTask.assigned_to_name || 'Not assigned'}</p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1 flex items-center gap-1`}>
+                      <Calendar className="h-3 w-3" /> Due Date
+                    </p>
+                    <p className={`font-medium ${viewingTask.due_date && new Date(viewingTask.due_date) < new Date() && viewingTask.status !== 'completed' ? 'text-[#ef4444]' : textPrimary}`}>
+                      {viewingTask.due_date ? formatDate(viewingTask.due_date) : 'No due date'}
+                    </p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1 flex items-center gap-1`}>
+                      <Clock className="h-3 w-3" /> Last Updated
+                    </p>
+                    <p className={`font-medium ${textPrimary}`}>{formatDate(viewingTask.updated_at)}</p>
+                  </div>
+                </div>
+
+                {/* Time Tracking Section */}
+                <div>
+                  <h4 className={`text-sm font-medium ${textSecondary} mb-2 flex items-center gap-2`}>
+                    <Timer className="h-4 w-4" /> Time Tracking
+                  </h4>
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className={`text-2xl font-bold ${textPrimary}`}>
+                          {formatDuration(viewingTask.time_tracking?.total_seconds || 0)}
+                        </p>
+                        <p className={`text-xs ${textSecondary}`}>Total Time Spent</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {viewingTask.time_tracking?.status === 'running' && (
+                          <Badge className="bg-[#10b981]/20 text-[#10b981] animate-pulse">
+                            <Play className="h-3 w-3 mr-1" /> Running
+                          </Badge>
+                        )}
+                        {viewingTask.time_tracking?.status === 'paused' && (
+                          <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">
+                            <Pause className="h-3 w-3 mr-1" /> Paused
+                          </Badge>
+                        )}
+                        {viewingTask.time_tracking?.status === 'finished' && (
+                          <Badge className="bg-[#10b981]/20 text-[#10b981]">
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> Finished
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Timer Controls */}
+                    <div className="flex gap-2">
+                      {getTimeTrackingButton(viewingTask)}
+                    </div>
+
+                    {/* Sessions List */}
+                    {viewingTask.time_tracking?.sessions?.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-dashed">
+                        <p className={`text-xs font-medium ${textSecondary} mb-2`}>Work Sessions</p>
+                        <div className="space-y-2 max-h-32 overflow-y-auto">
+                          {viewingTask.time_tracking.sessions.map((session, idx) => (
+                            <div key={idx} className={`flex justify-between text-xs ${textSecondary} p-2 rounded ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+                              <span>
+                                {new Date(session.start).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <span className="font-medium text-[#6366f1]">
+                                {formatDuration(session.duration_seconds)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-4 border-t">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => { setShowTaskDetailModal(false); setViewingTask(null); }} 
+                    className="flex-1"
+                  >
+                    Close
+                  </Button>
+                  <Button 
+                    onClick={() => { setShowTaskDetailModal(false); openEditModal(viewingTask); }} 
+                    className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]"
+                  >
+                    <Edit2 className="h-4 w-4 mr-2" /> Edit Task
                   </Button>
                 </div>
               </CardContent>
