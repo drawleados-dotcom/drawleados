@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Checkbox } from '../components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../components/ui/dialog';
 import { 
   Users, Clock, Calendar, CheckCircle, XCircle, 
   Home, Building, Edit, Search, UserPlus, X,
@@ -78,46 +78,52 @@ export default function HRAdminPage() {
   // Attendance state
   const [attendanceOverview, setAttendanceOverview] = useState([]);
 
-  const headers = { Authorization: `Bearer ${token}` };
-
   const loadStats = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/hr/admin/dashboard-stats`, { headers });
+      const res = await axios.get(`${API}/api/hr/admin/dashboard-stats`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setStats(res.data);
     } catch (error) {
       console.error('Error loading stats:', error);
     }
-  }, []);
+  }, [token]);
 
   const loadEmployees = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/hr/admin/employees`, { headers });
+      const res = await axios.get(`${API}/api/hr/admin/employees`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setEmployees(res.data);
     } catch (error) {
       console.error('Error loading employees:', error);
     }
-  }, []);
+  }, [token]);
 
   const loadLeaveRequests = useCallback(async () => {
     try {
       const url = leaveFilter === 'all' 
         ? `${API}/api/hr/admin/all-requests`
         : `${API}/api/hr/admin/all-requests?status=${leaveFilter}`;
-      const res = await axios.get(url, { headers });
+      const res = await axios.get(url, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setLeaveRequests(res.data);
     } catch (error) {
       console.error('Error loading leave requests:', error);
     }
-  }, [leaveFilter]);
+  }, [leaveFilter, token]);
 
   const loadAttendanceOverview = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/hr/team/attendance-overview`, { headers });
+      const res = await axios.get(`${API}/api/hr/team/attendance-overview`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setAttendanceOverview(res.data);
     } catch (error) {
       console.error('Error loading attendance:', error);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     if (activeTab === 'dashboard') {
@@ -441,6 +447,9 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
             <UserPlus className="h-5 w-5 text-[#6366f1]" />
             Add New Employee
           </DialogTitle>
+          <DialogDescription className={textSecondary}>
+            Fill in the employee details across all tabs to create a new account.
+          </DialogDescription>
         </DialogHeader>
 
         {/* Tabs */}

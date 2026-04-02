@@ -150,6 +150,20 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
   - Documents auto-assigned to user's department on creation
   - Admins can create documents for any department
 
+#### P0 - Add Employee Feature (DONE - Dec 2025)
+- ✅ **Add Employee Modal** in HR Admin with 5 tabs:
+  - Basic Details (name, email, phone, DOB, gender, blood group, address, emergency contact)
+  - Account Details (bank info, PAN, Aadhar)
+  - Employment (employee ID, designation, department, employment type, joining date, manager, location)
+  - Documents (Google Drive links for resume, ID proof, address proof, education docs, offer letter)
+  - Role & Access (13 role options, module access checkboxes, password with generate button)
+- ✅ Backend API: `POST /api/hr/admin/create-employee`
+- ✅ Password hashing with bcrypt
+- ✅ Leave balance auto-initialization for new employees
+- ✅ Welcome email with credentials (MOCKED - Resend API)
+- ✅ Duplicate email validation
+- ✅ New employees can log in immediately after creation
+
 #### P1 - Theme Fixes (DONE - Dec 2025)
 - ✅ Fixed light/dark mode on HR page
 - ✅ Fixed light/dark mode on HR Admin page  
