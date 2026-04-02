@@ -4,7 +4,7 @@ BDE Tasks Routes - Task management for Business Development
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 bde_router = APIRouter(prefix="/bde", tags=["BDE Tasks"])
@@ -91,6 +91,102 @@ async def get_tasks(request: Request):
                 task["created_by_name"] = creator.get("name") if creator else "Unknown"
         
         return tasks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Get tasks by date (for calendar day detail view)
+@bde_router.get("/tasks/by-date/{date}")
+async def get_tasks_by_date(date: str, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    
+    try:
+        # Parse date
+        target_date = datetime.strptime(date, "%Y-%m-%d")
+        next_date = target_date + timedelta(days=1)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        is_future = target_date.date() > today.date()
+        
+        # Build query for tasks
+        if is_future:
+            # For future dates, show tasks with due date on this date or assigned to user
+            base_query = {
+                "$or": [
+                    {"due_date": date},
+                    {"due_date": {"$gte": date}}
+                ]
+            }
+        else:
+            # For past/today, show tasks worked on this day or with time tracking sessions on this day
+            base_query = {
+                "$or": [
+                    {"created_at": {"$gte": target_date.isoformat(), "$lt": next_date.isoformat()}},
+                    {"updated_at": {"$gte": target_date.isoformat(), "$lt": next_date.isoformat()}},
+                    {"time_tracking.sessions.start": {"$gte": target_date.isoformat(), "$lt": next_date.isoformat()}}
+                ]
+            }
+        
+        # Filter by user access
+        if user.role not in ["super_admin", "admin", "hr_manager"]:
+            base_query = {
+                "$and": [
+                    base_query,
+                    {"$or": [
+                        {"created_by": user.user_id},
+                        {"assigned_to": user.user_id}
+                    ]}
+                ]
+            }
+        else:
+            # Admin can see all tasks, but we're showing user's own tasks
+            base_query = {
+                "$and": [
+                    base_query,
+                    {"$or": [
+                        {"created_by": user.user_id},
+                        {"assigned_to": user.user_id}
+                    ]}
+                ]
+            }
+        
+        tasks = await db.bde_tasks.find(base_query, {"_id": 0}).sort("created_at", -1).to_list(100)
+        
+        # Add names and calculate day_seconds
+        for task in tasks:
+            # Add assigned_to name
+            if task.get("assigned_to"):
+                assigned_user = await db.users.find_one({"user_id": task["assigned_to"]}, {"name": 1, "_id": 0})
+                task["assigned_to_name"] = assigned_user.get("name") if assigned_user else "Unknown"
+            else:
+                task["assigned_to_name"] = None
+            
+            # Add assigned_by name
+            if task.get("assigned_by"):
+                assigned_by_user = await db.users.find_one({"user_id": task["assigned_by"]}, {"name": 1, "_id": 0})
+                task["assigned_by_name"] = assigned_by_user.get("name") if assigned_by_user else "Unknown"
+            else:
+                task["assigned_by_name"] = None
+            
+            # Add created_by name
+            if task.get("created_by"):
+                created_by_user = await db.users.find_one({"user_id": task["created_by"]}, {"name": 1, "_id": 0})
+                task["created_by_name"] = created_by_user.get("name") if created_by_user else "Unknown"
+            else:
+                task["created_by_name"] = None
+            
+            # Calculate day_seconds (time spent on this specific date)
+            day_seconds = 0
+            if task.get("time_tracking", {}).get("sessions"):
+                for session in task["time_tracking"]["sessions"]:
+                    session_start = session.get("start", "")
+                    if session_start.startswith(date):
+                        day_seconds += session.get("duration_seconds", 0)
+            task["day_seconds"] = day_seconds
+        
+        return {"date": date, "is_future": is_future, "tasks": tasks}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

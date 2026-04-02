@@ -333,8 +333,27 @@ The system sends email notifications with "View" buttons for:
   - Monthly summary: Days Present, Total Hours, Avg Hours/Day
 - [ ] Google Sheets Integration - Auto-sync leads from a connected Google Sheet
 - [ ] Leads Custom Fields - Notion-style custom fields for leads
+- [x] **Calendar Day Detail Page** - DONE (Apr 2026)
+  - Full page view (not sidebar) when clicking calendar date
+  - Back to Calendar button
+  - For past/today: Shows attendance details + tasks worked on
+  - For future: Shows upcoming tasks only
+  - Day Summary: Total Tasks, Completed, In Progress, Total Time
+  - Task cards with full details, status, priority, time spent
+- [x] **BDE Tasks Advanced Filters** - DONE (Apr 2026)
+  - Date filter: Today (default) | All Time | Date Range
+  - Assigned To: All | Myself | User list
+  - Assigned By: All | User list
+  - Type: All | General | Meeting | Follow Up | Proposal | Call
+  - Status: All status options
+  - Work Link field for tasks
+  - Assigned By tracking
 
 ### P1 - High Priority
+- [ ] Leave Approval Workflow with Task Verification
+  - Show tasks for leave date to HR
+  - Send to Operations Admin for verification
+  - Task reassignment before approval
 - [ ] Multiple Login/Logout Sessions Per Day - Allow multiple clock-in/out cycles
 - [ ] Refactor LeadsPageV2.js - Break down into smaller components
 - [ ] Google Calendar Integration - Sync meetings and events

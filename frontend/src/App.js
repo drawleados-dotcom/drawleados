@@ -27,6 +27,7 @@ import SEOBoardPage from './pages/SEOBoardPage';
 import AdminSignupPage from './pages/AdminSignupPage';
 import ProfilePage from './pages/ProfilePage';
 import BDETasksPage from './pages/BDETasksPage';
+import CalendarDayDetailPage from './pages/CalendarDayDetailPage';
 import './App.css';
 
 function AppRouter() {
@@ -102,6 +103,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <HRPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/calendar/:date"
+        element={
+          <ProtectedRoute>
+            <CalendarDayDetailPage />
           </ProtectedRoute>
         }
       />

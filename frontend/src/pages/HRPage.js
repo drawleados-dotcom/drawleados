@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +31,7 @@ export default function HRPage() {
   
   // Get token from localStorage
   const token = localStorage.getItem('session_token');
+  const navigate = useNavigate();
   
   // Attendance state
   const [todayAttendance, setTodayAttendance] = useState(null);
@@ -297,6 +299,7 @@ export default function HRPage() {
             textSecondary={textSecondary}
             borderColor={borderColor}
             isDark={isDark}
+            navigate={navigate}
           />
         )}
 
@@ -1008,7 +1011,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
 function CalendarTab({ 
   calendarData, calendarMonth, calendarYear, setCalendarMonth, setCalendarYear,
   selectedDate, setSelectedDate, dateDetail, loadDateDetail, loadCalendarData,
-  bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark
+  bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark, navigate
 }) {
   const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                       'July', 'August', 'September', 'October', 'November', 'December'];
@@ -1060,8 +1063,8 @@ function CalendarTab({
   };
 
   const handleDateClick = (dateStr) => {
-    setSelectedDate(dateStr);
-    loadDateDetail(dateStr);
+    // Navigate to full page detail view
+    navigate(`/calendar/${dateStr}`);
   };
 
   const formatTime = (dateStr) => {
