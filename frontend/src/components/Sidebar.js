@@ -230,6 +230,17 @@ const Sidebar = () => {
           </Link>
         )}
 
+        {/* Calendar - visible for ALL users */}
+        <Link
+          to="/calendar"
+          data-testid="nav-calendar"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Calendar' : ''}
+        >
+          <Calendar className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'Calendar'}
+        </Link>
+
         {/* Operations with Service Types - visible if user has operations access */}
         {hasAccess('operations') && (
         <div>
@@ -410,17 +421,6 @@ const Sidebar = () => {
           {!isCollapsed && 'My Profile'}
         </Link>
         )}
-
-        {/* Calendar - visible for all users */}
-        <Link
-          to="/calendar"
-          data-testid="nav-calendar"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'Calendar' : ''}
-        >
-          <Calendar className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'Calendar'}
-        </Link>
 
         {/* Leave Verification - Operations Admin/Manager only */}
         {(isProjectManager || userRole === 'admin' || userRole === 'super_admin' || userRole === 'operations_admin') && (
