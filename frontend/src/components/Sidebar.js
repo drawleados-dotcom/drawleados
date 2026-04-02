@@ -86,8 +86,8 @@ const Sidebar = () => {
   const isEmployee = userRole === 'employee';
   const isBDE = userRole === 'business_development' || userRole === 'bde';
   const isProjectManager = userRole === 'project_manager';
-  // HR Admin access: Admins, project managers, HR managers, and users with HR module access
-  const canManageHR = isAdmin || isProjectManager || userRole === 'hr_manager' || hasAccess('hr');
+  // HR Admin access: Only Super Admin and HR Manager
+  const canManageHR = isAdmin || userRole === 'hr_manager';
   const canManageUsers = user?.can_manage_users || false;
 
   // Load databases for operations submenu
@@ -345,17 +345,16 @@ const Sidebar = () => {
         </div>
         )}
 
-        {/* HR - visible if user has hr access */}
-        {/* For BDE: Show as "My Profile" combining HR + Security */}
+        {/* My Profile (HR) - visible for all users */}
         {hasAccess('hr') && (
         <Link
           to="/hr"
-          data-testid="nav-hr"
+          data-testid="nav-my-profile"
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? (isBDE ? 'My Profile' : 'HR') : ''}
+          title={isCollapsed ? 'My Profile' : ''}
         >
           <UserCircle className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && (isBDE ? 'My Profile' : 'HR')}
+          {!isCollapsed && 'My Profile'}
         </Link>
         )}
 
@@ -396,19 +395,6 @@ const Sidebar = () => {
             <Settings className="h-5 w-5" strokeWidth={2} />
             {!isCollapsed && 'Settings'}
           </Link>
-        )}
-
-        {/* My Profile - visible for all users EXCEPT BDE (they use HR as My Profile) */}
-        {!isBDE && (
-        <Link
-          to="/profile"
-          data-testid="nav-profile"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/profile' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'My Profile' : ''}
-        >
-          <UserCircle className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'My Profile'}
-        </Link>
         )}
 
         {/* Documentations - visible for business_development and admins */}
