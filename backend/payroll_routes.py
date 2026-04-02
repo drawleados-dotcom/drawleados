@@ -158,7 +158,7 @@ async def get_salary_at_date(user_id: str, month: int, year: int, request: Reque
 
 @payroll_router.get("/details/{user_id}")
 async def get_payroll_details(user_id: str, month: int, year: int, request: Request):
-    """Get detailed payroll for a specific month/year"""
+    """Get detailed payroll for a specific month/year with attendance-based calculations"""
     from server import get_current_user
     current_user = await get_current_user(request)
     
@@ -179,7 +179,21 @@ async def get_payroll_details(user_id: str, month: int, year: int, request: Requ
     
     base_salary = salary_record["amount"] if salary_record else 0
     
-    # Get attendance for the month to calculate working days
+    # Get calendar for the month to know total working days
+    calendar_data = await db.company_calendars.find_one({
+        "month": month,
+        "year": year
+    })
+    
+    # Calculate total working days in the month (excluding weekends and holidays)
+    import calendar as cal
+    total_days_in_month = cal.monthrange(year, month)[1]
+    
+    # Default to 22 working days if no calendar data
+    total_working_days = calendar_data.get("working_days", 22) if calendar_data else 22
+    holidays = calendar_data.get("holidays", []) if calendar_data else []
+    
+    # Get attendance for the month
     month_start = datetime(year, month, 1)
     if month == 12:
         month_end = datetime(year + 1, 1, 1)
@@ -193,28 +207,57 @@ async def get_payroll_details(user_id: str, month: int, year: int, request: Requ
     
     days_present = len([r for r in attendance_records if r.get("status") == "present"])
     
-    # Get leave records for the month
+    # Get leave records for the month - separate casual and sick
     leave_records = await db.leave_requests.find({
         "user_id": user_id,
         "status": "approved",
         "start_date": {"$lte": month_end.strftime("%Y-%m-%d")},
         "end_date": {"$gte": month_start.strftime("%Y-%m-%d")}
-    }).to_list(10)
+    }).to_list(20)
     
-    leave_days = sum(r.get("days", 1) for r in leave_records)
+    casual_leaves = 0
+    sick_leaves = 0
+    for leave in leave_records:
+        leave_type = leave.get("leave_type", "casual").lower()
+        days = leave.get("days", 1)
+        if leave_type == "casual":
+            casual_leaves += days
+        elif leave_type == "sick":
+            sick_leaves += days
     
-    # Calculate payroll components (simplified)
+    total_leaves = casual_leaves + sick_leaves
+    
+    # Calculate absents (working days - present days - leaves - future days)
+    today = datetime.now()
+    current_day = today.day if today.year == year and today.month == month else total_days_in_month
+    
+    # For past months, use full month; for current month, calculate up to today
+    if year < today.year or (year == today.year and month < today.month):
+        # Past month - use total working days
+        accountable_days = total_working_days
+    else:
+        # Current or future month - prorate working days
+        accountable_days = min(current_day, total_working_days)
+    
+    absent_days = max(0, accountable_days - days_present - total_leaves - len(holidays))
+    
+    # Per day salary calculation
+    per_day_salary = round(base_salary / total_working_days, 2) if total_working_days > 0 else 0
+    
+    # Calculate actual earnings based on days worked
+    actual_working_days = days_present + casual_leaves + sick_leaves  # Paid leaves count as worked
+    loss_of_pay_days = absent_days  # Only unpaid absences are deducted
+    
+    # Calculate salary
+    earned_salary = round(per_day_salary * actual_working_days, 2)
+    lop_deduction = round(per_day_salary * loss_of_pay_days, 2)
+    
     # Standard deductions
-    pf_deduction = base_salary * 0.12  # 12% PF
+    pf_deduction = round(base_salary * 0.12, 2)  # 12% PF on base
     professional_tax = 200 if base_salary > 15000 else 0
     
-    # Allowances
-    hra = base_salary * 0.40  # 40% HRA
-    special_allowance = base_salary * 0.10
-    
-    gross_salary = base_salary + hra + special_allowance
-    total_deductions = pf_deduction + professional_tax
-    net_salary = gross_salary - total_deductions
+    total_deductions = pf_deduction + professional_tax + lop_deduction
+    net_salary = round(earned_salary - pf_deduction - professional_tax, 2)
     
     # Get employee info
     employee = await db.users.find_one({"user_id": user_id}, {"_id": 0, "name": 1, "email": 1, "designation": 1, "join_date": 1})
@@ -224,21 +267,37 @@ async def get_payroll_details(user_id: str, month: int, year: int, request: Requ
         "month": month,
         "year": year,
         "base_salary": base_salary,
-        "earnings": {
-            "basic": base_salary,
-            "hra": round(hra, 2),
-            "special_allowance": round(special_allowance, 2)
+        "attendance_summary": {
+            "total_working_days": total_working_days,
+            "total_holidays": len(holidays),
+            "days_present": days_present,
+            "casual_leaves": casual_leaves,
+            "sick_leaves": sick_leaves,
+            "absent_days": absent_days,
+            "loss_of_pay_days": loss_of_pay_days
+        },
+        "salary_breakdown": {
+            "per_day_salary": per_day_salary,
+            "days_paid": actual_working_days,
+            "earned_salary": earned_salary
         },
         "deductions": {
-            "pf": round(pf_deduction, 2),
-            "professional_tax": professional_tax
+            "pf": pf_deduction,
+            "professional_tax": professional_tax,
+            "lop_deduction": lop_deduction
         },
-        "gross_salary": round(gross_salary, 2),
         "total_deductions": round(total_deductions, 2),
-        "net_salary": round(net_salary, 2),
+        "net_salary": net_salary,
+        # Keep legacy fields for backward compatibility
+        "earnings": {
+            "basic": base_salary,
+            "hra": round(base_salary * 0.40, 2),
+            "special_allowance": round(base_salary * 0.10, 2)
+        },
+        "gross_salary": round(base_salary * 1.5, 2),
         "attendance": {
             "days_present": days_present,
-            "leave_days": leave_days
+            "leave_days": total_leaves
         }
     }
 

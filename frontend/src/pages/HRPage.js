@@ -1775,52 +1775,93 @@ function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCol
           {/* Payroll Details */}
           {payrollDetails && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Earnings Card */}
+              {/* Attendance Summary Card */}
               <Card className={`${bgCard} border ${borderColor}`}>
                 <CardHeader>
-                  <CardTitle className={`${textPrimary} text-lg`}>Earnings</CardTitle>
+                  <CardTitle className={`${textPrimary} text-lg`}>Attendance Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between">
-                    <span className={textSecondary}>Basic Salary</span>
-                    <span className={textPrimary}>₹{payrollDetails.earnings?.basic?.toLocaleString()}</span>
+                    <span className={textSecondary}>Total Working Days</span>
+                    <span className={textPrimary}>{payrollDetails.attendance_summary?.total_working_days || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={textSecondary}>HRA (40%)</span>
-                    <span className={textPrimary}>₹{payrollDetails.earnings?.hra?.toLocaleString()}</span>
+                    <span className={textSecondary}>Holidays</span>
+                    <span className={textPrimary}>{payrollDetails.attendance_summary?.total_holidays || 0}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={textSecondary}>Special Allowance</span>
-                    <span className={textPrimary}>₹{payrollDetails.earnings?.special_allowance?.toLocaleString()}</span>
+                    <span className={textSecondary}>Days Present</span>
+                    <span className="text-[#10b981] font-medium">{payrollDetails.attendance_summary?.days_present || 0}</span>
                   </div>
-                  <div className={`flex justify-between pt-3 border-t ${borderColor}`}>
-                    <span className={`font-medium ${textPrimary}`}>Gross Salary</span>
-                    <span className="font-bold text-[#10b981]">₹{payrollDetails.gross_salary?.toLocaleString()}</span>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Casual Leave</span>
+                    <span className="text-[#6366f1]">{payrollDetails.attendance_summary?.casual_leaves || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Sick Leave</span>
+                    <span className="text-[#f59e0b]">{payrollDetails.attendance_summary?.sick_leaves || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Absent (LOP)</span>
+                    <span className="text-red-400">{payrollDetails.attendance_summary?.absent_days || 0}</span>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Deductions Card */}
+              {/* Salary Breakdown Card */}
               <Card className={`${bgCard} border ${borderColor}`}>
                 <CardHeader>
-                  <CardTitle className={`${textPrimary} text-lg`}>Deductions</CardTitle>
+                  <CardTitle className={`${textPrimary} text-lg`}>Salary Breakdown</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="flex justify-between">
-                    <span className={textSecondary}>PF (12%)</span>
-                    <span className="text-red-400">-₹{payrollDetails.deductions?.pf?.toLocaleString()}</span>
+                    <span className={textSecondary}>Base Salary</span>
+                    <span className={textPrimary}>₹{payrollDetails.base_salary?.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={textSecondary}>Professional Tax</span>
-                    <span className="text-red-400">-₹{payrollDetails.deductions?.professional_tax?.toLocaleString()}</span>
+                    <span className={textSecondary}>Per Day Salary</span>
+                    <span className={textPrimary}>₹{payrollDetails.salary_breakdown?.per_day_salary?.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Days Paid (Present + Paid Leave)</span>
+                    <span className={textPrimary}>{payrollDetails.salary_breakdown?.days_paid || 0}</span>
                   </div>
                   <div className={`flex justify-between pt-3 border-t ${borderColor}`}>
-                    <span className={`font-medium ${textPrimary}`}>Total Deductions</span>
-                    <span className="font-bold text-red-400">-₹{payrollDetails.total_deductions?.toLocaleString()}</span>
+                    <span className={`font-medium ${textPrimary}`}>Earned Salary</span>
+                    <span className="font-bold text-[#10b981]">₹{payrollDetails.salary_breakdown?.earned_salary?.toLocaleString()}</span>
                   </div>
                 </CardContent>
               </Card>
             </div>
+          )}
+
+          {/* Deductions */}
+          {payrollDetails && (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardHeader>
+                <CardTitle className={`${textPrimary} text-lg`}>Deductions</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary}`}>PF (12%)</p>
+                    <p className="text-lg font-semibold text-red-400">-₹{payrollDetails.deductions?.pf?.toLocaleString()}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary}`}>Professional Tax</p>
+                    <p className="text-lg font-semibold text-red-400">-₹{payrollDetails.deductions?.professional_tax?.toLocaleString()}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary}`}>LOP Deduction</p>
+                    <p className="text-lg font-semibold text-red-400">-₹{payrollDetails.deductions?.lop_deduction?.toLocaleString() || 0}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary}`}>Total Deductions</p>
+                    <p className="text-lg font-semibold text-red-400">-₹{payrollDetails.total_deductions?.toLocaleString()}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Net Salary */}

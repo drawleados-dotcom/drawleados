@@ -113,6 +113,21 @@ export default function HRAdminPage() {
   const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
   const [editingDesignation, setEditingDesignation] = useState(null);
 
+  // Payroll Management state
+  const [payrollEmployees, setPayrollEmployees] = useState([]);
+  const [selectedPayrollEmployee, setSelectedPayrollEmployee] = useState(null);
+  const [showAddSalaryModal, setShowAddSalaryModal] = useState(false);
+  const [newSalaryRecord, setNewSalaryRecord] = useState({
+    user_id: '',
+    amount: '',
+    effective_from: '',
+    reason: 'initial',
+    notes: ''
+  });
+  const [hikeReasons, setHikeReasons] = useState([]);
+  const [employeeSalaryHistory, setEmployeeSalaryHistory] = useState([]);
+  const [payrollSearchQuery, setPayrollSearchQuery] = useState('');
+
   const loadStats = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/hr/admin/dashboard-stats`, { 
@@ -240,6 +255,74 @@ export default function HRAdminPage() {
     }
   }, [token]);
 
+  // Payroll Management functions
+  const loadPayrollEmployees = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/payroll/employees`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPayrollEmployees(res.data);
+    } catch (error) {
+      console.error('Error loading payroll employees:', error);
+    }
+  }, [token]);
+
+  const loadHikeReasons = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/payroll/hike-reasons`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setHikeReasons(res.data);
+    } catch (error) {
+      console.error('Error loading hike reasons:', error);
+    }
+  }, [token]);
+
+  const loadEmployeeSalaryHistory = useCallback(async (userId) => {
+    try {
+      const res = await axios.get(`${API}/api/payroll/salary-history/${userId}`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setEmployeeSalaryHistory(res.data.salary_history || []);
+    } catch (error) {
+      console.error('Error loading salary history:', error);
+      setEmployeeSalaryHistory([]);
+    }
+  }, [token]);
+
+  const handleAddSalaryRecord = async () => {
+    try {
+      await axios.post(`${API}/api/payroll/salary/add`, newSalaryRecord, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Salary record added successfully!');
+      setShowAddSalaryModal(false);
+      setNewSalaryRecord({ user_id: '', amount: '', effective_from: '', reason: 'initial', notes: '' });
+      loadPayrollEmployees();
+      if (selectedPayrollEmployee) {
+        loadEmployeeSalaryHistory(selectedPayrollEmployee.user_id);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add salary record');
+    }
+  };
+
+  const handleDeleteSalaryRecord = async (recordId) => {
+    if (!window.confirm('Are you sure you want to delete this salary record?')) return;
+    try {
+      await axios.delete(`${API}/api/payroll/salary/${recordId}`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Salary record deleted');
+      loadPayrollEmployees();
+      if (selectedPayrollEmployee) {
+        loadEmployeeSalaryHistory(selectedPayrollEmployee.user_id);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete salary record');
+    }
+  };
+
   useEffect(() => {
     // Always load designations and departments for Add Employee form
     loadDesignations();
@@ -266,6 +349,9 @@ export default function HRAdminPage() {
     } else if (activeTab === 'payslips') {
       loadPayslips();
       loadEmployees();
+    } else if (activeTab === 'payroll') {
+      loadPayrollEmployees();
+      loadHikeReasons();
     } else if (activeTab === 'settings') {
       loadHRSettings();
     } else if (activeTab === 'designations') {
@@ -273,7 +359,7 @@ export default function HRAdminPage() {
     } else if (activeTab === 'departments') {
       loadDepartments();
     }
-  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings]);
+  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons]);
 
   useEffect(() => {
     if (activeTab === 'requests') {
@@ -552,6 +638,7 @@ export default function HRAdminPage() {
     { id: 'approvals', label: 'Approvals', icon: CheckCircle },
     { id: 'requests', label: 'Leave Requests', icon: Calendar },
     { id: 'all-attendance', label: 'All Attendance', icon: Clock },
+    { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'payslips', label: 'Payslips', icon: FileText },
     { id: 'settings', label: 'Work Settings', icon: Clock },
@@ -730,6 +817,32 @@ export default function HRAdminPage() {
             formatDate={formatDate}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {/* Payroll Management Tab */}
+        {activeTab === 'payroll' && (
+          <PayrollManagementTab
+            employees={payrollEmployees}
+            selectedEmployee={selectedPayrollEmployee}
+            setSelectedEmployee={setSelectedPayrollEmployee}
+            salaryHistory={employeeSalaryHistory}
+            loadSalaryHistory={loadEmployeeSalaryHistory}
+            hikeReasons={hikeReasons}
+            showAddModal={showAddSalaryModal}
+            setShowAddModal={setShowAddSalaryModal}
+            newSalaryRecord={newSalaryRecord}
+            setNewSalaryRecord={setNewSalaryRecord}
+            onAddSalary={handleAddSalaryRecord}
+            onDeleteSalary={handleDeleteSalaryRecord}
+            searchQuery={payrollSearchQuery}
+            setSearchQuery={setPayrollSearchQuery}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            bgInput={bgInput}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
@@ -3339,6 +3452,489 @@ function WorkSettingsTab({ settings, onUpdate, onRefresh, bgCard, bgSecondary, t
           {saving ? 'Saving...' : 'Save Settings'}
         </Button>
       </div>
+    </div>
+  );
+}
+
+
+// Payroll Management Tab Component
+function PayrollManagementTab({
+  employees,
+  selectedEmployee,
+  setSelectedEmployee,
+  salaryHistory,
+  loadSalaryHistory,
+  hikeReasons,
+  showAddModal,
+  setShowAddModal,
+  newSalaryRecord,
+  setNewSalaryRecord,
+  onAddSalary,
+  onDeleteSalary,
+  searchQuery,
+  setSearchQuery,
+  bgCard,
+  bgSecondary,
+  bgInput,
+  textPrimary,
+  textSecondary,
+  borderColor
+}) {
+  const [activeSubTab, setActiveSubTab] = useState('employees');
+  
+  // Filter employees by search
+  const filteredEmployees = employees.filter(emp => 
+    emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    emp.designation?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Handle employee selection
+  const handleSelectEmployee = (emp) => {
+    setSelectedEmployee(emp);
+    loadSalaryHistory(emp.user_id);
+    setActiveSubTab('history');
+  };
+
+  // Get reason label
+  const getReasonLabel = (reasonId) => {
+    const reason = hikeReasons.find(r => r.id === reasonId);
+    return reason ? reason.label : reasonId;
+  };
+
+  // Get reason color
+  const getReasonColor = (reasonId) => {
+    const colors = {
+      'initial': 'bg-gray-500/20 text-gray-400',
+      'performance': 'bg-[#10b981]/20 text-[#10b981]',
+      'confirmation': 'bg-[#6366f1]/20 text-[#6366f1]',
+      'annual_increase': 'bg-[#f59e0b]/20 text-[#f59e0b]',
+      '6_month_review': 'bg-[#8b5cf6]/20 text-[#8b5cf6]',
+      '3_month_review': 'bg-[#ec4899]/20 text-[#ec4899]',
+      'promotion': 'bg-[#14b8a6]/20 text-[#14b8a6]',
+      'market_adjustment': 'bg-[#3b82f6]/20 text-[#3b82f6]'
+    };
+    return colors[reasonId] || 'bg-gray-500/20 text-gray-400';
+  };
+
+  // Calculate duration at each salary level
+  const calculateDuration = (history, index) => {
+    if (index === 0) {
+      const effectiveDate = new Date(history[0]?.effective_from);
+      const now = new Date();
+      const diffMonths = (now.getFullYear() - effectiveDate.getFullYear()) * 12 + (now.getMonth() - effectiveDate.getMonth());
+      return `${diffMonths} months (current)`;
+    } else {
+      const startDate = new Date(history[index]?.effective_from);
+      const endDate = new Date(history[index - 1]?.effective_from);
+      const diffMonths = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth());
+      return `${diffMonths} months`;
+    }
+  };
+
+  const subTabs = [
+    { id: 'employees', label: 'All Employees' },
+    { id: 'history', label: 'Salary History', disabled: !selectedEmployee },
+  ];
+
+  return (
+    <div className="space-y-6" data-testid="payroll-management-tab">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className={`text-xl font-semibold ${textPrimary}`}>Payroll Management</h2>
+          <p className={`text-sm ${textSecondary}`}>Manage employee salaries and view history</p>
+        </div>
+        <Button
+          onClick={() => {
+            setNewSalaryRecord({ user_id: selectedEmployee?.user_id || '', amount: '', effective_from: '', reason: 'initial', notes: '' });
+            setShowAddModal(true);
+          }}
+          className="bg-[#10b981] hover:bg-[#059669] text-white"
+          data-testid="add-salary-btn"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Salary Record
+        </Button>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-2 border-b border-[#3f3f46] pb-2">
+        {subTabs.map((tab) => (
+          <Button
+            key={tab.id}
+            onClick={() => !tab.disabled && setActiveSubTab(tab.id)}
+            disabled={tab.disabled}
+            variant={activeSubTab === tab.id ? 'default' : 'ghost'}
+            className={`${activeSubTab === tab.id 
+              ? 'bg-[#6366f1] text-white' 
+              : `${textSecondary} hover:bg-[#27272a]`
+            } ${tab.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            size="sm"
+          >
+            {tab.label}
+            {tab.id === 'history' && selectedEmployee && (
+              <span className="ml-2 text-xs">({selectedEmployee.name})</span>
+            )}
+          </Button>
+        ))}
+      </div>
+
+      {/* Employees List Tab */}
+      {activeSubTab === 'employees' && (
+        <div className="space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[#71717a]" />
+            <Input
+              placeholder="Search by name, email, or designation..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={`pl-10 ${bgInput} border ${borderColor} ${textPrimary}`}
+              data-testid="payroll-search"
+            />
+          </div>
+
+          {/* Employees Table */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className={`border-b ${borderColor}`}>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Employee</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Designation</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Join Date</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Current Salary</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Total Hikes</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredEmployees.length > 0 ? filteredEmployees.map((emp) => (
+                      <tr key={emp.user_id} className={`border-b ${borderColor} hover:${bgSecondary}`}>
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-medium">
+                              {emp.name?.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className={`font-medium ${textPrimary}`}>{emp.name}</p>
+                              <p className={`text-sm ${textSecondary}`}>{emp.email}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className={`p-4 ${textPrimary}`}>{emp.designation || '-'}</td>
+                        <td className={`p-4 ${textSecondary}`}>
+                          {emp.join_date ? new Date(emp.join_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '-'}
+                        </td>
+                        <td className="p-4">
+                          <span className={`font-semibold ${emp.current_salary > 0 ? 'text-[#10b981]' : textSecondary}`}>
+                            {emp.current_salary > 0 ? `₹${emp.current_salary.toLocaleString()}` : 'Not Set'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{emp.total_hikes || 0}</Badge>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={() => handleSelectEmployee(emp)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-[#6366f1] hover:bg-[#6366f1]/10"
+                            >
+                              <Eye className="h-4 w-4 mr-1" />
+                              View History
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                setNewSalaryRecord({ user_id: emp.user_id, amount: '', effective_from: '', reason: 'initial', notes: '' });
+                                setShowAddModal(true);
+                              }}
+                              variant="ghost"
+                              size="sm"
+                              className="text-[#10b981] hover:bg-[#10b981]/10"
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Salary
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={6} className={`p-8 text-center ${textSecondary}`}>
+                          {searchQuery ? 'No employees found matching your search' : 'No employees found'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Salary History Tab */}
+      {activeSubTab === 'history' && selectedEmployee && (
+        <div className="space-y-6">
+          {/* Employee Info Card */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="h-14 w-14 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white text-xl font-bold">
+                    {selectedEmployee.name?.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>{selectedEmployee.name}</h3>
+                    <p className={textSecondary}>{selectedEmployee.designation || 'No designation'}</p>
+                    <p className={`text-sm ${textSecondary}`}>{selectedEmployee.email}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className={`text-sm ${textSecondary}`}>Current Salary</p>
+                  <p className="text-2xl font-bold text-[#10b981]">
+                    {selectedEmployee.current_salary > 0 ? `₹${selectedEmployee.current_salary.toLocaleString()}` : 'Not Set'}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Current Salary</p>
+              <p className="text-xl font-bold text-[#10b981]">
+                ₹{selectedEmployee.current_salary?.toLocaleString() || 0}
+              </p>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Total Hikes</p>
+              <p className="text-xl font-bold text-[#6366f1]">{Math.max(0, salaryHistory.length - 1)}</p>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Initial Salary</p>
+              <p className="text-xl font-bold text-[#f59e0b]">
+                ₹{salaryHistory.length > 0 ? salaryHistory[salaryHistory.length - 1]?.amount?.toLocaleString() : 0}
+              </p>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor} p-4`}>
+              <p className={`text-xs ${textSecondary}`}>Total Growth</p>
+              <p className="text-xl font-bold text-[#8b5cf6]">
+                {salaryHistory.length > 1 
+                  ? `+${Math.round(((selectedEmployee.current_salary - salaryHistory[salaryHistory.length - 1]?.amount) / salaryHistory[salaryHistory.length - 1]?.amount) * 100)}%`
+                  : '0%'}
+              </p>
+            </Card>
+          </div>
+
+          {/* Salary History Table */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={textPrimary}>Salary History</CardTitle>
+              <Button
+                onClick={() => {
+                  setNewSalaryRecord({ user_id: selectedEmployee.user_id, amount: '', effective_from: '', reason: salaryHistory.length === 0 ? 'initial' : 'performance', notes: '' });
+                  setShowAddModal(true);
+                }}
+                size="sm"
+                className="bg-[#10b981] hover:bg-[#059669] text-white"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Record
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {salaryHistory.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${borderColor}`}>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>#</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Effective From</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Amount</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Duration</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Reason</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Hike</th>
+                        <th className={`text-left p-3 ${textSecondary} text-sm`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {salaryHistory.map((record, index) => {
+                        const prevSalary = index < salaryHistory.length - 1 ? salaryHistory[index + 1]?.amount : 0;
+                        const hikeAmount = prevSalary > 0 ? record.amount - prevSalary : 0;
+                        const hikePercent = prevSalary > 0 ? ((hikeAmount / prevSalary) * 100).toFixed(1) : 0;
+                        
+                        return (
+                          <tr key={record.record_id} className={`border-b ${borderColor}`}>
+                            <td className={`p-3 ${textSecondary}`}>{salaryHistory.length - index}</td>
+                            <td className={`p-3 ${textPrimary}`}>
+                              {new Date(record.effective_from).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className={`p-3 font-semibold text-[#10b981]`}>₹{record.amount?.toLocaleString()}</td>
+                            <td className={`p-3 ${textSecondary}`}>{calculateDuration(salaryHistory, index)}</td>
+                            <td className="p-3">
+                              <Badge className={getReasonColor(record.reason)}>
+                                {getReasonLabel(record.reason)}
+                              </Badge>
+                            </td>
+                            <td className={`p-3`}>
+                              {hikeAmount > 0 ? (
+                                <span className="text-[#10b981]">+₹{hikeAmount.toLocaleString()} ({hikePercent}%)</span>
+                              ) : (
+                                <span className={textSecondary}>-</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <Button
+                                onClick={() => onDeleteSalary(record.record_id)}
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-400 hover:bg-red-400/10"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <CreditCard className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
+                  <p className={textSecondary}>No salary history available</p>
+                  <p className={`text-sm ${textSecondary}`}>Add the first salary record for this employee</p>
+                  <Button
+                    onClick={() => {
+                      setNewSalaryRecord({ user_id: selectedEmployee.user_id, amount: '', effective_from: '', reason: 'initial', notes: '' });
+                      setShowAddModal(true);
+                    }}
+                    className="mt-4 bg-[#10b981] hover:bg-[#059669] text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add First Salary
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Hike Conditions Legend */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={`${textPrimary} text-lg`}>Hike Conditions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {hikeReasons.map((reason) => (
+                  <div key={reason.id} className="flex flex-col gap-1">
+                    <Badge className={getReasonColor(reason.id)}>{reason.label}</Badge>
+                    <span className={`text-xs ${textSecondary}`}>{reason.description}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Add Salary Modal */}
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className={`${bgCard} border ${borderColor} max-w-md`}>
+          <DialogHeader>
+            <DialogTitle className={textPrimary}>Add Salary Record</DialogTitle>
+            <DialogDescription className={textSecondary}>
+              Add a new salary record for an employee
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Employee Selection */}
+            <div>
+              <Label className={textPrimary}>Employee *</Label>
+              <select
+                value={newSalaryRecord.user_id}
+                onChange={(e) => setNewSalaryRecord({...newSalaryRecord, user_id: e.target.value})}
+                className={`w-full p-2 rounded-lg mt-1 ${bgInput} border ${borderColor} ${textPrimary}`}
+                required
+              >
+                <option value="">Select Employee</option>
+                {employees.map((emp) => (
+                  <option key={emp.user_id} value={emp.user_id}>{emp.name} ({emp.email})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Amount */}
+            <div>
+              <Label className={textPrimary}>Salary Amount (₹) *</Label>
+              <Input
+                type="number"
+                placeholder="25000"
+                value={newSalaryRecord.amount}
+                onChange={(e) => setNewSalaryRecord({...newSalaryRecord, amount: parseFloat(e.target.value) || ''})}
+                className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                required
+              />
+            </div>
+
+            {/* Effective From */}
+            <div>
+              <Label className={textPrimary}>Effective From *</Label>
+              <Input
+                type="date"
+                value={newSalaryRecord.effective_from}
+                onChange={(e) => setNewSalaryRecord({...newSalaryRecord, effective_from: e.target.value})}
+                className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                required
+              />
+            </div>
+
+            {/* Reason */}
+            <div>
+              <Label className={textPrimary}>Reason *</Label>
+              <select
+                value={newSalaryRecord.reason}
+                onChange={(e) => setNewSalaryRecord({...newSalaryRecord, reason: e.target.value})}
+                className={`w-full p-2 rounded-lg mt-1 ${bgInput} border ${borderColor} ${textPrimary}`}
+                required
+              >
+                {hikeReasons.map((reason) => (
+                  <option key={reason.id} value={reason.id}>{reason.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <Label className={textPrimary}>Notes (Optional)</Label>
+              <Input
+                placeholder="Any additional notes..."
+                value={newSalaryRecord.notes}
+                onChange={(e) => setNewSalaryRecord({...newSalaryRecord, notes: e.target.value})}
+                className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddModal(false)} className={`border ${borderColor}`}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={onAddSalary}
+              disabled={!newSalaryRecord.user_id || !newSalaryRecord.amount || !newSalaryRecord.effective_from}
+              className="bg-[#10b981] hover:bg-[#059669] text-white"
+            >
+              Add Salary Record
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
