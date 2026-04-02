@@ -55,7 +55,8 @@ export default function BDETasksPage() {
     assignedTo: 'all', // all, myself, or user_id
     assignedBy: 'all', // all or user_id
     taskType: 'all', // all, general, meeting, follow_up, proposal, call
-    status: 'all' // all, pending, in_progress, completed, on_hold
+    status: 'all', // all, pending, in_progress, completed, on_hold
+    singleDate: '' // for single date filter
   });
   
   const token = localStorage.getItem('session_token');
@@ -374,10 +375,13 @@ export default function BDETasksPage() {
     // Date filter
     if (filters.dateFilter === 'today') {
       const today = getTodayString();
-      const taskDate = task.created_at?.split('T')[0];
+      const taskDate = task.due_date || task.created_at?.split('T')[0];
       if (taskDate !== today) return false;
+    } else if (filters.dateFilter === 'single' && filters.singleDate) {
+      const taskDate = task.due_date || task.created_at?.split('T')[0];
+      if (taskDate !== filters.singleDate) return false;
     } else if (filters.dateFilter === 'range' && (filters.dateFrom || filters.dateTo)) {
-      const taskDate = task.created_at?.split('T')[0];
+      const taskDate = task.due_date || task.created_at?.split('T')[0];
       if (filters.dateFrom && taskDate < filters.dateFrom) return false;
       if (filters.dateTo && taskDate > filters.dateTo) return false;
     }
@@ -404,6 +408,7 @@ export default function BDETasksPage() {
       dateFilter: 'all',
       dateFrom: '',
       dateTo: '',
+      singleDate: '',
       assignedTo: 'all',
       assignedBy: 'all',
       taskType: 'all',
@@ -524,10 +529,24 @@ export default function BDETasksPage() {
                       <SelectContent className={bgCard}>
                         <SelectItem value="today">Today</SelectItem>
                         <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="single">Single Date</SelectItem>
                         <SelectItem value="range">Date Range</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Single Date Picker */}
+                  {filters.dateFilter === 'single' && (
+                    <div>
+                      <Label className={`text-xs ${textSecondary}`}>Select Date</Label>
+                      <Input
+                        type="date"
+                        value={filters.singleDate || ''}
+                        onChange={(e) => setFilters({...filters, singleDate: e.target.value})}
+                        className={`h-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                  )}
 
                   {/* Date Range */}
                   {filters.dateFilter === 'range' && (
@@ -660,7 +679,11 @@ export default function BDETasksPage() {
                       <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                         <p>No tasks found</p>
-                        <p className="text-sm">{filters.dateFilter === 'today' ? 'No tasks created today' : 'Create a new task to get started'}</p>
+                        <p className="text-sm">
+                          {filters.dateFilter === 'today' ? 'No tasks for today' : 
+                           filters.dateFilter === 'single' && filters.singleDate ? `No tasks for ${filters.singleDate}` :
+                           'Create a new task to get started'}
+                        </p>
                       </td>
                     </tr>
                   ) : filteredTasks.map(task => (
