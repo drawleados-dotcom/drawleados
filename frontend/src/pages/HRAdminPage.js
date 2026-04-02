@@ -77,6 +77,29 @@ export default function HRAdminPage() {
   
   // Attendance state
   const [attendanceOverview, setAttendanceOverview] = useState([]);
+  
+  // Pending approvals state
+  const [pendingApprovals, setPendingApprovals] = useState({ attendance: [], permissions: [], leaves: [] });
+  
+  // All attendance state
+  const [allAttendance, setAllAttendance] = useState([]);
+  const [attendanceMonth, setAttendanceMonth] = useState(new Date().getMonth() + 1);
+  const [attendanceYear, setAttendanceYear] = useState(new Date().getFullYear());
+  
+  // Calendar/Holidays state
+  const [calendar, setCalendar] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth() + 1);
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  
+  // Payslips state
+  const [payslips, setPayslips] = useState([]);
+  const [payslipMonth, setPayslipMonth] = useState(new Date().getMonth() + 1);
+  const [payslipYear, setPayslipYear] = useState(new Date().getFullYear());
+  const [showPayslipModal, setShowPayslipModal] = useState(false);
+  const [selectedPayslipEmployee, setSelectedPayslipEmployee] = useState(null);
+  
+  // HR Settings state
+  const [hrSettings, setHrSettings] = useState(null);
 
   const loadStats = useCallback(async () => {
     try {
@@ -125,6 +148,64 @@ export default function HRAdminPage() {
     }
   }, [token]);
 
+  const loadPendingApprovals = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/attendance/pending-approvals`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPendingApprovals(res.data);
+    } catch (error) {
+      console.error('Error loading pending approvals:', error);
+    }
+  }, [token]);
+
+  const loadAllAttendance = useCallback(async () => {
+    try {
+      const res = await axios.get(
+        `${API}/api/hr/admin/attendance/all?month=${attendanceMonth}&year=${attendanceYear}`, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setAllAttendance(res.data.records || []);
+    } catch (error) {
+      console.error('Error loading all attendance:', error);
+    }
+  }, [token, attendanceMonth, attendanceYear]);
+
+  const loadCalendar = useCallback(async () => {
+    try {
+      const res = await axios.get(
+        `${API}/api/hr/admin/calendar/${calendarYear}/${calendarMonth}`, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setCalendar(res.data);
+    } catch (error) {
+      console.error('Error loading calendar:', error);
+    }
+  }, [token, calendarMonth, calendarYear]);
+
+  const loadPayslips = useCallback(async () => {
+    try {
+      const res = await axios.get(
+        `${API}/api/hr/admin/payslips?month=${payslipMonth}&year=${payslipYear}`, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setPayslips(res.data);
+    } catch (error) {
+      console.error('Error loading payslips:', error);
+    }
+  }, [token, payslipMonth, payslipYear]);
+
+  const loadHRSettings = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/settings`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setHrSettings(res.data);
+    } catch (error) {
+      console.error('Error loading HR settings:', error);
+    }
+  }, [token]);
+
   useEffect(() => {
     if (activeTab === 'dashboard') {
       loadStats();
@@ -135,8 +216,20 @@ export default function HRAdminPage() {
       loadLeaveRequests();
     } else if (activeTab === 'attendance') {
       loadAttendanceOverview();
+    } else if (activeTab === 'approvals') {
+      loadPendingApprovals();
+    } else if (activeTab === 'all-attendance') {
+      loadAllAttendance();
+      loadEmployees();
+    } else if (activeTab === 'calendar') {
+      loadCalendar();
+    } else if (activeTab === 'payslips') {
+      loadPayslips();
+      loadEmployees();
+    } else if (activeTab === 'settings') {
+      loadHRSettings();
     }
-  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview]);
+  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings]);
 
   useEffect(() => {
     if (activeTab === 'requests') {
@@ -164,6 +257,97 @@ export default function HRAdminPage() {
       loadStats();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to reject');
+    }
+  };
+
+  const handleApproveAttendance = async (attendanceId, action = 'approve') => {
+    try {
+      await axios.post(
+        `${API}/api/hr/admin/attendance/approve/${attendanceId}?action=${action}`,
+        {},
+        { headers }
+      );
+      toast.success(`Attendance ${action}d successfully`);
+      loadPendingApprovals();
+      loadStats();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update attendance');
+    }
+  };
+
+  const handleApprovePermission = async (permissionId, action = 'approve') => {
+    try {
+      await axios.post(
+        `${API}/api/hr/admin/permission/approve/${permissionId}?action=${action}`,
+        {},
+        { headers }
+      );
+      toast.success(`Permission ${action}d successfully`);
+      loadPendingApprovals();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update permission');
+    }
+  };
+
+  const handleUpdateCalendar = async (calendarData) => {
+    try {
+      await axios.put(
+        `${API}/api/hr/admin/calendar/${calendarYear}/${calendarMonth}`,
+        calendarData,
+        { headers }
+      );
+      toast.success('Calendar updated successfully');
+      loadCalendar();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update calendar');
+    }
+  };
+
+  const handleGeneratePayslip = async (userId) => {
+    try {
+      const res = await axios.post(
+        `${API}/api/hr/admin/payslip/generate`,
+        { user_id: userId, month: payslipMonth, year: payslipYear },
+        { headers }
+      );
+      toast.success('Payslip generated successfully');
+      loadPayslips();
+      setShowPayslipModal(false);
+      return res.data;
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to generate payslip');
+      return null;
+    }
+  };
+
+  const handlePayslipAction = async (payslipId, action) => {
+    try {
+      let url = '';
+      if (action === 'submit') {
+        url = `${API}/api/hr/admin/payslip/${payslipId}/submit`;
+      } else if (action === 'approve') {
+        url = `${API}/api/hr/admin/payslip/${payslipId}/approve?action=approve`;
+      } else if (action === 'send-to-finance') {
+        url = `${API}/api/hr/admin/payslip/${payslipId}/send-to-finance`;
+      } else if (action === 'release') {
+        url = `${API}/api/hr/finance/payslip/${payslipId}/release`;
+      }
+      
+      await axios.put(url, {}, { headers });
+      toast.success(`Payslip ${action} successful`);
+      loadPayslips();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || `Failed to ${action} payslip`);
+    }
+  };
+
+  const handleUpdateHRSettings = async (settingsData) => {
+    try {
+      await axios.put(`${API}/api/hr/admin/settings`, settingsData, { headers });
+      toast.success('HR Settings updated');
+      loadHRSettings();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update settings');
     }
   };
 
@@ -213,8 +397,11 @@ export default function HRAdminPage() {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
     { id: 'employees', label: 'Employees', icon: Users },
+    { id: 'approvals', label: 'Approvals', icon: CheckCircle },
     { id: 'requests', label: 'Leave Requests', icon: Calendar },
-    { id: 'attendance', label: 'Attendance', icon: Clock },
+    { id: 'all-attendance', label: 'All Attendance', icon: Clock },
+    { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'payslips', label: 'Payslips', icon: FileText },
   ];
 
   return (
@@ -313,6 +500,78 @@ export default function HRAdminPage() {
           <AttendanceTab
             overview={attendanceOverview}
             formatTime={formatTime}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {activeTab === 'approvals' && (
+          <ApprovalsTab
+            pendingApprovals={pendingApprovals}
+            onApproveAttendance={handleApproveAttendance}
+            onApprovePermission={handleApprovePermission}
+            onApproveLeave={handleApprove}
+            onRejectLeave={handleReject}
+            formatDate={formatDate}
+            formatTime={formatTime}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {activeTab === 'all-attendance' && (
+          <AllAttendanceTab
+            records={allAttendance}
+            month={attendanceMonth}
+            year={attendanceYear}
+            setMonth={setAttendanceMonth}
+            setYear={setAttendanceYear}
+            onRefresh={loadAllAttendance}
+            formatDate={formatDate}
+            formatTime={formatTime}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {activeTab === 'calendar' && (
+          <CalendarTab
+            calendar={calendar}
+            month={calendarMonth}
+            year={calendarYear}
+            setMonth={setCalendarMonth}
+            setYear={setCalendarYear}
+            onUpdate={handleUpdateCalendar}
+            onRefresh={loadCalendar}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {activeTab === 'payslips' && (
+          <PayslipsTab
+            payslips={payslips}
+            employees={employees}
+            month={payslipMonth}
+            year={payslipYear}
+            setMonth={setPayslipMonth}
+            setYear={setPayslipYear}
+            onGenerate={handleGeneratePayslip}
+            onAction={handlePayslipAction}
+            onRefresh={loadPayslips}
+            formatDate={formatDate}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -1396,6 +1655,633 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
           </form>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ============== APPROVALS TAB ==============
+function ApprovalsTab({ pendingApprovals, onApproveAttendance, onApprovePermission, onApproveLeave, onRejectLeave, formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const { attendance = [], permissions = [], leaves = [] } = pendingApprovals;
+  const totalPending = attendance.length + permissions.length + leaves.length;
+
+  return (
+    <div className="space-y-6">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary}`}>Attendance Approvals</p>
+          <p className="text-2xl font-bold text-[#f59e0b]">{attendance.length}</p>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary}`}>Permission Requests</p>
+          <p className="text-2xl font-bold text-[#8b5cf6]">{permissions.length}</p>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} p-4`}>
+          <p className={`text-xs ${textSecondary}`}>Leave Requests</p>
+          <p className="text-2xl font-bold text-[#3b82f6]">{leaves.length}</p>
+        </Card>
+      </div>
+
+      {/* Attendance Approvals */}
+      {attendance.length > 0 && (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader>
+            <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+              <Clock className="h-5 w-5 text-[#f59e0b]" />
+              Attendance Approvals
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {attendance.map((att) => (
+                <div key={att.attendance_id} className={`flex items-center justify-between p-4 ${bgSecondary} rounded-lg`}>
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-[#f59e0b] flex items-center justify-center text-white font-bold">
+                      {att.user_name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${textPrimary}`}>{att.user_name}</p>
+                      <p className={`text-xs ${textSecondary}`}>{formatDate(att.date)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Badge className={`${
+                      att.approval_status === 'pending_early_login' 
+                        ? 'bg-yellow-500/20 text-yellow-400' 
+                        : 'bg-orange-500/20 text-orange-400'
+                    }`}>
+                      {att.approval_status === 'pending_early_login' ? 'Early Login' : 'Early Logout'}
+                    </Badge>
+                    <div className={`text-sm ${textSecondary}`}>
+                      {formatTime(att.clock_in)} - {formatTime(att.clock_out) || 'Not yet'}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={() => onApproveAttendance(att.attendance_id, 'approve')} className="bg-[#10b981] hover:bg-[#059669] text-white">
+                        <CheckCircle className="h-4 w-4" />
+                      </Button>
+                      <Button onClick={() => onApproveAttendance(att.attendance_id, 'reject')} className="bg-[#ef4444] hover:bg-[#dc2626] text-white">
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Permission Requests */}
+      {permissions.length > 0 && (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader>
+            <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+              <AlertCircle className="h-5 w-5 text-[#8b5cf6]" />
+              Permission Requests
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {permissions.map((perm) => (
+                <div key={perm.permission_id} className={`flex items-center justify-between p-4 ${bgSecondary} rounded-lg`}>
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-[#8b5cf6] flex items-center justify-center text-white font-bold">
+                      {perm.user_name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${textPrimary}`}>{perm.user_name}</p>
+                      <p className={`text-xs ${textSecondary}`}>{formatDate(perm.date)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Badge className="bg-[#8b5cf6]/20 text-[#8b5cf6]">
+                      {perm.hours_requested} hours
+                    </Badge>
+                    <p className={`text-sm ${textSecondary} max-w-xs truncate`}>{perm.reason}</p>
+                    <div className="flex gap-2">
+                      <Button onClick={() => onApprovePermission(perm.permission_id, 'approve')} className="bg-[#10b981] hover:bg-[#059669] text-white">
+                        <CheckCircle className="h-4 w-4" />
+                      </Button>
+                      <Button onClick={() => onApprovePermission(perm.permission_id, 'reject')} className="bg-[#ef4444] hover:bg-[#dc2626] text-white">
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Leave Requests */}
+      {leaves.length > 0 && (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader>
+            <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+              <Calendar className="h-5 w-5 text-[#3b82f6]" />
+              Leave Requests
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {leaves.map((leave) => (
+                <div key={leave.leave_id} className={`flex items-center justify-between p-4 ${bgSecondary} rounded-lg`}>
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-full bg-[#3b82f6] flex items-center justify-center text-white font-bold">
+                      {leave.user_name?.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className={`font-medium ${textPrimary}`}>{leave.user_name}</p>
+                      <p className={`text-xs ${textSecondary}`}>{formatDate(leave.start_date)} - {formatDate(leave.end_date)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">
+                      {leave.leave_type?.toUpperCase()}
+                    </Badge>
+                    <p className={`text-sm ${textSecondary} max-w-xs truncate`}>{leave.reason}</p>
+                    <div className="flex gap-2">
+                      <Button onClick={() => onApproveLeave(leave.leave_id)} className="bg-[#10b981] hover:bg-[#059669] text-white">
+                        <CheckCircle className="h-4 w-4" />
+                      </Button>
+                      <Button onClick={() => onRejectLeave(leave.leave_id)} className="bg-[#ef4444] hover:bg-[#dc2626] text-white">
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {totalPending === 0 && (
+        <div className="text-center py-12">
+          <CheckCircle className="h-12 w-12 text-[#10b981] mx-auto mb-4" />
+          <p className={textPrimary}>All caught up!</p>
+          <p className={textSecondary}>No pending approvals</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============== ALL ATTENDANCE TAB ==============
+function AllAttendanceTab({ records, month, year, setMonth, setYear, onRefresh, formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  
+  return (
+    <div className="space-y-6">
+      {/* Filters */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <Label className={textSecondary}>Month</Label>
+              <select 
+                value={month}
+                onChange={(e) => { setMonth(parseInt(e.target.value)); }}
+                className={`w-40 p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+              >
+                {months.map((m, idx) => (
+                  <option key={idx} value={idx + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className={textSecondary}>Year</Label>
+              <select 
+                value={year}
+                onChange={(e) => { setYear(parseInt(e.target.value)); }}
+                className={`w-32 p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+              >
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={onRefresh} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white mt-5">
+              Load Data
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Table */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader>
+          <CardTitle className={textPrimary}>All Employees Attendance - {months[month - 1]} {year}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className={`border-b ${borderColor}`}>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Employee</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Date</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Login</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Logout</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Lunch</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Permission</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Work Hrs</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Extra</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map((record, idx) => (
+                  <tr key={idx} className={`border-b ${borderColor} hover:${bgSecondary}`}>
+                    <td className={`p-3 ${textPrimary}`}>
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs font-bold">
+                          {record.employee_name?.charAt(0) || record.user_name?.charAt(0) || '?'}
+                        </div>
+                        {record.employee_name || record.user_name}
+                      </div>
+                    </td>
+                    <td className={`p-3 ${textPrimary}`}>{formatDate(record.date)}</td>
+                    <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in)}</td>
+                    <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out)}</td>
+                    <td className={`p-3 ${textSecondary}`}>{record.lunch_duration ? `${record.lunch_duration}m` : '-'}</td>
+                    <td className={`p-3 ${textSecondary}`}>{record.permission_hours ? `${record.permission_hours}h` : '-'}</td>
+                    <td className={`p-3 font-medium ${textPrimary}`}>{record.total_hours?.toFixed(2) || '-'}</td>
+                    <td className={`p-3 font-medium text-[#10b981]`}>{record.extra_hours?.toFixed(2) || '-'}</td>
+                    <td className="p-3">
+                      <Badge className={`${
+                        record.approval_status === 'approved' || record.approval_status === 'auto' 
+                          ? 'bg-green-500/20 text-green-400' 
+                          : record.approval_status?.includes('pending')
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {record.approval_status === 'auto' ? 'OK' : record.approval_status || 'N/A'}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+                {records.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className={`p-8 text-center ${textSecondary}`}>
+                      No attendance records found for this month
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============== CALENDAR TAB ==============
+function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRefresh, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [holidays, setHolidays] = useState([]);
+  const [newHoliday, setNewHoliday] = useState({ date: '', name: '' });
+  const [workingDays, setWorkingDays] = useState(22);
+  
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  useEffect(() => {
+    if (calendar) {
+      setHolidays(calendar.holidays || []);
+      setWorkingDays(calendar.working_days || 22);
+    }
+  }, [calendar]);
+
+  const handleAddHoliday = () => {
+    if (newHoliday.date && newHoliday.name) {
+      setHolidays([...holidays, newHoliday]);
+      setNewHoliday({ date: '', name: '' });
+    }
+  };
+
+  const handleRemoveHoliday = (index) => {
+    setHolidays(holidays.filter((_, i) => i !== index));
+  };
+
+  const handleSave = () => {
+    onUpdate({ holidays, working_days: workingDays });
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Month Selector */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <Label className={textSecondary}>Month</Label>
+              <select 
+                value={month}
+                onChange={(e) => setMonth(parseInt(e.target.value))}
+                className={`w-40 p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+              >
+                {months.map((m, idx) => (
+                  <option key={idx} value={idx + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className={textSecondary}>Year</Label>
+              <select 
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value))}
+                className={`w-32 p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+              >
+                {[2024, 2025, 2026, 2027].map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+            <Button onClick={onRefresh} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white mt-5">
+              Load
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Working Days */}
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader>
+            <CardTitle className={textPrimary}>Working Days</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <Label className={textSecondary}>Total Working Days in {months[month - 1]}</Label>
+                <Input 
+                  type="number"
+                  value={workingDays}
+                  onChange={(e) => setWorkingDays(parseInt(e.target.value))}
+                  className={`w-32 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Holidays */}
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader>
+            <CardTitle className={textPrimary}>Holidays</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Add Holiday */}
+              <div className="flex gap-2">
+                <Input 
+                  type="date"
+                  value={newHoliday.date}
+                  onChange={(e) => setNewHoliday({...newHoliday, date: e.target.value})}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                />
+                <Input 
+                  placeholder="Holiday name"
+                  value={newHoliday.name}
+                  onChange={(e) => setNewHoliday({...newHoliday, name: e.target.value})}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                />
+                <Button onClick={handleAddHoliday} className="bg-[#10b981] hover:bg-[#059669] text-white">
+                  Add
+                </Button>
+              </div>
+              
+              {/* Holiday List */}
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {holidays.map((h, idx) => (
+                  <div key={idx} className={`flex items-center justify-between p-2 ${bgSecondary} rounded`}>
+                    <div>
+                      <span className={textPrimary}>{h.name}</span>
+                      <span className={`ml-2 text-sm ${textSecondary}`}>({h.date})</span>
+                    </div>
+                    <Button variant="ghost" onClick={() => handleRemoveHoliday(idx)} className="text-red-400 hover:text-red-300">
+                      <XCircle className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {holidays.length === 0 && (
+                  <p className={`text-center py-4 ${textSecondary}`}>No holidays added</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Save Button */}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white px-8">
+          Save Calendar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============== PAYSLIPS TAB ==============
+function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGenerate, onAction, onRefresh, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'draft': return 'bg-gray-500/20 text-gray-400';
+      case 'pending_super_admin': return 'bg-yellow-500/20 text-yellow-400';
+      case 'approved': return 'bg-blue-500/20 text-blue-400';
+      case 'acknowledged': return 'bg-purple-500/20 text-purple-400';
+      case 'pending_finance': return 'bg-orange-500/20 text-orange-400';
+      case 'payment_released': return 'bg-green-500/20 text-green-400';
+      default: return 'bg-gray-500/20 text-gray-400';
+    }
+  };
+
+  const getNextAction = (status) => {
+    switch (status) {
+      case 'draft': return { action: 'submit', label: 'Submit for Approval', color: 'bg-[#f59e0b]' };
+      case 'pending_super_admin': return { action: 'approve', label: 'Approve', color: 'bg-[#10b981]' };
+      case 'approved': return null; // Wait for employee
+      case 'acknowledged': return { action: 'send-to-finance', label: 'Send to Finance', color: 'bg-[#8b5cf6]' };
+      case 'pending_finance': return { action: 'release', label: 'Release Payment', color: 'bg-[#10b981]' };
+      default: return null;
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (selectedEmployee) {
+      await onGenerate(selectedEmployee);
+      setShowGenerateModal(false);
+      setSelectedEmployee('');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Filters & Generate */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div>
+                <Label className={textSecondary}>Month</Label>
+                <select 
+                  value={month}
+                  onChange={(e) => setMonth(parseInt(e.target.value))}
+                  className={`w-40 p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                >
+                  {months.map((m, idx) => (
+                    <option key={idx} value={idx + 1}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className={textSecondary}>Year</Label>
+                <select 
+                  value={year}
+                  onChange={(e) => setYear(parseInt(e.target.value))}
+                  className={`w-32 p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                >
+                  {[2024, 2025, 2026, 2027].map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+              <Button onClick={onRefresh} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white mt-5">
+                Load
+              </Button>
+            </div>
+            <Button onClick={() => setShowGenerateModal(true)} className="bg-[#10b981] hover:bg-[#059669] text-white">
+              <FileText className="h-4 w-4 mr-2" />
+              Generate Payslip
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Payslips Table */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader>
+          <CardTitle className={textPrimary}>Payslips - {months[month - 1]} {year}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className={`border-b ${borderColor}`}>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Employee</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Days Present</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Gross</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Deductions</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Net Salary</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payslips.map((payslip) => {
+                  const nextAction = getNextAction(payslip.status);
+                  return (
+                    <tr key={payslip.payslip_id} className={`border-b ${borderColor} hover:${bgSecondary}`}>
+                      <td className={`p-3 ${textPrimary}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs font-bold">
+                            {payslip.employee_name?.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-medium">{payslip.employee_name}</p>
+                            <p className={`text-xs ${textSecondary}`}>{payslip.designation}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className={`p-3 ${textPrimary}`}>
+                        {payslip.days_present}/{payslip.total_working_days}
+                      </td>
+                      <td className={`p-3 ${textPrimary}`}>₹{payslip.gross_salary?.toLocaleString()}</td>
+                      <td className={`p-3 text-red-400`}>
+                        ₹{(payslip.pf_deduction + payslip.esi_deduction + payslip.professional_tax + payslip.other_deductions).toLocaleString()}
+                      </td>
+                      <td className={`p-3 font-bold text-[#10b981]`}>₹{payslip.net_salary?.toLocaleString()}</td>
+                      <td className="p-3">
+                        <Badge className={getStatusColor(payslip.status)}>
+                          {payslip.status?.replace(/_/g, ' ')}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        {nextAction && (
+                          <Button 
+                            onClick={() => onAction(payslip.payslip_id, nextAction.action)}
+                            className={`${nextAction.color} hover:opacity-80 text-white text-xs`}
+                          >
+                            {nextAction.label}
+                          </Button>
+                        )}
+                        {payslip.status === 'approved' && (
+                          <span className={`text-xs ${textSecondary}`}>Waiting for employee</span>
+                        )}
+                        {payslip.status === 'payment_released' && (
+                          <span className="text-xs text-[#10b981]">✓ Completed</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {payslips.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className={`p-8 text-center ${textSecondary}`}>
+                      No payslips generated for this month yet
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Generate Modal */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>Generate Payslip</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className={textSecondary}>Select Employee</Label>
+                <select 
+                  value={selectedEmployee}
+                  onChange={(e) => setSelectedEmployee(e.target.value)}
+                  className={`w-full p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                >
+                  <option value="">Select an employee</option>
+                  {employees.map((emp) => (
+                    <option key={emp.user_id} value={emp.user_id}>
+                      {emp.name} - {emp.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className={textSecondary}>
+                Generate payslip for <strong>{months[month - 1]} {year}</strong>
+              </p>
+              <div className="flex gap-3 pt-4">
+                <Button onClick={() => setShowGenerateModal(false)} className={`flex-1 ${bgSecondary} ${textPrimary}`}>
+                  Cancel
+                </Button>
+                <Button onClick={handleGenerate} className="flex-1 bg-[#10b981] hover:bg-[#059669] text-white" disabled={!selectedEmployee}>
+                  Generate
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
