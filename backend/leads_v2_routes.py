@@ -4,6 +4,13 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
 import httpx
+import asyncio
+
+# Import notification service
+from notification_service import (
+    notify_lead_assigned, notify_lead_closed, notify_lead_remark,
+    get_user_email_by_id
+)
 
 leads_v2_router = APIRouter(prefix="/leads-v2")
 db = None
@@ -366,7 +373,10 @@ async def create_lead(lead_data: LeadCreate, request: Request):
 @leads_v2_router.put("/leads/{lead_id}")
 async def update_lead(lead_id: str, update_data: Dict[str, Any], request: Request):
     """Update a lead"""
-    await get_current_user_from_request(request)
+    current_user = await get_current_user_from_request(request)
+    
+    # Get current lead data for comparison
+    old_lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
     
     update_data["updated_at"] = datetime.now(timezone.utc)
     
@@ -375,7 +385,23 @@ async def update_lead(lead_id: str, update_data: Dict[str, Any], request: Reques
         {"$set": update_data}
     )
     
-    return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+    updated_lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    # Check if lead owner changed
+    if old_lead and update_data.get("lead_owner_id") and update_data.get("lead_owner_id") != old_lead.get("lead_owner_id"):
+        new_owner_email = await get_user_email_by_id(db, update_data["lead_owner_id"])
+        new_owner = await db.users.find_one({"user_id": update_data["lead_owner_id"]}, {"_id": 0})
+        if new_owner_email:
+            asyncio.create_task(notify_lead_assigned(
+                assignee_email=new_owner_email,
+                assignee_name=new_owner.get("name", "Owner"),
+                lead_name=updated_lead.get("name", "Unknown"),
+                company=updated_lead.get("location", ""),
+                assigned_by=current_user.name,
+                lead_id=lead_id
+            ))
+    
+    return updated_lead
 
 @leads_v2_router.delete("/leads/{lead_id}")
 async def delete_lead(lead_id: str, request: Request):
@@ -392,14 +418,91 @@ async def delete_lead(lead_id: str, request: Request):
 @leads_v2_router.put("/leads/{lead_id}/stage")
 async def update_lead_stage(lead_id: str, stage_data: Dict[str, str], request: Request):
     """Update lead stage (for drag-drop)"""
-    await get_current_user_from_request(request)
+    current_user = await get_current_user_from_request(request)
+    
+    lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
     
     await db.leads_v2.update_one(
         {"lead_id": lead_id},
         {"$set": {"stage_id": stage_data["stage_id"], "updated_at": datetime.now(timezone.utc)}}
     )
     
+    # Check if moved to "Deal Closed" or "Won" stage
+    new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
+    if new_stage and new_stage.get("name", "").lower() in ["deal closed", "won", "closed won"]:
+        # Get lead owner and admin emails
+        recipient_emails = []
+        if lead.get("lead_owner_id"):
+            owner_email = await get_user_email_by_id(db, lead["lead_owner_id"])
+            if owner_email:
+                recipient_emails.append(owner_email)
+        
+        # Add admins
+        admins = await db.users.find(
+            {"role": {"$in": ["super_admin", "admin"]}},
+            {"_id": 0, "email": 1}
+        ).to_list(10)
+        recipient_emails.extend([a["email"] for a in admins if a.get("email")])
+        
+        if recipient_emails:
+            asyncio.create_task(notify_lead_closed(
+                recipient_emails=list(set(recipient_emails)),
+                lead_name=lead.get("name", "Unknown"),
+                company=lead.get("location", ""),
+                closed_by=current_user.name,
+                deal_value=f"₹{lead.get('estimation_amount', 0):,}" if lead.get('estimation_amount') else "Not specified",
+                lead_id=lead_id
+            ))
+    
     return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+
+# ============== LEAD REMARKS/NOTES ==============
+
+@leads_v2_router.post("/leads/{lead_id}/remarks")
+async def add_lead_remark(lead_id: str, remark_data: Dict[str, str], request: Request):
+    """Add a remark/note to a lead"""
+    current_user = await get_current_user_from_request(request)
+    
+    lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    remark = {
+        "remark_id": f"rem_{uuid.uuid4().hex[:12]}",
+        "lead_id": lead_id,
+        "user_id": current_user.user_id,
+        "user_name": current_user.name,
+        "content": remark_data.get("content", ""),
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.lead_remarks.insert_one(remark)
+    
+    # Notify lead owner
+    if lead.get("lead_owner_id") and lead.get("lead_owner_id") != current_user.user_id:
+        owner_email = await get_user_email_by_id(db, lead["lead_owner_id"])
+        if owner_email:
+            asyncio.create_task(notify_lead_remark(
+                recipient_emails=[owner_email],
+                lead_name=lead.get("name", "Unknown"),
+                remark_by=current_user.name,
+                remark=remark_data.get("content", "")[:200],  # Truncate for email
+                lead_id=lead_id
+            ))
+    
+    return {"message": "Remark added", "remark_id": remark["remark_id"]}
+
+@leads_v2_router.get("/leads/{lead_id}/remarks")
+async def get_lead_remarks(lead_id: str, request: Request):
+    """Get all remarks for a lead"""
+    await get_current_user_from_request(request)
+    
+    remarks = await db.lead_remarks.find(
+        {"lead_id": lead_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return remarks
 
 # ============== GOOGLE SHEETS ROUTES ==============
 

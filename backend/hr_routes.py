@@ -10,6 +10,15 @@ import os
 import asyncio
 import logging
 
+# Import notification service
+from notification_service import (
+    notify_leave_request, notify_leave_decision,
+    notify_permission_request, notify_permission_decision,
+    notify_attendance_approval_needed,
+    notify_payslip_ready, notify_payslip_acknowledged, notify_payment_released,
+    get_hr_admin_emails, get_finance_emails, get_user_email_by_id
+)
+
 # Email setup
 try:
     import resend
@@ -490,6 +499,17 @@ async def clock_in(clock_data: ClockInRequest, request: Request):
     else:
         await db.attendance.insert_one(attendance_doc)
     
+    # Send notification if early login needs approval
+    if approval_status == "pending_early_login":
+        hr_emails = await get_hr_admin_emails(db)
+        asyncio.create_task(notify_attendance_approval_needed(
+            employee_name=user.name,
+            date=today.strftime("%Y-%m-%d"),
+            approval_type="early_login",
+            hr_admin_emails=hr_emails,
+            attendance_id=attendance_id
+        ))
+    
     result = await db.attendance.find_one({"attendance_id": attendance_id}, {"_id": 0})
     result["needs_approval"] = approval_status != "auto"
     return result
@@ -632,6 +652,17 @@ async def clock_out(clock_data: ClockOutRequest, request: Request):
             "notes": clock_data.notes or ""
         }}
     )
+    
+    # Send notification if early logout needs approval
+    if approval_status == "pending_early_logout":
+        hr_emails = await get_hr_admin_emails(db)
+        asyncio.create_task(notify_attendance_approval_needed(
+            employee_name=user.name,
+            date=today.strftime("%Y-%m-%d"),
+            approval_type="early_logout",
+            hr_admin_emails=hr_emails,
+            attendance_id=existing["attendance_id"]
+        ))
     
     result = await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
     result["needs_approval"] = "pending" in approval_status
@@ -832,6 +863,20 @@ async def create_permission_request(perm_data: PermissionRequestCreate, request:
     
     await db.permissions.insert_one(perm_doc)
     
+    # Send notification to HR Admin
+    hr_emails = await get_hr_admin_emails(db)
+    perm_date = perm_data.date
+    if isinstance(perm_date, datetime):
+        perm_date = perm_date.strftime("%Y-%m-%d")
+    asyncio.create_task(notify_permission_request(
+        requester_name=user.name,
+        date=str(perm_date),
+        hours=perm_data.hours_requested,
+        reason=perm_data.reason,
+        hr_admin_emails=hr_emails,
+        permission_id=permission_id
+    ))
+    
     return {"message": "Permission request submitted", "permission_id": permission_id}
 
 @hr_router.get("/permission/requests")
@@ -944,6 +989,21 @@ async def approve_permission(permission_id: str, request: Request, action: str =
             },
             {"$inc": {"permission_hours": permission.get("hours_requested", 0)}}
         )
+    
+    # Notify employee about the decision
+    employee_email = await get_user_email_by_id(db, permission.get("user_id"))
+    if employee_email:
+        perm_date = permission.get("date")
+        if isinstance(perm_date, datetime):
+            perm_date = perm_date.strftime("%Y-%m-%d")
+        asyncio.create_task(notify_permission_decision(
+            employee_email=employee_email,
+            employee_name=permission.get("user_name", "Employee"),
+            date=str(perm_date),
+            hours=permission.get("hours_requested", 0),
+            status=new_status,
+            approved_by=user.name
+        ))
     
     return {"message": f"Permission {new_status}", "permission_id": permission_id}
 
@@ -1563,27 +1623,22 @@ async def create_leave_request(leave_data: LeaveRequestCreate, request: Request)
     
     await db.leave_requests.insert_one(leave_doc)
     
-    # Send email notification to admin
+    # Format dates
     start_str = leave_data.start_date.strftime("%d %b %Y") if hasattr(leave_data.start_date, 'strftime') else str(leave_data.start_date)[:10]
     end_str = leave_data.end_date.strftime("%d %b %Y") if hasattr(leave_data.end_date, 'strftime') else str(leave_data.end_date)[:10]
     
-    email_html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #10b981;">New Leave Request</h2>
-        <p><strong>Employee:</strong> {user.name}</p>
-        <p><strong>Leave Type:</strong> {leave_data.leave_type.upper()}</p>
-        <p><strong>Duration:</strong> {start_str} to {end_str}</p>
-        <p><strong>Reason:</strong> {leave_data.reason}</p>
-        <p style="margin-top: 20px;">Please login to Drawlead OS to approve or reject this request.</p>
-    </div>
-    """
-    
-    # Send to admin email
-    await send_email_notification(
-        ADMIN_EMAIL,
-        f"Leave Request from {user.name} - {leave_data.leave_type.upper()}",
-        email_html
-    )
+    # Send notification to HR Admins using the new notification service
+    hr_emails = await get_hr_admin_emails(db)
+    asyncio.create_task(notify_leave_request(
+        requester_name=user.name,
+        requester_email=user_email,
+        leave_type=leave_data.leave_type,
+        start_date=start_str,
+        end_date=end_str,
+        reason=leave_data.reason,
+        hr_admin_emails=hr_emails,
+        leave_id=leave_id
+    ))
     
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 
@@ -1622,7 +1677,7 @@ async def approve_leave_request(leave_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id})
@@ -1657,31 +1712,21 @@ async def approve_leave_request(leave_id: str, request: Request):
         upsert=True
     )
     
-    # Send approval email to employee
+    # Send approval notification to employee using new service
     start_str = start.strftime("%d %b %Y")
     end_str = end.strftime("%d %b %Y")
-    
-    email_html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #10b981;">Leave Request Approved ✓</h2>
-        <p>Hi {leave.get('user_name', 'Employee')},</p>
-        <p>Your leave request has been <strong style="color: #10b981;">approved</strong>.</p>
-        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>Leave Type:</strong> {leave_type.upper()}</p>
-            <p><strong>Duration:</strong> {start_str} to {end_str}</p>
-            <p><strong>Approved by:</strong> {user.name}</p>
-        </div>
-        <p>Enjoy your time off!</p>
-    </div>
-    """
-    
     employee_email = leave.get("user_email", "")
+    
     if employee_email:
-        await send_email_notification(
-            employee_email,
-            f"Leave Request Approved - {leave_type.upper()}",
-            email_html
-        )
+        asyncio.create_task(notify_leave_decision(
+            employee_email=employee_email,
+            employee_name=leave.get("user_name", "Employee"),
+            leave_type=leave_type,
+            start_date=start_str,
+            end_date=end_str,
+            status="approved",
+            approved_by=user.name
+        ))
     
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 
@@ -1691,7 +1736,7 @@ async def reject_leave_request(leave_id: str, request: Request, reason: str = ""
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id})
@@ -1709,7 +1754,7 @@ async def reject_leave_request(leave_id: str, request: Request, reason: str = ""
         }}
     )
     
-    # Send rejection email to employee
+    # Send rejection notification to employee
     start = leave["start_date"]
     end = leave["end_date"]
     if isinstance(start, str):
@@ -1720,29 +1765,18 @@ async def reject_leave_request(leave_id: str, request: Request, reason: str = ""
     start_str = start.strftime("%d %b %Y")
     end_str = end.strftime("%d %b %Y")
     leave_type = leave.get("leave_type", "leave")
-    
-    email_html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #ef4444;">Leave Request Not Approved</h2>
-        <p>Hi {leave.get('user_name', 'Employee')},</p>
-        <p>Your leave request has been <strong style="color: #ef4444;">not approved</strong>.</p>
-        <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>Leave Type:</strong> {leave_type.upper()}</p>
-            <p><strong>Duration:</strong> {start_str} to {end_str}</p>
-            <p><strong>Reviewed by:</strong> {user.name}</p>
-            {f'<p><strong>Reason:</strong> {reason}</p>' if reason else ''}
-        </div>
-        <p>Please contact your manager for more details.</p>
-    </div>
-    """
-    
     employee_email = leave.get("user_email", "")
+    
     if employee_email:
-        await send_email_notification(
-            employee_email,
-            f"Leave Request Update - {leave_type.upper()}",
-            email_html
-        )
+        asyncio.create_task(notify_leave_decision(
+            employee_email=employee_email,
+            employee_name=leave.get("user_name", "Employee"),
+            leave_type=leave_type,
+            start_date=start_str,
+            end_date=end_str,
+            status="rejected",
+            approved_by=user.name
+        ))
     
     return await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
 

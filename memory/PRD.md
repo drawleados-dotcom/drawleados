@@ -24,6 +24,32 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - **Authentication**: JWT-based with Emergent-managed Google Auth option
 - **Database**: MongoDB with collections for users, leads, attendance, leave, documentation, etc.
 
+## Email Notification System (DONE - Dec 2025)
+
+The system sends email notifications with "View" buttons for:
+
+| Action | Recipients |
+|--------|-----------|
+| Leave Request | All HR Admins/Managers |
+| Leave Approved/Rejected | Employee |
+| Permission Request | All HR Admins |
+| Permission Approved/Rejected | Employee |
+| Early Login/Logout (needs approval) | All HR Admins |
+| Lead Assigned | New Lead Owner |
+| Deal Closed | Lead Owner + Admins |
+| Lead Remark Added | Lead Owner |
+| Payslip Ready | Employee |
+| Payslip Acknowledged | HR/Finance |
+| Payment Released | Employee |
+
+**Email Features:**
+- Beautiful HTML template with Drawlead branding
+- "View" button linking to specific item
+- Sent to individual registered emails based on responsibilities
+- Currently MOCKED (configure `RESEND_API_KEY` in .env to enable)
+
+---
+
 ## API Endpoints
 ### Authentication
 - POST `/api/auth/login` - Login with email/password
