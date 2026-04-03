@@ -29,6 +29,39 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 ---
 
 ## Implemented Features
+### My Profile / HR Portal Redesign (NEW - April 2026)
+**Purpose:** Redesigned HR Portal page with personalized greeting and improved leave/permission management.
+
+**Changes:**
+1. **Title**: Changed from "HR Portal" to "Hi, [Username]" (personalized greeting)
+
+2. **Leave Tab - Two Sub-tabs:**
+   - **Request Leave**: 
+     - Leave Balance card (Casual, Sick, Earned, WFH)
+     - Request Leave button and modal
+     - Status summary cards (Pending, Approved, Rejected)
+     - Leave requests list (clickable for detail popup with timeline)
+   
+   - **Request Permission**:
+     - Permission request header with description
+     - Request Permission button and modal (Date, From/To Time, Hours, Reason)
+     - Status summary cards (Pending, Approved, Rejected)
+     - Permission requests list
+
+3. **Leave Detail Popup**:
+   - Request summary (type, dates, days, reason)
+   - Timeline showing: Request Submitted → HR Review → Approved/Rejected
+   - HR Remarks section (if any)
+
+**New Backend Endpoints:**
+- `POST /api/hr/permissions/request` - Create permission request
+- `GET /api/hr/permissions/my-requests` - Get user's permission requests
+- `GET /api/hr/permissions/pending` - Get pending requests (HR admin)
+- `POST /api/hr/permissions/{id}/approve` - Approve permission
+- `POST /api/hr/permissions/{id}/reject` - Reject permission
+
+---
+
 ### HR Admin Page Redesign (NEW - April 2026)
 **Purpose:** Reorganized HR Admin page with improved tab structure for better UX.
 

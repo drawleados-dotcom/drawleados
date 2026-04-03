@@ -237,7 +237,7 @@ export default function HRPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold tracking-tight mb-2">
             <span className="bg-gradient-to-r from-[#10b981] to-[#059669] bg-clip-text text-transparent">
-              HR Portal
+              Hi, {authUser?.name || 'User'}
             </span>
           </h1>
           <p className={textSecondary}>Manage your attendance, leaves, payslips and more</p>
@@ -1421,94 +1421,406 @@ function ProfileTab({ profile, bgCard, bgSecondary, textPrimary, textSecondary, 
 }
 
 function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveForm, setLeaveForm, onSubmit, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [activeSubTab, setActiveSubTab] = useState('leave');
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [permissionRequests, setPermissionRequests] = useState([]);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [permissionForm, setPermissionForm] = useState({
+    date: '',
+    hours: 1,
+    reason: '',
+    from_time: '',
+    to_time: ''
+  });
+
+  const token = localStorage.getItem('session_token');
+  const API = process.env.REACT_APP_BACKEND_URL;
+
+  // Load permission requests
+  useEffect(() => {
+    const loadPermissions = async () => {
+      try {
+        const res = await axios.get(`${API}/api/hr/permissions/my-requests`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setPermissionRequests(res.data || []);
+      } catch (err) {
+        console.error('Error loading permissions:', err);
+      }
+    };
+    if (activeSubTab === 'permission') {
+      loadPermissions();
+    }
+  }, [activeSubTab, token]);
+
+  // Submit permission request
+  const handlePermissionSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/api/hr/permissions/request`, permissionForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Permission request submitted');
+      setShowPermissionModal(false);
+      setPermissionForm({ date: '', hours: 1, reason: '', from_time: '', to_time: '' });
+      // Reload permissions
+      const res = await axios.get(`${API}/api/hr/permissions/my-requests`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setPermissionRequests(res.data || []);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to submit permission request');
+    }
+  };
+
+  // Get status badge color
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'approved': return 'bg-[#22c55e]/20 text-[#22c55e]';
+      case 'rejected': return 'bg-[#ef4444]/20 text-[#ef4444]';
+      case 'pending_verification': return 'bg-[#f59e0b]/20 text-[#f59e0b]';
+      default: return 'bg-[#6366f1]/20 text-[#6366f1]';
+    }
+  };
+
+  // Timeline component for leave detail
+  const LeaveTimeline = ({ request }) => {
+    const steps = [
+      { 
+        label: 'Request Submitted', 
+        date: request.created_at,
+        status: 'completed',
+        icon: Send
+      },
+      { 
+        label: 'HR Review', 
+        date: request.hr_reviewed_at,
+        status: request.status === 'pending' ? 'current' : 
+                request.status === 'approved' || request.status === 'rejected' ? 'completed' : 'pending',
+        icon: User
+      },
+      { 
+        label: request.status === 'approved' ? 'Approved' : 
+               request.status === 'rejected' ? 'Rejected' : 'Awaiting Decision',
+        date: request.status !== 'pending' ? request.updated_at : null,
+        status: request.status === 'approved' ? 'approved' : 
+                request.status === 'rejected' ? 'rejected' : 'pending',
+        icon: request.status === 'approved' ? CheckCircle : 
+              request.status === 'rejected' ? XCircle : AlertCircle
+      }
+    ];
+
+    return (
+      <div className="relative">
+        {steps.map((step, idx) => {
+          const Icon = step.icon;
+          return (
+            <div key={idx} className="flex gap-4 pb-6 last:pb-0">
+              {/* Line */}
+              <div className="flex flex-col items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  step.status === 'completed' ? 'bg-[#22c55e]' :
+                  step.status === 'approved' ? 'bg-[#22c55e]' :
+                  step.status === 'rejected' ? 'bg-[#ef4444]' :
+                  step.status === 'current' ? 'bg-[#6366f1]' :
+                  `${bgSecondary}`
+                }`}>
+                  <Icon className={`h-4 w-4 ${
+                    step.status === 'completed' || step.status === 'approved' || step.status === 'rejected' || step.status === 'current'
+                      ? 'text-white' : textSecondary
+                  }`} />
+                </div>
+                {idx < steps.length - 1 && (
+                  <div className={`w-0.5 flex-1 mt-2 ${
+                    step.status === 'completed' || step.status === 'approved' 
+                      ? 'bg-[#22c55e]' 
+                      : step.status === 'rejected' ? 'bg-[#ef4444]' : bgSecondary
+                  }`} />
+                )}
+              </div>
+              {/* Content */}
+              <div className="flex-1 pt-1">
+                <p className={`font-medium ${textPrimary}`}>{step.label}</p>
+                {step.date && (
+                  <p className={`text-sm ${textSecondary}`}>
+                    {new Date(step.date).toLocaleDateString('en-IN', { 
+                      day: 'numeric', month: 'short', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit'
+                    })}
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className={textPrimary}>Leave Balance ({new Date().getFullYear()})</CardTitle>
-          <Button 
-            onClick={() => setShowModal(true)}
-            className="bg-[#10b981] hover:bg-[#059669] text-white"
-            data-testid="request-leave-btn"
-          >
-            <Send className="mr-2 h-4 w-4" />
-            Request Leave
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>
-              <p className="text-2xl font-bold text-[#6366f1]">
-                {(leaveBalance?.casual_leave || 12) - (leaveBalance?.casual_used || 0)}
-                <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.casual_leave || 12}</span>
-              </p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Sick Leave</p>
-              <p className="text-2xl font-bold text-[#f59e0b]">
-                {(leaveBalance?.sick_leave || 6) - (leaveBalance?.sick_used || 0)}
-                <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.sick_leave || 6}</span>
-              </p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Earned Leave</p>
-              <p className="text-2xl font-bold text-[#10b981]">
-                {(leaveBalance?.earned_leave || 15) - (leaveBalance?.earned_used || 0)}
-                <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.earned_leave || 15}</span>
-              </p>
-            </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>WFH Requests</p>
-              <p className="text-2xl font-bold text-[#8b5cf6]">∞</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Sub-tabs: Request Leave | Request Permission */}
+      <div className="flex gap-2">
+        <Button
+          onClick={() => setActiveSubTab('leave')}
+          className={`px-6 py-3 rounded-lg transition-all ${
+            activeSubTab === 'leave'
+              ? 'bg-[#10b981] text-white'
+              : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+          }`}
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          Request Leave
+        </Button>
+        <Button
+          onClick={() => setActiveSubTab('permission')}
+          className={`px-6 py-3 rounded-lg transition-all ${
+            activeSubTab === 'permission'
+              ? 'bg-[#6366f1] text-white'
+              : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+          }`}
+        >
+          <Clock className="h-4 w-4 mr-2" />
+          Request Permission
+        </Button>
+      </div>
 
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardHeader>
-          <CardTitle className={textPrimary}>My Leave Requests</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {leaveRequests.map((req) => (
-              <div key={req.leave_id} className={`p-4 ${bgSecondary} rounded-lg flex items-center justify-between`}>
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge className={`${
-                      req.leave_type === 'wfh' ? 'bg-purple-500/20 text-purple-400' :
-                      req.leave_type === 'casual' ? 'bg-blue-500/20 text-blue-400' :
-                      req.leave_type === 'sick' ? 'bg-orange-500/20 text-orange-400' :
-                      'bg-green-500/20 text-green-400'
-                    }`}>
-                      {req.leave_type.toUpperCase()}
-                    </Badge>
-                    <Badge className={`${
-                      req.status === 'approved' ? 'bg-green-500/20 text-green-400' :
-                      req.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                      'bg-yellow-500/20 text-yellow-400'
-                    }`}>
-                      {req.status}
-                    </Badge>
-                  </div>
-                  <p className={`text-sm ${textPrimary}`}>
-                    {formatDate(req.start_date)} - {formatDate(req.end_date)}
+      {/* Leave Tab */}
+      {activeSubTab === 'leave' && (
+        <div className="space-y-6">
+          {/* Leave Balance Dashboard */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={textPrimary}>Leave Balance ({new Date().getFullYear()})</CardTitle>
+              <Button 
+                onClick={() => setShowModal(true)}
+                className="bg-[#10b981] hover:bg-[#059669] text-white"
+                data-testid="request-leave-btn"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Request Leave
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>
+                  <p className="text-2xl font-bold text-[#6366f1]">
+                    {(leaveBalance?.casual_leave || 12) - (leaveBalance?.casual_used || 0)}
+                    <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.casual_leave || 12}</span>
                   </p>
-                  <p className={`text-xs ${textSecondary} mt-1`}>{req.reason}</p>
                 </div>
-                {req.status === 'approved' && <CheckCircle className="h-5 w-5 text-green-400" />}
-                {req.status === 'rejected' && <XCircle className="h-5 w-5 text-red-400" />}
-                {req.status === 'pending' && <AlertCircle className="h-5 w-5 text-yellow-400" />}
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Sick Leave</p>
+                  <p className="text-2xl font-bold text-[#f59e0b]">
+                    {(leaveBalance?.sick_leave || 6) - (leaveBalance?.sick_used || 0)}
+                    <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.sick_leave || 6}</span>
+                  </p>
+                </div>
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Earned Leave</p>
+                  <p className="text-2xl font-bold text-[#10b981]">
+                    {(leaveBalance?.earned_leave || 15) - (leaveBalance?.earned_used || 0)}
+                    <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.earned_leave || 15}</span>
+                  </p>
+                </div>
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>WFH Requests</p>
+                  <p className="text-2xl font-bold text-[#8b5cf6]">∞</p>
+                </div>
               </div>
-            ))}
-            {leaveRequests.length === 0 && (
-              <p className={`text-center py-8 ${textSecondary}`}>No leave requests found</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
 
+          {/* Leave Status Summary */}
+          <div className="grid grid-cols-3 gap-4">
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#6366f1]">
+                  {leaveRequests.filter(r => r.status === 'pending').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Pending</div>
+              </CardContent>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#22c55e]">
+                  {leaveRequests.filter(r => r.status === 'approved').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Approved</div>
+              </CardContent>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#ef4444]">
+                  {leaveRequests.filter(r => r.status === 'rejected').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Rejected</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Leave Requests List */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>My Leave Requests</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {leaveRequests.map((req) => (
+                  <div 
+                    key={req.leave_id || req.request_id} 
+                    onClick={() => { setSelectedRequest(req); setShowDetailModal(true); }}
+                    className={`p-4 ${bgSecondary} rounded-lg flex items-center justify-between cursor-pointer hover:bg-[#3f3f46] transition-colors`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className={`${
+                          req.leave_type === 'wfh' ? 'bg-purple-500/20 text-purple-400' :
+                          req.leave_type === 'casual' ? 'bg-blue-500/20 text-blue-400' :
+                          req.leave_type === 'sick' ? 'bg-orange-500/20 text-orange-400' :
+                          'bg-green-500/20 text-green-400'
+                        }`}>
+                          {req.leave_type?.toUpperCase() || 'LEAVE'}
+                        </Badge>
+                        <Badge className={getStatusBadge(req.status)}>
+                          {req.status}
+                        </Badge>
+                      </div>
+                      <p className={`text-sm ${textPrimary}`}>
+                        {formatDate(req.start_date || req.from_date)} - {formatDate(req.end_date || req.to_date)}
+                      </p>
+                      <p className={`text-xs ${textSecondary} mt-1`}>{req.reason}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {req.status === 'approved' && <CheckCircle className="h-5 w-5 text-green-400" />}
+                      {req.status === 'rejected' && <XCircle className="h-5 w-5 text-red-400" />}
+                      {req.status === 'pending' && <AlertCircle className="h-5 w-5 text-yellow-400" />}
+                      <ChevronRight className={`h-5 w-5 ${textSecondary}`} />
+                    </div>
+                  </div>
+                ))}
+                {leaveRequests.length === 0 && (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No leave requests found</p>
+                    <Button 
+                      onClick={() => setShowModal(true)}
+                      className="mt-4 bg-[#10b981] hover:bg-[#059669]"
+                    >
+                      Request Your First Leave
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Permission Tab */}
+      {activeSubTab === 'permission' && (
+        <div className="space-y-6">
+          {/* Permission Dashboard Header */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={textPrimary}>Permission Requests</CardTitle>
+              <Button 
+                onClick={() => setShowPermissionModal(true)}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              >
+                <Clock className="mr-2 h-4 w-4" />
+                Request Permission
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <p className={`text-sm ${textSecondary}`}>
+                Request permission for late arrival, early leave, or short breaks during work hours.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Permission Status Summary */}
+          <div className="grid grid-cols-3 gap-4">
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#6366f1]">
+                  {permissionRequests.filter(r => r.status === 'pending').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Pending</div>
+              </CardContent>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#22c55e]">
+                  {permissionRequests.filter(r => r.status === 'approved').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Approved</div>
+              </CardContent>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#ef4444]">
+                  {permissionRequests.filter(r => r.status === 'rejected').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Rejected</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Permission Requests List */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>My Permission Requests</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {permissionRequests.map((req, idx) => (
+                  <div 
+                    key={req.permission_id || idx}
+                    className={`p-4 ${bgSecondary} rounded-lg flex items-center justify-between`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className="bg-[#6366f1]/20 text-[#6366f1]">
+                          {req.hours || 1}h Permission
+                        </Badge>
+                        <Badge className={getStatusBadge(req.status)}>
+                          {req.status}
+                        </Badge>
+                      </div>
+                      <p className={`text-sm ${textPrimary}`}>
+                        {formatDate(req.date)} {req.from_time && `| ${req.from_time} - ${req.to_time}`}
+                      </p>
+                      <p className={`text-xs ${textSecondary} mt-1`}>{req.reason}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {req.status === 'approved' && <CheckCircle className="h-5 w-5 text-green-400" />}
+                      {req.status === 'rejected' && <XCircle className="h-5 w-5 text-red-400" />}
+                      {req.status === 'pending' && <AlertCircle className="h-5 w-5 text-yellow-400" />}
+                    </div>
+                  </div>
+                ))}
+                {permissionRequests.length === 0 && (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No permission requests found</p>
+                    <Button 
+                      onClick={() => setShowPermissionModal(true)}
+                      className="mt-4 bg-[#6366f1] hover:bg-[#4f46e5]"
+                    >
+                      Request Your First Permission
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Leave Request Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
@@ -1579,6 +1891,156 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Permission Request Modal */}
+      {showPermissionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>Request Permission</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handlePermissionSubmit} className="space-y-4">
+                <div>
+                  <Label className={textPrimary}>Date</Label>
+                  <Input
+                    type="date"
+                    value={permissionForm.date}
+                    onChange={(e) => setPermissionForm({ ...permissionForm, date: e.target.value })}
+                    required
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>From Time</Label>
+                    <Input
+                      type="time"
+                      value={permissionForm.from_time}
+                      onChange={(e) => setPermissionForm({ ...permissionForm, from_time: e.target.value })}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>To Time</Label>
+                    <Input
+                      type="time"
+                      value={permissionForm.to_time}
+                      onChange={(e) => setPermissionForm({ ...permissionForm, to_time: e.target.value })}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Hours</Label>
+                  <Input
+                    type="number"
+                    min="0.5"
+                    max="4"
+                    step="0.5"
+                    value={permissionForm.hours}
+                    onChange={(e) => setPermissionForm({ ...permissionForm, hours: parseFloat(e.target.value) })}
+                    required
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Reason</Label>
+                  <textarea
+                    value={permissionForm.reason}
+                    onChange={(e) => setPermissionForm({ ...permissionForm, reason: e.target.value })}
+                    required
+                    rows={3}
+                    className={`w-full mt-1 p-2 ${bgSecondary} border ${borderColor} rounded-lg ${textPrimary}`}
+                    placeholder="Enter reason for permission..."
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="button"
+                    onClick={() => setShowPermissionModal(false)}
+                    className={`flex-1 ${bgSecondary} hover:bg-[#3f3f46] ${textPrimary}`}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  >
+                    Submit Request
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Leave Detail Modal with Timeline */}
+      {showDetailModal && selectedRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-lg`}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={textPrimary}>Leave Request Details</CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowDetailModal(false)}
+              >
+                <XCircle className="h-5 w-5" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Request Summary */}
+              <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge className={`${
+                    selectedRequest.leave_type === 'wfh' ? 'bg-purple-500/20 text-purple-400' :
+                    selectedRequest.leave_type === 'casual' ? 'bg-blue-500/20 text-blue-400' :
+                    selectedRequest.leave_type === 'sick' ? 'bg-orange-500/20 text-orange-400' :
+                    'bg-green-500/20 text-green-400'
+                  }`}>
+                    {selectedRequest.leave_type?.toUpperCase() || 'LEAVE'}
+                  </Badge>
+                  <Badge className={getStatusBadge(selectedRequest.status)}>
+                    {selectedRequest.status}
+                  </Badge>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Duration:</span>
+                    <span className={textPrimary}>
+                      {formatDate(selectedRequest.start_date || selectedRequest.from_date)} - {formatDate(selectedRequest.end_date || selectedRequest.to_date)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className={textSecondary}>Days:</span>
+                    <span className={textPrimary}>{selectedRequest.days || 1} day(s)</span>
+                  </div>
+                  <div>
+                    <span className={textSecondary}>Reason:</span>
+                    <p className={`${textPrimary} mt-1`}>{selectedRequest.reason}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Timeline */}
+              <div>
+                <h4 className={`font-medium ${textPrimary} mb-4`}>Request Timeline</h4>
+                <LeaveTimeline request={selectedRequest} />
+              </div>
+
+              {/* HR Remarks (if any) */}
+              {selectedRequest.hr_remarks && (
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <h4 className={`font-medium ${textPrimary} mb-2`}>HR Remarks</h4>
+                  <p className={textSecondary}>{selectedRequest.hr_remarks}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -2947,3 +2947,131 @@ async def create_employee(data: CreateEmployeeRequest, request: Request):
     }
 
 
+
+# ============== PERMISSION REQUESTS ==============
+
+class PermissionRequest(BaseModel):
+    date: str
+    hours: float = 1
+    reason: str
+    from_time: Optional[str] = None
+    to_time: Optional[str] = None
+
+@hr_router.post("/permissions/request")
+async def create_permission_request(data: PermissionRequest, request: Request):
+    """Create a permission request for late arrival, early leave, or breaks"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    permission_id = f"perm_{uuid.uuid4().hex[:12]}"
+    
+    permission = {
+        "permission_id": permission_id,
+        "user_id": current_user.user_id,
+        "employee_name": current_user.name,
+        "date": data.date,
+        "hours": data.hours,
+        "from_time": data.from_time,
+        "to_time": data.to_time,
+        "reason": data.reason,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    await db.permission_requests.insert_one(permission)
+    
+    # Notify HR admins
+    await notify_permission_request(current_user.name, data.hours, data.reason)
+    
+    return {"message": "Permission request submitted", "permission_id": permission_id}
+
+@hr_router.get("/permissions/my-requests")
+async def get_my_permission_requests(request: Request):
+    """Get all permission requests for the current user"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    requests = await db.permission_requests.find(
+        {"user_id": current_user.user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return requests
+
+@hr_router.get("/permissions/pending")
+async def get_pending_permission_requests(request: Request):
+    """Get all pending permission requests (for HR admin)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    # Check if user is HR admin
+    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    requests = await db.permission_requests.find(
+        {"status": "pending"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return requests
+
+@hr_router.post("/permissions/{permission_id}/approve")
+async def approve_permission_request(permission_id: str, request: Request):
+    """Approve a permission request"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    result = await db.permission_requests.update_one(
+        {"permission_id": permission_id},
+        {"$set": {
+            "status": "approved",
+            "approved_by": current_user.user_id,
+            "approved_by_name": current_user.name,
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Permission request not found")
+    
+    # Notify employee
+    perm = await db.permission_requests.find_one({"permission_id": permission_id})
+    if perm:
+        await notify_permission_decision(perm.get("employee_name", "Employee"), "approved")
+    
+    return {"message": "Permission request approved"}
+
+@hr_router.post("/permissions/{permission_id}/reject")
+async def reject_permission_request(permission_id: str, request: Request):
+    """Reject a permission request"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    result = await db.permission_requests.update_one(
+        {"permission_id": permission_id},
+        {"$set": {
+            "status": "rejected",
+            "rejected_by": current_user.user_id,
+            "rejected_by_name": current_user.name,
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Permission request not found")
+    
+    # Notify employee
+    perm = await db.permission_requests.find_one({"permission_id": permission_id})
+    if perm:
+        await notify_permission_decision(perm.get("employee_name", "Employee"), "rejected")
+    
+    return {"message": "Permission request rejected"}
+
+
