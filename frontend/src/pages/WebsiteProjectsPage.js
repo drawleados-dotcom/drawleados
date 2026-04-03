@@ -18,7 +18,7 @@ import {
   Image, FileText, ListTodo, LayoutGrid, Send, Check, ArrowLeft, Percent,
   Users, CalendarDays, Code, Palette, FileEdit, Box, Mail, PanelLeftClose, PanelLeft,
   Play, Pause, Square, Timer, Eye, RefreshCw, AlertCircle, CheckCircle2,
-  Home, FolderKanban, Settings, Menu, ChevronRight
+  Home, FolderKanban, Settings, Menu, ChevronRight, ArrowRight
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -105,12 +105,37 @@ const WebsiteProjectsPage = () => {
   const [mobileActiveTab, setMobileActiveTab] = useState('projects'); // projects, tasks, filters
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   
+  // Workflow Stage States
+  const [workflowStage, setWorkflowStage] = useState(searchParams.get('stage') || 'all');
+  const isProjectManager = user?.role === 'project_manager';
+  
+  // Workflow Stage Definitions
+  const WORKFLOW_STAGES = [
+    { id: 'creation', label: 'Project Creation', color: 'bg-yellow-500', description: 'New projects awaiting initial setup' },
+    { id: 'discovery', label: 'Discovery Call', color: 'bg-orange-500', description: 'Requirements gathering and planning' },
+    { id: 'content', label: 'Content', color: 'bg-blue-500', description: 'Content writing and collection' },
+    { id: 'wireframe', label: 'Wireframe', color: 'bg-purple-500', description: 'Wireframe design and client approval' },
+    { id: 'ui', label: 'UI Design', color: 'bg-pink-500', description: 'UI design and client approval' },
+    { id: 'development', label: 'Development', color: 'bg-green-500', description: 'Development in progress' },
+    { id: 'testing', label: 'Testing', color: 'bg-cyan-500', description: 'QA testing and bug fixes' },
+    { id: 'delivered', label: 'Delivered', color: 'bg-emerald-500', description: 'Project completed and delivered' }
+  ];
+  
   // Mobile resize detection
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+  
+  // Sync workflow stage from URL
+  useEffect(() => {
+    const stageFromUrl = searchParams.get('stage');
+    if (stageFromUrl) {
+      setWorkflowStage(stageFromUrl);
+      setCurrentView('all-projects');
+    }
+  }, [searchParams]);
   
   // Default pages for new projects
   const DEFAULT_PAGES = [
@@ -526,6 +551,34 @@ const WebsiteProjectsPage = () => {
     setSelectedSection(null);
   };
 
+  // Workflow Stage Transition
+  const handleStageTransition = async (projectId, newStage, notes = '') => {
+    try {
+      await axios.put(
+        `${API}/api/website-projects/projects/${projectId}/transition`,
+        { stage: newStage, notes },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success(`Project moved to ${WORKFLOW_STAGES.find(s => s.id === newStage)?.label || newStage}`);
+      loadAllProjectsSummary();
+      if (projectDetail?.project_id === projectId) {
+        loadProjectDetail(projectId);
+      }
+    } catch (error) {
+      toast.error('Failed to move project');
+    }
+  };
+
+  // Get next stage in workflow
+  const getNextStage = (currentStage) => {
+    const stages = ['creation', 'discovery', 'content', 'wireframe', 'ui', 'development', 'testing', 'delivered'];
+    const currentIndex = stages.indexOf(currentStage || 'creation');
+    if (currentIndex < stages.length - 1) {
+      return stages[currentIndex + 1];
+    }
+    return null;
+  };
+
   // CRUD handlers
   const handleCreateProject = async () => {
     if (!newProject.name) { toast.error('Project name is required'); return; }
@@ -764,10 +817,17 @@ const WebsiteProjectsPage = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const filteredProjectsSummary = allProjectsSummary.filter(p => 
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    (developerFilter === 'all' || developerFilter === '' || p.developer === developerFilter)
-  );
+  const filteredProjectsSummary = allProjectsSummary.filter(p => {
+    // Text search
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    // Developer filter
+    const matchesDeveloper = developerFilter === 'all' || developerFilter === '' || p.developer === developerFilter;
+    // Workflow stage filter
+    const projectStage = p.workflow_stage || 'creation';
+    const matchesStage = workflowStage === 'all' || projectStage === workflowStage;
+    
+    return matchesSearch && matchesDeveloper && matchesStage;
+  });
 
   if (loading) {
     return (
@@ -830,9 +890,17 @@ const WebsiteProjectsPage = () => {
               <div className="flex items-center gap-2 md:gap-3">
                 <Globe className="h-5 w-5 md:h-6 md:w-6 text-[#6366f1]" />
                 <h1 className={`text-base md:text-xl font-bold ${textPrimary}`}>
-                  {isMobile ? 'Projects' : 'All Website Projects'}
+                  {workflowStage !== 'all' 
+                    ? WORKFLOW_STAGES.find(s => s.id === workflowStage)?.label || 'Projects'
+                    : isMobile ? 'Projects' : 'All Website Projects'
+                  }
                 </h1>
-                <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{allProjectsSummary.length}</Badge>
+                <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">
+                  {workflowStage !== 'all' 
+                    ? filteredProjectsSummary.length 
+                    : allProjectsSummary.length
+                  }
+                </Badge>
               </div>
               <Button 
                 onClick={() => setIsCreateModalOpen(true)} 
@@ -844,6 +912,38 @@ const WebsiteProjectsPage = () => {
               </Button>
             </div>
           </div>
+
+          {/* Workflow Stages Bar - For Project Manager */}
+          {isProjectManager && (
+            <div className={`hidden md:block p-3 border-b ${borderColor} overflow-x-auto`}>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={workflowStage === 'all' ? 'default' : 'outline'}
+                  onClick={() => { setWorkflowStage('all'); setSearchParams({}); }}
+                  className={`h-8 ${workflowStage === 'all' ? 'bg-[#6366f1]' : ''}`}
+                >
+                  All
+                </Button>
+                {WORKFLOW_STAGES.map(stage => {
+                  const stageCount = allProjectsSummary.filter(p => (p.workflow_stage || 'creation') === stage.id).length;
+                  return (
+                    <Button
+                      key={stage.id}
+                      size="sm"
+                      variant={workflowStage === stage.id ? 'default' : 'outline'}
+                      onClick={() => { setWorkflowStage(stage.id); setSearchParams({ stage: stage.id }); }}
+                      className={`h-8 gap-2 ${workflowStage === stage.id ? 'bg-[#6366f1]' : ''}`}
+                    >
+                      <div className={`w-2 h-2 rounded-full ${stage.color}`} />
+                      {stage.label}
+                      {stageCount > 0 && <Badge className="ml-1 h-5 bg-white/20">{stageCount}</Badge>}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* View Mode Toggle & Filters - Desktop */}
           <div className={`hidden md:block p-4 border-b ${borderColor}`}>
@@ -1043,65 +1143,84 @@ const WebsiteProjectsPage = () => {
                   <thead className={`${bgSecondary} sticky top-0 z-10`}>
                     <tr className={`text-xs ${textSecondary} uppercase`}>
                       <th className="px-4 py-3 text-left font-semibold">Project</th>
-                      <th className="px-4 py-3 text-center font-semibold">Status</th>
-                      <th className="px-4 py-3 text-center font-semibold">Dev %</th>
-                      <th className="px-4 py-3 text-center font-semibold">Overall %</th>
+                      <th className="px-4 py-3 text-center font-semibold">Stage</th>
+                      <th className="px-4 py-3 text-center font-semibold">Progress</th>
                       <th className="px-4 py-3 text-center font-semibold">Developer</th>
-                      <th className="px-4 py-3 text-center font-semibold">Onboarding</th>
                       <th className="px-4 py-3 text-center font-semibold">Deadline</th>
                       <th className="px-4 py-3 text-center font-semibold">Pages</th>
+                      <th className="px-4 py-3 text-center font-semibold">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredProjectsSummary.map(project => (
-                      <tr key={project.project_id} onClick={() => openProject(project.project_id)} 
-                          className={`border-b ${borderColor} hover:${bgSecondary} transition-colors cursor-pointer`}>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <Globe className="h-5 w-5 text-[#6366f1]" />
-                            <div>
-                              <p className={`font-medium ${textPrimary}`}>{project.name}</p>
-                              <p className={`text-xs ${textSecondary}`}>{project.domain_url || project.platform}</p>
+                    {filteredProjectsSummary.map(project => {
+                      const currentStage = project.workflow_stage || 'creation';
+                      const stageInfo = WORKFLOW_STAGES.find(s => s.id === currentStage);
+                      const nextStage = getNextStage(currentStage);
+                      const nextStageInfo = nextStage ? WORKFLOW_STAGES.find(s => s.id === nextStage) : null;
+                      
+                      return (
+                        <tr key={project.project_id} 
+                            className={`border-b ${borderColor} hover:${bgSecondary} transition-colors`}>
+                          <td className="px-4 py-3 cursor-pointer" onClick={() => openProject(project.project_id)}>
+                            <div className="flex items-center gap-3">
+                              <Globe className="h-5 w-5 text-[#6366f1]" />
+                              <div>
+                                <p className={`font-medium ${textPrimary}`}>{project.name}</p>
+                                <p className={`text-xs ${textSecondary}`}>{project.platform} • {project.website_type}</p>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Badge className={`text-xs ${
-                            project.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                            project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
-                            project.status === 'on-hold' ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-gray-500/20 text-gray-400'
-                          }`}>
-                            {project.status || 'active'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <Progress value={project.dev_percent} className="w-16 h-2" />
-                            <span className={`text-sm font-medium ${textPrimary}`}>{project.dev_percent}%</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Badge className={project.overall_percent >= 80 ? 'bg-green-500/20 text-green-400' : project.overall_percent >= 50 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-gray-400'}>
-                            {project.overall_percent}%
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`text-sm ${textSecondary}`}>{project.developer || '-'}</span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`text-sm ${textSecondary}`}>{project.onboarding_date || '-'}</span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`text-sm font-medium ${project.deadline && new Date(project.deadline) < new Date() ? 'text-red-400' : textPrimary}`}>
-                            {project.deadline || '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <Badge variant="outline">{project.total_pages}</Badge>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
+                              <span className={`text-sm ${textPrimary}`}>{stageInfo?.label || 'Unknown'}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center gap-2">
+                              <Progress value={project.overall_percent} className="w-20 h-2" />
+                              <span className={`text-sm font-medium ${textPrimary}`}>{project.overall_percent}%</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`text-sm ${textSecondary}`}>{project.developer || '-'}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`text-sm font-medium ${project.deadline && new Date(project.deadline) < new Date() ? 'text-red-400' : textPrimary}`}>
+                              {project.deadline || '-'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge variant="outline">{project.total_pages}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openProject(project.project_id)}
+                                className="h-8 w-8 p-0"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {nextStageInfo && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleStageTransition(project.project_id, nextStage)}
+                                  className="h-8 bg-[#6366f1] hover:bg-[#5855eb] px-2"
+                                >
+                                  <ArrowRight className="h-3 w-3 mr-1" />
+                                  {nextStageInfo.label}
+                                </Button>
+                              )}
+                              {!nextStageInfo && (
+                                <Badge className="bg-emerald-500/20 text-emerald-400">Completed</Badge>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
 
@@ -1113,58 +1232,91 @@ const WebsiteProjectsPage = () => {
                       <p>No projects found</p>
                     </div>
                   ) : (
-                    filteredProjectsSummary.map(project => (
-                      <div 
-                        key={project.project_id} 
-                        onClick={() => openProject(project.project_id)}
-                        className={`p-4 rounded-xl border ${borderColor} ${bgCard} active:scale-[0.98] transition-all cursor-pointer`}
-                      >
-                        {/* Project Header */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-10 h-10 rounded-lg bg-[#6366f1]/10 flex items-center justify-center">
-                              <Globe className="h-5 w-5 text-[#6366f1]" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`font-semibold ${textPrimary} truncate`}>{project.name}</p>
-                              <p className={`text-xs ${textSecondary} truncate`}>{project.platform || 'Website'}</p>
+                    filteredProjectsSummary.map(project => {
+                      const currentStage = project.workflow_stage || 'creation';
+                      const stageInfo = WORKFLOW_STAGES.find(s => s.id === currentStage);
+                      const nextStage = getNextStage(currentStage);
+                      const nextStageInfo = nextStage ? WORKFLOW_STAGES.find(s => s.id === nextStage) : null;
+                      
+                      return (
+                        <div 
+                          key={project.project_id} 
+                          className={`p-4 rounded-xl border ${borderColor} ${bgCard} transition-all`}
+                        >
+                          {/* Project Header */}
+                          <div className="flex items-start justify-between mb-3" onClick={() => openProject(project.project_id)}>
+                            <div className="flex items-center gap-2">
+                              <div className="w-10 h-10 rounded-lg bg-[#6366f1]/10 flex items-center justify-center">
+                                <Globe className="h-5 w-5 text-[#6366f1]" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`font-semibold ${textPrimary} truncate`}>{project.name}</p>
+                                <p className={`text-xs ${textSecondary} truncate`}>{project.platform} • {project.website_type}</p>
+                              </div>
                             </div>
                           </div>
-                          <Badge className={`text-xs ${
-                            project.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                            project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
-                            project.status === 'on-hold' ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-gray-500/20 text-gray-400'
-                          }`}>
-                            {project.status || 'active'}
-                          </Badge>
-                        </div>
 
-                        {/* Progress Bar */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className={`text-xs ${textSecondary}`}>Overall Progress</span>
-                            <span className={`text-xs font-semibold ${textPrimary}`}>{project.overall_percent}%</span>
-                          </div>
-                          <Progress value={project.overall_percent} className="h-2" />
-                        </div>
-
-                        {/* Stats Row */}
-                        <div className="flex items-center justify-between text-xs">
-                          <div className={`flex items-center gap-1 ${textSecondary}`}>
-                            <FileText className="h-3 w-3" />
-                            <span>{project.total_pages} pages</span>
-                          </div>
-                          {project.deadline && (
-                            <div className={`flex items-center gap-1 ${new Date(project.deadline) < new Date() ? 'text-red-400' : textSecondary}`}>
-                              <Calendar className="h-3 w-3" />
-                              <span>{project.deadline}</span>
+                          {/* Workflow Stage Badge */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
+                              <span className={`text-sm font-medium ${textPrimary}`}>{stageInfo?.label || 'Unknown'}</span>
                             </div>
-                          )}
-                          <ChevronRight className={`h-4 w-4 ${textSecondary}`} />
+                            <Badge className={`text-xs ${
+                              project.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                              project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
+                              'bg-gray-500/20 text-gray-400'
+                            }`}>
+                              {project.status || 'active'}
+                            </Badge>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="mb-3" onClick={() => openProject(project.project_id)}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs ${textSecondary}`}>Progress</span>
+                              <span className={`text-xs font-semibold ${textPrimary}`}>{project.overall_percent}%</span>
+                            </div>
+                            <Progress value={project.overall_percent} className="h-2" />
+                          </div>
+
+                          {/* Stats Row */}
+                          <div className="flex items-center justify-between text-xs mb-3" onClick={() => openProject(project.project_id)}>
+                            <div className={`flex items-center gap-1 ${textSecondary}`}>
+                              <FileText className="h-3 w-3" />
+                              <span>{project.total_pages} pages</span>
+                            </div>
+                            {project.deadline && (
+                              <div className={`flex items-center gap-1 ${new Date(project.deadline) < new Date() ? 'text-red-400' : textSecondary}`}>
+                                <Calendar className="h-3 w-3" />
+                                <span>{project.deadline}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center gap-2 pt-2 border-t border-dashed" style={{ borderColor: isDark ? '#3f3f46' : '#e5e7eb' }}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openProject(project.project_id)}
+                              className="flex-1 h-8"
+                            >
+                              <Eye className="h-3 w-3 mr-1" /> View
+                            </Button>
+                            {nextStageInfo && (
+                              <Button
+                                size="sm"
+                                onClick={(e) => { e.stopPropagation(); handleStageTransition(project.project_id, nextStage); }}
+                                className="flex-1 h-8 bg-[#6366f1] hover:bg-[#5855eb]"
+                              >
+                                <ArrowRight className="h-3 w-3 mr-1" /> {nextStageInfo.label}
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>

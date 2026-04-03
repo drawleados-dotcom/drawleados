@@ -2,7 +2,7 @@
 Enhanced Website Projects - Spreadsheet-like project management
 Supports page-based tasks with multiple phases (Wireframe, UI, Content, Dev)
 """
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Body
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
@@ -50,6 +50,8 @@ class ProjectCreate(BaseModel):
     # Platform & Type
     platform: str = "Website"  # Website, Shopify, WordPress, Wix, Custom, etc.
     website_type: str = "Business Website"  # Business, E-commerce, Portfolio, Landing Page, Blog, etc.
+    # Workflow Stage
+    workflow_stage: str = "creation"  # creation, discovery, content, wireframe, ui, development, testing, delivered
     # Team
     developer: Optional[str] = None
     designer: Optional[str] = None
@@ -98,6 +100,8 @@ class ProjectUpdate(BaseModel):
     # Platform & Type
     platform: Optional[str] = None
     website_type: Optional[str] = None
+    # Workflow Stage
+    workflow_stage: Optional[str] = None  # creation, discovery, content, wireframe, ui, development, testing, delivered
     # Team
     developer: Optional[str] = None
     designer: Optional[str] = None
@@ -438,6 +442,54 @@ async def update_project(request: Request, project_id: str, update_data: Project
     
     updated = await db.website_projects.find_one({"project_id": project_id}, {"_id": 0})
     return updated
+
+# Workflow stage transition endpoint
+@website_projects_router.put("/projects/{project_id}/transition")
+async def transition_project_stage(request: Request, project_id: str, data: dict = Body(...)):
+    """Move project to next workflow stage"""
+    user = await get_current_user(request)
+    
+    project = await db.website_projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    new_stage = data.get("stage")
+    notes = data.get("notes", "")
+    
+    # Define valid stage transitions
+    STAGE_ORDER = ["creation", "discovery", "content", "wireframe", "ui", "development", "testing", "delivered"]
+    
+    if new_stage not in STAGE_ORDER:
+        raise HTTPException(status_code=400, detail=f"Invalid stage: {new_stage}")
+    
+    current_stage = project.get("workflow_stage", "creation")
+    
+    # Log the transition
+    transition_log = {
+        "from_stage": current_stage,
+        "to_stage": new_stage,
+        "transitioned_by": user.get("user_id"),
+        "transitioned_by_name": user.get("name"),
+        "notes": notes,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Update the project
+    await db.website_projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {
+                "workflow_stage": new_stage,
+                "updated_at": datetime.now(timezone.utc)
+            },
+            "$push": {
+                "stage_transitions": transition_log
+            }
+        }
+    )
+    
+    updated = await db.website_projects.find_one({"project_id": project_id}, {"_id": 0})
+    return {"message": f"Project moved to {new_stage}", "project": updated}
 
 @website_projects_router.delete("/projects/{project_id}")
 async def delete_project(request: Request, project_id: str):

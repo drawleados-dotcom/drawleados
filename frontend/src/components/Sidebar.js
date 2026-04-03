@@ -302,8 +302,148 @@ const Sidebar = () => {
           </>
         )}
 
-        {/* === STANDARD VIEW (for non-tasks-only users) === */}
-        {!hasTasksModuleOnly && (
+        {/* === PROJECT MANAGER VIEW (Website Department Only) === */}
+        {isProjectManager && !hasTasksModuleOnly && (
+          <>
+            {/* Calendar */}
+            <Link
+              to="/calendar"
+              data-testid="nav-pm-calendar"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Calendar' : ''}
+            >
+              <Calendar className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Calendar'}
+            </Link>
+
+            {/* Website Projects - Main Link */}
+            <Link
+              to="/website-projects"
+              data-testid="nav-pm-projects"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/website-projects' && !location.search ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'All Projects' : ''}
+            >
+              <Globe className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && (
+                <>
+                  <span className="flex-1 text-left">All Projects</span>
+                  <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{websiteProjects.length}</Badge>
+                </>
+              )}
+            </Link>
+
+            {/* Project Stages Section */}
+            {!isCollapsed && (
+              <div className={`ml-2 mt-2 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#3f3f46]' : 'border-gray-200'}`}>
+                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>
+                  Workflow Stages
+                </p>
+                
+                {/* Project Creation */}
+                <Link
+                  to="/website-projects?stage=creation"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=creation') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                  <span>Project Creation</span>
+                </Link>
+
+                {/* Discovery Call */}
+                <Link
+                  to="/website-projects?stage=discovery"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=discovery') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-orange-500" />
+                  <span>Discovery Call</span>
+                </Link>
+
+                {/* Content */}
+                <Link
+                  to="/website-projects?stage=content"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=content') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <span>Content</span>
+                </Link>
+
+                {/* Wireframe */}
+                <Link
+                  to="/website-projects?stage=wireframe"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=wireframe') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span>Wireframe</span>
+                </Link>
+
+                {/* UI Design */}
+                <Link
+                  to="/website-projects?stage=ui"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=ui') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-pink-500" />
+                  <span>UI Design</span>
+                </Link>
+
+                {/* Development */}
+                <Link
+                  to="/website-projects?stage=development"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=development') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span>Development</span>
+                </Link>
+
+                {/* Testing */}
+                <Link
+                  to="/website-projects?stage=testing"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=testing') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-cyan-500" />
+                  <span>Testing</span>
+                </Link>
+
+                {/* Delivered */}
+                <Link
+                  to="/website-projects?stage=delivered"
+                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
+                    location.search.includes('stage=delivered') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>Delivered</span>
+                </Link>
+              </div>
+            )}
+
+            {/* HR - Limited access */}
+            <Link
+              to="/hr"
+              data-testid="nav-pm-hr"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/hr') ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'HR' : ''}
+            >
+              <Users className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'HR'}
+            </Link>
+          </>
+        )}
+
+        {/* === STANDARD VIEW (for non-tasks-only users and non-project-managers) === */}
+        {!hasTasksModuleOnly && !isProjectManager && (
           <>
         {/* 1. Calendar - visible for ALL users */}
         <Link
