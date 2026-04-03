@@ -4104,27 +4104,62 @@ function EnhancedCalendarTab({
   const [activeSubTab, setActiveSubTab] = useState('calendar');
   const [editingSettings, setEditingSettings] = useState(false);
   const [formData, setFormData] = useState({
-    standard_login_time: hrSettings?.standard_login_time || '09:30',
-    standard_logout_time: hrSettings?.standard_logout_time || '18:30',
+    standard_login_time: hrSettings?.standard_login_time || '10:00',
+    standard_logout_time: hrSettings?.standard_logout_time || '19:00',
     working_days: hrSettings?.working_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-    holidays: hrSettings?.holidays || [],
-    standard_work_hours: hrSettings?.standard_work_hours || 8,
+    standard_work_hours: hrSettings?.standard_work_hours || 8.25,
+    lunch_minutes: hrSettings?.lunch_minutes || 45,
+    total_office_hours: hrSettings?.total_office_hours || 9,
     grace_period_minutes: hrSettings?.grace_period_minutes || 15,
   });
 
   // Local state for calendar configuration
   const [holidays, setHolidays] = useState([]);
-  const [workingDays, setWorkingDays] = useState(22);
+  const [approvedHolidays, setApprovedHolidays] = useState([]);
+  const [specialWorkingDays, setSpecialWorkingDays] = useState([]); // Sundays that are marked as working days
   const [newHoliday, setNewHoliday] = useState({ date: '', name: '' });
+  const [editingHoliday, setEditingHoliday] = useState(null);
+  
+  // Indian National Holidays - prefixed list
+  const defaultIndianHolidays = [
+    { date: '2025-01-26', name: 'Republic Day', type: 'national' },
+    { date: '2025-03-14', name: 'Holi', type: 'national' },
+    { date: '2025-04-14', name: 'Ambedkar Jayanti', type: 'national' },
+    { date: '2025-04-18', name: 'Good Friday', type: 'national' },
+    { date: '2025-05-01', name: 'May Day', type: 'national' },
+    { date: '2025-08-15', name: 'Independence Day', type: 'national' },
+    { date: '2025-08-27', name: 'Janmashtami', type: 'national' },
+    { date: '2025-10-02', name: 'Gandhi Jayanti', type: 'national' },
+    { date: '2025-10-20', name: 'Dussehra', type: 'national' },
+    { date: '2025-11-01', name: 'Diwali', type: 'national' },
+    { date: '2025-11-15', name: 'Guru Nanak Jayanti', type: 'national' },
+    { date: '2025-12-25', name: 'Christmas', type: 'national' },
+    { date: '2026-01-26', name: 'Republic Day', type: 'national' },
+    { date: '2026-03-04', name: 'Holi', type: 'national' },
+    { date: '2026-04-03', name: 'Good Friday', type: 'national' },
+    { date: '2026-04-14', name: 'Ambedkar Jayanti', type: 'national' },
+    { date: '2026-05-01', name: 'May Day', type: 'national' },
+    { date: '2026-08-15', name: 'Independence Day', type: 'national' },
+    { date: '2026-08-16', name: 'Janmashtami', type: 'national' },
+    { date: '2026-10-02', name: 'Gandhi Jayanti', type: 'national' },
+    { date: '2026-10-08', name: 'Dussehra', type: 'national' },
+    { date: '2026-10-20', name: 'Diwali', type: 'national' },
+    { date: '2026-11-04', name: 'Guru Nanak Jayanti', type: 'national' },
+    { date: '2026-12-25', name: 'Christmas', type: 'national' },
+  ];
+
+  // Combine default Indian holidays with any added custom ones
+  const [allHolidays, setAllHolidays] = useState([]);
 
   useEffect(() => {
     if (hrSettings) {
       setFormData({
-        standard_login_time: hrSettings.standard_login_time || '09:30',
-        standard_logout_time: hrSettings.standard_logout_time || '18:30',
+        standard_login_time: hrSettings.standard_login_time || '10:00',
+        standard_logout_time: hrSettings.standard_logout_time || '19:00',
         working_days: hrSettings.working_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-        holidays: hrSettings.holidays || [],
-        standard_work_hours: hrSettings.standard_work_hours || 8,
+        standard_work_hours: hrSettings.standard_work_hours || 8.25,
+        lunch_minutes: hrSettings.lunch_minutes || 45,
+        total_office_hours: hrSettings.total_office_hours || 9,
         grace_period_minutes: hrSettings.grace_period_minutes || 15,
       });
     }
@@ -4132,10 +4167,28 @@ function EnhancedCalendarTab({
 
   useEffect(() => {
     if (calendar) {
-      setHolidays(calendar.holidays || []);
-      setWorkingDays(calendar.working_days || 22);
+      // Load approved holidays from calendar
+      const calHolidays = calendar.holidays || [];
+      setHolidays(calHolidays);
+      setApprovedHolidays(calHolidays.filter(h => h.approved));
+      setSpecialWorkingDays(calendar.special_working_days || []);
     }
-  }, [calendar]);
+    
+    // Initialize allHolidays with default Indian holidays for the selected year
+    const yearHolidays = defaultIndianHolidays
+      .filter(h => h.date.startsWith(String(year)))
+      .map(h => ({
+        ...h,
+        approved: (calendar?.holidays || []).some(ch => ch.date === h.date && ch.approved)
+      }));
+    
+    // Add any custom holidays from calendar that aren't in the default list
+    const customHolidays = (calendar?.holidays || [])
+      .filter(ch => !defaultIndianHolidays.some(dh => dh.date === ch.date))
+      .filter(ch => ch.date.startsWith(String(year)));
+    
+    setAllHolidays([...yearHolidays, ...customHolidays]);
+  }, [calendar, year]);
 
   const allDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -4159,20 +4212,27 @@ function EnhancedCalendarTab({
       const date = new Date(year, month - 1, day);
       const dateStr = date.toISOString().split('T')[0];
       const dayOfWeek = date.getDay();
-      const isWeekend = dayOfWeek === 0; // Sunday
+      const isSunday = dayOfWeek === 0;
       const isToday = date.toDateString() === today.toDateString();
       
-      // Check if it's a holiday
-      const holiday = holidays.find(h => h.date === dateStr);
+      // Check if it's an approved holiday
+      const holiday = approvedHolidays.find(h => h.date === dateStr);
+      
+      // Check if Sunday is marked as a special working day
+      const isSpecialWorkingDay = specialWorkingDays.includes(dateStr);
+      
+      // Sunday is a holiday unless it's a special working day
+      const isSundayHoliday = isSunday && !isSpecialWorkingDay;
       
       grid.push({
         date: dateStr,
         day: day,
-        isWeekend,
+        isSunday,
         isToday,
-        isHoliday: !!holiday,
-        holidayName: holiday?.name || null,
-        dayOfWeek
+        isHoliday: !!holiday || isSundayHoliday,
+        holidayName: holiday?.name || (isSundayHoliday ? 'Sunday' : null),
+        dayOfWeek,
+        isSpecialWorkingDay
       });
     }
     
@@ -4181,54 +4241,119 @@ function EnhancedCalendarTab({
 
   const calendarGrid = generateCalendarGrid();
 
-  // Indian National Holidays 2025/2026
-  const indianHolidays = [
-    { date: '2025-01-26', name: 'Republic Day' },
-    { date: '2025-03-14', name: 'Holi' },
-    { date: '2025-04-14', name: 'Ambedkar Jayanti' },
-    { date: '2025-04-18', name: 'Good Friday' },
-    { date: '2025-05-01', name: 'May Day' },
-    { date: '2025-08-15', name: 'Independence Day' },
-    { date: '2025-08-27', name: 'Janmashtami' },
-    { date: '2025-10-02', name: 'Gandhi Jayanti' },
-    { date: '2025-10-20', name: 'Dussehra' },
-    { date: '2025-11-01', name: 'Diwali' },
-    { date: '2025-11-15', name: 'Guru Nanak Jayanti' },
-    { date: '2025-12-25', name: 'Christmas' },
-    { date: '2026-01-26', name: 'Republic Day' },
-    { date: '2026-03-04', name: 'Holi' },
-    { date: '2026-04-14', name: 'Ambedkar Jayanti' },
-    { date: '2026-04-03', name: 'Good Friday' },
-    { date: '2026-05-01', name: 'May Day' },
-    { date: '2026-08-15', name: 'Independence Day' },
-    { date: '2026-08-16', name: 'Janmashtami' },
-    { date: '2026-10-02', name: 'Gandhi Jayanti' },
-    { date: '2026-10-08', name: 'Dussehra' },
-    { date: '2026-10-20', name: 'Diwali' },
-    { date: '2026-11-04', name: 'Guru Nanak Jayanti' },
-    { date: '2026-12-25', name: 'Christmas' },
-  ];
-
   const handleSaveSettings = async () => {
     await onUpdateSettings(formData);
     setEditingSettings(false);
     loadHRSettings();
+    toast.success('Work settings saved!');
   };
 
-  const handleAddHoliday = () => {
-    if (newHoliday.date && newHoliday.name) {
-      const updated = [...holidays, { ...newHoliday, type: 'company' }];
-      setHolidays(updated);
-      setNewHoliday({ date: '', name: '' });
-      // Save to backend
-      onUpdateCalendar({ holidays: updated, working_days: workingDays });
+  // Approve a holiday - adds it to the calendar
+  const handleApproveHoliday = (holiday) => {
+    const updatedHoliday = { ...holiday, approved: true };
+    const updatedAllHolidays = allHolidays.map(h => 
+      h.date === holiday.date ? updatedHoliday : h
+    );
+    setAllHolidays(updatedAllHolidays);
+    
+    // Update approved holidays list
+    const newApproved = [...approvedHolidays.filter(h => h.date !== holiday.date), updatedHoliday];
+    setApprovedHolidays(newApproved);
+    
+    // Save to backend
+    onUpdateCalendar({ 
+      holidays: newApproved, 
+      special_working_days: specialWorkingDays 
+    });
+    toast.success(`${holiday.name} approved and added to calendar!`);
+  };
+
+  // Edit a holiday
+  const handleEditHoliday = (holiday) => {
+    setEditingHoliday({ ...holiday });
+  };
+
+  // Save edited holiday
+  const handleSaveEditHoliday = () => {
+    if (!editingHoliday.name || !editingHoliday.date) return;
+    
+    const updatedAllHolidays = allHolidays.map(h => 
+      h.date === editingHoliday.originalDate ? { ...editingHoliday, originalDate: undefined } : h
+    );
+    setAllHolidays(updatedAllHolidays);
+    
+    // Update in approved if it was approved
+    if (editingHoliday.approved) {
+      const newApproved = approvedHolidays.map(h => 
+        h.date === editingHoliday.originalDate ? { ...editingHoliday, originalDate: undefined } : h
+      );
+      setApprovedHolidays(newApproved);
+      onUpdateCalendar({ 
+        holidays: newApproved, 
+        special_working_days: specialWorkingDays 
+      });
     }
+    
+    setEditingHoliday(null);
+    toast.success('Holiday updated!');
   };
 
-  const handleRemoveHoliday = (index) => {
-    const updated = holidays.filter((_, i) => i !== index);
-    setHolidays(updated);
-    onUpdateCalendar({ holidays: updated, working_days: workingDays });
+  // Add new custom holiday
+  const handleAddCustomHoliday = () => {
+    if (!newHoliday.date || !newHoliday.name) {
+      toast.error('Please enter date and name');
+      return;
+    }
+    
+    const newH = { ...newHoliday, type: 'custom', approved: false };
+    setAllHolidays([...allHolidays, newH]);
+    setNewHoliday({ date: '', name: '' });
+    toast.success('Holiday added! Click Approve to add it to the calendar.');
+  };
+
+  // Remove unapproved holiday from calendar
+  const handleUnapproveHoliday = (holiday) => {
+    const updatedAllHolidays = allHolidays.map(h => 
+      h.date === holiday.date ? { ...h, approved: false } : h
+    );
+    setAllHolidays(updatedAllHolidays);
+    
+    const newApproved = approvedHolidays.filter(h => h.date !== holiday.date);
+    setApprovedHolidays(newApproved);
+    
+    onUpdateCalendar({ 
+      holidays: newApproved, 
+      special_working_days: specialWorkingDays 
+    });
+    toast.success(`${holiday.name} removed from calendar`);
+  };
+
+  // Toggle a day as working day (for Sundays)
+  const handleToggleWorkingDay = (dateStr, isSunday) => {
+    if (!isSunday) return; // Only Sundays can be toggled
+    
+    let updated;
+    if (specialWorkingDays.includes(dateStr)) {
+      // Remove from special working days (make it a holiday again)
+      updated = specialWorkingDays.filter(d => d !== dateStr);
+    } else {
+      // Add to special working days (make it a working day)
+      updated = [...specialWorkingDays, dateStr];
+    }
+    setSpecialWorkingDays(updated);
+    
+    onUpdateCalendar({ 
+      holidays: approvedHolidays, 
+      special_working_days: updated 
+    });
+    toast.success(updated.includes(dateStr) ? 'Marked as working day' : 'Marked as holiday');
+  };
+
+  // Calculate work hours display
+  const formatWorkHours = (hours) => {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
   };
 
   return (
@@ -4287,85 +4412,56 @@ function EnhancedCalendarTab({
             <Button onClick={onRefresh} variant="outline" className={borderColor}>
               <RefreshCcw className="h-4 w-4" />
             </Button>
+            <div className={`text-sm ${textSecondary} flex items-center gap-4`}>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ef4444]/30"></span> Holiday</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#6366f1]/30"></span> Sunday (Holiday)</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#22c55e]/30"></span> Working Sunday</span>
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Calendar Grid */}
-            <Card className={`${bgCard} border ${borderColor} md:col-span-2`}>
-              <CardContent className="p-4">
-                <div className="grid grid-cols-7 gap-1">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className={`text-center font-medium ${textSecondary} py-2 text-sm`}>{day}</div>
-                  ))}
-                  {calendarGrid.map((day, idx) => (
-                    <div
-                      key={idx}
-                      className={`p-2 min-h-[50px] rounded text-center transition-colors ${
-                        !day.date ? '' :
-                        day.isHoliday ? 'bg-[#ef4444]/20' :
-                        day.isWeekend ? 'bg-[#f59e0b]/10' :
-                        `${bgSecondary}`
-                      } ${day.isToday ? 'ring-2 ring-[#6366f1]' : ''}`}
-                    >
-                      {day.date && (
-                        <>
-                          <div className={`text-sm font-medium ${day.isHoliday ? 'text-[#ef4444]' : textPrimary}`}>{day.day}</div>
-                          {day.isHoliday && (
-                            <div className="text-[10px] text-[#ef4444] truncate">{day.holidayName}</div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Holiday Management */}
-            <Card className={`${bgCard} border ${borderColor}`}>
-              <CardContent className="p-4">
-                <h4 className={`font-medium ${textPrimary} mb-3`}>Manage Holidays</h4>
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <Input
-                      type="date"
-                      value={newHoliday.date}
-                      onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
-                      className={`${bgSecondary} ${borderColor} flex-1`}
-                    />
-                    <Input
-                      placeholder="Holiday name"
-                      value={newHoliday.name}
-                      onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
-                      className={`${bgSecondary} ${borderColor} flex-1`}
-                    />
-                    <Button size="sm" onClick={handleAddHoliday} className="bg-[#22c55e]">
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {holidays.map((h, idx) => (
-                      <div key={idx} className={`p-2 rounded ${bgSecondary} flex justify-between items-center`}>
-                        <div>
-                          <div className={`text-sm ${textPrimary}`}>{h.name}</div>
-                          <div className={`text-xs ${textSecondary}`}>
-                            {new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-7 gap-1">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className={`text-center font-medium py-2 text-sm ${day === 'Sun' ? 'text-[#6366f1]' : textSecondary}`}>{day}</div>
+                ))}
+                {calendarGrid.map((day, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => day.date && day.isSunday && handleToggleWorkingDay(day.date, day.isSunday)}
+                    className={`p-2 min-h-[60px] rounded text-center transition-colors cursor-pointer ${
+                      !day.date ? '' :
+                      day.isSpecialWorkingDay ? 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30' :
+                      day.isHoliday && day.holidayName !== 'Sunday' ? 'bg-[#ef4444]/20' :
+                      day.isSunday ? 'bg-[#6366f1]/20 hover:bg-[#6366f1]/30' :
+                      `${bgSecondary} hover:bg-[#6366f1]/10`
+                    } ${day.isToday ? 'ring-2 ring-[#6366f1]' : ''}`}
+                  >
+                    {day.date && (
+                      <>
+                        <div className={`text-sm font-medium ${
+                          day.isSpecialWorkingDay ? 'text-[#22c55e]' :
+                          day.isHoliday ? 'text-[#ef4444]' : 
+                          day.isSunday ? 'text-[#6366f1]' : textPrimary
+                        }`}>{day.day}</div>
+                        {day.isHoliday && day.holidayName && (
+                          <div className={`text-[10px] truncate ${day.isSunday && !day.isSpecialWorkingDay ? 'text-[#6366f1]' : 'text-[#ef4444]'}`}>
+                            {day.holidayName}
                           </div>
-                        </div>
-                        <Button size="sm" variant="ghost" onClick={() => handleRemoveHoliday(idx)} className="text-[#ef4444] h-6 w-6 p-0">
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                    {holidays.length === 0 && (
-                      <div className={`text-sm ${textSecondary} text-center py-4`}>No holidays set for this month</div>
+                        )}
+                        {day.isSpecialWorkingDay && (
+                          <div className="text-[10px] text-[#22c55e]">Working</div>
+                        )}
+                      </>
                     )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                ))}
+              </div>
+              <div className={`mt-4 p-3 rounded ${bgSecondary} text-sm ${textSecondary}`}>
+                <strong>Tip:</strong> Click on any Sunday to toggle it as a working day. Approved holidays from "Indian Holidays" tab will appear here.
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -4382,6 +4478,27 @@ function EnhancedCalendarTab({
                 </Button>
               )}
             </div>
+
+            {/* Work Hours Summary Card */}
+            <Card className={`${bgSecondary} border ${borderColor}`}>
+              <CardContent className="p-4">
+                <h4 className={`font-medium ${textPrimary} mb-3`}>Work Hours Summary</h4>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <div className={`text-2xl font-bold text-[#6366f1]`}>{formatWorkHours(formData.total_office_hours)}</div>
+                    <div className={`text-sm ${textSecondary}`}>Total Office Hours</div>
+                  </div>
+                  <div>
+                    <div className={`text-2xl font-bold text-[#22c55e]`}>{formatWorkHours(formData.standard_work_hours)}</div>
+                    <div className={`text-sm ${textSecondary}`}>Work Hours</div>
+                  </div>
+                  <div>
+                    <div className={`text-2xl font-bold text-[#f59e0b]`}>{formData.lunch_minutes}m</div>
+                    <div className={`text-sm ${textSecondary}`}>Lunch Break</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             <div className="grid md:grid-cols-2 gap-6">
               <div>
@@ -4405,14 +4522,54 @@ function EnhancedCalendarTab({
                 />
               </div>
               <div>
-                <Label className={textPrimary}>Standard Work Hours</Label>
+                <Label className={textPrimary}>Total Office Hours</Label>
                 <Input
                   type="number"
-                  value={formData.standard_work_hours}
-                  onChange={(e) => setFormData({ ...formData, standard_work_hours: parseFloat(e.target.value) })}
+                  step="0.5"
+                  value={formData.total_office_hours}
+                  onChange={(e) => {
+                    const total = parseFloat(e.target.value);
+                    const lunchHours = formData.lunch_minutes / 60;
+                    setFormData({ 
+                      ...formData, 
+                      total_office_hours: total,
+                      standard_work_hours: total - lunchHours
+                    });
+                  }}
                   disabled={!editingSettings}
                   className={`${bgSecondary} ${borderColor} ${textPrimary}`}
                 />
+                <p className={`text-xs ${textSecondary} mt-1`}>Total time in office including lunch</p>
+              </div>
+              <div>
+                <Label className={textPrimary}>Lunch Break (minutes)</Label>
+                <Input
+                  type="number"
+                  value={formData.lunch_minutes}
+                  onChange={(e) => {
+                    const lunch = parseInt(e.target.value);
+                    const lunchHours = lunch / 60;
+                    setFormData({ 
+                      ...formData, 
+                      lunch_minutes: lunch,
+                      standard_work_hours: formData.total_office_hours - lunchHours
+                    });
+                  }}
+                  disabled={!editingSettings}
+                  className={`${bgSecondary} ${borderColor} ${textPrimary}`}
+                />
+                <p className={`text-xs ${textSecondary} mt-1`}>Lunch break duration</p>
+              </div>
+              <div>
+                <Label className={textPrimary}>Effective Work Hours</Label>
+                <Input
+                  type="number"
+                  step="0.25"
+                  value={formData.standard_work_hours}
+                  disabled={true}
+                  className={`${bgSecondary} ${borderColor} ${textPrimary} opacity-60`}
+                />
+                <p className={`text-xs ${textSecondary} mt-1`}>Auto-calculated: Total - Lunch</p>
               </div>
               <div>
                 <Label className={textPrimary}>Grace Period (minutes)</Label>
@@ -4423,6 +4580,7 @@ function EnhancedCalendarTab({
                   disabled={!editingSettings}
                   className={`${bgSecondary} ${borderColor} ${textPrimary}`}
                 />
+                <p className={`text-xs ${textSecondary} mt-1`}>Late arrival tolerance</p>
               </div>
             </div>
 
@@ -4448,7 +4606,7 @@ function EnhancedCalendarTab({
                       formData.working_days.includes(day)
                         ? 'bg-[#22c55e] text-white'
                         : `${bgSecondary} ${textSecondary}`
-                    } ${!editingSettings ? 'opacity-60' : ''}`}
+                    } ${!editingSettings ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {day}
                   </button>
@@ -4468,34 +4626,137 @@ function EnhancedCalendarTab({
         </Card>
       )}
 
-      {/* Indian Holidays */}
+      {/* Indian Holidays - with Edit & Approve */}
       {activeSubTab === 'holidays' && (
-        <Card className={`${bgCard} border ${borderColor}`}>
-          <CardContent className="p-6">
-            <h3 className={`text-lg font-semibold ${textPrimary} mb-4`}>Indian National Holidays {year}</h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              {indianHolidays
-                .filter(h => h.date.startsWith(String(year)))
-                .map((holiday, idx) => (
-                  <div key={idx} className={`p-3 rounded-lg ${bgSecondary} flex justify-between items-center`}>
-                    <div>
-                      <div className={`font-medium ${textPrimary}`}>{holiday.name}</div>
-                      <div className={`text-sm ${textSecondary}`}>
-                        {new Date(holiday.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-                      </div>
-                    </div>
-                    <Badge className="bg-[#ef4444]/20 text-[#ef4444]">Holiday</Badge>
-                  </div>
-                ))}
-            </div>
-            {indianHolidays.filter(h => h.date.startsWith(String(year))).length === 0 && (
-              <div className={`text-center py-8 ${textSecondary}`}>
-                <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                <p>No holidays data for {year}</p>
+        <div className="space-y-4">
+          {/* Add Custom Holiday */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-4">
+              <h4 className={`font-medium ${textPrimary} mb-3`}>Add Custom Holiday</h4>
+              <div className="flex gap-3 flex-wrap">
+                <Input
+                  type="date"
+                  value={newHoliday.date}
+                  onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
+                  className={`${bgSecondary} ${borderColor} w-40`}
+                />
+                <Input
+                  placeholder="Holiday name"
+                  value={newHoliday.name}
+                  onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
+                  className={`${bgSecondary} ${borderColor} flex-1 min-w-[200px]`}
+                />
+                <Button onClick={handleAddCustomHoliday} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Holiday
+                </Button>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+
+          {/* Holidays List */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className={`text-lg font-semibold ${textPrimary}`}>Indian National Holidays {year}</h3>
+                <div className={`text-sm ${textSecondary}`}>
+                  <span className="text-[#22c55e]">{allHolidays.filter(h => h.approved).length} Approved</span>
+                  {' / '}
+                  <span>{allHolidays.length} Total</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                {allHolidays.length > 0 ? allHolidays.map((holiday, idx) => (
+                  <div key={idx} className={`p-4 rounded-lg ${bgSecondary} ${holiday.approved ? 'border-l-4 border-[#22c55e]' : ''}`}>
+                    {editingHoliday?.date === holiday.date ? (
+                      // Edit Mode
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Input
+                          type="date"
+                          value={editingHoliday.date}
+                          onChange={(e) => setEditingHoliday({ ...editingHoliday, date: e.target.value })}
+                          className={`${bgCard} ${borderColor} w-40`}
+                        />
+                        <Input
+                          value={editingHoliday.name}
+                          onChange={(e) => setEditingHoliday({ ...editingHoliday, name: e.target.value })}
+                          className={`${bgCard} ${borderColor} flex-1`}
+                        />
+                        <Button size="sm" onClick={handleSaveEditHoliday} className="bg-[#22c55e]">
+                          Save
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingHoliday(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      // View Mode
+                      <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-medium ${textPrimary}`}>{holiday.name}</span>
+                            {holiday.type === 'custom' && (
+                              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">Custom</Badge>
+                            )}
+                            {holiday.approved && (
+                              <Badge className="bg-[#22c55e]/20 text-[#22c55e] text-xs">Approved</Badge>
+                            )}
+                          </div>
+                          <div className={`text-sm ${textSecondary}`}>
+                            {new Date(holiday.date + 'T00:00:00').toLocaleDateString('en-IN', { 
+                              weekday: 'long', 
+                              day: 'numeric', 
+                              month: 'long' 
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            onClick={() => handleEditHoliday({ ...holiday, originalDate: holiday.date })}
+                            className="h-8"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          {holiday.approved ? (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleUnapproveHoliday(holiday)}
+                              className="h-8 text-[#ef4444] border-[#ef4444]"
+                            >
+                              Remove
+                            </Button>
+                          ) : (
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleApproveHoliday(holiday)}
+                              className="h-8 bg-[#22c55e] hover:bg-[#16a34a]"
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Approve
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )) : (
+                  <div className={`text-center py-8 ${textSecondary}`}>
+                    <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No holidays data for {year}</p>
+                  </div>
+                )}
+              </div>
+              
+              <div className={`mt-4 p-3 rounded ${bgSecondary} text-sm ${textSecondary}`}>
+                <strong>How it works:</strong> Edit holiday details if needed, then click "Approve" to add it to the Calendar View. Only approved holidays will be marked on the calendar.
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );

@@ -43,9 +43,27 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
    - Leave Requests (all leave requests with filter)
 5. **Payroll Mgmt** - Complete payroll management with salary history and payslip generation
 6. **Calendar** - Combined tab with three sub-tabs:
-   - Calendar View (visual monthly grid with holiday management)
-   - Work Settings (office hours, working days, grace period)
-   - Indian Holidays (national holiday reference)
+   - Calendar View (visual monthly grid with holiday management, Sundays as holidays, click to toggle working day)
+   - Work Settings (office hours, lunch break, work hours breakdown, working days, grace period)
+   - Indian Holidays (pre-filled national holidays with Edit/Approve workflow, custom holiday addition)
+
+**Calendar Features (Enhanced April 2026):**
+- Sundays highlighted as holidays (purple) by default
+- Click any Sunday to toggle as working day (green)
+- Only approved holidays from "Indian Holidays" tab appear on calendar
+- Legend showing: Holiday (red), Sunday Holiday (purple), Working Sunday (green)
+
+**Work Settings Features (Enhanced April 2026):**
+- Work Hours Summary card showing Total Office Hours, Work Hours, Lunch Break
+- Fields: Office Start/End Time, Total Office Hours, Lunch Break (minutes), Effective Work Hours (auto-calculated), Grace Period, Working Days
+- Formula: Effective Work Hours = Total Office Hours - Lunch Break
+
+**Indian Holidays Features (Enhanced April 2026):**
+- Pre-filled Indian national holidays for 2025/2026
+- Each holiday has Edit and Approve buttons
+- Only approved holidays show on Calendar View
+- Can add custom holidays
+- Shows "X Approved / Y Total" counter
 
 **Removed Tabs:**
 - Dashboard (consolidated into other tabs)
@@ -53,12 +71,6 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Leave Requests (merged into Approvals)
 - Payslips (merged into Payroll Mgmt)
 - Settings (merged into Calendar as Work Settings)
-
-**New Components:**
-- `EnhancedAttendanceTab` - Full employee attendance view with date filters
-- `DesignationsDeptsTab` - Combined designations and departments management
-- `EnhancedApprovalsTab` - Combined approvals and leave requests
-- `EnhancedCalendarTab` - Visual calendar with work settings and Indian holidays
 
 ---
 
