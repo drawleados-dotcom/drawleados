@@ -822,3 +822,117 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 **Files Modified:**
 - `/app/backend/hr_routes.py`: Lines 3369-3762 - Employee review API endpoints
 - `/app/frontend/src/pages/HRAdminPage.js`: Reviews Tab UI component
+
+---
+
+### Website Project Management Enhancements (DONE - April 2026)
+**Purpose:** Enhanced the Website Projects page with a comprehensive step-by-step project creation flow, BDE-style task management, and Requirements/Branding management.
+
+**Step-by-Step Create Project Modal (4 Steps):**
+1. **Step 1 - Type & Platform Selection:**
+   - Visual card selection for 6 Website Types: Landing Page, Business Website, Shopify Store, Web App, E-commerce, Portfolio
+   - Visual card selection for 8 Platforms: WordPress, Shopify, Wix, Webflow, Framer, AI Builder, Custom Code, React
+   - "Creating:" preview showing selected combination
+   - Step indicator (1-2-3-4) at top
+
+2. **Step 2 - Dynamic Requirements:**
+   - Form fields change based on website type selected
+   - **Landing Page:** Basic Info (Business Name, Tagline, About Text), Content (Services, CTA Text, Contact)
+   - **Business Website:** Company Info (Business Name, Tagline, About, Team), Content (Services, Portfolio, Testimonials, Social)
+   - **Shopify Store/E-commerce:** Store Info, Products & Collections (Categories, Count, Collections, Variants), Shipping & Payments (Zones, Methods, Return Policy)
+   - **Web App:** App Info, Features (Core Features, User Roles, Integrations), Technical (Tech Stack, API Requirements, Auth)
+   - **Portfolio:** Personal Info, Work (Skills, Projects, Experience), Contact
+   - Skip option to go directly to Details
+
+3. **Step 3 - Branding Information:**
+   - Logo & Assets: Logo URL, Favicon URL
+   - Color Palette: Primary, Secondary, Accent colors with color pickers
+   - Typography & Guidelines: Primary Font, Secondary Font, Brand Guidelines URL
+   - Skip option available
+
+4. **Step 4 - Project Details:**
+   - 5 tabs: Basic, Client, Credentials, Team, Links
+   - Back button to return to previous steps
+   - Final "Create Project" submission
+
+**Project Detail View - New Tabs:**
+- **Pages** (existing): Page management with stages
+- **Tasks** (enhanced): BDE-style task management
+- **Requirements** (new): Dynamic form based on project type
+- **Branding** (new): Brand guidelines management
+
+**BDE-Style Tasks Tab:**
+- **Stats Cards (4 cards):**
+  - Total Tasks (purple icon)
+  - Pending (amber icon)
+  - In Progress (blue icon)
+  - Completed (green icon)
+- **Filter Pills:** All | Pending | In Progress | Completed
+- **Date Filter:** All Time | Today | This Week | This Month
+- **Tasks Table:**
+  - Columns: TASK, STATUS, PRIORITY, DUE DATE, TIME, TIMER, ACTIONS
+  - Timer with Play/Pause controls
+  - Eye icon for task details
+  - Delete button
+- **Empty State:** Icon with "No tasks yet. Click 'Add Task' to create one."
+
+**Enhanced Add Task Modal:**
+- Task Name (required)
+- Description (textarea)
+- Assign To (team member dropdown)
+- Priority (Low/Medium/High)
+- Due Date (date picker)
+- Due Time (time picker)
+- Task Type (General/Meeting/Follow Up/Proposal/Call)
+
+**Requirements Tab (Project Detail):**
+- Dynamic form sections based on project type
+- Business Information: Business/Store Name, Tagline, About Text
+- Services/Products section (type-specific fields)
+- Contact Information: Email, Phone, Address, Social Media
+- Save Requirements button
+
+**Branding Tab (Project Detail):**
+- Logo & Assets: Logo URL, Favicon URL, Brand Guidelines Document
+- Color Palette: Primary, Secondary, Accent with color pickers and hex inputs
+- Typography: Primary Font, Secondary Font
+- Save Branding button
+
+**API Endpoints (Enhanced):**
+- `GET/POST /api/departments/website/projects/{project_id}/tasks` - BDE tasks CRUD
+- `PUT/DELETE /api/departments/website/projects/{project_id}/tasks/{task_id}` - Task management
+- Timer actions via `timer_action` parameter (start/stop)
+
+**Files Modified:**
+- `/app/frontend/src/pages/WebsiteProjectsPage.js`: Complete ProjectModal rewrite with 4-step wizard, BDE Tasks tab, Requirements tab, Branding tab
+- `/app/backend/department_routes.py`: BDE tasks endpoints with timer support
+
+---
+
+## Upcoming Tasks (Prioritized)
+
+### P0 - Critical
+1. **SOP/Template Management:** Create template system for Website SOPs based on website type
+2. **Google Sheets Integration:** Connect leads module to Google Sheets for automatic sync
+
+### P1 - High Priority
+1. **Leads Custom Fields:** Implement Notion-style custom fields in Leads module
+2. **Finance/Operations Approvals:** Expand Review/Approval system for budgets and expenses
+3. **Component Refactoring:** Break down oversized components:
+   - `HRAdminPage.js` (~5800 lines)
+   - `TasksModulePage.js` (~3600 lines)
+   - `WebsiteProjectsPage.js` (~2900 lines)
+
+### P2 - Medium Priority
+1. **Chat Backend Persistence:** Migrate in-memory chat to MongoDB
+2. **Kanban Drag-and-Drop:** Add drag-and-drop to Operations module
+
+---
+
+## Known Issues
+
+### Active Issues
+- MongoDB Atlas connection timeouts (bypassed via local MongoDB in preview)
+
+### Mocked Integrations
+- Resend email integration (uses placeholder API keys)
