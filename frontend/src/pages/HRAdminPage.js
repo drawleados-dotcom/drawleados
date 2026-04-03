@@ -5440,6 +5440,16 @@ function EnhancedApprovalsTab({
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   
+  // Attendance Rules Configuration (editable)
+  const [attendanceRules, setAttendanceRules] = useState({
+    earlyLogin: 60,      // minutes before work time
+    lateLogin: 15,       // minutes after start
+    earlyLogout: 30,     // minutes before 9 hours
+    lateLogout: 10       // minutes after expected
+  });
+  const [showRulesEditor, setShowRulesEditor] = useState(false);
+  const [editingRules, setEditingRules] = useState({ ...attendanceRules });
+  
   // WFH Filters
   const [wfhEmployeeFilter, setWfhEmployeeFilter] = useState('all');
   const [wfhDateRange, setWfhDateRange] = useState({ start: '', end: '' });
@@ -5461,6 +5471,23 @@ function EnhancedApprovalsTab({
   const permissionApprovals = pendingApprovals?.permissions || [];
   const leaveApprovals = pendingApprovals?.leaves || [];
   const wfhApprovals = wfhRequests || [];
+
+  // Save attendance rules
+  const handleSaveRules = () => {
+    setAttendanceRules({ ...editingRules });
+    setShowRulesEditor(false);
+    toast.success('Attendance rules updated successfully');
+  };
+
+  // Format minutes to display
+  const formatDuration = (minutes) => {
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return mins > 0 ? `${hours}h ${mins}m` : `${hours} hour${hours > 1 ? 's' : ''}`;
+    }
+    return `${minutes} mins`;
+  };
 
   // Open approve modal
   const openApproveModal = (item, type) => {
@@ -5624,33 +5651,164 @@ function EnhancedApprovalsTab({
       {/* Attendance Approvals Tab - Enhanced with Rules */}
       {activeSubTab === 'attendance' && (
         <div className="space-y-4">
-          {/* Attendance Rules Info */}
+          {/* Attendance Rules Info - Editable */}
           <Card className={`${bgCard} border border-[#6366f1]/30`}>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <AlertCircle className="h-5 w-5 text-[#6366f1]" />
-                <p className={`font-medium ${textPrimary}`}>Attendance Approval Rules</p>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-[#6366f1]" />
+                  <p className={`font-medium ${textPrimary}`}>Attendance Approval Rules</p>
+                </div>
+                {!isViewOnly && (
+                  <Button 
+                    size="sm" 
+                    onClick={() => {
+                      setEditingRules({ ...attendanceRules });
+                      setShowRulesEditor(true);
+                    }}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  >
+                    <Edit className="h-4 w-4 mr-1" /> Edit Rules
+                  </Button>
+                )}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                <div className={`p-3 ${bgSecondary} rounded-lg border-l-4 border-blue-500`}>
                   <p className={`text-xs ${textSecondary}`}>Early Login</p>
-                  <p className={`font-medium text-blue-400`}>1 hour before work time</p>
+                  <p className={`font-bold text-blue-400 text-lg`}>{formatDuration(attendanceRules.earlyLogin)}</p>
+                  <p className={`text-xs ${textSecondary}`}>before work time</p>
                 </div>
-                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                <div className={`p-3 ${bgSecondary} rounded-lg border-l-4 border-orange-500`}>
                   <p className={`text-xs ${textSecondary}`}>Late Login</p>
-                  <p className={`font-medium text-orange-400`}>15 mins after start</p>
+                  <p className={`font-bold text-orange-400 text-lg`}>{formatDuration(attendanceRules.lateLogin)}</p>
+                  <p className={`text-xs ${textSecondary}`}>after start</p>
                 </div>
-                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                <div className={`p-3 ${bgSecondary} rounded-lg border-l-4 border-red-500`}>
                   <p className={`text-xs ${textSecondary}`}>Early Logout</p>
-                  <p className={`font-medium text-red-400`}>30 mins before 9 hours</p>
+                  <p className={`font-bold text-red-400 text-lg`}>{formatDuration(attendanceRules.earlyLogout)}</p>
+                  <p className={`text-xs ${textSecondary}`}>before 9 hours</p>
                 </div>
-                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                <div className={`p-3 ${bgSecondary} rounded-lg border-l-4 border-green-500`}>
                   <p className={`text-xs ${textSecondary}`}>Late Logout</p>
-                  <p className={`font-medium text-green-400`}>10 mins after expected</p>
+                  <p className={`font-bold text-green-400 text-lg`}>{formatDuration(attendanceRules.lateLogout)}</p>
+                  <p className={`text-xs ${textSecondary}`}>after expected</p>
                 </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Rules Editor Modal */}
+          {showRulesEditor && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <Card className={`${bgCard} border ${borderColor} w-full max-w-lg`}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className={textPrimary}>Edit Attendance Rules</CardTitle>
+                    <Button variant="ghost" size="sm" onClick={() => setShowRulesEditor(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Early Login */}
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <Label className={`${textPrimary} font-medium`}>Early Login</Label>
+                        <p className={`text-xs ${textSecondary}`}>Time before official work start</p>
+                      </div>
+                      <Badge className="bg-blue-500/20 text-blue-400">Before Work</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={editingRules.earlyLogin}
+                        onChange={(e) => setEditingRules({ ...editingRules, earlyLogin: parseInt(e.target.value) || 0 })}
+                        className={`w-24 ${bgCard} ${borderColor} ${textPrimary}`}
+                        min="0"
+                      />
+                      <span className={textSecondary}>minutes</span>
+                      <span className={`text-xs ${textSecondary}`}>= {formatDuration(editingRules.earlyLogin)}</span>
+                    </div>
+                  </div>
+
+                  {/* Late Login */}
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <Label className={`${textPrimary} font-medium`}>Late Login</Label>
+                        <p className={`text-xs ${textSecondary}`}>Grace period after start time</p>
+                      </div>
+                      <Badge className="bg-orange-500/20 text-orange-400">After Start</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={editingRules.lateLogin}
+                        onChange={(e) => setEditingRules({ ...editingRules, lateLogin: parseInt(e.target.value) || 0 })}
+                        className={`w-24 ${bgCard} ${borderColor} ${textPrimary}`}
+                        min="0"
+                      />
+                      <span className={textSecondary}>minutes</span>
+                      <span className={`text-xs ${textSecondary}`}>= {formatDuration(editingRules.lateLogin)}</span>
+                    </div>
+                  </div>
+
+                  {/* Early Logout */}
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <Label className={`${textPrimary} font-medium`}>Early Logout</Label>
+                        <p className={`text-xs ${textSecondary}`}>Time before completing 9 hours</p>
+                      </div>
+                      <Badge className="bg-red-500/20 text-red-400">Before 9hrs</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={editingRules.earlyLogout}
+                        onChange={(e) => setEditingRules({ ...editingRules, earlyLogout: parseInt(e.target.value) || 0 })}
+                        className={`w-24 ${bgCard} ${borderColor} ${textPrimary}`}
+                        min="0"
+                      />
+                      <span className={textSecondary}>minutes</span>
+                      <span className={`text-xs ${textSecondary}`}>= {formatDuration(editingRules.earlyLogout)}</span>
+                    </div>
+                  </div>
+
+                  {/* Late Logout */}
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <Label className={`${textPrimary} font-medium`}>Late Logout</Label>
+                        <p className={`text-xs ${textSecondary}`}>Time after expected logout</p>
+                      </div>
+                      <Badge className="bg-green-500/20 text-green-400">After Expected</Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={editingRules.lateLogout}
+                        onChange={(e) => setEditingRules({ ...editingRules, lateLogout: parseInt(e.target.value) || 0 })}
+                        className={`w-24 ${bgCard} ${borderColor} ${textPrimary}`}
+                        min="0"
+                      />
+                      <span className={textSecondary}>minutes</span>
+                      <span className={`text-xs ${textSecondary}`}>= {formatDuration(editingRules.lateLogout)}</span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 justify-end pt-4">
+                    <Button variant="ghost" onClick={() => setShowRulesEditor(false)}>Cancel</Button>
+                    <Button onClick={handleSaveRules} className="bg-[#22c55e] hover:bg-[#16a34a] text-white">
+                      <CheckCircle className="h-4 w-4 mr-2" /> Save Rules
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Attendance List View Table */}
           <Card className={`${bgCard} border ${borderColor}`}>
