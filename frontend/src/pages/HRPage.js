@@ -295,6 +295,14 @@ export default function HRPage() {
     { id: 'remote', label: 'Remote', icon: Home, count: tabCounts.remote },
   ];
 
+  // Secondary tabs (Profile, Payroll, Reviews, Security)
+  const secondaryTabs = [
+    { id: 'profile', label: 'My Profile', icon: User },
+    { id: 'payroll', label: 'Payroll', icon: FileText },
+    { id: 'reviews', label: 'Reviews', icon: Award },
+    { id: 'security', label: 'Security', icon: Shield },
+  ];
+
   return (
     <Layout>
       <div className={`p-6 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'} min-h-screen`} data-testid="hr-page">
@@ -307,8 +315,8 @@ export default function HRPage() {
           <p className={textSecondary}>Manage your attendance, leaves, payslips and more</p>
         </div>
 
-        {/* Single Row Tabs - Attendance, Leave, Permission, Remote */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {/* Primary Tabs - Attendance, Leave, Permission, Remote */}
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
           {primaryTabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -338,6 +346,28 @@ export default function HRPage() {
                     {tab.count}
                   </span>
                 )}
+              </Button>
+            );
+          })}
+        </div>
+
+        {/* Secondary Tabs - Profile, Payroll, Reviews, Security */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          {secondaryTabs.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <Button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                data-testid={`hr-tab-${tab.id}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                  activeTab === tab.id
+                    ? 'bg-[#10b981] text-white'
+                    : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
               </Button>
             );
           })}
