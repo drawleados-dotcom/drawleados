@@ -189,6 +189,11 @@ export default function TasksModulePage() {
   const [showWebsiteProjectModal, setShowWebsiteProjectModal] = useState(false);
   const [showWebsitePageModal, setShowWebsitePageModal] = useState(false);
   const [editingWebsitePage, setEditingWebsitePage] = useState(null);
+  const [websiteProjectTab, setWebsiteProjectTab] = useState('pages'); // pages, tasks
+  const [websitePageSearch, setWebsitePageSearch] = useState('');
+  const [showEditWebsiteProjectModal, setShowEditWebsiteProjectModal] = useState(false);
+  const [showUrlModal, setShowUrlModal] = useState(null); // { taskId, field } for adding URLs
+  const [urlInput, setUrlInput] = useState('');
   
   // Filters
   const [projectFilter, setProjectFilter] = useState({ status: 'all', search: '' });
@@ -916,7 +921,8 @@ export default function TasksModulePage() {
   
   const [websiteProjectForm, setWebsiteProjectForm] = useState({
     name: '', onboarding_date: '', deadline: '', status: 'active', platform: 'Website',
-    website_type: 'Business Website', developer: '', designer: '', domain_url: ''
+    website_type: 'Business Website', developer: '', designer: '', domain_url: '',
+    client_name: '', location: '', client_drive_url: '', documents_url: ''
   });
 
   const handleCreateWebsiteProject = async () => {
@@ -928,7 +934,7 @@ export default function TasksModulePage() {
       await axios.post(`${API}/api/departments/website/projects`, websiteProjectForm, { headers });
       toast.success('Website project created');
       setShowWebsiteProjectModal(false);
-      setWebsiteProjectForm({ name: '', onboarding_date: '', deadline: '', status: 'active', platform: 'Website', website_type: 'Business Website', developer: '', designer: '', domain_url: '' });
+      setWebsiteProjectForm({ name: '', onboarding_date: '', deadline: '', status: 'active', platform: 'Website', website_type: 'Business Website', developer: '', designer: '', domain_url: '', client_name: '', location: '', client_drive_url: '', documents_url: '' });
       loadWebsiteProjects();
     } catch (error) {
       toast.error('Failed to create project');
@@ -982,6 +988,79 @@ export default function TasksModulePage() {
       loadWebsiteProjectDetail(selectedProject.project_id);
     } catch (error) {
       toast.error('Failed to delete page');
+    }
+  };
+
+  // Get user initials for avatar
+  const getUserInitials = (userId) => {
+    const u = users.find(x => x.user_id === userId);
+    if (!u) return '?';
+    const names = u.name.split(' ');
+    return names.length > 1 ? `${names[0][0]}${names[1][0]}` : names[0][0];
+  };
+
+  // Get user name
+  const getUserName = (userId) => {
+    const u = users.find(x => x.user_id === userId);
+    return u?.name || 'Unassigned';
+  };
+
+  // Handle adding URL to a page column
+  const handleAddUrl = async (taskId, field) => {
+    if (!urlInput.trim()) {
+      toast.error('Please enter a URL');
+      return;
+    }
+    try {
+      await axios.put(`${API}/api/departments/website/pages/${taskId}`, { [field]: urlInput }, { headers });
+      setShowUrlModal(null);
+      setUrlInput('');
+      loadWebsiteProjectDetail(selectedProject.project_id);
+      toast.success('URL added');
+    } catch (error) {
+      toast.error('Failed to add URL');
+    }
+  };
+
+  // Handle edit website project
+  const handleEditWebsiteProject = async () => {
+    try {
+      await axios.put(`${API}/api/departments/website/projects/${websiteProjectDetail.project_id}`, websiteProjectForm, { headers });
+      toast.success('Project updated');
+      setShowEditWebsiteProjectModal(false);
+      loadWebsiteProjectDetail(websiteProjectDetail.project_id);
+    } catch (error) {
+      toast.error('Failed to update project');
+    }
+  };
+
+  // Open edit project modal with current data
+  const openEditProjectModal = () => {
+    setWebsiteProjectForm({
+      name: websiteProjectDetail.name || '',
+      onboarding_date: websiteProjectDetail.onboarding_date || '',
+      deadline: websiteProjectDetail.deadline || '',
+      status: websiteProjectDetail.status || 'active',
+      platform: websiteProjectDetail.platform || 'Website',
+      website_type: websiteProjectDetail.website_type || 'Business Website',
+      developer: websiteProjectDetail.developer || '',
+      designer: websiteProjectDetail.designer || '',
+      domain_url: websiteProjectDetail.domain_url || '',
+      client_name: websiteProjectDetail.client_name || '',
+      location: websiteProjectDetail.location || '',
+      client_drive_url: websiteProjectDetail.client_drive_url || '',
+      documents_url: websiteProjectDetail.documents_url || ''
+    });
+    setShowEditWebsiteProjectModal(true);
+  };
+
+  // Format date for input
+  const formatDateForInput = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      return new Date(dateStr).toISOString().split('T')[0];
+    } catch {
+      return '';
     }
   };
 
@@ -2138,154 +2217,448 @@ export default function TasksModulePage() {
             </div>
           )}
 
-          {/* Website Project Detail View - Pages List */}
+          {/* Website Project Detail View - Operations Style Redesign */}
           {view === 'project-detail' && websiteProjectDetail && isWebsiteDepartment(selectedDepartment) && (
-            <div className="space-y-6">
-              {/* Project Info Header */}
+            <div className="space-y-4">
+              {/* Project Header Card - Operations Style */}
               <Card className={`${bgCard} border ${borderColor}`}>
                 <div className="p-5">
-                  <div className="flex items-start justify-between">
+                  {/* Top Row: Project Name, Status Badge, Action Buttons */}
+                  <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <Globe className="h-8 w-8 text-[#22c55e]" />
                       <div>
-                        <h2 className={`text-xl font-semibold ${textPrimary}`}>{websiteProjectDetail.name}</h2>
+                        <div className="flex items-center gap-3">
+                          <h2 className={`text-xl font-bold ${textPrimary}`}>{websiteProjectDetail.name}</h2>
+                          <Badge className={`${projectStatusColors[websiteProjectDetail.status] || projectStatusColors['active']} uppercase text-xs`}>
+                            {websiteProjectDetail.status}
+                          </Badge>
+                        </div>
                         <p className={`text-sm ${textSecondary}`}>{websiteProjectDetail.website_type || 'Website'}</p>
                       </div>
                     </div>
-                    <Badge className={projectStatusColors[websiteProjectDetail.status] || projectStatusColors['active']}>{websiteProjectDetail.status}</Badge>
-                  </div>
-                  
-                  {/* Progress Stats */}
-                  <div className="grid grid-cols-4 gap-4 mt-6">
-                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
-                      <p className={`text-xs ${textSecondary}`}>Total Pages</p>
-                      <p className={`text-xl font-bold ${textPrimary}`}>{websiteProjectDetail.total_pages || 0}</p>
-                    </div>
-                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
-                      <p className={`text-xs ${textSecondary}`}>Dev Progress</p>
-                      <div className="flex items-center gap-2">
-                        <div className={`flex-1 h-2 rounded-full ${isDark ? 'bg-[#3f3f46]' : 'bg-gray-300'}`}>
-                          <div className="h-2 rounded-full bg-[#3b82f6]" style={{ width: `${websiteProjectDetail.dev_percent || 0}%` }} />
-                        </div>
-                        <span className={`text-sm font-bold ${textPrimary}`}>{websiteProjectDetail.dev_percent || 0}%</span>
-                      </div>
-                    </div>
-                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
-                      <p className={`text-xs ${textSecondary}`}>Overall Progress</p>
-                      <div className="flex items-center gap-2">
-                        <div className={`flex-1 h-2 rounded-full ${isDark ? 'bg-[#3f3f46]' : 'bg-gray-300'}`}>
-                          <div className="h-2 rounded-full bg-[#10b981]" style={{ width: `${websiteProjectDetail.overall_percent || 0}%` }} />
-                        </div>
-                        <span className={`text-sm font-bold ${textPrimary}`}>{websiteProjectDetail.overall_percent || 0}%</span>
-                      </div>
-                    </div>
-                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
-                      <p className={`text-xs ${textSecondary}`}>Developer</p>
-                      <p className={`text-sm font-medium ${textPrimary}`}>{websiteProjectDetail.developer_name || '-'}</p>
+                    <div className="flex items-center gap-2">
+                      {websiteProjectDetail.documents_url && (
+                        <a href={websiteProjectDetail.documents_url} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="sm" className={`${borderColor} gap-2`}>
+                            <FileText className="h-4 w-4" /> Docs
+                          </Button>
+                        </a>
+                      )}
+                      {websiteProjectDetail.client_drive_url && (
+                        <a href={websiteProjectDetail.client_drive_url} target="_blank" rel="noopener noreferrer">
+                          <Button variant="outline" size="sm" className={`${borderColor} gap-2`}>
+                            <ExternalLink className="h-4 w-4" /> Drive
+                          </Button>
+                        </a>
+                      )}
+                      <Button size="sm" className="bg-[#6366f1] hover:bg-[#4f46e5] gap-2" onClick={openEditProjectModal}>
+                        <Edit2 className="h-4 w-4" /> Edit
+                      </Button>
                     </div>
                   </div>
                   
-                  {/* Info row */}
-                  <div className="flex items-center gap-6 mt-4">
+                  {/* Progress Bar with count */}
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className={`flex-1 h-3 rounded-full ${isDark ? 'bg-[#3f3f46]' : 'bg-gray-200'}`}>
+                      <div 
+                        className="h-3 rounded-full bg-gradient-to-r from-[#6366f1] to-[#8b5cf6]" 
+                        style={{ width: `${websiteProjectDetail.overall_percent || 0}%` }} 
+                      />
+                    </div>
+                    <span className={`text-sm font-semibold ${textPrimary}`}>
+                      {(websiteProjectDetail.pages || []).filter(p => p.overall_status === 'Completed').length}/{websiteProjectDetail.total_pages || 0}
+                    </span>
+                  </div>
+                  
+                  {/* Dates Row */}
+                  <div className="flex items-center gap-6 text-sm">
                     <div className="flex items-center gap-2">
                       <Calendar className={`h-4 w-4 ${textSecondary}`} />
-                      <span className={`text-sm ${textSecondary}`}>Onboarding: {formatDateDisplay(websiteProjectDetail.onboarding_date)}</span>
+                      <span className={textSecondary}>Onboarding:</span>
+                      <span className={textPrimary}>{formatDateDisplay(websiteProjectDetail.onboarding_date)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Clock className={`h-4 w-4 ${textSecondary}`} />
-                      <span className={`text-sm ${textSecondary}`}>Deadline: {formatDateDisplay(websiteProjectDetail.deadline)}</span>
+                      <span className={textSecondary}>Deadline:</span>
+                      <span className={websiteProjectDetail.deadline ? textPrimary : 'text-red-500'}>
+                        {websiteProjectDetail.deadline ? formatDateDisplay(websiteProjectDetail.deadline) : 'Not Set'}
+                      </span>
                     </div>
-                    {websiteProjectDetail.domain_url && (
-                      <a href={websiteProjectDetail.domain_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[#6366f1]">
-                        <ExternalLink className="h-4 w-4" />
-                        <span className="text-sm">View Site</span>
-                      </a>
-                    )}
                   </div>
                 </div>
               </Card>
 
-              {/* Pages Table */}
+              {/* Project Details Info Row */}
+              <div className="grid grid-cols-6 gap-3">
+                <div className={`p-3 rounded-lg ${bgCard} border ${borderColor}`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Domain</p>
+                  {websiteProjectDetail.domain_url ? (
+                    <a href={websiteProjectDetail.domain_url} target="_blank" rel="noopener noreferrer" className="text-sm text-[#6366f1] truncate block">
+                      {websiteProjectDetail.domain_url.replace(/^https?:\/\//, '').split('/')[0]}
+                    </a>
+                  ) : (
+                    <span className={`text-sm ${textSecondary}`}>-</span>
+                  )}
+                </div>
+                <div className={`p-3 rounded-lg ${bgCard} border ${borderColor}`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Developer</p>
+                  <div className="flex items-center gap-2">
+                    {websiteProjectDetail.developer ? (
+                      <>
+                        <div className="w-6 h-6 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-xs font-medium">
+                          {getUserInitials(websiteProjectDetail.developer)}
+                        </div>
+                        <span className={`text-sm ${textPrimary} truncate`}>{getUserName(websiteProjectDetail.developer)}</span>
+                      </>
+                    ) : (
+                      <span className={`text-sm ${textSecondary}`}>-</span>
+                    )}
+                  </div>
+                </div>
+                <div className={`p-3 rounded-lg ${bgCard} border ${borderColor}`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Platform</p>
+                  <p className={`text-sm ${textPrimary}`}>{websiteProjectDetail.platform || 'Website'}</p>
+                </div>
+                <div className={`p-3 rounded-lg ${bgCard} border ${borderColor}`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Type</p>
+                  <p className={`text-sm ${textPrimary}`}>{websiteProjectDetail.website_type || 'Business'}</p>
+                </div>
+                <div className={`p-3 rounded-lg ${bgCard} border ${borderColor}`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Client</p>
+                  <p className={`text-sm ${textPrimary}`}>{websiteProjectDetail.client_name || '-'}</p>
+                </div>
+                <div className={`p-3 rounded-lg ${bgCard} border ${borderColor}`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Location</p>
+                  <p className={`text-sm ${textPrimary}`}>{websiteProjectDetail.location || '-'}</p>
+                </div>
+              </div>
+
+              {/* Pages/Tasks Tabs */}
               <Card className={`${bgCard} border ${borderColor}`}>
-                <CardContent className="p-0">
+                <div className={`flex items-center justify-between px-4 py-3 border-b ${borderColor}`}>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setWebsiteProjectTab('pages')}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        websiteProjectTab === 'pages' 
+                          ? 'bg-[#6366f1] text-white' 
+                          : `${textSecondary} hover:${bgSecondary}`
+                      }`}
+                    >
+                      Pages
+                    </button>
+                    <button
+                      onClick={() => setWebsiteProjectTab('tasks')}
+                      className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        websiteProjectTab === 'tasks' 
+                          ? 'bg-[#6366f1] text-white' 
+                          : `${textSecondary} hover:${bgSecondary}`
+                      }`}
+                    >
+                      Tasks
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
+                      <Input
+                        placeholder="Search pages..."
+                        value={websitePageSearch}
+                        onChange={(e) => setWebsitePageSearch(e.target.value)}
+                        className={`pl-9 h-9 w-64 ${bgSecondary} ${borderColor}`}
+                      />
+                    </div>
+                    <Button size="sm" className="bg-[#6366f1] hover:bg-[#4f46e5] gap-2" onClick={() => setShowWebsitePageModal(true)}>
+                      <Plus className="h-4 w-4" /> Add Page
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Pages Table - Enhanced with per-column controls */}
+                {websiteProjectTab === 'pages' && (
                   <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[1200px]">
                       <thead className={bgSecondary}>
                         <tr>
-                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase w-10`}>S.No</th>
-                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Page Name</th>
-                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Wireframe</th>
-                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>UI Design</th>
-                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Content</th>
-                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Development</th>
-                          <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Overall</th>
-                          <th className={`px-4 py-3`}></th>
+                          <th className={`px-3 py-3 text-left text-xs font-semibold ${textSecondary} uppercase w-12`}>#</th>
+                          <th className={`px-3 py-3 text-left text-xs font-semibold ${textSecondary} uppercase w-36`}>Page Name</th>
+                          <th className={`px-3 py-3 text-left text-xs font-semibold ${textSecondary} uppercase`}>
+                            <div>Wireframe</div>
+                            <div className={`text-[10px] font-normal ${textSecondary} opacity-70`}>Status / Assignee / Due</div>
+                          </th>
+                          <th className={`px-3 py-3 text-left text-xs font-semibold ${textSecondary} uppercase`}>
+                            <div>UI Design</div>
+                            <div className={`text-[10px] font-normal ${textSecondary} opacity-70`}>Status / Assignee / Due</div>
+                          </th>
+                          <th className={`px-3 py-3 text-left text-xs font-semibold ${textSecondary} uppercase`}>
+                            <div>Content</div>
+                            <div className={`text-[10px] font-normal ${textSecondary} opacity-70`}>Status / Assignee / Due</div>
+                          </th>
+                          <th className={`px-3 py-3 text-left text-xs font-semibold ${textSecondary} uppercase`}>
+                            <div>Development</div>
+                            <div className={`text-[10px] font-normal ${textSecondary} opacity-70`}>Status / Assignee / Due</div>
+                          </th>
+                          <th className={`px-3 py-3 text-left text-xs font-semibold ${textSecondary} uppercase`}>
+                            <div>Overall</div>
+                            <div className={`text-[10px] font-normal ${textSecondary} opacity-70`}>Status / URL</div>
+                          </th>
+                          <th className={`px-3 py-3 text-center text-xs font-semibold ${textSecondary} uppercase w-16`}>Actions</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
-                        {(websiteProjectDetail.pages || []).length === 0 ? (
+                        {(websiteProjectDetail.pages || []).filter(p => 
+                          !websitePageSearch || p.page_name.toLowerCase().includes(websitePageSearch.toLowerCase())
+                        ).length === 0 ? (
                           <tr>
-                            <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
-                              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                              <p>No pages yet. Add your first page!</p>
+                            <td colSpan={8} className={`px-4 py-12 text-center ${textSecondary}`}>
+                              <FileText className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                              <p className="text-base">No pages yet</p>
+                              <p className="text-sm opacity-70">Click "Add Page" to add your first page</p>
                             </td>
                           </tr>
-                        ) : (websiteProjectDetail.pages || []).map((page, idx) => (
-                          <tr key={page.task_id} className={`hover:${bgSecondary}`}>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{page.sno || idx + 1}</td>
-                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>{page.page_name}</td>
-                            <td className="px-4 py-3">
-                              <Select value={page.wireframe_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { wireframe_status: v })}>
-                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                        ) : (websiteProjectDetail.pages || []).filter(p => 
+                          !websitePageSearch || p.page_name.toLowerCase().includes(websitePageSearch.toLowerCase())
+                        ).map((page, idx) => (
+                          <tr key={page.task_id} className={`hover:${isDark ? 'bg-[#27272a]/50' : 'bg-gray-50'}`}>
+                            {/* S.No */}
+                            <td className={`px-3 py-3 ${textSecondary} text-sm`}>{page.sno || idx + 1}</td>
+                            
+                            {/* Page Name */}
+                            <td className={`px-3 py-3`}>
+                              <span className={`font-medium ${textPrimary} text-sm`}>{page.page_name}</span>
                             </td>
-                            <td className="px-4 py-3">
-                              <Select value={page.ui_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { ui_status: v })}>
-                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                            
+                            {/* Wireframe Column */}
+                            <td className="px-3 py-2">
+                              <div className="space-y-1.5">
+                                <Select value={page.wireframe_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { wireframe_status: v })}>
+                                  <SelectTrigger className={`h-7 w-28 text-xs ${WEBSITE_STATUS_COLORS[page.wireframe_status || 'To-Do']} border-0`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <div className="flex items-center gap-1.5">
+                                  <Select value={page.wireframe_assignee || 'unassigned'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { wireframe_assignee: v === 'unassigned' ? null : v })}>
+                                    <SelectTrigger className={`h-7 w-7 p-0 ${bgSecondary} border-0 rounded-full`}>
+                                      {page.wireframe_assignee ? (
+                                        <div className="w-6 h-6 rounded-full bg-[#8b5cf6] flex items-center justify-center text-white text-[10px] font-medium">
+                                          {getUserInitials(page.wireframe_assignee)}
+                                        </div>
+                                      ) : (
+                                        <User className={`h-3.5 w-3.5 ${textSecondary}`} />
+                                      )}
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="date"
+                                    value={formatDateForInput(page.wireframe_due)}
+                                    onChange={(e) => handleUpdateWebsitePage(page.task_id, { wireframe_due: e.target.value })}
+                                    className={`h-7 w-28 text-xs ${bgSecondary} border-0 px-2`}
+                                  />
+                                </div>
+                                {page.wireframe_url ? (
+                                  <a href={page.wireframe_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6366f1] truncate block max-w-[120px]">
+                                    View URL
+                                  </a>
+                                ) : (
+                                  <button 
+                                    onClick={() => { setShowUrlModal({ taskId: page.task_id, field: 'wireframe_url' }); setUrlInput(''); }}
+                                    className="text-[10px] text-[#3b82f6] hover:underline"
+                                  >
+                                    + Add URL
+                                  </button>
+                                )}
+                              </div>
                             </td>
-                            <td className="px-4 py-3">
-                              <Select value={page.content_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { content_status: v })}>
-                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                            
+                            {/* UI Design Column */}
+                            <td className="px-3 py-2">
+                              <div className="space-y-1.5">
+                                <Select value={page.ui_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { ui_status: v })}>
+                                  <SelectTrigger className={`h-7 w-28 text-xs ${WEBSITE_STATUS_COLORS[page.ui_status || 'To-Do']} border-0`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <div className="flex items-center gap-1.5">
+                                  <Select value={page.ui_assignee || 'unassigned'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { ui_assignee: v === 'unassigned' ? null : v })}>
+                                    <SelectTrigger className={`h-7 w-7 p-0 ${bgSecondary} border-0 rounded-full`}>
+                                      {page.ui_assignee ? (
+                                        <div className="w-6 h-6 rounded-full bg-[#ec4899] flex items-center justify-center text-white text-[10px] font-medium">
+                                          {getUserInitials(page.ui_assignee)}
+                                        </div>
+                                      ) : (
+                                        <User className={`h-3.5 w-3.5 ${textSecondary}`} />
+                                      )}
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="date"
+                                    value={formatDateForInput(page.ui_due)}
+                                    onChange={(e) => handleUpdateWebsitePage(page.task_id, { ui_due: e.target.value })}
+                                    className={`h-7 w-28 text-xs ${bgSecondary} border-0 px-2`}
+                                  />
+                                </div>
+                                {page.ui_url ? (
+                                  <a href={page.ui_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6366f1] truncate block max-w-[120px]">
+                                    View URL
+                                  </a>
+                                ) : (
+                                  <button 
+                                    onClick={() => { setShowUrlModal({ taskId: page.task_id, field: 'ui_url' }); setUrlInput(''); }}
+                                    className="text-[10px] text-[#3b82f6] hover:underline"
+                                  >
+                                    + Add URL
+                                  </button>
+                                )}
+                              </div>
                             </td>
-                            <td className="px-4 py-3">
-                              <Select value={page.dev_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { dev_status: v })}>
-                                <SelectTrigger className={`h-8 w-32 text-xs ${bgSecondary} ${borderColor}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                            
+                            {/* Content Column */}
+                            <td className="px-3 py-2">
+                              <div className="space-y-1.5">
+                                <Select value={page.content_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { content_status: v })}>
+                                  <SelectTrigger className={`h-7 w-28 text-xs ${WEBSITE_STATUS_COLORS[page.content_status || 'To-Do']} border-0`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <div className="flex items-center gap-1.5">
+                                  <Select value={page.content_assignee || 'unassigned'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { content_assignee: v === 'unassigned' ? null : v })}>
+                                    <SelectTrigger className={`h-7 w-7 p-0 ${bgSecondary} border-0 rounded-full`}>
+                                      {page.content_assignee ? (
+                                        <div className="w-6 h-6 rounded-full bg-[#f59e0b] flex items-center justify-center text-white text-[10px] font-medium">
+                                          {getUserInitials(page.content_assignee)}
+                                        </div>
+                                      ) : (
+                                        <User className={`h-3.5 w-3.5 ${textSecondary}`} />
+                                      )}
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="date"
+                                    value={formatDateForInput(page.content_due)}
+                                    onChange={(e) => handleUpdateWebsitePage(page.task_id, { content_due: e.target.value })}
+                                    className={`h-7 w-28 text-xs ${bgSecondary} border-0 px-2`}
+                                  />
+                                </div>
+                                {page.content_url ? (
+                                  <a href={page.content_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6366f1] truncate block max-w-[120px]">
+                                    View URL
+                                  </a>
+                                ) : (
+                                  <button 
+                                    onClick={() => { setShowUrlModal({ taskId: page.task_id, field: 'content_url' }); setUrlInput(''); }}
+                                    className="text-[10px] text-[#3b82f6] hover:underline"
+                                  >
+                                    + Add URL
+                                  </button>
+                                )}
+                              </div>
                             </td>
-                            <td className="px-4 py-3">
-                              <Select value={page.overall_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { overall_status: v })}>
-                                <SelectTrigger className={`h-8 w-32 text-xs ${WEBSITE_STATUS_COLORS[page.overall_status || 'To-Do']}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
+                            
+                            {/* Development Column */}
+                            <td className="px-3 py-2">
+                              <div className="space-y-1.5">
+                                <Select value={page.dev_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { dev_status: v })}>
+                                  <SelectTrigger className={`h-7 w-28 text-xs ${WEBSITE_STATUS_COLORS[page.dev_status || 'To-Do']} border-0`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                <div className="flex items-center gap-1.5">
+                                  <Select value={page.dev_assignee || 'unassigned'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { dev_assignee: v === 'unassigned' ? null : v })}>
+                                    <SelectTrigger className={`h-7 w-7 p-0 ${bgSecondary} border-0 rounded-full`}>
+                                      {page.dev_assignee ? (
+                                        <div className="w-6 h-6 rounded-full bg-[#10b981] flex items-center justify-center text-white text-[10px] font-medium">
+                                          {getUserInitials(page.dev_assignee)}
+                                        </div>
+                                      ) : (
+                                        <User className={`h-3.5 w-3.5 ${textSecondary}`} />
+                                      )}
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="date"
+                                    value={formatDateForInput(page.dev_due)}
+                                    onChange={(e) => handleUpdateWebsitePage(page.task_id, { dev_due: e.target.value })}
+                                    className={`h-7 w-28 text-xs ${bgSecondary} border-0 px-2`}
+                                  />
+                                </div>
+                                {page.dev_url ? (
+                                  <a href={page.dev_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6366f1] truncate block max-w-[120px]">
+                                    View URL
+                                  </a>
+                                ) : (
+                                  <button 
+                                    onClick={() => { setShowUrlModal({ taskId: page.task_id, field: 'dev_url' }); setUrlInput(''); }}
+                                    className="text-[10px] text-[#3b82f6] hover:underline"
+                                  >
+                                    + Add URL
+                                  </button>
+                                )}
+                              </div>
                             </td>
-                            <td className="px-4 py-3">
-                              <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteWebsitePage(page.task_id)}>
+                            
+                            {/* Overall Column */}
+                            <td className="px-3 py-2">
+                              <div className="space-y-1.5">
+                                <Select value={page.overall_status || 'To-Do'} onValueChange={(v) => handleUpdateWebsitePage(page.task_id, { overall_status: v })}>
+                                  <SelectTrigger className={`h-7 w-28 text-xs ${WEBSITE_STATUS_COLORS[page.overall_status || 'To-Do']} border-0 font-medium`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {WEBSITE_STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                                {page.overall_url ? (
+                                  <a href={page.overall_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[#6366f1] truncate block max-w-[120px]">
+                                    View URL
+                                  </a>
+                                ) : (
+                                  <button 
+                                    onClick={() => { setShowUrlModal({ taskId: page.task_id, field: 'overall_url' }); setUrlInput(''); }}
+                                    className="text-[10px] text-[#3b82f6] hover:underline"
+                                  >
+                                    + Add URL
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            
+                            {/* Actions */}
+                            <td className="px-3 py-2 text-center">
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="text-red-500 hover:text-red-600 hover:bg-red-500/10 h-8 w-8 p-0" 
+                                onClick={() => handleDeleteWebsitePage(page.task_id)}
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </td>
@@ -2294,11 +2667,143 @@ export default function TasksModulePage() {
                       </tbody>
                     </table>
                   </div>
-                </CardContent>
+                )}
+
+                {/* Tasks Tab - Placeholder for future */}
+                {websiteProjectTab === 'tasks' && (
+                  <div className={`p-8 text-center ${textSecondary}`}>
+                    <Briefcase className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                    <p className="text-base">Project Tasks</p>
+                    <p className="text-sm opacity-70">Task management for this project (Coming Soon)</p>
+                  </div>
+                )}
               </Card>
             </div>
           )}
         </div>
+
+        {/* URL Add Modal */}
+        {showUrlModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className={`w-full max-w-md ${bgCard} border ${borderColor}`}>
+              <div className={`p-4 border-b ${borderColor} flex items-center justify-between`}>
+                <h3 className={`font-semibold ${textPrimary}`}>Add URL</h3>
+                <button onClick={() => setShowUrlModal(null)} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4">
+                <Label className={textPrimary}>URL</Label>
+                <Input
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  placeholder="https://..."
+                  className={`mt-2 ${bgSecondary} ${borderColor}`}
+                />
+              </div>
+              <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
+                <Button variant="outline" onClick={() => setShowUrlModal(null)}>Cancel</Button>
+                <Button onClick={() => handleAddUrl(showUrlModal.taskId, showUrlModal.field)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                  Save URL
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Edit Website Project Modal */}
+        {showEditWebsiteProjectModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className={`w-full max-w-lg ${bgCard} border ${borderColor}`}>
+              <div className={`p-4 border-b ${borderColor} flex items-center justify-between`}>
+                <h3 className={`font-semibold ${textPrimary} flex items-center gap-2`}>
+                  <Globe className="h-5 w-5 text-[#22c55e]" />
+                  Edit Website Project
+                </h3>
+                <button onClick={() => setShowEditWebsiteProjectModal(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div>
+                  <Label className={textPrimary}>Project Name *</Label>
+                  <Input value={websiteProjectForm.name} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, name: e.target.value })} className={`${bgSecondary} ${borderColor}`} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Client Name</Label>
+                    <Input value={websiteProjectForm.client_name} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, client_name: e.target.value })} placeholder="Client/Company" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Location</Label>
+                    <Input value={websiteProjectForm.location} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, location: e.target.value })} placeholder="City, Country" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Website Type</Label>
+                    <Select value={websiteProjectForm.website_type} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, website_type: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Business Website">Business Website</SelectItem>
+                        <SelectItem value="E-commerce">E-commerce</SelectItem>
+                        <SelectItem value="Portfolio">Portfolio</SelectItem>
+                        <SelectItem value="Landing Page">Landing Page</SelectItem>
+                        <SelectItem value="Blog">Blog</SelectItem>
+                        <SelectItem value="Web App">Web App</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Status</Label>
+                    <Select value={websiteProjectForm.status} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, status: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="on-hold">On Hold</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Onboarding Date</Label>
+                    <Input type="date" value={formatDateForInput(websiteProjectForm.onboarding_date)} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, onboarding_date: e.target.value })} className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Deadline</Label>
+                    <Input type="date" value={formatDateForInput(websiteProjectForm.deadline)} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, deadline: e.target.value })} className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Developer</Label>
+                  <Select value={websiteProjectForm.developer || 'none'} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, developer: v === 'none' ? '' : v })}>
+                    <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue placeholder="Select developer" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Domain URL</Label>
+                  <Input value={websiteProjectForm.domain_url} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, domain_url: e.target.value })} placeholder="https://example.com" className={`${bgSecondary} ${borderColor}`} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Docs Link</Label>
+                    <Input value={websiteProjectForm.documents_url} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, documents_url: e.target.value })} placeholder="Google Docs link" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Drive Link</Label>
+                    <Input value={websiteProjectForm.client_drive_url} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, client_drive_url: e.target.value })} placeholder="Google Drive link" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                </div>
+              </div>
+              <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
+                <Button variant="outline" onClick={() => setShowEditWebsiteProjectModal(false)}>Cancel</Button>
+                <Button onClick={handleEditWebsiteProject} className="bg-[#22c55e] hover:bg-[#16a34a]">Save Changes</Button>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {/* Document Viewer Modal */}
         {viewingDoc && (
@@ -2684,6 +3189,16 @@ export default function TasksModulePage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+                    <Label className={textPrimary}>Client Name</Label>
+                    <Input value={websiteProjectForm.client_name} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, client_name: e.target.value })} placeholder="Client/Company name" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Location</Label>
+                    <Input value={websiteProjectForm.location} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, location: e.target.value })} placeholder="City, Country" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
                     <Label className={textPrimary}>Website Type</Label>
                     <Select value={websiteProjectForm.website_type} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, website_type: v })}>
                       <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
@@ -2721,9 +3236,10 @@ export default function TasksModulePage() {
                 </div>
                 <div>
                   <Label className={textPrimary}>Developer</Label>
-                  <Select value={websiteProjectForm.developer} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, developer: v })}>
+                  <Select value={websiteProjectForm.developer || 'none'} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, developer: v === 'none' ? '' : v })}>
                     <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue placeholder="Select developer" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
                       {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -2731,6 +3247,16 @@ export default function TasksModulePage() {
                 <div>
                   <Label className={textPrimary}>Domain URL</Label>
                   <Input value={websiteProjectForm.domain_url} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, domain_url: e.target.value })} placeholder="https://example.com" className={`${bgSecondary} ${borderColor}`} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Docs Link</Label>
+                    <Input value={websiteProjectForm.documents_url} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, documents_url: e.target.value })} placeholder="Google Docs link" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Drive Link</Label>
+                    <Input value={websiteProjectForm.client_drive_url} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, client_drive_url: e.target.value })} placeholder="Google Drive link" className={`${bgSecondary} ${borderColor}`} />
+                  </div>
                 </div>
               </div>
               <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
