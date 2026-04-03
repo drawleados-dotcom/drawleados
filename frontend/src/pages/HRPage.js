@@ -689,8 +689,8 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const totalWorkingDays = monthlyStats?.total_working_days || 22;
   const presentDays = monthlyStats?.present || filteredHistory.length;
   
-  // Expected working hours for the month
-  const expectedMonthlyHours = presentDays * STANDARD_WORK_HOURS;
+  // Expected working hours for the month = Total Working Days × 8 hours
+  const expectedMonthlyHours = totalWorkingDays * STANDARD_WORK_HOURS;
   
   // Total worked hours (sum of all work hours)
   const totalWorkedHours = filteredHistory.reduce((sum, r) => sum + (r.total_hours || 0), 0);
@@ -877,7 +877,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
             <div className={`p-3 ${bgSecondary} rounded-lg text-center`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Expected Hours</p>
               <p className="text-xl font-bold text-[#6366f1]">{expectedMonthlyHours.toFixed(1)}</p>
-              <p className={`text-xs ${textSecondary}`}>({presentDays} × 8h)</p>
+              <p className={`text-xs ${textSecondary}`}>({totalWorkingDays} days × 8h)</p>
             </div>
             <div className={`p-3 ${bgSecondary} rounded-lg text-center`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Total Worked</p>
