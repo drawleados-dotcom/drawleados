@@ -3262,3 +3262,103 @@ async def reject_permission_request(permission_id: str, request: Request):
     return {"message": "Permission request rejected"}
 
 
+# ============ MOTIVATIONAL QUOTES MANAGEMENT ============
+
+@hr_router.get("/admin/quotes")
+async def get_quotes(request: Request):
+    """Get all motivational quotes"""
+    quotes = await db.motivational_quotes.find({}, {"_id": 0}).to_list(100)
+    if not quotes:
+        # Return default quotes if none exist
+        default_quotes = [
+            {"quote_id": f"quote_{i+1}", "text": q, "active": True}
+            for i, q in enumerate([
+                "Believe in yourself", "Never give up", "Dream big today",
+                "Stay always positive", "Keep moving forward", "You are enough",
+                "Chase your dreams", "Make it happen", "Be the change",
+                "Start right now", "Embrace every challenge", "Rise and shine",
+                "Create your future", "Trust the process", "Stay focused always",
+                "Push your limits", "Shine bright today", "Own your journey",
+                "Be unstoppable now", "Growth takes time", "Courage conquers fear",
+                "Progress not perfection", "Inspire others daily", "Success awaits you",
+                "Today matters most", "Live with purpose", "Action creates results",
+                "Persistence beats resistance", "You got this", "Make today count",
+                "Excellence every day"
+            ])
+        ]
+        # Insert default quotes
+        await db.motivational_quotes.insert_many(default_quotes)
+        return default_quotes
+    return quotes
+
+@hr_router.post("/admin/quotes")
+async def add_quote(request: Request, quote_data: dict):
+    """Add a new motivational quote"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    quote_text = quote_data.get("text", "").strip()
+    if not quote_text:
+        raise HTTPException(status_code=400, detail="Quote text is required")
+    
+    quote_doc = {
+        "quote_id": f"quote_{uuid.uuid4().hex[:8]}",
+        "text": quote_text,
+        "active": True,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": user.user_id
+    }
+    
+    await db.motivational_quotes.insert_one(quote_doc)
+    return {**quote_doc, "_id": None}
+
+@hr_router.put("/admin/quotes/{quote_id}")
+async def update_quote(quote_id: str, request: Request, quote_data: dict):
+    """Update a motivational quote"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    update_fields = {}
+    if "text" in quote_data:
+        update_fields["text"] = quote_data["text"]
+    if "active" in quote_data:
+        update_fields["active"] = quote_data["active"]
+    
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    
+    update_fields["updated_at"] = datetime.now(timezone.utc)
+    
+    result = await db.motivational_quotes.update_one(
+        {"quote_id": quote_id},
+        {"$set": update_fields}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    return {"message": "Quote updated"}
+
+@hr_router.delete("/admin/quotes/{quote_id}")
+async def delete_quote(quote_id: str, request: Request):
+    """Delete a motivational quote"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    result = await db.motivational_quotes.delete_one({"quote_id": quote_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    return {"message": "Quote deleted"}
+
+

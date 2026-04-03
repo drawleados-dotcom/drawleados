@@ -76,17 +76,21 @@ export default function TasksModulePage() {
   
   // My Tasks Sub-tabs state
   const [myTasksSubTab, setMyTasksSubTab] = useState('all'); // all, tasks, meetings, approvals
+  const [myTasksAssignFilter, setMyTasksAssignFilter] = useState('to_me'); // by_me, to_me
+  const [myTasksDeptFilter, setMyTasksDeptFilter] = useState('all'); // all, seo, social_media, bde, operations, meta, website, erp
   const [myTasks, setMyTasks] = useState([]);
   const [myTasksLoading, setMyTasksLoading] = useState(false);
   const [myTasksDateFilter, setMyTasksDateFilter] = useState('all'); // all, today, week, month, range
   const [myTasksDateRange, setMyTasksDateRange] = useState({ from: '', to: '' });
   const [showMyTaskModal, setShowMyTaskModal] = useState(false);
+  const [dailyQuote, setDailyQuote] = useState('');
   const [myTaskForm, setMyTaskForm] = useState({
     task_name: '',
     description: '',
     priority: 'medium',
     type: 'task', // task, meeting, approval
     assigned_to: '',
+    department: '', // for department filter
     due_date: '',
     due_time: '',
     status: 'pending',
@@ -101,6 +105,68 @@ export default function TasksModulePage() {
     approval_type: '', // review, approval
     approval_for: '' // user_id who needs to approve
   });
+  
+  // Motivational quotes (31 positive 3-word quotes)
+  const motivationalQuotes = [
+    "Believe in yourself",
+    "Never give up",
+    "Dream big today",
+    "Stay always positive",
+    "Keep moving forward",
+    "You are enough",
+    "Chase your dreams",
+    "Make it happen",
+    "Be the change",
+    "Start right now",
+    "Embrace every challenge",
+    "Rise and shine",
+    "Create your future",
+    "Trust the process",
+    "Stay focused always",
+    "Push your limits",
+    "Shine bright today",
+    "Own your journey",
+    "Be unstoppable now",
+    "Growth takes time",
+    "Courage conquers fear",
+    "Progress not perfection",
+    "Inspire others daily",
+    "Success awaits you",
+    "Today matters most",
+    "Live with purpose",
+    "Action creates results",
+    "Persistence beats resistance",
+    "You got this",
+    "Make today count",
+    "Excellence every day"
+  ];
+  
+  // Get greeting based on time
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  };
+  
+  // Get daily quote (changes each day)
+  useEffect(() => {
+    const dayOfMonth = new Date().getDate();
+    const quoteIndex = (dayOfMonth - 1) % motivationalQuotes.length;
+    setDailyQuote(motivationalQuotes[quoteIndex]);
+  }, []);
+  
+  // Department options for filter
+  const departmentOptions = [
+    { id: 'all', label: 'All Departments' },
+    { id: 'seo', label: 'SEO' },
+    { id: 'social_media', label: 'Social Media' },
+    { id: 'bde', label: 'Business Dev' },
+    { id: 'operations', label: 'Operations' },
+    { id: 'meta', label: 'Meta' },
+    { id: 'website', label: 'Website' },
+    { id: 'erp', label: 'ERP' }
+  ];
   
   // Data
   const [departments, setDepartments] = useState([]);
@@ -269,10 +335,22 @@ export default function TasksModulePage() {
     });
   };
 
-  // Filter my tasks by sub-tab and date
+  // Filter my tasks by sub-tab, assignment, department and date
   const filteredMyTasks = myTasks.filter(task => {
     // Sub-tab filter
-    if (myTasksSubTab === 'tasks' && task.type !== 'task' && task.type !== 'general' && task.type !== 'follow_up' && task.type !== 'proposal' && task.type !== 'call') return false;
+    if (myTasksSubTab === 'tasks') {
+      if (task.type === 'meeting' || task.type === 'approval') return false;
+      
+      // Assignment filter (only for Tasks tab)
+      if (myTasksAssignFilter === 'by_me' && task.created_by !== user?.user_id) return false;
+      if (myTasksAssignFilter === 'to_me' && task.assigned_to !== user?.user_id) return false;
+      
+      // Department filter
+      if (myTasksDeptFilter !== 'all') {
+        const taskDept = (task.department || '').toLowerCase().replace(/\s+/g, '_');
+        if (taskDept !== myTasksDeptFilter && !taskDept.includes(myTasksDeptFilter)) return false;
+      }
+    }
     if (myTasksSubTab === 'meetings' && task.type !== 'meeting') return false;
     if (myTasksSubTab === 'approvals' && task.type !== 'approval' && !task.needs_approval) return false;
     
@@ -302,7 +380,7 @@ export default function TasksModulePage() {
   // My tasks stats
   const myTasksStats = {
     all: myTasks.length,
-    tasks: myTasks.filter(t => t.type === 'task' || t.type === 'general' || t.type === 'follow_up' || t.type === 'proposal' || t.type === 'call' || !t.type).length,
+    tasks: myTasks.filter(t => t.type !== 'meeting' && t.type !== 'approval' && !t.needs_approval).length,
     meetings: myTasks.filter(t => t.type === 'meeting').length,
     approvals: myTasks.filter(t => t.type === 'approval' || t.needs_approval).length
   };
@@ -835,17 +913,13 @@ export default function TasksModulePage() {
   return (
     <Layout>
       <div className={`h-full flex flex-col ${bgPage}`} data-testid="tasks-module-page">
-        {/* Header */}
+        {/* Header - Hide when in My Tasks view */}
+        {view !== 'my-tasks' && (
         <div className={`px-6 py-4 border-b ${borderColor} ${bgCard}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {view !== 'departments' && view !== 'my-tasks' && (
+              {view !== 'departments' && (
                 <Button variant="ghost" size="icon" onClick={handleBack} className={textSecondary}>
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-              )}
-              {view === 'my-tasks' && (
-                <Button variant="ghost" size="icon" onClick={() => setView('departments')} className={textSecondary}>
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               )}
@@ -856,13 +930,6 @@ export default function TasksModulePage() {
                   <Layers className="h-5 w-5" />
                   <span className="font-medium">Tasks</span>
                 </button>
-                
-                {view === 'my-tasks' && (
-                  <>
-                    <ChevronRight className={`h-4 w-4 ${textSecondary}`} />
-                    <span className={`font-medium ${textPrimary}`}>My Tasks</span>
-                  </>
-                )}
                 
                 {selectedDepartment && (
                   <>
@@ -902,12 +969,6 @@ export default function TasksModulePage() {
                   Add Department
                 </Button>
               )}
-              {view === 'my-tasks' && (
-                <Button onClick={() => setShowMyTaskModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Task
-                </Button>
-              )}
               {view === 'projects' && !isWebsiteDepartment(selectedDepartment) && (
                 <Button onClick={() => { setEditingProject(null); setProjectForm({ name: '', client_name: '', description: '', start_date: '', end_date: '', status: 'active', team_members: [] }); setShowProjectModal(true); }} className="bg-[#10b981] hover:bg-[#059669]">
                   <Plus className="h-4 w-4 mr-2" />
@@ -941,42 +1002,145 @@ export default function TasksModulePage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
           {/* My Tasks View */}
           {view === 'my-tasks' && (
             <div className="space-y-6">
-              {/* Sub-tabs */}
-              <div className="flex items-center gap-4 flex-wrap">
-                <div className={`flex rounded-lg ${bgCard} border ${borderColor} p-1`}>
-                  {[
-                    { id: 'all', label: 'All', icon: Layers, count: myTasksStats.all },
-                    { id: 'tasks', label: 'Tasks', icon: CheckCircle2, count: myTasksStats.tasks },
-                    { id: 'meetings', label: 'Meetings', icon: Video, count: myTasksStats.meetings },
-                    { id: 'approvals', label: 'Review/Approval', icon: ClipboardCheck, count: myTasksStats.approvals }
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setMyTasksSubTab(tab.id)}
-                      data-testid={`my-tasks-tab-${tab.id}`}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                        myTasksSubTab === tab.id
-                          ? 'bg-[#6366f1] text-white'
-                          : `${textSecondary} hover:bg-[#27272a]`
-                      }`}
-                    >
-                      <tab.icon className="h-4 w-4" />
-                      <span>{tab.label}</span>
-                      <Badge className={`ml-1 ${myTasksSubTab === tab.id ? 'bg-white/20 text-white' : 'bg-[#27272a]'}`}>
-                        {tab.count}
-                      </Badge>
-                    </button>
-                  ))}
+              {/* Greeting Header */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className={`text-2xl font-bold ${textPrimary}`}>
+                      {getGreeting()}, {user?.name?.split(' ')[0] || 'User'}!
+                    </h1>
+                    <p className="text-lg text-[#6366f1] font-medium mt-1 italic">
+                      "{dailyQuote}"
+                    </p>
+                  </div>
+                  <Button onClick={() => setShowMyTaskModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Task
+                  </Button>
                 </div>
+              </div>
 
-                {/* Date Filters */}
-                <div className="flex items-center gap-2 ml-auto">
+              {/* Main Tabs: All | Tasks | Meetings | Review/Approval */}
+              <div className={`flex rounded-lg ${bgCard} border ${borderColor} p-1 w-fit`}>
+                {[
+                  { id: 'all', label: 'All', icon: Layers, count: myTasksStats.all },
+                  { id: 'tasks', label: 'Tasks', icon: CheckCircle2, count: myTasksStats.tasks },
+                  { id: 'meetings', label: 'Meetings', icon: Video, count: myTasksStats.meetings },
+                  { id: 'approvals', label: 'Review/Approval', icon: ClipboardCheck, count: myTasksStats.approvals }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setMyTasksSubTab(tab.id)}
+                    data-testid={`my-tasks-tab-${tab.id}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                      myTasksSubTab === tab.id
+                        ? 'bg-[#6366f1] text-white'
+                        : `${textSecondary} hover:bg-[#27272a]`
+                    }`}
+                  >
+                    <tab.icon className="h-4 w-4" />
+                    <span>{tab.label}</span>
+                    <Badge className={`ml-1 ${myTasksSubTab === tab.id ? 'bg-white/20 text-white' : 'bg-[#27272a]'}`}>
+                      {tab.count}
+                    </Badge>
+                  </button>
+                ))}
+              </div>
+
+              {/* Tasks Tab Sub-filters */}
+              {myTasksSubTab === 'tasks' && (
+                <div className="space-y-4">
+                  {/* Assigned by me / Assigned to me Toggle */}
+                  <div className="flex items-center gap-4">
+                    <div className={`flex rounded-lg ${bgSecondary} p-1`}>
+                      <button
+                        onClick={() => setMyTasksAssignFilter('to_me')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                          myTasksAssignFilter === 'to_me'
+                            ? 'bg-[#6366f1] text-white'
+                            : `${textSecondary} hover:bg-[#3f3f46]`
+                        }`}
+                        data-testid="filter-assigned-to-me"
+                      >
+                        Assigned to me
+                      </button>
+                      <button
+                        onClick={() => setMyTasksAssignFilter('by_me')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                          myTasksAssignFilter === 'by_me'
+                            ? 'bg-[#6366f1] text-white'
+                            : `${textSecondary} hover:bg-[#3f3f46]`
+                        }`}
+                        data-testid="filter-assigned-by-me"
+                      >
+                        Assigned by me
+                      </button>
+                    </div>
+
+                    {/* Date Filter */}
+                    <Select value={myTasksDateFilter} onValueChange={setMyTasksDateFilter}>
+                      <SelectTrigger className={`w-36 ${bgCard} ${borderColor}`}>
+                        <CalendarDays className="h-4 w-4 mr-2" />
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="week">This Week</SelectItem>
+                        <SelectItem value="month">This Month</SelectItem>
+                        <SelectItem value="range">Date Range</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    
+                    {myTasksDateFilter === 'range' && (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="date"
+                          value={myTasksDateRange.from}
+                          onChange={(e) => setMyTasksDateRange({ ...myTasksDateRange, from: e.target.value })}
+                          className={`w-36 ${bgCard} ${borderColor}`}
+                        />
+                        <span className={textSecondary}>to</span>
+                        <Input
+                          type="date"
+                          value={myTasksDateRange.to}
+                          onChange={(e) => setMyTasksDateRange({ ...myTasksDateRange, to: e.target.value })}
+                          className={`w-36 ${bgCard} ${borderColor}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Department Filter Pills */}
+                  <div className="flex flex-wrap gap-2">
+                    {departmentOptions.map(dept => (
+                      <button
+                        key={dept.id}
+                        onClick={() => setMyTasksDeptFilter(dept.id)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                          myTasksDeptFilter === dept.id
+                            ? 'bg-[#6366f1] text-white'
+                            : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                        }`}
+                        data-testid={`dept-filter-${dept.id}`}
+                      >
+                        {dept.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Date Filters for non-tasks tabs */}
+              {myTasksSubTab !== 'tasks' && (
+                <div className="flex items-center gap-2">
                   <Select value={myTasksDateFilter} onValueChange={setMyTasksDateFilter}>
                     <SelectTrigger className={`w-36 ${bgCard} ${borderColor}`}>
                       <CalendarDays className="h-4 w-4 mr-2" />
@@ -1009,7 +1173,7 @@ export default function TasksModulePage() {
                     </div>
                   )}
                 </div>
-              </div>
+              )}
 
               {/* Tasks List */}
               {myTasksLoading ? (
@@ -1050,6 +1214,11 @@ export default function TasksModulePage() {
                               <Badge className={statusColors[task.status]?.bg + ' ' + statusColors[task.status]?.text}>
                                 {statusColors[task.status]?.label || task.status}
                               </Badge>
+                              {task.department && (
+                                <Badge variant="outline" className="text-[#6366f1] border-[#6366f1]">
+                                  {task.department}
+                                </Badge>
+                              )}
                             </div>
                             
                             {task.description && (

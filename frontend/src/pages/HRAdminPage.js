@@ -12,7 +12,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../components/ui/dialog';
 import { 
   Users, Clock, Calendar, CheckCircle, XCircle, 
-  Home, Building, Edit, Search, UserPlus, X, Trash2,
+  Home, Building, Edit, Edit2, Search, UserPlus, X, Trash2,
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCcw, Settings, Globe
@@ -95,6 +95,12 @@ export default function HRAdminPage() {
   const [calendar, setCalendar] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth() + 1);
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
+  
+  // Quotes state
+  const [quotes, setQuotes] = useState([]);
+  const [showAddQuoteModal, setShowAddQuoteModal] = useState(false);
+  const [newQuoteText, setNewQuoteText] = useState('');
+  const [editingQuote, setEditingQuote] = useState(null);
   
   // Payslips state
   const [payslips, setPayslips] = useState([]);
@@ -261,6 +267,56 @@ export default function HRAdminPage() {
       console.error('Error loading departments:', error);
     }
   }, [token]);
+
+  const loadQuotes = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/quotes`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setQuotes(res.data);
+    } catch (error) {
+      console.error('Error loading quotes:', error);
+    }
+  }, [token]);
+
+  // Quote management functions
+  const handleAddQuote = async () => {
+    if (!newQuoteText.trim()) {
+      toast.error('Please enter a quote');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/hr/admin/quotes`, { text: newQuoteText }, { headers });
+      toast.success('Quote added successfully');
+      setNewQuoteText('');
+      setShowAddQuoteModal(false);
+      loadQuotes();
+    } catch (error) {
+      toast.error('Failed to add quote');
+    }
+  };
+
+  const handleUpdateQuote = async (quoteId, updates) => {
+    try {
+      await axios.put(`${API}/api/hr/admin/quotes/${quoteId}`, updates, { headers });
+      toast.success('Quote updated');
+      setEditingQuote(null);
+      loadQuotes();
+    } catch (error) {
+      toast.error('Failed to update quote');
+    }
+  };
+
+  const handleDeleteQuote = async (quoteId) => {
+    if (!window.confirm('Delete this quote?')) return;
+    try {
+      await axios.delete(`${API}/api/hr/admin/quotes/${quoteId}`, { headers });
+      toast.success('Quote deleted');
+      loadQuotes();
+    } catch (error) {
+      toast.error('Failed to delete quote');
+    }
+  };
 
   // Payroll Management functions
   const loadPayrollEmployees = useCallback(async () => {
@@ -447,8 +503,10 @@ export default function HRAdminPage() {
     } else if (activeTab === 'designations-depts') {
       loadDesignations();
       loadDepartments();
+    } else if (activeTab === 'quotes') {
+      loadQuotes();
     }
-  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments]);
+  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments, loadQuotes]);
 
   useEffect(() => {
     if (activeTab === 'approvals') {
@@ -726,6 +784,7 @@ export default function HRAdminPage() {
     { id: 'approvals', label: 'Approvals', icon: CheckCircle },
     { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'quotes', label: 'Quotes', icon: FileText },
   ];
 
   return (
@@ -921,6 +980,139 @@ export default function HRAdminPage() {
             borderColor={borderColor}
           />
         )}
+
+        {/* Quotes Tab */}
+        {activeTab === 'quotes' && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className={`text-xl font-bold ${textPrimary}`}>Motivational Quotes</h2>
+                <p className={textSecondary}>Manage daily quotes shown to employees on their task dashboard</p>
+              </div>
+              <Button onClick={() => setShowAddQuoteModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Quote
+              </Button>
+            </div>
+
+            {/* Quotes List */}
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-0">
+                <div className="divide-y divide-[#3f3f46]">
+                  {quotes.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <FileText className={`h-12 w-12 mx-auto mb-4 ${textSecondary}`} />
+                      <p className={textPrimary}>No quotes added yet</p>
+                      <p className={`text-sm ${textSecondary}`}>Add motivational quotes to inspire your team</p>
+                    </div>
+                  ) : quotes.map((quote, index) => (
+                    <div 
+                      key={quote.quote_id} 
+                      className={`p-4 flex items-center justify-between gap-4 ${!quote.active ? 'opacity-50' : ''}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`h-8 w-8 rounded-full ${bgSecondary} flex items-center justify-center text-sm font-medium ${textPrimary}`}>
+                          {index + 1}
+                        </div>
+                        {editingQuote === quote.quote_id ? (
+                          <Input
+                            defaultValue={quote.text}
+                            onBlur={(e) => handleUpdateQuote(quote.quote_id, { text: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleUpdateQuote(quote.quote_id, { text: e.target.value });
+                              if (e.key === 'Escape') setEditingQuote(null);
+                            }}
+                            className={`flex-1 ${bgSecondary} ${borderColor}`}
+                            autoFocus
+                          />
+                        ) : (
+                          <p className={`${textPrimary} italic`}>"{quote.text}"</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleUpdateQuote(quote.quote_id, { active: !quote.active })}
+                          className={quote.active ? 'text-[#10b981]' : textSecondary}
+                        >
+                          {quote.active ? 'Active' : 'Inactive'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingQuote(quote.quote_id)}
+                          className={textSecondary}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteQuote(quote.quote_id)}
+                          className="text-red-500 hover:text-red-400"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Quote Statistics */}
+            <div className="grid grid-cols-3 gap-4">
+              <Card className={`${bgCard} border ${borderColor} p-4`}>
+                <p className={`text-sm ${textSecondary}`}>Total Quotes</p>
+                <p className={`text-2xl font-bold ${textPrimary}`}>{quotes.length}</p>
+              </Card>
+              <Card className={`${bgCard} border ${borderColor} p-4`}>
+                <p className={`text-sm ${textSecondary}`}>Active</p>
+                <p className="text-2xl font-bold text-[#10b981]">{quotes.filter(q => q.active).length}</p>
+              </Card>
+              <Card className={`${bgCard} border ${borderColor} p-4`}>
+                <p className={`text-sm ${textSecondary}`}>Inactive</p>
+                <p className="text-2xl font-bold text-[#f59e0b]">{quotes.filter(q => !q.active).length}</p>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Add Quote Modal */}
+        {showAddQuoteModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-md`}>
+              <CardHeader>
+                <CardTitle className={textPrimary}>Add New Quote</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className={textPrimary}>Quote Text</Label>
+                  <Input
+                    value={newQuoteText}
+                    onChange={(e) => setNewQuoteText(e.target.value)}
+                    placeholder="Enter a short motivational quote (3-5 words)"
+                    className={`${bgSecondary} ${borderColor}`}
+                  />
+                  <p className={`text-xs ${textSecondary} mt-1`}>
+                    Keep it short and positive (e.g., "Believe in yourself")
+                  </p>
+                </div>
+              </CardContent>
+              <div className={`p-4 border-t ${borderColor} flex gap-2 justify-end`}>
+                <Button variant="outline" onClick={() => { setShowAddQuoteModal(false); setNewQuoteText(''); }}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddQuote} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                  Add Quote
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
         {/* Add Employee Modal */}
         {showAddModal && (
           <AddEmployeeModal
