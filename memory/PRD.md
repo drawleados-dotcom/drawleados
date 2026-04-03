@@ -1069,6 +1069,44 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ---
 
+### Our Tasks Module (DONE - April 2026)
+**Purpose:** Created a team-wide task management module called "Our Tasks" that allows all users to create, assign, and track tasks across the organization.
+
+**Features:**
+1. **Stats Dashboard** - Cards showing Total Tasks, Pending, In Progress, Completed
+2. **Filter Tabs** - All, My Tasks, Pending, In Progress, Completed
+3. **Advanced Filters** - Date, Assigned To, Assigned By, Type, Status
+4. **Task CRUD** - Create, Read, Update, Delete tasks
+5. **Timer Functionality** - Start, Pause, Resume, Finish with time tracking
+6. **Task Assignment** - Assign tasks to any user in the system
+7. **Recurring Tasks** - Support for daily, weekly, monthly, yearly, weekdays, and custom recurrence
+8. **Work Link** - Attach links to external resources
+
+**API Endpoints:**
+- `GET /api/our-tasks/tasks` - List all tasks
+- `POST /api/our-tasks/tasks` - Create a task
+- `GET /api/our-tasks/tasks/{task_id}` - Get single task
+- `PUT /api/our-tasks/tasks/{task_id}` - Update task
+- `DELETE /api/our-tasks/tasks/{task_id}` - Delete task
+- `PATCH /api/our-tasks/tasks/{task_id}/status` - Update status
+- `POST /api/our-tasks/tasks/{task_id}/time` - Timer actions (start/pause/resume/finish)
+
+**Sidebar Navigation:**
+- Added as a separate top-level menu item "Our Tasks" with clipboard icon
+- Accessible to all authenticated users
+
+**Files Created:**
+- `/app/backend/our_tasks_routes.py`: Backend API routes
+- `/app/frontend/src/pages/OurTasksPage.js`: Frontend page component
+- `/app/backend/tests/test_our_tasks.py`: Backend test suite (22 tests)
+
+**Files Modified:**
+- `/app/backend/server.py`: Added our_tasks_router import and registration
+- `/app/frontend/src/App.js`: Added /our-tasks route
+- `/app/frontend/src/components/Sidebar.js`: Added Our Tasks nav link
+
+---
+
 ## Backlog / Future Tasks
 
 ### High Priority (P0)
