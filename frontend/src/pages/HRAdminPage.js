@@ -15,7 +15,7 @@ import {
   Home, Building, Edit, Search, UserPlus, X, Trash2,
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
-  Send, AlertTriangle
+  Send, AlertTriangle, RefreshCcw, Settings, Globe
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -54,7 +54,7 @@ const MODULES = [
 
 export default function HRAdminPage() {
   const { isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('attendance');
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
   
@@ -426,41 +426,32 @@ export default function HRAdminPage() {
   }, [loadDesignations, loadDepartments]);
 
   useEffect(() => {
-    if (activeTab === 'dashboard') {
-      loadStats();
-      loadAttendanceOverview();
-    } else if (activeTab === 'employees') {
-      loadEmployees();
-    } else if (activeTab === 'requests') {
-      loadLeaveRequests();
-    } else if (activeTab === 'attendance') {
-      loadAttendanceOverview();
-    } else if (activeTab === 'approvals') {
-      loadPendingApprovals();
-    } else if (activeTab === 'all-attendance') {
+    if (activeTab === 'attendance') {
       loadAllAttendance();
       loadEmployees();
+      loadStats();
+    } else if (activeTab === 'employees') {
+      loadEmployees();
+    } else if (activeTab === 'approvals') {
+      loadPendingApprovals();
+      loadLeaveRequests();
     } else if (activeTab === 'calendar') {
       loadCalendar();
-    } else if (activeTab === 'payslips') {
-      loadPayslips(payslipMonth, payslipYear);
-      loadEmployees();
+      loadHRSettings();
     } else if (activeTab === 'payroll') {
       loadPayrollEmployees();
       loadHikeReasons();
       loadPayslips(payslipMonth, payslipYear);
       loadCompanySettings();
-    } else if (activeTab === 'settings') {
-      loadHRSettings();
-    } else if (activeTab === 'designations') {
+      loadEmployees();
+    } else if (activeTab === 'designations-depts') {
       loadDesignations();
-    } else if (activeTab === 'departments') {
       loadDepartments();
     }
-  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear]);
+  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments]);
 
   useEffect(() => {
-    if (activeTab === 'requests') {
+    if (activeTab === 'approvals') {
       loadLeaveRequests();
     }
   }, [leaveFilter, loadLeaveRequests, activeTab]);
@@ -729,17 +720,12 @@ export default function HRAdminPage() {
   );
 
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
+    { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'employees', label: 'Employees', icon: Users },
-    { id: 'designations', label: 'Designations', icon: Briefcase },
-    { id: 'departments', label: 'Departments', icon: Building },
+    { id: 'designations-depts', label: 'Designation & Depts', icon: Briefcase },
     { id: 'approvals', label: 'Approvals', icon: CheckCircle },
-    { id: 'requests', label: 'Leave Requests', icon: Calendar },
-    { id: 'all-attendance', label: 'All Attendance', icon: Clock },
     { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'payslips', label: 'Payslips', icon: FileText },
-    { id: 'settings', label: 'Work Settings', icon: Clock },
   ];
 
   return (
@@ -792,15 +778,24 @@ export default function HRAdminPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'dashboard' && (
-          <DashboardTab 
-            stats={stats} 
-            attendanceOverview={attendanceOverview} 
+        {activeTab === 'attendance' && (
+          <EnhancedAttendanceTab
+            records={allAttendance}
+            employees={employees}
+            stats={stats}
+            month={attendanceMonth}
+            year={attendanceYear}
+            setMonth={setAttendanceMonth}
+            setYear={setAttendanceYear}
+            onRefresh={loadAllAttendance}
+            formatDate={formatDate}
+            formatTime={formatTime}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            token={token}
           />
         )}
 
@@ -818,29 +813,25 @@ export default function HRAdminPage() {
           />
         )}
 
-        {activeTab === 'requests' && (
-          <LeaveRequestsTab
-            requests={leaveRequests}
-            filter={leaveFilter}
-            setFilter={setLeaveFilter}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onViewTasks={handleViewTasks}
-            onSendForVerification={handleSendForVerification}
-            onFinalApprove={handleFinalApprove}
-            formatDate={formatDate}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
-
-        {activeTab === 'attendance' && (
-          <AttendanceTab
-            overview={attendanceOverview}
-            formatTime={formatTime}
+        {activeTab === 'designations-depts' && (
+          <DesignationsDeptsTab
+            designations={designations}
+            departments={departments}
+            editingDesignation={editingDesignation}
+            setEditingDesignation={setEditingDesignation}
+            showDesignationModal={showDesignationModal}
+            setShowDesignationModal={setShowDesignationModal}
+            showDepartmentModal={showDepartmentModal}
+            setShowDepartmentModal={setShowDepartmentModal}
+            newDesignation={newDesignation}
+            setNewDesignation={setNewDesignation}
+            newDepartment={newDepartment}
+            setNewDepartment={setNewDepartment}
+            onCreateDesignation={handleCreateDesignation}
+            onUpdateDesignation={handleUpdateDesignation}
+            onDeleteDesignation={handleDeleteDesignation}
+            onCreateDepartment={handleCreateDepartment}
+            onDeleteDepartment={handleDeleteDepartment}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -850,12 +841,18 @@ export default function HRAdminPage() {
         )}
 
         {activeTab === 'approvals' && (
-          <ApprovalsTab
+          <EnhancedApprovalsTab
             pendingApprovals={pendingApprovals}
+            leaveRequests={leaveRequests}
+            leaveFilter={leaveFilter}
+            setLeaveFilter={setLeaveFilter}
             onApproveAttendance={handleApproveAttendance}
             onApprovePermission={handleApprovePermission}
             onApproveLeave={handleApprove}
             onRejectLeave={handleReject}
+            onViewTasks={handleViewTasks}
+            onSendForVerification={handleSendForVerification}
+            onFinalApprove={handleFinalApprove}
             formatDate={formatDate}
             formatTime={formatTime}
             bgCard={bgCard}
@@ -866,62 +863,7 @@ export default function HRAdminPage() {
           />
         )}
 
-        {activeTab === 'all-attendance' && (
-          <AllAttendanceTab
-            records={allAttendance}
-            month={attendanceMonth}
-            year={attendanceYear}
-            setMonth={setAttendanceMonth}
-            setYear={setAttendanceYear}
-            onRefresh={loadAllAttendance}
-            formatDate={formatDate}
-            formatTime={formatTime}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
-
-        {activeTab === 'calendar' && (
-          <CalendarTab
-            calendar={calendar}
-            month={calendarMonth}
-            year={calendarYear}
-            setMonth={setCalendarMonth}
-            setYear={setCalendarYear}
-            onUpdate={handleUpdateCalendar}
-            onRefresh={loadCalendar}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
-
-        {activeTab === 'payslips' && (
-          <PayslipsTab
-            payslips={payslips}
-            employees={employees}
-            month={payslipMonth}
-            year={payslipYear}
-            setMonth={setPayslipMonth}
-            setYear={setPayslipYear}
-            onGenerate={handleGeneratePayslip}
-            onAction={handlePayslipAction}
-            onRefresh={loadPayslips}
-            formatDate={formatDate}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
-
-        {/* Payroll Management Tab */}
+        {/* Payroll Management Tab - with Payslips inside */}
         {activeTab === 'payroll' && (
           <PayrollManagementTab
             employees={payrollEmployees}
@@ -960,301 +902,18 @@ export default function HRAdminPage() {
           />
         )}
 
-        {/* Designations Tab */}
-        {activeTab === 'designations' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className={`text-xl font-semibold ${textPrimary}`}>Designations</h2>
-              <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Designation
-              </Button>
-            </div>
-            
-            {/* Designations List */}
-            <div className="grid gap-4">
-              {designations.length > 0 ? designations.map((desg) => (
-                <Card key={desg.designation_id} className={`${bgCard} border ${borderColor}`}>
-                  <CardContent className="p-4">
-                    {editingDesignation?.designation_id === desg.designation_id ? (
-                      // Edit Mode
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label className={textPrimary}>Title *</Label>
-                            <Input
-                              value={editingDesignation.title}
-                              onChange={(e) => setEditingDesignation(prev => ({ ...prev, title: e.target.value }))}
-                              className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                            />
-                          </div>
-                          <div>
-                            <Label className={textPrimary}>Description</Label>
-                            <Input
-                              value={editingDesignation.description}
-                              onChange={(e) => setEditingDesignation(prev => ({ ...prev, description: e.target.value }))}
-                              className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label className={textPrimary}>Roles & Responsibilities</Label>
-                          <textarea
-                            value={editingDesignation.roles_responsibilities}
-                            onChange={(e) => setEditingDesignation(prev => ({ ...prev, roles_responsibilities: e.target.value }))}
-                            rows={3}
-                            className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
-                          />
-                        </div>
-                        <div>
-                          <Label className={textPrimary}>Module Access</Label>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {MODULES.map(m => (
-                              <button
-                                key={m.value}
-                                type="button"
-                                onClick={() => {
-                                  const access = editingDesignation.module_access || [];
-                                  setEditingDesignation(prev => ({
-                                    ...prev,
-                                    module_access: access.includes(m.value)
-                                      ? access.filter(x => x !== m.value)
-                                      : [...access, m.value]
-                                  }));
-                                }}
-                                className={`px-3 py-1 rounded-full text-sm ${
-                                  (editingDesignation.module_access || []).includes(m.value)
-                                    ? 'bg-[#6366f1] text-white'
-                                    : `${bgSecondary} ${textSecondary}`
-                                }`}
-                              >
-                                {m.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div className="flex gap-2 justify-end">
-                          <Button variant="ghost" onClick={() => setEditingDesignation(null)}>Cancel</Button>
-                          <Button onClick={handleUpdateDesignation} className="bg-[#10b981] hover:bg-[#059669]">Save</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      // View Mode
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <h3 className={`text-lg font-semibold ${textPrimary}`}>{desg.title}</h3>
-                            <Badge className="bg-[#10b981]/20 text-[#10b981]">
-                              <Users className="h-3 w-3 mr-1" />
-                              {desg.employee_count || 0} Employees
-                            </Badge>
-                          </div>
-                          {desg.description && <p className={`text-sm ${textSecondary} mt-1`}>{desg.description}</p>}
-                          {desg.roles_responsibilities && (
-                            <div className="mt-2">
-                              <span className={`text-xs ${textSecondary}`}>Responsibilities:</span>
-                              <p className={`text-sm ${textPrimary} whitespace-pre-wrap`}>{desg.roles_responsibilities}</p>
-                            </div>
-                          )}
-                          {desg.module_access?.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-3">
-                              {desg.module_access.map(m => (
-                                <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1]">{m}</Badge>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button variant="ghost" size="sm" onClick={() => setEditingDesignation(desg)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => handleDeleteDesignation(desg.designation_id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )) : (
-                <Card className={`${bgCard} border ${borderColor}`}>
-                  <CardContent className="p-8 text-center">
-                    <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
-                    <p className={textSecondary}>No designations created yet</p>
-                    <p className={`text-sm ${textSecondary}`}>Add designations to define employee roles and access</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-            
-            {/* Add Designation Modal */}
-            {showDesignationModal && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`}>
-                  <CardHeader>
-                    <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
-                      <Briefcase className="h-5 w-5 text-[#6366f1]" />
-                      Add New Designation
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label className={textPrimary}>Designation Title *</Label>
-                      <Input
-                        value={newDesignation.title}
-                        onChange={(e) => setNewDesignation(prev => ({ ...prev, title: e.target.value }))}
-                        placeholder="e.g., Senior Developer"
-                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      />
-                    </div>
-                    <div>
-                      <Label className={textPrimary}>Description</Label>
-                      <Input
-                        value={newDesignation.description}
-                        onChange={(e) => setNewDesignation(prev => ({ ...prev, description: e.target.value }))}
-                        placeholder="Brief description of the role"
-                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      />
-                    </div>
-                    <div>
-                      <Label className={textPrimary}>Roles & Responsibilities</Label>
-                      <textarea
-                        value={newDesignation.roles_responsibilities}
-                        onChange={(e) => setNewDesignation(prev => ({ ...prev, roles_responsibilities: e.target.value }))}
-                        placeholder="List the key responsibilities..."
-                        rows={4}
-                        className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      />
-                    </div>
-                    <div>
-                      <Label className={textPrimary}>Module Access</Label>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {MODULES.map(m => (
-                          <button
-                            key={m.value}
-                            type="button"
-                            onClick={() => {
-                              setNewDesignation(prev => ({
-                                ...prev,
-                                module_access: prev.module_access.includes(m.value)
-                                  ? prev.module_access.filter(x => x !== m.value)
-                                  : [...prev.module_access, m.value]
-                              }));
-                            }}
-                            className={`px-3 py-1 rounded-full text-sm ${
-                              newDesignation.module_access.includes(m.value)
-                                ? 'bg-[#6366f1] text-white'
-                                : `${bgSecondary} ${textSecondary}`
-                            }`}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex gap-2 justify-end pt-4">
-                      <Button variant="ghost" onClick={() => setShowDesignationModal(false)}>Cancel</Button>
-                      <Button onClick={handleCreateDesignation} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create Designation</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Departments Tab */}
-        {activeTab === 'departments' && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className={`text-xl font-semibold ${textPrimary}`}>Departments</h2>
-              <Button onClick={() => setShowDepartmentModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Department
-              </Button>
-            </div>
-            
-            {/* Departments List */}
-            <div className={`rounded-lg border ${borderColor} overflow-hidden`}>
-              <table className="w-full">
-                <thead className={bgSecondary}>
-                  <tr>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>S.No</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Department Name</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Description</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#3f3f46]">
-                  {departments.length > 0 ? departments.map((dept, index) => (
-                    <tr key={dept.department_id} className={bgCard}>
-                      <td className={`px-4 py-3 text-sm ${textPrimary}`}>{index + 1}</td>
-                      <td className={`px-4 py-3 text-sm font-medium ${textPrimary}`}>{dept.name}</td>
-                      <td className={`px-4 py-3 text-sm ${textSecondary}`}>{dept.description || '-'}</td>
-                      <td className="px-4 py-3">
-                        <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => handleDeleteDepartment(dept.department_id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  )) : (
-                    <tr>
-                      <td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>
-                        <Building className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
-                        <p>No departments created yet</p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            
-            {/* Add Department Modal */}
-            {showDepartmentModal && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
-                  <CardHeader>
-                    <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
-                      <Building className="h-5 w-5 text-[#6366f1]" />
-                      Add New Department
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label className={textPrimary}>Department Name *</Label>
-                      <Input
-                        value={newDepartment.name}
-                        onChange={(e) => setNewDepartment(prev => ({ ...prev, name: e.target.value }))}
-                        placeholder="e.g., Engineering"
-                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      />
-                    </div>
-                    <div>
-                      <Label className={textPrimary}>Description</Label>
-                      <Input
-                        value={newDepartment.description}
-                        onChange={(e) => setNewDepartment(prev => ({ ...prev, description: e.target.value }))}
-                        placeholder="Brief description"
-                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      />
-                    </div>
-                    <div className="flex gap-2 justify-end pt-4">
-                      <Button variant="ghost" onClick={() => setShowDepartmentModal(false)}>Cancel</Button>
-                      <Button onClick={handleCreateDepartment} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create Department</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Work Settings Tab */}
-        {activeTab === 'settings' && (
-          <WorkSettingsTab
-            settings={hrSettings}
-            onUpdate={handleUpdateHRSettings}
-            onRefresh={loadHRSettings}
+        {activeTab === 'calendar' && (
+          <EnhancedCalendarTab
+            calendar={calendar}
+            hrSettings={hrSettings}
+            month={calendarMonth}
+            year={calendarYear}
+            setMonth={setCalendarMonth}
+            setYear={setCalendarYear}
+            onUpdateCalendar={handleUpdateCalendar}
+            onUpdateSettings={handleUpdateHRSettings}
+            onRefresh={loadCalendar}
+            loadHRSettings={loadHRSettings}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -1262,7 +921,6 @@ export default function HRAdminPage() {
             borderColor={borderColor}
           />
         )}
-
         {/* Add Employee Modal */}
         {showAddModal && (
           <AddEmployeeModal
@@ -3563,6 +3221,1282 @@ function WorkSettingsTab({ settings, onUpdate, onRefresh, bgCard, bgSecondary, t
           {saving ? 'Saving...' : 'Save Settings'}
         </Button>
       </div>
+    </div>
+  );
+}
+
+
+
+// ============ Enhanced Attendance Tab with Date Filters ============
+function EnhancedAttendanceTab({ 
+  records, employees, stats, month, year, setMonth, setYear, onRefresh, 
+  formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, token 
+}) {
+  const [dateFilter, setDateFilter] = useState('day'); // day, range, month, year
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [employeeRecords, setEmployeeRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const API = process.env.REACT_APP_BACKEND_URL;
+
+  // Get all employees with their attendance status for the selected date
+  const getEmployeesWithStatus = () => {
+    const today = selectedDate;
+    const employeesWithStatus = employees.map(emp => {
+      // Find attendance record for this employee on selected date
+      const record = records.find(r => 
+        r.user_id === emp.user_id && 
+        r.date?.split('T')[0] === today
+      );
+      
+      let status = 'yet_to_login';
+      let checkIn = null;
+      let checkOut = null;
+      let workedHours = null;
+      
+      if (record) {
+        checkIn = record.clock_in_time;
+        checkOut = record.clock_out_time;
+        if (checkOut) {
+          status = 'present';
+          // Calculate worked hours
+          if (checkIn && checkOut) {
+            const inTime = new Date(`2000-01-01T${checkIn}`);
+            const outTime = new Date(`2000-01-01T${checkOut}`);
+            workedHours = ((outTime - inTime) / (1000 * 60 * 60)).toFixed(1);
+          }
+        } else if (checkIn) {
+          status = 'working';
+        }
+      }
+      
+      // Check leave/absent records
+      const isAbsent = records.some(r => 
+        r.user_id === emp.user_id && 
+        r.date?.split('T')[0] === today && 
+        r.leave_type
+      );
+      if (isAbsent) status = 'absent';
+      
+      return {
+        ...emp,
+        status,
+        checkIn,
+        checkOut,
+        workedHours
+      };
+    });
+    
+    return employeesWithStatus.sort((a, b) => {
+      const order = { 'present': 0, 'working': 1, 'yet_to_login': 2, 'absent': 3 };
+      return order[a.status] - order[b.status];
+    });
+  };
+
+  // Load detailed employee attendance records
+  const loadEmployeeDetails = async (emp) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API}/api/hr/attendance/employee/${emp.user_id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { month, year }
+      });
+      setEmployeeRecords(res.data || []);
+      setSelectedEmployee(emp);
+      setShowDetailModal(true);
+    } catch (err) {
+      console.error('Failed to load employee records:', err);
+      toast.error('Failed to load attendance details');
+    }
+    setLoading(false);
+  };
+
+  const employeesWithStatus = getEmployeesWithStatus();
+  const presentCount = employeesWithStatus.filter(e => e.status === 'present' || e.status === 'working').length;
+  const absentCount = employeesWithStatus.filter(e => e.status === 'absent').length;
+  const yetToLoginCount = employeesWithStatus.filter(e => e.status === 'yet_to_login').length;
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'present': return <Badge className="bg-[#22c55e]/20 text-[#22c55e]">Present</Badge>;
+      case 'working': return <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">Working</Badge>;
+      case 'absent': return <Badge className="bg-[#ef4444]/20 text-[#ef4444]">Absent</Badge>;
+      case 'yet_to_login': return <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">Yet to Login</Badge>;
+      default: return <Badge className={bgSecondary}>Unknown</Badge>;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Date Filters */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex gap-2">
+              {['day', 'range', 'month', 'year'].map(filter => (
+                <Button
+                  key={filter}
+                  variant={dateFilter === filter ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setDateFilter(filter)}
+                  className={dateFilter === filter ? 'bg-[#6366f1]' : ''}
+                >
+                  {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                </Button>
+              ))}
+            </div>
+            
+            {dateFilter === 'day' && (
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className={`w-48 ${bgSecondary} ${borderColor}`}
+              />
+            )}
+            
+            {dateFilter === 'range' && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  className={`w-40 ${bgSecondary} ${borderColor}`}
+                />
+                <span className={textSecondary}>to</span>
+                <Input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  className={`w-40 ${bgSecondary} ${borderColor}`}
+                />
+              </div>
+            )}
+            
+            {dateFilter === 'month' && (
+              <div className="flex gap-2">
+                <select
+                  value={month}
+                  onChange={(e) => setMonth(parseInt(e.target.value))}
+                  className={`px-3 py-2 rounded-md ${bgSecondary} ${borderColor} ${textPrimary}`}
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>
+                  ))}
+                </select>
+                <Input
+                  type="number"
+                  value={year}
+                  onChange={(e) => setYear(parseInt(e.target.value))}
+                  className={`w-24 ${bgSecondary} ${borderColor}`}
+                  min="2020"
+                  max="2030"
+                />
+              </div>
+            )}
+            
+            {dateFilter === 'year' && (
+              <Input
+                type="number"
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value))}
+                className={`w-24 ${bgSecondary} ${borderColor}`}
+                min="2020"
+                max="2030"
+              />
+            )}
+            
+            <Button onClick={onRefresh} variant="outline" size="sm" className={borderColor}>
+              <RefreshCcw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-[#6366f1]">{employees.length}</div>
+            <div className={`text-sm ${textSecondary}`}>Total Employees</div>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#22c55e]`}>
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-[#22c55e]">{presentCount}</div>
+            <div className={`text-sm ${textSecondary}`}>Present/Working</div>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#f59e0b]`}>
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-[#f59e0b]">{yetToLoginCount}</div>
+            <div className={`text-sm ${textSecondary}`}>Yet to Login</div>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#ef4444]`}>
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-[#ef4444]">{absentCount}</div>
+            <div className={`text-sm ${textSecondary}`}>Absent/Leave</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Employee List Table */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-0">
+          <div className={`p-4 border-b ${borderColor} flex justify-between items-center`}>
+            <h3 className={`font-semibold ${textPrimary}`}>
+              Employee Attendance - {new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className={bgSecondary}>
+                <tr>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Employee</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Department</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Check In</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Check Out</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Worked Hours</th>
+                  <th className={`px-4 py-3 text-right text-xs font-medium ${textSecondary} uppercase`}>Details</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${borderColor}`}>
+                {employeesWithStatus.map(emp => (
+                  <tr key={emp.user_id} className="hover:bg-[#27272a]/30">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-full bg-[#6366f1] flex items-center justify-center text-white font-medium`}>
+                          {emp.name?.charAt(0) || '?'}
+                        </div>
+                        <div>
+                          <div className={`font-medium ${textPrimary}`}>{emp.name}</div>
+                          <div className={`text-xs ${textSecondary}`}>{emp.designation || emp.role}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className={`px-4 py-3 ${textSecondary}`}>{emp.department || '-'}</td>
+                    <td className="px-4 py-3">{getStatusBadge(emp.status)}</td>
+                    <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkIn || '-'}</td>
+                    <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkOut || '-'}</td>
+                    <td className={`px-4 py-3 ${textPrimary}`}>{emp.workedHours ? `${emp.workedHours}h` : '-'}</td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => loadEmployeeDetails(emp)}
+                        disabled={loading}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Employee Detail Modal */}
+      {showDetailModal && selectedEmployee && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} w-full max-w-2xl max-h-[80vh] overflow-hidden`}>
+            <CardContent className="p-0">
+              <div className={`p-4 border-b ${borderColor} flex justify-between items-center`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full bg-[#6366f1] flex items-center justify-center text-white font-medium`}>
+                    {selectedEmployee.name?.charAt(0) || '?'}
+                  </div>
+                  <div>
+                    <h3 className={`font-semibold ${textPrimary}`}>{selectedEmployee.name}</h3>
+                    <p className={`text-sm ${textSecondary}`}>{selectedEmployee.designation || selectedEmployee.role} - {selectedEmployee.department}</p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setShowDetailModal(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="p-4 overflow-y-auto max-h-[60vh]">
+                <h4 className={`font-medium ${textPrimary} mb-3`}>Attendance History - {new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}</h4>
+                {employeeRecords.length > 0 ? (
+                  <div className="space-y-2">
+                    {employeeRecords.map((rec, idx) => (
+                      <div key={idx} className={`p-3 rounded-lg ${bgSecondary} flex justify-between items-center`}>
+                        <div>
+                          <div className={`font-medium ${textPrimary}`}>
+                            {new Date(rec.date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+                          </div>
+                          <div className={`text-sm ${textSecondary}`}>
+                            Check-in: {rec.clock_in_time || 'N/A'} | Check-out: {rec.clock_out_time || 'N/A'}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {rec.leave_type ? (
+                            <Badge className="bg-[#ef4444]/20 text-[#ef4444]">{rec.leave_type}</Badge>
+                          ) : rec.clock_out_time ? (
+                            <Badge className="bg-[#22c55e]/20 text-[#22c55e]">Present</Badge>
+                          ) : rec.clock_in_time ? (
+                            <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">Working</Badge>
+                          ) : (
+                            <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">No Record</Badge>
+                          )}
+                          {rec.total_work_hours && (
+                            <div className={`text-sm ${textSecondary} mt-1`}>{rec.total_work_hours.toFixed(1)}h worked</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className={`text-center py-8 ${textSecondary}`}>
+                    <Clock className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No attendance records found for this period</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ Designations & Departments Combined Tab ============
+function DesignationsDeptsTab({
+  designations, departments, editingDesignation, setEditingDesignation,
+  showDesignationModal, setShowDesignationModal, showDepartmentModal, setShowDepartmentModal,
+  newDesignation, setNewDesignation, newDepartment, setNewDepartment,
+  onCreateDesignation, onUpdateDesignation, onDeleteDesignation,
+  onCreateDepartment, onDeleteDepartment,
+  bgCard, bgSecondary, textPrimary, textSecondary, borderColor
+}) {
+  const [activeSubTab, setActiveSubTab] = useState('designations');
+
+  const MODULES = [
+    { value: 'leads', label: 'Leads' },
+    { value: 'operations', label: 'Operations' },
+    { value: 'hr', label: 'HR' },
+    { value: 'finance', label: 'Finance' },
+    { value: 'tasks', label: 'Tasks' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-2">
+        <Button
+          variant={activeSubTab === 'designations' ? 'default' : 'outline'}
+          onClick={() => setActiveSubTab('designations')}
+          className={activeSubTab === 'designations' ? 'bg-[#6366f1]' : ''}
+        >
+          <Briefcase className="h-4 w-4 mr-2" />
+          Designations ({designations.length})
+        </Button>
+        <Button
+          variant={activeSubTab === 'departments' ? 'default' : 'outline'}
+          onClick={() => setActiveSubTab('departments')}
+          className={activeSubTab === 'departments' ? 'bg-[#6366f1]' : ''}
+        >
+          <Building className="h-4 w-4 mr-2" />
+          Departments ({departments.length})
+        </Button>
+      </div>
+
+      {/* Designations Sub-Tab */}
+      {activeSubTab === 'designations' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Designation
+            </Button>
+          </div>
+          
+          <div className="grid gap-4">
+            {designations.length > 0 ? designations.map((desg) => (
+              <Card key={desg.designation_id} className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-4">
+                  {editingDesignation?.designation_id === desg.designation_id ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className={textPrimary}>Title *</Label>
+                          <Input
+                            value={editingDesignation.title}
+                            onChange={(e) => setEditingDesignation(prev => ({ ...prev, title: e.target.value }))}
+                            className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          />
+                        </div>
+                        <div>
+                          <Label className={textPrimary}>Description</Label>
+                          <Input
+                            value={editingDesignation.description}
+                            onChange={(e) => setEditingDesignation(prev => ({ ...prev, description: e.target.value }))}
+                            className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Roles & Responsibilities</Label>
+                        <textarea
+                          value={editingDesignation.roles_responsibilities}
+                          onChange={(e) => setEditingDesignation(prev => ({ ...prev, roles_responsibilities: e.target.value }))}
+                          rows={3}
+                          className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Module Access</Label>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {MODULES.map(m => (
+                            <button
+                              key={m.value}
+                              type="button"
+                              onClick={() => {
+                                const access = editingDesignation.module_access || [];
+                                setEditingDesignation(prev => ({
+                                  ...prev,
+                                  module_access: access.includes(m.value)
+                                    ? access.filter(x => x !== m.value)
+                                    : [...access, m.value]
+                                }));
+                              }}
+                              className={`px-3 py-1 rounded-full text-sm ${
+                                (editingDesignation.module_access || []).includes(m.value)
+                                  ? 'bg-[#6366f1] text-white'
+                                  : `${bgSecondary} ${textSecondary}`
+                              }`}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" onClick={() => setEditingDesignation(null)}>Cancel</Button>
+                        <Button onClick={onUpdateDesignation} className="bg-[#10b981] hover:bg-[#059669]">Save</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <h3 className={`text-lg font-semibold ${textPrimary}`}>{desg.title}</h3>
+                          <Badge className="bg-[#10b981]/20 text-[#10b981]">
+                            <Users className="h-3 w-3 mr-1" />
+                            {desg.employee_count || 0} Employees
+                          </Badge>
+                        </div>
+                        {desg.description && <p className={`text-sm ${textSecondary} mt-1`}>{desg.description}</p>}
+                        {desg.roles_responsibilities && (
+                          <div className="mt-2">
+                            <span className={`text-xs ${textSecondary}`}>Responsibilities:</span>
+                            <p className={`text-sm ${textPrimary} whitespace-pre-wrap`}>{desg.roles_responsibilities}</p>
+                          </div>
+                        )}
+                        {desg.module_access?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {desg.module_access.map(m => (
+                              <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1]">{m}</Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setEditingDesignation(desg)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => onDeleteDesignation(desg.designation_id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )) : (
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-8 text-center">
+                  <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                  <p className={textSecondary}>No designations created yet</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+          
+          {/* Add Designation Modal */}
+          {showDesignationModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className={`${bgCard} w-full max-w-lg`}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>Add New Designation</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setShowDesignationModal(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className={textPrimary}>Title *</Label>
+                      <Input
+                        value={newDesignation.title}
+                        onChange={(e) => setNewDesignation({ ...newDesignation, title: e.target.value })}
+                        placeholder="e.g., Project Manager"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Description</Label>
+                      <Input
+                        value={newDesignation.description}
+                        onChange={(e) => setNewDesignation({ ...newDesignation, description: e.target.value })}
+                        placeholder="Brief description"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Roles & Responsibilities</Label>
+                      <textarea
+                        value={newDesignation.roles_responsibilities}
+                        onChange={(e) => setNewDesignation({ ...newDesignation, roles_responsibilities: e.target.value })}
+                        placeholder="Define roles and responsibilities"
+                        rows={3}
+                        className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Module Access</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {MODULES.map(m => (
+                          <button
+                            key={m.value}
+                            type="button"
+                            onClick={() => {
+                              setNewDesignation(prev => ({
+                                ...prev,
+                                module_access: prev.module_access.includes(m.value)
+                                  ? prev.module_access.filter(x => x !== m.value)
+                                  : [...prev.module_access, m.value]
+                              }));
+                            }}
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              newDesignation.module_access.includes(m.value)
+                                ? 'bg-[#6366f1] text-white'
+                                : `${bgSecondary} ${textSecondary}`
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6">
+                    <Button variant="ghost" onClick={() => setShowDesignationModal(false)}>Cancel</Button>
+                    <Button onClick={onCreateDesignation} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Departments Sub-Tab */}
+      {activeSubTab === 'departments' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowDepartmentModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Department
+            </Button>
+          </div>
+          
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {departments.length > 0 ? departments.map((dept) => (
+              <Card key={dept.department_id} className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className={`font-semibold ${textPrimary}`}>{dept.name}</h3>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Badge className="bg-[#10b981]/20 text-[#10b981]">
+                          <Users className="h-3 w-3 mr-1" />
+                          {dept.employee_count || 0} Members
+                        </Badge>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => onDeleteDepartment(dept.department_id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )) : (
+              <Card className={`${bgCard} border ${borderColor} col-span-full`}>
+                <CardContent className="p-8 text-center">
+                  <Building className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                  <p className={textSecondary}>No departments created yet</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Add Department Modal */}
+          {showDepartmentModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className={`${bgCard} w-full max-w-md`}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>Add New Department</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setShowDepartmentModal(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className={textPrimary}>Department Name *</Label>
+                      <Input
+                        value={newDepartment.name}
+                        onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
+                        placeholder="e.g., Engineering"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6">
+                    <Button variant="ghost" onClick={() => setShowDepartmentModal(false)}>Cancel</Button>
+                    <Button onClick={onCreateDepartment} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ Enhanced Approvals Tab (Leave Requests + Approvals Combined) ============
+function EnhancedApprovalsTab({
+  pendingApprovals, leaveRequests, leaveFilter, setLeaveFilter,
+  onApproveAttendance, onApprovePermission, onApproveLeave, onRejectLeave,
+  onViewTasks, onSendForVerification, onFinalApprove,
+  formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor
+}) {
+  const [activeSubTab, setActiveSubTab] = useState('pending');
+
+  const attendanceApprovals = pendingApprovals?.attendance || [];
+  const permissionApprovals = pendingApprovals?.permissions || [];
+  const leaveApprovals = pendingApprovals?.leaves || [];
+  const totalPending = attendanceApprovals.length + permissionApprovals.length + leaveApprovals.length;
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-2">
+        <Button
+          variant={activeSubTab === 'pending' ? 'default' : 'outline'}
+          onClick={() => setActiveSubTab('pending')}
+          className={activeSubTab === 'pending' ? 'bg-[#6366f1]' : ''}
+        >
+          <CheckCircle className="h-4 w-4 mr-2" />
+          Pending Approvals ({totalPending})
+        </Button>
+        <Button
+          variant={activeSubTab === 'leaves' ? 'default' : 'outline'}
+          onClick={() => setActiveSubTab('leaves')}
+          className={activeSubTab === 'leaves' ? 'bg-[#6366f1]' : ''}
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          Leave Requests ({leaveRequests?.length || 0})
+        </Button>
+      </div>
+
+      {activeSubTab === 'pending' && (
+        <div className="space-y-6">
+          {/* Attendance Approvals */}
+          {attendanceApprovals.length > 0 && (
+            <div>
+              <h3 className={`font-semibold ${textPrimary} mb-3`}>Attendance Corrections ({attendanceApprovals.length})</h3>
+              <div className="space-y-3">
+                {attendanceApprovals.map((item, idx) => (
+                  <Card key={idx} className={`${bgCard} border ${borderColor}`}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                          <p className={`text-sm ${textSecondary}`}>{item.type}: {item.reason}</p>
+                          <p className={`text-xs ${textSecondary}`}>{formatDate(item.date)} | {formatTime(item.time)}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => onApproveAttendance(item)} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                            <CheckCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Permission Approvals */}
+          {permissionApprovals.length > 0 && (
+            <div>
+              <h3 className={`font-semibold ${textPrimary} mb-3`}>Permission Requests ({permissionApprovals.length})</h3>
+              <div className="space-y-3">
+                {permissionApprovals.map((item, idx) => (
+                  <Card key={idx} className={`${bgCard} border ${borderColor}`}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                          <p className={`text-sm ${textSecondary}`}>{item.hours}h - {item.reason}</p>
+                          <p className={`text-xs ${textSecondary}`}>{formatDate(item.date)}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => onApprovePermission(item)} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                            <CheckCircle className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Leave Approvals */}
+          {leaveApprovals.length > 0 && (
+            <div>
+              <h3 className={`font-semibold ${textPrimary} mb-3`}>Leave Approvals ({leaveApprovals.length})</h3>
+              <div className="space-y-3">
+                {leaveApprovals.map((item, idx) => (
+                  <Card key={idx} className={`${bgCard} border ${borderColor}`}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                          <p className={`text-sm ${textSecondary}`}>{item.leave_type}: {item.reason}</p>
+                          <p className={`text-xs ${textSecondary}`}>{formatDate(item.from_date)} - {formatDate(item.to_date)}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => onApproveLeave(item.request_id)} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                            Approve
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => onRejectLeave(item.request_id)} className="text-[#ef4444] border-[#ef4444]">
+                            Reject
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {totalPending === 0 && (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-8 text-center">
+                <CheckCircle className={`h-12 w-12 mx-auto mb-3 text-[#22c55e]`} />
+                <p className={textPrimary}>All caught up!</p>
+                <p className={`text-sm ${textSecondary}`}>No pending approvals</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {activeSubTab === 'leaves' && (
+        <div className="space-y-4">
+          {/* Filter */}
+          <div className="flex gap-2">
+            {['all', 'pending', 'approved', 'rejected'].map(f => (
+              <Button
+                key={f}
+                variant={leaveFilter === f ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setLeaveFilter(f)}
+                className={leaveFilter === f ? 'bg-[#6366f1]' : ''}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Button>
+            ))}
+          </div>
+
+          {/* Leave Requests List */}
+          <div className="space-y-3">
+            {leaveRequests?.length > 0 ? leaveRequests.map((request) => (
+              <Card key={request.request_id} className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <p className={`font-medium ${textPrimary}`}>{request.employee_name}</p>
+                        <Badge className={
+                          request.status === 'approved' ? 'bg-[#22c55e]/20 text-[#22c55e]' :
+                          request.status === 'rejected' ? 'bg-[#ef4444]/20 text-[#ef4444]' :
+                          request.status === 'pending_verification' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
+                          'bg-[#6366f1]/20 text-[#6366f1]'
+                        }>
+                          {request.status}
+                        </Badge>
+                      </div>
+                      <p className={`text-sm ${textSecondary}`}>{request.leave_type}: {request.reason}</p>
+                      <p className={`text-xs ${textSecondary}`}>{formatDate(request.from_date)} - {formatDate(request.to_date)} ({request.days || 1} days)</p>
+                    </div>
+                    {request.status === 'pending' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => onApproveLeave(request.request_id)} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onRejectLeave(request.request_id)} className="text-[#ef4444] border-[#ef4444]">
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                    {request.status === 'pending_verification' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => onViewTasks(request)} className="bg-[#3b82f6]">
+                          View Tasks
+                        </Button>
+                        <Button size="sm" onClick={() => onFinalApprove(request.request_id)} className="bg-[#22c55e]">
+                          Final Approve
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )) : (
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-8 text-center">
+                  <Calendar className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                  <p className={textSecondary}>No leave requests found</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ Enhanced Calendar Tab with Work Settings ============
+function EnhancedCalendarTab({
+  calendar, hrSettings, month, year, setMonth, setYear,
+  onUpdateCalendar, onUpdateSettings, onRefresh, loadHRSettings,
+  bgCard, bgSecondary, textPrimary, textSecondary, borderColor
+}) {
+  const [activeSubTab, setActiveSubTab] = useState('calendar');
+  const [editingSettings, setEditingSettings] = useState(false);
+  const [formData, setFormData] = useState({
+    standard_login_time: hrSettings?.standard_login_time || '09:30',
+    standard_logout_time: hrSettings?.standard_logout_time || '18:30',
+    working_days: hrSettings?.working_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    holidays: hrSettings?.holidays || [],
+    standard_work_hours: hrSettings?.standard_work_hours || 8,
+    grace_period_minutes: hrSettings?.grace_period_minutes || 15,
+  });
+
+  // Local state for calendar configuration
+  const [holidays, setHolidays] = useState([]);
+  const [workingDays, setWorkingDays] = useState(22);
+  const [newHoliday, setNewHoliday] = useState({ date: '', name: '' });
+
+  useEffect(() => {
+    if (hrSettings) {
+      setFormData({
+        standard_login_time: hrSettings.standard_login_time || '09:30',
+        standard_logout_time: hrSettings.standard_logout_time || '18:30',
+        working_days: hrSettings.working_days || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        holidays: hrSettings.holidays || [],
+        standard_work_hours: hrSettings.standard_work_hours || 8,
+        grace_period_minutes: hrSettings.grace_period_minutes || 15,
+      });
+    }
+  }, [hrSettings]);
+
+  useEffect(() => {
+    if (calendar) {
+      setHolidays(calendar.holidays || []);
+      setWorkingDays(calendar.working_days || 22);
+    }
+  }, [calendar]);
+
+  const allDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+  // Generate calendar grid for the month
+  const generateCalendarGrid = () => {
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay(); // 0 = Sunday
+    
+    const grid = [];
+    const today = new Date();
+    
+    // Add empty cells for days before the first day
+    for (let i = 0; i < startDayOfWeek; i++) {
+      grid.push({ date: null, day: null });
+    }
+    
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month - 1, day);
+      const dateStr = date.toISOString().split('T')[0];
+      const dayOfWeek = date.getDay();
+      const isWeekend = dayOfWeek === 0; // Sunday
+      const isToday = date.toDateString() === today.toDateString();
+      
+      // Check if it's a holiday
+      const holiday = holidays.find(h => h.date === dateStr);
+      
+      grid.push({
+        date: dateStr,
+        day: day,
+        isWeekend,
+        isToday,
+        isHoliday: !!holiday,
+        holidayName: holiday?.name || null,
+        dayOfWeek
+      });
+    }
+    
+    return grid;
+  };
+
+  const calendarGrid = generateCalendarGrid();
+
+  // Indian National Holidays 2025/2026
+  const indianHolidays = [
+    { date: '2025-01-26', name: 'Republic Day' },
+    { date: '2025-03-14', name: 'Holi' },
+    { date: '2025-04-14', name: 'Ambedkar Jayanti' },
+    { date: '2025-04-18', name: 'Good Friday' },
+    { date: '2025-05-01', name: 'May Day' },
+    { date: '2025-08-15', name: 'Independence Day' },
+    { date: '2025-08-27', name: 'Janmashtami' },
+    { date: '2025-10-02', name: 'Gandhi Jayanti' },
+    { date: '2025-10-20', name: 'Dussehra' },
+    { date: '2025-11-01', name: 'Diwali' },
+    { date: '2025-11-15', name: 'Guru Nanak Jayanti' },
+    { date: '2025-12-25', name: 'Christmas' },
+    { date: '2026-01-26', name: 'Republic Day' },
+    { date: '2026-03-04', name: 'Holi' },
+    { date: '2026-04-14', name: 'Ambedkar Jayanti' },
+    { date: '2026-04-03', name: 'Good Friday' },
+    { date: '2026-05-01', name: 'May Day' },
+    { date: '2026-08-15', name: 'Independence Day' },
+    { date: '2026-08-16', name: 'Janmashtami' },
+    { date: '2026-10-02', name: 'Gandhi Jayanti' },
+    { date: '2026-10-08', name: 'Dussehra' },
+    { date: '2026-10-20', name: 'Diwali' },
+    { date: '2026-11-04', name: 'Guru Nanak Jayanti' },
+    { date: '2026-12-25', name: 'Christmas' },
+  ];
+
+  const handleSaveSettings = async () => {
+    await onUpdateSettings(formData);
+    setEditingSettings(false);
+    loadHRSettings();
+  };
+
+  const handleAddHoliday = () => {
+    if (newHoliday.date && newHoliday.name) {
+      const updated = [...holidays, { ...newHoliday, type: 'company' }];
+      setHolidays(updated);
+      setNewHoliday({ date: '', name: '' });
+      // Save to backend
+      onUpdateCalendar({ holidays: updated, working_days: workingDays });
+    }
+  };
+
+  const handleRemoveHoliday = (index) => {
+    const updated = holidays.filter((_, i) => i !== index);
+    setHolidays(updated);
+    onUpdateCalendar({ holidays: updated, working_days: workingDays });
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-tabs */}
+      <div className="flex gap-2">
+        <Button
+          variant={activeSubTab === 'calendar' ? 'default' : 'outline'}
+          onClick={() => setActiveSubTab('calendar')}
+          className={activeSubTab === 'calendar' ? 'bg-[#6366f1]' : ''}
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          Calendar View
+        </Button>
+        <Button
+          variant={activeSubTab === 'settings' ? 'default' : 'outline'}
+          onClick={() => setActiveSubTab('settings')}
+          className={activeSubTab === 'settings' ? 'bg-[#6366f1]' : ''}
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Work Settings
+        </Button>
+        <Button
+          variant={activeSubTab === 'holidays' ? 'default' : 'outline'}
+          onClick={() => setActiveSubTab('holidays')}
+          className={activeSubTab === 'holidays' ? 'bg-[#6366f1]' : ''}
+        >
+          <Globe className="h-4 w-4 mr-2" />
+          Indian Holidays
+        </Button>
+      </div>
+
+      {/* Calendar View */}
+      {activeSubTab === 'calendar' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <select
+              value={month}
+              onChange={(e) => setMonth(parseInt(e.target.value))}
+              className={`px-3 py-2 rounded-md ${bgSecondary} ${borderColor} ${textPrimary}`}
+            >
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i} value={i + 1}>
+                  {new Date(2000, i).toLocaleString('default', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <Input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+              className={`w-24 ${bgSecondary} ${borderColor}`}
+              min="2020"
+              max="2030"
+            />
+            <Button onClick={onRefresh} variant="outline" className={borderColor}>
+              <RefreshCcw className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-6">
+            {/* Calendar Grid */}
+            <Card className={`${bgCard} border ${borderColor} md:col-span-2`}>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-7 gap-1">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className={`text-center font-medium ${textSecondary} py-2 text-sm`}>{day}</div>
+                  ))}
+                  {calendarGrid.map((day, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-2 min-h-[50px] rounded text-center transition-colors ${
+                        !day.date ? '' :
+                        day.isHoliday ? 'bg-[#ef4444]/20' :
+                        day.isWeekend ? 'bg-[#f59e0b]/10' :
+                        `${bgSecondary}`
+                      } ${day.isToday ? 'ring-2 ring-[#6366f1]' : ''}`}
+                    >
+                      {day.date && (
+                        <>
+                          <div className={`text-sm font-medium ${day.isHoliday ? 'text-[#ef4444]' : textPrimary}`}>{day.day}</div>
+                          {day.isHoliday && (
+                            <div className="text-[10px] text-[#ef4444] truncate">{day.holidayName}</div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Holiday Management */}
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4">
+                <h4 className={`font-medium ${textPrimary} mb-3`}>Manage Holidays</h4>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      value={newHoliday.date}
+                      onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
+                      className={`${bgSecondary} ${borderColor} flex-1`}
+                    />
+                    <Input
+                      placeholder="Holiday name"
+                      value={newHoliday.name}
+                      onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
+                      className={`${bgSecondary} ${borderColor} flex-1`}
+                    />
+                    <Button size="sm" onClick={handleAddHoliday} className="bg-[#22c55e]">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {holidays.map((h, idx) => (
+                      <div key={idx} className={`p-2 rounded ${bgSecondary} flex justify-between items-center`}>
+                        <div>
+                          <div className={`text-sm ${textPrimary}`}>{h.name}</div>
+                          <div className={`text-xs ${textSecondary}`}>
+                            {new Date(h.date + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                          </div>
+                        </div>
+                        <Button size="sm" variant="ghost" onClick={() => handleRemoveHoliday(idx)} className="text-[#ef4444] h-6 w-6 p-0">
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                    {holidays.length === 0 && (
+                      <div className={`text-sm ${textSecondary} text-center py-4`}>No holidays set for this month</div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* Work Settings */}
+      {activeSubTab === 'settings' && (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-6 space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className={`text-lg font-semibold ${textPrimary}`}>Work Settings</h3>
+              {!editingSettings && (
+                <Button onClick={() => setEditingSettings(true)} className="bg-[#6366f1]">
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Settings
+                </Button>
+              )}
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <Label className={textPrimary}>Office Start Time</Label>
+                <Input
+                  type="time"
+                  value={formData.standard_login_time}
+                  onChange={(e) => setFormData({ ...formData, standard_login_time: e.target.value })}
+                  disabled={!editingSettings}
+                  className={`${bgSecondary} ${borderColor} ${textPrimary}`}
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Office End Time</Label>
+                <Input
+                  type="time"
+                  value={formData.standard_logout_time}
+                  onChange={(e) => setFormData({ ...formData, standard_logout_time: e.target.value })}
+                  disabled={!editingSettings}
+                  className={`${bgSecondary} ${borderColor} ${textPrimary}`}
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Standard Work Hours</Label>
+                <Input
+                  type="number"
+                  value={formData.standard_work_hours}
+                  onChange={(e) => setFormData({ ...formData, standard_work_hours: parseFloat(e.target.value) })}
+                  disabled={!editingSettings}
+                  className={`${bgSecondary} ${borderColor} ${textPrimary}`}
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Grace Period (minutes)</Label>
+                <Input
+                  type="number"
+                  value={formData.grace_period_minutes}
+                  onChange={(e) => setFormData({ ...formData, grace_period_minutes: parseInt(e.target.value) })}
+                  disabled={!editingSettings}
+                  className={`${bgSecondary} ${borderColor} ${textPrimary}`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className={textPrimary}>Working Days</Label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {allDays.map(day => (
+                  <button
+                    key={day}
+                    type="button"
+                    disabled={!editingSettings}
+                    onClick={() => {
+                      if (editingSettings) {
+                        setFormData(prev => ({
+                          ...prev,
+                          working_days: prev.working_days.includes(day)
+                            ? prev.working_days.filter(d => d !== day)
+                            : [...prev.working_days, day]
+                        }));
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      formData.working_days.includes(day)
+                        ? 'bg-[#22c55e] text-white'
+                        : `${bgSecondary} ${textSecondary}`
+                    } ${!editingSettings ? 'opacity-60' : ''}`}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {editingSettings && (
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setEditingSettings(false)}>Cancel</Button>
+                <Button onClick={handleSaveSettings} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                  Save Changes
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Indian Holidays */}
+      {activeSubTab === 'holidays' && (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-6">
+            <h3 className={`text-lg font-semibold ${textPrimary} mb-4`}>Indian National Holidays {year}</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              {indianHolidays
+                .filter(h => h.date.startsWith(String(year)))
+                .map((holiday, idx) => (
+                  <div key={idx} className={`p-3 rounded-lg ${bgSecondary} flex justify-between items-center`}>
+                    <div>
+                      <div className={`font-medium ${textPrimary}`}>{holiday.name}</div>
+                      <div className={`text-sm ${textSecondary}`}>
+                        {new Date(holiday.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+                      </div>
+                    </div>
+                    <Badge className="bg-[#ef4444]/20 text-[#ef4444]">Holiday</Badge>
+                  </div>
+                ))}
+            </div>
+            {indianHolidays.filter(h => h.date.startsWith(String(year))).length === 0 && (
+              <div className={`text-center py-8 ${textSecondary}`}>
+                <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No holidays data for {year}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
