@@ -1,7 +1,7 @@
 """
 HR Module Routes - Employee profiles, attendance, leave management, payroll, reviews
 """
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Body
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
@@ -3759,3 +3759,230 @@ async def delete_performance_review(review_id: str, request: Request):
     await db.employee_reviews.delete_one({"review_id": review_id})
     
     return {"message": "Review deleted"}
+
+
+
+# ============ WFH/Remote Work Request Routes ============
+
+class WFHRequest(BaseModel):
+    start_date: str
+    end_date: str
+    reason: str
+    work_plan: Optional[str] = None
+    contact_number: Optional[str] = None
+    work_location: str = "home"  # home, other
+
+class WFHRequestUpdate(BaseModel):
+    status: str  # approved, rejected
+    remarks: Optional[str] = None
+    admin_notes: Optional[str] = None
+
+
+@hr_router.post("/wfh/request")
+async def create_wfh_request(data: WFHRequest, request: Request):
+    """Create a Work From Home request"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    wfh_id = f"wfh_{uuid.uuid4().hex[:12]}"
+    
+    # Calculate number of days
+    start = datetime.strptime(data.start_date, "%Y-%m-%d")
+    end = datetime.strptime(data.end_date, "%Y-%m-%d")
+    days = (end - start).days + 1
+    
+    wfh_request = {
+        "wfh_id": wfh_id,
+        "user_id": current_user.user_id,
+        "employee_name": current_user.name,
+        "employee_email": current_user.email,
+        "department": getattr(current_user, 'department', None),
+        "designation": getattr(current_user, 'designation', None),
+        "start_date": data.start_date,
+        "end_date": data.end_date,
+        "days": days,
+        "reason": data.reason,
+        "work_plan": data.work_plan,
+        "contact_number": data.contact_number,
+        "work_location": data.work_location,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    await db.wfh_requests.insert_one(wfh_request)
+    
+    return {"message": "WFH request submitted", "wfh_id": wfh_id}
+
+
+@hr_router.get("/wfh/my-requests")
+async def get_my_wfh_requests(request: Request):
+    """Get all WFH requests for the current user"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    requests = await db.wfh_requests.find(
+        {"user_id": current_user.user_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return requests
+
+
+@hr_router.get("/wfh/pending")
+async def get_pending_wfh_requests(request: Request):
+    """Get all pending WFH requests (for HR admin)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    requests = await db.wfh_requests.find(
+        {"status": "pending"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return requests
+
+
+@hr_router.get("/wfh/all")
+async def get_all_wfh_requests(
+    request: Request,
+    status: Optional[str] = None,
+    employee: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """Get all WFH requests with filters (for HR admin)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    query = {}
+    
+    if status and status != 'all':
+        query["status"] = status
+    
+    if employee and employee != 'all':
+        query["user_id"] = employee
+    
+    if start_date:
+        query["start_date"] = {"$gte": start_date}
+    
+    if end_date:
+        if "start_date" in query:
+            query["end_date"] = {"$lte": end_date}
+        else:
+            query["end_date"] = {"$lte": end_date}
+    
+    requests = await db.wfh_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    
+    return requests
+
+
+@hr_router.get("/wfh/{wfh_id}")
+async def get_wfh_request(wfh_id: str, request: Request):
+    """Get a single WFH request details"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    wfh = await db.wfh_requests.find_one({"wfh_id": wfh_id}, {"_id": 0})
+    
+    if not wfh:
+        raise HTTPException(status_code=404, detail="WFH request not found")
+    
+    # Only the employee or admin can view
+    if wfh["user_id"] != current_user.user_id and current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    return wfh
+
+
+@hr_router.post("/wfh/{wfh_id}/approve")
+async def approve_wfh_request(wfh_id: str, request: Request, data: dict = Body(default={})):
+    """Approve a WFH request with remarks"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    wfh = await db.wfh_requests.find_one({"wfh_id": wfh_id})
+    if not wfh:
+        raise HTTPException(status_code=404, detail="WFH request not found")
+    
+    remarks = data.get("remarks", "")
+    admin_notes = data.get("admin_notes", "")
+    
+    result = await db.wfh_requests.update_one(
+        {"wfh_id": wfh_id},
+        {"$set": {
+            "status": "approved",
+            "approved_by": current_user.user_id,
+            "approved_by_name": current_user.name,
+            "remarks": remarks,
+            "admin_notes": admin_notes,
+            "approved_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    return {"message": "WFH request approved"}
+
+
+@hr_router.post("/wfh/{wfh_id}/reject")
+async def reject_wfh_request(wfh_id: str, request: Request, data: dict = Body(default={})):
+    """Reject a WFH request with reason"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    wfh = await db.wfh_requests.find_one({"wfh_id": wfh_id})
+    if not wfh:
+        raise HTTPException(status_code=404, detail="WFH request not found")
+    
+    reason = data.get("reason", "")
+    if not reason:
+        raise HTTPException(status_code=400, detail="Rejection reason is required")
+    
+    result = await db.wfh_requests.update_one(
+        {"wfh_id": wfh_id},
+        {"$set": {
+            "status": "rejected",
+            "rejected_by": current_user.user_id,
+            "rejected_by_name": current_user.name,
+            "rejection_reason": reason,
+            "rejected_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
+        }}
+    )
+    
+    return {"message": "WFH request rejected"}
+
+
+@hr_router.delete("/wfh/{wfh_id}")
+async def cancel_wfh_request(wfh_id: str, request: Request):
+    """Cancel a WFH request (only pending requests can be cancelled by employee)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    wfh = await db.wfh_requests.find_one({"wfh_id": wfh_id})
+    if not wfh:
+        raise HTTPException(status_code=404, detail="WFH request not found")
+    
+    # Only owner can cancel if pending, admins can cancel anytime
+    if wfh["user_id"] != current_user.user_id:
+        if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    else:
+        if wfh["status"] != "pending":
+            raise HTTPException(status_code=400, detail="Can only cancel pending requests")
+    
+    await db.wfh_requests.delete_one({"wfh_id": wfh_id})
+    
+    return {"message": "WFH request cancelled"}

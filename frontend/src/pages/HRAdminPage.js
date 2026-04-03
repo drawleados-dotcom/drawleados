@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { 
   Users, Clock, Calendar, CheckCircle, XCircle, 
   Home, Building, Edit, Edit2, Search, UserPlus, X, Trash2,
-  AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus,
+  AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCcw, Settings, Globe, Star, ClipboardList
 } from 'lucide-react';
@@ -85,6 +85,10 @@ export default function HRAdminPage() {
   
   // Pending approvals state
   const [pendingApprovals, setPendingApprovals] = useState({ attendance: [], permissions: [], leaves: [] });
+  
+  // WFH/Remote requests state
+  const [wfhRequests, setWfhRequests] = useState([]);
+  const [wfhFilter, setWfhFilter] = useState('pending');
   
   // All attendance state
   const [allAttendance, setAllAttendance] = useState([]);
@@ -214,6 +218,20 @@ export default function HRAdminPage() {
       console.error('Error loading pending approvals:', error);
     }
   }, [token]);
+
+  const loadWfhRequests = useCallback(async () => {
+    try {
+      const endpoint = wfhFilter === 'pending' 
+        ? `${API}/api/hr/wfh/pending`
+        : `${API}/api/hr/wfh/all?status=${wfhFilter}`;
+      const res = await axios.get(endpoint, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setWfhRequests(res.data);
+    } catch (error) {
+      console.error('Error loading WFH requests:', error);
+    }
+  }, [token, wfhFilter]);
 
   const loadAllAttendance = useCallback(async () => {
     try {
@@ -647,6 +665,7 @@ export default function HRAdminPage() {
     } else if (activeTab === 'approvals') {
       loadPendingApprovals();
       loadLeaveRequests();
+      loadWfhRequests();
     } else if (activeTab === 'calendar') {
       loadCalendar();
       loadHRSettings();
@@ -664,13 +683,19 @@ export default function HRAdminPage() {
     } else if (activeTab === 'reviews') {
       loadReviewEmployees();
     }
-  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments, loadQuotes]);
+  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadWfhRequests, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments, loadQuotes]);
 
   useEffect(() => {
     if (activeTab === 'approvals') {
       loadLeaveRequests();
     }
   }, [leaveFilter, loadLeaveRequests, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'approvals') {
+      loadWfhRequests();
+    }
+  }, [wfhFilter, loadWfhRequests, activeTab]);
 
   const handleApprove = async (leaveId) => {
     try {
@@ -753,6 +778,39 @@ export default function HRAdminPage() {
       loadPendingApprovals();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to update permission');
+    }
+  };
+
+  // WFH/Remote Work Request Handlers
+  const handleApproveWfh = async (wfhId, remarks = '') => {
+    try {
+      await axios.post(
+        `${API}/api/hr/wfh/${wfhId}/approve`,
+        { remarks },
+        { headers }
+      );
+      toast.success('WFH request approved');
+      loadWfhRequests();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to approve WFH request');
+    }
+  };
+
+  const handleRejectWfh = async (wfhId, reason) => {
+    try {
+      if (!reason) {
+        toast.error('Please provide a rejection reason');
+        return;
+      }
+      await axios.post(
+        `${API}/api/hr/wfh/${wfhId}/reject`,
+        { reason },
+        { headers }
+      );
+      toast.success('WFH request rejected');
+      loadWfhRequests();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to reject WFH request');
     }
   };
 
@@ -1064,10 +1122,15 @@ export default function HRAdminPage() {
             leaveRequests={leaveRequests}
             leaveFilter={leaveFilter}
             setLeaveFilter={setLeaveFilter}
+            wfhRequests={wfhRequests}
+            wfhFilter={wfhFilter}
+            setWfhFilter={setWfhFilter}
             onApproveAttendance={handleApproveAttendance}
             onApprovePermission={handleApprovePermission}
             onApproveLeave={handleApprove}
             onRejectLeave={handleReject}
+            onApproveWfh={handleApproveWfh}
+            onRejectWfh={handleRejectWfh}
             onViewTasks={handleViewTasks}
             onSendForVerification={handleSendForVerification}
             onFinalApprove={handleFinalApprove}
@@ -5131,7 +5194,9 @@ function DesignationsDeptsTab({
 // ============ Enhanced Approvals Tab (3 Sub-tabs with Filters) ============
 function EnhancedApprovalsTab({
   pendingApprovals, leaveRequests, leaveFilter, setLeaveFilter,
+  wfhRequests, wfhFilter, setWfhFilter,
   onApproveAttendance, onApprovePermission, onApproveLeave, onRejectLeave,
+  onApproveWfh, onRejectWfh,
   onViewTasks, onSendForVerification, onFinalApprove,
   formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor
 }) {
@@ -5140,11 +5205,19 @@ function EnhancedApprovalsTab({
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   
+  // WFH Filters
+  const [wfhEmployeeFilter, setWfhEmployeeFilter] = useState('all');
+  const [wfhDateRange, setWfhDateRange] = useState({ start: '', end: '' });
+  
+  // View Details Modal
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedWfhRequest, setSelectedWfhRequest] = useState(null);
+  
   // Approval modals
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [approvalType, setApprovalType] = useState(''); // attendance, permission, leave
+  const [approvalType, setApprovalType] = useState(''); // attendance, permission, leave, wfh
   const [remarks, setRemarks] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [enableLOP, setEnableLOP] = useState(false);
@@ -5152,6 +5225,7 @@ function EnhancedApprovalsTab({
   const attendanceApprovals = pendingApprovals?.attendance || [];
   const permissionApprovals = pendingApprovals?.permissions || [];
   const leaveApprovals = pendingApprovals?.leaves || [];
+  const wfhApprovals = wfhRequests || [];
 
   // Open approve modal
   const openApproveModal = (item, type) => {
@@ -5178,6 +5252,8 @@ function EnhancedApprovalsTab({
       onApprovePermission({ ...selectedItem, remarks, lop_deduction: enableLOP });
     } else if (approvalType === 'leave') {
       onApproveLeave(selectedItem.request_id, remarks, enableLOP);
+    } else if (approvalType === 'wfh') {
+      onApproveWfh(selectedItem.wfh_id, remarks);
     }
     setShowApproveModal(false);
     toast.success('Approved successfully');
@@ -5189,14 +5265,39 @@ function EnhancedApprovalsTab({
       toast.error('Please enter a rejection reason');
       return;
     }
-    onRejectLeave(selectedItem.request_id, rejectReason);
+    if (approvalType === 'wfh') {
+      onRejectWfh(selectedItem.wfh_id, rejectReason);
+    } else {
+      onRejectLeave(selectedItem.request_id, rejectReason);
+    }
     setShowRejectModal(false);
     toast.success('Rejected');
   };
 
+  // Filter WFH requests
+  const filteredWfhRequests = wfhApprovals.filter(req => {
+    let match = true;
+    if (wfhEmployeeFilter !== 'all') {
+      match = match && req.user_id === wfhEmployeeFilter;
+    }
+    if (wfhDateRange.start) {
+      match = match && req.start_date >= wfhDateRange.start;
+    }
+    if (wfhDateRange.end) {
+      match = match && req.end_date <= wfhDateRange.end;
+    }
+    return match;
+  });
+
+  // Get unique employees for filter
+  const wfhEmployees = [...new Set(wfhApprovals.map(r => r.user_id))].map(id => {
+    const req = wfhApprovals.find(r => r.user_id === id);
+    return { id, name: req?.employee_name || 'Unknown' };
+  });
+
   return (
     <div className="space-y-4">
-      {/* Sub-tabs: Attendance | Leave | Permission */}
+      {/* Sub-tabs: Attendance | Leave | Permission | Remote */}
       <div className="flex gap-2 flex-wrap">
         <Button
           onClick={() => setActiveSubTab('attendance')}
@@ -5218,6 +5319,13 @@ function EnhancedApprovalsTab({
         >
           <AlertCircle className="h-4 w-4 mr-2" />
           Permission ({permissionApprovals.length})
+        </Button>
+        <Button
+          onClick={() => setActiveSubTab('remote')}
+          className={`${activeSubTab === 'remote' ? 'bg-[#8b5cf6] text-white' : `${bgSecondary} ${textSecondary}`}`}
+        >
+          <Home className="h-4 w-4 mr-2" />
+          Remote ({wfhApprovals.length})
         </Button>
       </div>
 
@@ -5424,6 +5532,326 @@ function EnhancedApprovalsTab({
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* Remote/WFH Approvals Tab */}
+      {activeSubTab === 'remote' && (
+        <div className="space-y-4">
+          {/* WFH Filters */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className={textSecondary}>Status:</Label>
+                  <Select value={wfhFilter} onValueChange={setWfhFilter}>
+                    <SelectTrigger className={`w-36 ${bgSecondary} ${borderColor}`}>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Label className={textSecondary}>Employee:</Label>
+                  <Select value={wfhEmployeeFilter} onValueChange={setWfhEmployeeFilter}>
+                    <SelectTrigger className={`w-48 ${bgSecondary} ${borderColor}`}>
+                      <SelectValue placeholder="All Employees" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Employees</SelectItem>
+                      {wfhEmployees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Label className={textSecondary}>Date Range:</Label>
+                  <Input
+                    type="date"
+                    value={wfhDateRange.start}
+                    onChange={(e) => setWfhDateRange({ ...wfhDateRange, start: e.target.value })}
+                    className={`w-40 ${bgSecondary} ${borderColor}`}
+                    placeholder="Start"
+                  />
+                  <span className={textSecondary}>to</span>
+                  <Input
+                    type="date"
+                    value={wfhDateRange.end}
+                    onChange={(e) => setWfhDateRange({ ...wfhDateRange, end: e.target.value })}
+                    className={`w-40 ${bgSecondary} ${borderColor}`}
+                    placeholder="End"
+                  />
+                </div>
+                
+                {(wfhEmployeeFilter !== 'all' || wfhDateRange.start || wfhDateRange.end) && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => {
+                      setWfhEmployeeFilter('all');
+                      setWfhDateRange({ start: '', end: '' });
+                    }}
+                    className="text-[#ef4444]"
+                  >
+                    <X className="h-4 w-4 mr-1" /> Clear Filters
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* WFH Requests List */}
+          <div className="space-y-3">
+            {filteredWfhRequests.length > 0 ? filteredWfhRequests.map((item, idx) => (
+              <Card key={idx} className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                        <Badge className={
+                          item.status === 'pending' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
+                          item.status === 'approved' ? 'bg-[#22c55e]/20 text-[#22c55e]' :
+                          'bg-[#ef4444]/20 text-[#ef4444]'
+                        }>
+                          {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                        </Badge>
+                        <Badge className="bg-[#8b5cf6]/20 text-[#8b5cf6]">
+                          {item.days} {item.days > 1 ? 'Days' : 'Day'} WFH
+                        </Badge>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mb-2">
+                        <div>
+                          <span className={textSecondary}>From: </span>
+                          <span className={textPrimary}>{formatDate(item.start_date)}</span>
+                        </div>
+                        <div>
+                          <span className={textSecondary}>To: </span>
+                          <span className={textPrimary}>{formatDate(item.end_date)}</span>
+                        </div>
+                        <div>
+                          <span className={textSecondary}>Location: </span>
+                          <span className={textPrimary}>{item.work_location === 'home' ? 'Home' : 'Other'}</span>
+                        </div>
+                        {item.contact_number && (
+                          <div>
+                            <span className={textSecondary}>Contact: </span>
+                            <span className={textPrimary}>{item.contact_number}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <p className={`text-sm ${textSecondary}`}>
+                        <span className="font-medium">Reason:</span> {item.reason}
+                      </p>
+                      
+                      {item.work_plan && (
+                        <p className={`text-sm ${textSecondary} mt-1`}>
+                          <span className="font-medium">Work Plan:</span> {item.work_plan}
+                        </p>
+                      )}
+                      
+                      {item.remarks && item.status === 'approved' && (
+                        <p className={`text-sm text-[#22c55e] mt-1`}>
+                          <span className="font-medium">Approved with remarks:</span> {item.remarks}
+                        </p>
+                      )}
+                      
+                      {item.rejection_reason && item.status === 'rejected' && (
+                        <p className={`text-sm text-[#ef4444] mt-1`}>
+                          <span className="font-medium">Rejection reason:</span> {item.rejection_reason}
+                        </p>
+                      )}
+                      
+                      <p className={`text-xs ${textSecondary} mt-2`}>
+                        Requested: {formatDate(item.created_at?.split('T')[0])}
+                        {item.approved_by_name && ` | Approved by: ${item.approved_by_name}`}
+                        {item.rejected_by_name && ` | Rejected by: ${item.rejected_by_name}`}
+                      </p>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2 ml-4">
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => { setSelectedWfhRequest(item); setShowDetailsModal(true); }}
+                        className={`${textSecondary}`}
+                      >
+                        <Eye className="h-4 w-4 mr-1" /> View
+                      </Button>
+                      
+                      {item.status === 'pending' && (
+                        <>
+                          <Button 
+                            size="sm" 
+                            onClick={() => openApproveModal(item, 'wfh')} 
+                            className="bg-[#22c55e] hover:bg-[#16a34a]"
+                          >
+                            Approve
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => openRejectModal(item, 'wfh')} 
+                            className="text-[#ef4444] border-[#ef4444]"
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )) : (
+              <Card className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-8 text-center">
+                  <Home className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                  <p className={textSecondary}>No WFH requests found</p>
+                  <p className={`text-sm ${textSecondary} mt-1`}>
+                    {wfhFilter === 'pending' ? 'No pending requests to review' : 'Try adjusting the filters'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* WFH Details Modal */}
+      {showDetailsModal && selectedWfhRequest && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} w-full max-w-2xl max-h-[90vh] overflow-auto`}>
+            <CardContent className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className={`text-lg font-semibold ${textPrimary}`}>WFH Request Details</h3>
+                <Button variant="ghost" size="sm" onClick={() => setShowDetailsModal(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className="space-y-4">
+                {/* Employee Info */}
+                <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-12 h-12 rounded-full bg-[#8b5cf6]/20 flex items-center justify-center">
+                      <User className="h-6 w-6 text-[#8b5cf6]" />
+                    </div>
+                    <div>
+                      <p className={`font-medium text-lg ${textPrimary}`}>{selectedWfhRequest.employee_name}</p>
+                      <p className={`text-sm ${textSecondary}`}>{selectedWfhRequest.employee_email}</p>
+                    </div>
+                    <Badge className={
+                      selectedWfhRequest.status === 'pending' ? 'bg-[#f59e0b]/20 text-[#f59e0b] ml-auto' :
+                      selectedWfhRequest.status === 'approved' ? 'bg-[#22c55e]/20 text-[#22c55e] ml-auto' :
+                      'bg-[#ef4444]/20 text-[#ef4444] ml-auto'
+                    }>
+                      {selectedWfhRequest.status.charAt(0).toUpperCase() + selectedWfhRequest.status.slice(1)}
+                    </Badge>
+                  </div>
+                  
+                  {selectedWfhRequest.department && (
+                    <p className={`text-sm ${textSecondary}`}>
+                      Department: <span className={textPrimary}>{selectedWfhRequest.department}</span>
+                    </p>
+                  )}
+                  {selectedWfhRequest.designation && (
+                    <p className={`text-sm ${textSecondary}`}>
+                      Designation: <span className={textPrimary}>{selectedWfhRequest.designation}</span>
+                    </p>
+                  )}
+                </div>
+                
+                {/* Request Details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>Start Date</p>
+                    <p className={`font-medium ${textPrimary}`}>{formatDate(selectedWfhRequest.start_date)}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>End Date</p>
+                    <p className={`font-medium ${textPrimary}`}>{formatDate(selectedWfhRequest.end_date)}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>Total Days</p>
+                    <p className={`font-medium ${textPrimary}`}>{selectedWfhRequest.days} {selectedWfhRequest.days > 1 ? 'Days' : 'Day'}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>Work Location</p>
+                    <p className={`font-medium ${textPrimary}`}>{selectedWfhRequest.work_location === 'home' ? 'Home' : 'Other Location'}</p>
+                  </div>
+                </div>
+                
+                {selectedWfhRequest.contact_number && (
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>Contact Number</p>
+                    <p className={`font-medium ${textPrimary}`}>{selectedWfhRequest.contact_number}</p>
+                  </div>
+                )}
+                
+                <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Reason</p>
+                  <p className={textPrimary}>{selectedWfhRequest.reason}</p>
+                </div>
+                
+                {selectedWfhRequest.work_plan && (
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>Work Plan</p>
+                    <p className={textPrimary}>{selectedWfhRequest.work_plan}</p>
+                  </div>
+                )}
+                
+                {/* Approval/Rejection Info */}
+                {selectedWfhRequest.status === 'approved' && (
+                  <div className={`p-3 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20`}>
+                    <p className="text-xs text-[#22c55e] mb-1">Approved</p>
+                    <p className={textPrimary}>By: {selectedWfhRequest.approved_by_name}</p>
+                    {selectedWfhRequest.remarks && (
+                      <p className={`text-sm ${textSecondary} mt-1`}>Remarks: {selectedWfhRequest.remarks}</p>
+                    )}
+                  </div>
+                )}
+                
+                {selectedWfhRequest.status === 'rejected' && (
+                  <div className={`p-3 rounded-lg bg-[#ef4444]/10 border border-[#ef4444]/20`}>
+                    <p className="text-xs text-[#ef4444] mb-1">Rejected</p>
+                    <p className={textPrimary}>By: {selectedWfhRequest.rejected_by_name}</p>
+                    {selectedWfhRequest.rejection_reason && (
+                      <p className={`text-sm ${textSecondary} mt-1`}>Reason: {selectedWfhRequest.rejection_reason}</p>
+                    )}
+                  </div>
+                )}
+                
+                {/* Action Buttons */}
+                {selectedWfhRequest.status === 'pending' && (
+                  <div className="flex gap-2 justify-end pt-4 border-t border-gray-700">
+                    <Button 
+                      onClick={() => { setShowDetailsModal(false); openApproveModal(selectedWfhRequest, 'wfh'); }} 
+                      className="bg-[#22c55e] hover:bg-[#16a34a]"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" /> Approve
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => { setShowDetailsModal(false); openRejectModal(selectedWfhRequest, 'wfh'); }} 
+                      className="text-[#ef4444] border-[#ef4444]"
+                    >
+                      <X className="h-4 w-4 mr-2" /> Reject
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
