@@ -72,44 +72,10 @@ api_router = APIRouter(prefix="/api")
 
 # ============== STARTUP EVENT - ENSURE ADMIN EXISTS ==============
 @app.on_event("startup")
-async def ensure_admin_user():
-    """Ensure admin user exists on startup for login access"""
-    # Always ensure vinoth@drawlead.com exists as super_admin with known password
-    password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    
-    existing_admin = await db.users.find_one({"email": "vinoth@drawlead.com"})
-    if not existing_admin:
-        admin_id = f"user_{uuid.uuid4().hex[:12]}"
-        admin_doc = {
-            "user_id": admin_id,
-            "email": "vinoth@drawlead.com",
-            "name": "Vinoth",
-            "role": "super_admin",
-            "password_hash": password_hash,
-            "is_active": True,
-            "module_access": ["leads", "operations", "finance", "reports", "settings", "hr"],
-            "project_access": [],
-            "can_create_projects": True,
-            "can_delete_tasks": True,
-            "can_manage_users": True,
-            "created_at": datetime.now(timezone.utc)
-        }
-        await db.users.insert_one(admin_doc)
-        logging.info("Admin user vinoth@drawlead.com created automatically on startup")
-    else:
-        # Always reset password and ensure super_admin role on startup
-        await db.users.update_one(
-            {"email": "vinoth@drawlead.com"},
-            {"$set": {
-                "password_hash": password_hash, 
-                "role": "super_admin",
-                "module_access": ["leads", "operations", "finance", "reports", "settings", "hr"],
-                "can_create_projects": True,
-                "can_delete_tasks": True,
-                "can_manage_users": True
-            }}
-        )
-        logging.info("Admin user vinoth@drawlead.com password reset to admin123 on startup")
+async def startup_tasks():
+    """Startup tasks - DB indexes etc."""
+    # No automatic admin creation - users will create accounts via /admin signup page
+    logging.info("Server started - Admin signup available at /admin with code DRAWLEAD2025")
 
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
