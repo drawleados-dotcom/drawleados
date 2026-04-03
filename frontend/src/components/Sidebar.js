@@ -45,8 +45,8 @@ const Sidebar = () => {
   const { user, logout, isAdmin } = useAuth();
   const { isDark } = useTheme();
   const [databases, setDatabases] = useState([]);
-  const [operationsExpanded, setOperationsExpanded] = useState(true);
-  const [salesExpanded, setSalesExpanded] = useState(true);
+  const [operationsExpanded, setOperationsExpanded] = useState(false);
+  const [salesExpanded, setSalesExpanded] = useState(false);
   const [metaAdsExpanded, setMetaAdsExpanded] = useState(false);
   const [websiteProjects, setWebsiteProjects] = useState([]);
   const [chatOpen, setChatOpen] = useState(false);
@@ -178,7 +178,7 @@ const Sidebar = () => {
 
   // Expand the relevant dropdown based on current page (accordion style - only one open)
   useEffect(() => {
-    // Operations pages
+    // Operations pages - open Operations, close Sales
     if (location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works') || 
         location.pathname.startsWith('/website-projects') || location.pathname === '/social-media' ||
         location.pathname === '/creative-board' || location.pathname === '/meta-ads' ||
@@ -186,9 +186,14 @@ const Sidebar = () => {
       setOperationsExpanded(true);
       setSalesExpanded(false);
     }
-    // Sales pages
+    // Sales pages - open Sales, close Operations
     else if (location.pathname === '/leads' || location.pathname === '/bde-tasks') {
       setSalesExpanded(true);
+      setOperationsExpanded(false);
+    }
+    // All other pages - close both dropdowns
+    else {
+      setSalesExpanded(false);
       setOperationsExpanded(false);
     }
   }, [location.pathname, location.search]);
