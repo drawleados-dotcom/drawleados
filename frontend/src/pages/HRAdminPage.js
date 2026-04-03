@@ -81,9 +81,12 @@ export default function HRAdminPage() {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
   
-  // Check if user can edit (super_admin and admin can edit, hr_manager is view-only)
+  // Check if user can edit (super_admin and admin can edit, hr_manager is view-only except for reviews)
   const canEdit = user?.role === 'super_admin' || user?.role === 'admin';
   const isHRManager = user?.role === 'hr_manager';
+  
+  // HR Manager can write reviews
+  const canWriteReviews = canEdit || isHRManager;
   
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -1034,16 +1037,24 @@ export default function HRAdminPage() {
     emp.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const tabs = [
-    { id: 'attendance', label: 'Attendance', icon: Clock },
-    { id: 'employees', label: 'Employees', icon: Users },
-    { id: 'designations-depts', label: 'Designation & Depts', icon: Briefcase },
-    { id: 'approvals', label: 'Approvals', icon: CheckCircle },
-    { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard },
-    { id: 'reviews', label: 'Reviews', icon: ClipboardList },
-    { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'quotes', label: 'Quotes', icon: FileText },
+  const allTabs = [
+    { id: 'attendance', label: 'Attendance', icon: Clock, hrManagerAccess: true },
+    { id: 'employees', label: 'Employees', icon: Users, hrManagerAccess: true },
+    { id: 'designations-depts', label: 'Designation & Depts', icon: Briefcase, hrManagerAccess: false },
+    { id: 'approvals', label: 'Approvals', icon: CheckCircle, hrManagerAccess: true },
+    { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard, hrManagerAccess: false },
+    { id: 'reviews', label: 'Reviews', icon: ClipboardList, hrManagerAccess: true, hrManagerCanWrite: true },
+    { id: 'calendar', label: 'Calendar', icon: Calendar, hrManagerAccess: true },
+    { id: 'quotes', label: 'Quotes', icon: FileText, hrManagerAccess: false },
   ];
+
+  // Filter tabs based on role - HR Manager only sees specific tabs
+  const tabs = isHRManager 
+    ? allTabs.filter(tab => tab.hrManagerAccess)
+    : allTabs;
+
+  // Check if HR Manager can write on current tab
+  const canHRManagerWrite = isHRManager && allTabs.find(t => t.id === activeTab)?.hrManagerCanWrite;
 
   return (
     <Layout>
@@ -1053,10 +1064,17 @@ export default function HRAdminPage() {
           <div>
             <h1 className="text-4xl font-bold tracking-tight mb-2">
               <span className="bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
-                HR Admin
+                {isHRManager ? 'HR Manager' : 'HR Admin'}
               </span>
             </h1>
-            <p className={textSecondary}>Manage employees, leave requests, and attendance</p>
+            <p className={textSecondary}>
+              {isHRManager 
+                ? 'View employees, attendance, and write reviews' 
+                : 'Manage employees, leave requests, and attendance'}
+            </p>
+            {isHRManager && (
+              <Badge className="mt-2 bg-[#ec4899]/20 text-[#ec4899]">View Only Mode (Reviews: Write Access)</Badge>
+            )}
           </div>
           {activeTab === 'employees' && canEdit && (
             <Button 
@@ -1609,12 +1627,12 @@ export default function HRAdminPage() {
                   </div>
                 )}
 
-                {/* Review Tabs: HR | Operations | CEO */}
+                {/* Review Tabs: HR | Operations | CEO - HR Manager can only use HR tab */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <h4 className={`font-semibold ${textPrimary}`}>Write Review</h4>
                     <div className="flex gap-2">
-                      {['hr', 'operations', 'ceo'].map((role) => (
+                      {(isHRManager ? ['hr'] : ['hr', 'operations', 'ceo']).map((role) => (
                         <Button
                           key={role}
                           onClick={() => {
