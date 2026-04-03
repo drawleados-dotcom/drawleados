@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -61,10 +62,15 @@ const WEBSITE_STATUS_OPTIONS = ['To-Do', 'In Progress', 'Client Review', 'Client
 export default function TasksModulePage() {
   const { isDark } = useTheme();
   const { user, isAdmin } = useAuth();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   
+  // Check URL for my-tasks view
+  const urlParams = new URLSearchParams(location.search);
+  const initialView = urlParams.get('view') === 'my-tasks' ? 'my-tasks' : 'departments';
+  
   // Navigation state
-  const [view, setView] = useState('departments');
+  const [view, setView] = useState(initialView);
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
   
@@ -338,6 +344,14 @@ export default function TasksModulePage() {
     loadDepartments();
     loadUsers();
   }, [loadDepartments, loadUsers]);
+
+  // Update view when URL changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('view') === 'my-tasks') {
+      setView('my-tasks');
+    }
+  }, [location.search]);
 
   // Load my tasks when switching to my-tasks view
   useEffect(() => {

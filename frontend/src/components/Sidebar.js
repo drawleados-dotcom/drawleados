@@ -5,6 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import {
   LayoutDashboard,
   Users,
+  User,
   Settings,
   LogOut,
   Package,
@@ -313,6 +314,17 @@ const Sidebar = () => {
         >
           <Calendar className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'Calendar'}
+        </Link>
+
+        {/* My Tasks - Personal task view for all users */}
+        <Link
+          to="/tasks?view=my-tasks"
+          data-testid="nav-my-tasks"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/tasks' && location.search.includes('my-tasks') ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'My Tasks' : ''}
+        >
+          <User className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'My Tasks'}
         </Link>
 
         {/* Business Development Tasks - Direct link for BDE users or users with bde designation */}
