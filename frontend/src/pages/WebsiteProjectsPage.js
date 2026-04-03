@@ -1631,6 +1631,7 @@ const PhaseTableCell = ({ task, phase, onUpdate, teamMembers, isDark }) => {
 
 const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, options, teamMembers, isDark, isEdit }) => {
   const [activeTab, setActiveTab] = useState('basic');
+  const [createStep, setCreateStep] = useState(isEdit ? 2 : 1); // Step 1: Type/Platform, Step 2: Full form
   const [showPassword, setShowPassword] = useState({});
   const [showAddTypeInput, setShowAddTypeInput] = useState(false);
   const [newWebsiteType, setNewWebsiteType] = useState('');
@@ -1645,9 +1646,16 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
 
-  const PLATFORMS = options?.platforms || ['Website', 'Shopify', 'WordPress', 'Wix', 'Webflow', 'Custom', 'React', 'Next.js'];
-  const WEBSITE_TYPES = [...(options?.website_types || ['Business Website', 'E-commerce', 'Portfolio', 'Landing Page', 'Blog', 'SaaS', 'Corporate', 'Educational']), ...customWebsiteTypes];
+  const PLATFORMS = ['WordPress', 'Shopify', 'Wix', 'Webflow', 'Framer', 'AI Builder', 'Custom Code', 'React', 'Next.js'];
+  const WEBSITE_TYPES = ['Landing Page', 'Business Website', 'Shopify Store', 'Web App', 'E-commerce', 'Portfolio', 'Blog', 'SaaS', 'Corporate', ...customWebsiteTypes];
   const PROJECT_STATUS = ['active', 'completed', 'on-hold', 'cancelled'];
+
+  // Reset step when modal opens for create
+  useEffect(() => {
+    if (isOpen && !isEdit) {
+      setCreateStep(1);
+    }
+  }, [isOpen, isEdit]);
 
   const togglePassword = (field) => {
     setShowPassword(prev => ({ ...prev, [field]: !prev[field] }));
@@ -1664,10 +1672,108 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
     }
   };
 
+  const handleNext = () => {
+    if (!project.website_type || !project.platform) {
+      toast.error('Please select Website Type and Platform');
+      return;
+    }
+    setCreateStep(2);
+  };
+
+  // Step 1: Type and Platform Selection
+  if (createStep === 1 && !isEdit) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className={`${bgCard} ${textPrimary} max-w-2xl`}>
+          <DialogHeader><DialogTitle className="text-xl">Create Website Project</DialogTitle></DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Website Type Selection */}
+            <div>
+              <label className={`text-base font-semibold ${textPrimary} block mb-3`}>1. Select Website Type</label>
+              <div className="grid grid-cols-3 gap-3">
+                {WEBSITE_TYPES.slice(0, 6).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setProject({ ...project, website_type: type })}
+                    className={`p-4 rounded-xl border-2 transition-all text-left ${
+                      project.website_type === type
+                        ? 'border-[#6366f1] bg-[#6366f1]/10'
+                        : `border-transparent ${bgSecondary} hover:border-[#6366f1]/50`
+                    }`}
+                  >
+                    <p className={`font-medium ${textPrimary}`}>{type}</p>
+                    <p className={`text-xs ${textSecondary} mt-1`}>
+                      {type === 'Landing Page' && 'Single page website'}
+                      {type === 'Business Website' && 'Multi-page corporate site'}
+                      {type === 'Shopify Store' && 'E-commerce store'}
+                      {type === 'Web App' && 'Custom web application'}
+                      {type === 'E-commerce' && 'Online store'}
+                      {type === 'Portfolio' && 'Showcase work'}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Platform Selection */}
+            <div>
+              <label className={`text-base font-semibold ${textPrimary} block mb-3`}>2. Select Platform</label>
+              <div className="grid grid-cols-4 gap-3">
+                {PLATFORMS.slice(0, 8).map(platform => (
+                  <button
+                    key={platform}
+                    onClick={() => setProject({ ...project, platform: platform })}
+                    className={`p-3 rounded-xl border-2 transition-all text-center ${
+                      project.platform === platform
+                        ? 'border-[#6366f1] bg-[#6366f1]/10'
+                        : `border-transparent ${bgSecondary} hover:border-[#6366f1]/50`
+                    }`}
+                  >
+                    <p className={`font-medium text-sm ${textPrimary}`}>{platform}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Selected Info */}
+            {project.website_type && project.platform && (
+              <div className={`p-4 rounded-lg ${isDark ? 'bg-[#6366f1]/10' : 'bg-[#6366f1]/5'} border border-[#6366f1]/30`}>
+                <p className={`text-sm ${textSecondary}`}>Creating:</p>
+                <p className={`font-semibold ${textPrimary}`}>{project.platform} {project.website_type}</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button 
+              onClick={handleNext} 
+              className="bg-[#6366f1] hover:bg-[#4f46e5]"
+              disabled={!project.website_type || !project.platform}
+            >
+              Next: Project Details
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={`${bgCard} ${textPrimary} max-w-4xl max-h-[85vh] overflow-y-auto`}>
-        <DialogHeader><DialogTitle className="text-xl">{title}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle className="text-xl">
+            {isEdit ? title : 'Create Website Project'}
+          </DialogTitle>
+          {!isEdit && (
+            <p className={`text-sm ${textSecondary}`}>
+              {project.platform} • {project.website_type}
+              <Button variant="link" size="sm" className="text-[#6366f1] ml-2" onClick={() => setCreateStep(1)}>Change</Button>
+            </p>
+          )}
+        </DialogHeader>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-5 mb-4">
@@ -1702,43 +1808,42 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
                 <label className={`text-sm ${textSecondary} block mb-1`}>Project Deadline</label>
                 <Input type="date" value={project.deadline} onChange={(e) => setProject({...project, deadline: e.target.value})} className={bgSecondary} />
               </div>
-              <div>
-                <label className={`text-sm ${textSecondary} block mb-1`}>Platform</label>
-                <Select value={project.platform} onValueChange={(v) => setProject({...project, platform: v})}>
-                  <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
-                  <SelectContent>{PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className={`text-sm ${textSecondary} block mb-1`}>Website Type</label>
-                {!showAddTypeInput ? (
-                  <div className="flex gap-2">
-                    <Select value={project.website_type} onValueChange={(v) => setProject({...project, website_type: v})}>
-                      <SelectTrigger className={`flex-1 ${bgSecondary}`}><SelectValue /></SelectTrigger>
-                      <SelectContent>{WEBSITE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" size="icon" onClick={() => setShowAddTypeInput(true)} className={bgSecondary} title="Add New Type">
-                      <Plus className="h-4 w-4" />
-                    </Button>
+              {isEdit && (
+                <>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Platform</label>
+                  <Select value={project.platform} onValueChange={(v) => setProject({...project, platform: v})}>
+                    <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                    <SelectContent>{PLATFORMS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Website Type</label>
+                  <Select value={project.website_type} onValueChange={(v) => setProject({...project, website_type: v})}>
+                    <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                    <SelectContent>{WEBSITE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                </>
+              )}
+              
+              {/* Shopify-specific fields */}
+              {project.website_type === 'Shopify Store' && (
+                <div className={`col-span-2 p-4 rounded-lg ${bgSecondary}`}>
+                  <label className={`text-sm font-semibold ${textPrimary} block mb-3`}>Shopify Store Details</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={`text-sm ${textSecondary} block mb-1`}>Store Name</label>
+                      <Input value={project.store_name || ''} onChange={(e) => setProject({...project, store_name: e.target.value})} placeholder="My Shopify Store" className={bgCard} />
+                    </div>
+                    <div>
+                      <label className={`text-sm ${textSecondary} block mb-1`}>Product Categories</label>
+                      <Input value={project.product_categories || ''} onChange={(e) => setProject({...project, product_categories: e.target.value})} placeholder="Clothing, Electronics..." className={bgCard} />
+                    </div>
                   </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <Input 
-                      value={newWebsiteType} 
-                      onChange={(e) => setNewWebsiteType(e.target.value)} 
-                      placeholder="Enter new type..." 
-                      className={`flex-1 ${bgSecondary}`}
-                      onKeyDown={(e) => e.key === 'Enter' && addNewWebsiteType()}
-                    />
-                    <Button type="button" size="icon" onClick={addNewWebsiteType} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                      <Check className="h-4 w-4" />
-                    </Button>
-                    <Button type="button" variant="outline" size="icon" onClick={() => { setShowAddTypeInput(false); setNewWebsiteType(''); }} className={bgSecondary}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
+
               <div className="col-span-2">
                 <label className={`text-sm ${textSecondary} block mb-1`}>Product Details</label>
                 <Textarea value={project.product_details} onChange={(e) => setProject({...project, product_details: e.target.value})} placeholder="Describe the product/service details..." className={bgSecondary} rows={3} />

@@ -282,7 +282,7 @@ async def get_website_projects(
 
 @department_router.post("/website/projects")
 async def create_website_project(request: Request):
-    """Create a new website project with default pages"""
+    """Create a new website project with template support"""
     from server import get_current_user
     current_user = await get_current_user(request)
     
@@ -290,14 +290,27 @@ async def create_website_project(request: Request):
     project_id = f"wp_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
     
+    # Get template if specified
+    template_id = data.get("template_id")
+    template = None
+    if template_id:
+        template = await db.website_templates.find_one({"template_id": template_id})
+    
+    # Get default config based on website_type + platform
+    website_type = data.get("website_type", "Business Website")
+    platform = data.get("platform", "WordPress")
+    config_key = f"{platform}_{website_type}"
+    default_config = DEFAULT_TEMPLATES.get(config_key, {})
+    
     project = {
         "project_id": project_id,
         "name": data.get("name", "New Website Project"),
         "onboarding_date": data.get("onboarding_date") or now.strftime("%Y-%m-%d"),
         "deadline": data.get("deadline"),
         "status": data.get("status", "active"),
-        "platform": data.get("platform", "Website"),
-        "website_type": data.get("website_type", "Business Website"),
+        "platform": platform,
+        "website_type": website_type,
+        "template_id": template_id,
         "developer": data.get("developer"),
         "designer": data.get("designer"),
         "content_writer": data.get("content_writer"),
@@ -306,7 +319,16 @@ async def create_website_project(request: Request):
         "client_drive_url": data.get("client_drive_url"),
         "documents_url": data.get("documents_url"),
         "client_name": data.get("client_name"),
+        "client_email": data.get("client_email"),
+        "client_phone": data.get("client_phone"),
         "location": data.get("location"),
+        "budget": data.get("budget"),
+        "notes": data.get("notes"),
+        # Shopify specific fields
+        "store_name": data.get("store_name"),
+        "product_categories": data.get("product_categories", []),
+        "shipping_zones": data.get("shipping_zones", []),
+        "payment_methods": data.get("payment_methods", []),
         "created_by": current_user.user_id,
         "created_at": now,
         "updated_at": now
@@ -314,35 +336,39 @@ async def create_website_project(request: Request):
     
     await db.website_projects.insert_one(project)
     
-    # Create default page tasks
-    for idx, page_name in enumerate(DEFAULT_WEBSITE_PAGES, 1):
+    # Create default pages from template or config
+    pages_to_create = data.get("pages", [])
+    if not pages_to_create:
+        if template and template.get("default_pages"):
+            pages_to_create = template["default_pages"]
+        elif default_config.get("default_pages"):
+            pages_to_create = default_config["default_pages"]
+        else:
+            pages_to_create = DEFAULT_WEBSITE_PAGES
+    
+    for idx, page_name in enumerate(pages_to_create, 1):
         task_id = f"wpt_{uuid.uuid4().hex[:12]}"
         task = {
             "task_id": task_id,
             "project_id": project_id,
             "sno": idx,
-            "page_name": page_name,
-            # Wireframe column
+            "page_name": page_name if isinstance(page_name, str) else page_name.get("name", "Page"),
             "wireframe_status": "To-Do",
             "wireframe_assignee": None,
             "wireframe_due": None,
             "wireframe_url": None,
-            # UI Design column
             "ui_status": "To-Do",
             "ui_assignee": None,
             "ui_due": None,
             "ui_url": None,
-            # Content column
             "content_status": "To-Do",
             "content_assignee": None,
             "content_due": None,
             "content_url": None,
-            # Development column
             "dev_status": "To-Do",
             "dev_assignee": None,
             "dev_due": None,
             "dev_url": None,
-            # Overall
             "overall_status": "To-Do",
             "overall_url": None,
             "assigned_to": None,
@@ -352,8 +378,65 @@ async def create_website_project(request: Request):
         }
         await db.website_page_tasks.insert_one(task)
     
+    # Create default tasks from template or config
+    tasks_to_create = data.get("tasks", [])
+    if not tasks_to_create:
+        if template and template.get("default_tasks"):
+            tasks_to_create = template["default_tasks"]
+        elif default_config.get("default_tasks"):
+            tasks_to_create = default_config["default_tasks"]
+    
+    for task_name in tasks_to_create:
+        task_id = f"wptask_{uuid.uuid4().hex[:12]}"
+        task = {
+            "task_id": task_id,
+            "project_id": project_id,
+            "task_name": task_name if isinstance(task_name, str) else task_name.get("name", "Task"),
+            "description": "",
+            "priority": "medium",
+            "type": "general",
+            "status": "pending",
+            "assigned_to": None,
+            "due_date": None,
+            "due_time": None,
+            "all_day": False,
+            "estimated_hours": None,
+            "actual_hours": None,
+            "timer_running": False,
+            "timer_started_at": None,
+            "total_time_seconds": 0,
+            "calendar_event_id": None,
+            "recurrence": "none",
+            "custom_recurrence": None,
+            "checklist": [],
+            "attachments": [],
+            "comments": [],
+            "created_by": current_user.user_id,
+            "created_at": now,
+            "updated_at": now,
+            "completed_at": None
+        }
+        await db.website_project_tasks.insert_one(task)
+    
+    # Initialize requirements if template has requirements_fields
+    if template and template.get("requirements_fields"):
+        await db.website_project_requirements.insert_one({
+            "project_id": project_id,
+            "fields": {field: "" for field in template["requirements_fields"]},
+            "created_at": now
+        })
+    
+    # Initialize branding if template has branding_fields
+    if template and template.get("branding_fields"):
+        await db.website_project_branding.insert_one({
+            "project_id": project_id,
+            "fields": {field: "" for field in template["branding_fields"]},
+            "created_at": now
+        })
+    
     project.pop("_id", None)
-    project["total_pages"] = len(DEFAULT_WEBSITE_PAGES)
+    project["total_pages"] = len(pages_to_create)
+    project["total_tasks"] = len(tasks_to_create)
     project["dev_percent"] = 0
     project["overall_percent"] = 0
     
@@ -1054,3 +1137,416 @@ async def get_my_tasks(request: Request):
 
 
 
+
+
+# ============== WEBSITE PROJECT TEMPLATES ==============
+
+# Website Types and Platforms Configuration
+WEBSITE_TYPES = ["Landing Page", "Business Website", "Shopify Store", "Web App", "E-commerce", "Portfolio"]
+WEBSITE_PLATFORMS = ["WordPress", "Shopify", "Wix", "Webflow", "Framer", "AI Builder", "Custom Code"]
+
+# Default template configurations
+DEFAULT_TEMPLATES = {
+    "WordPress_Landing Page": {
+        "default_pages": ["Home", "About", "Services", "Contact", "Thank You"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Content Writing", "Development", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "contact_info", "cta_text"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    "WordPress_Business Website": {
+        "default_pages": ["Home", "About Us", "Services", "Portfolio", "Team", "Blog", "Contact", "Privacy Policy"],
+        "default_tasks": ["Discovery Call", "Sitemap Planning", "Wireframe Design", "UI Design", "Content Writing", "Development", "SEO Setup", "Testing", "Training", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "team_info", "contact_info", "social_links"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "accent_color", "fonts", "brand_guidelines"]
+    },
+    "Shopify_Shopify Store": {
+        "default_pages": ["Home", "Collections", "Product Page", "About", "Contact", "FAQ", "Shipping Policy", "Refund Policy"],
+        "default_tasks": ["Discovery Call", "Store Setup", "Theme Selection", "Product Upload", "Collection Setup", "Payment Setup", "Shipping Setup", "Testing", "Training", "Launch"],
+        "requirements": ["store_name", "tagline", "about_text", "product_categories", "products_list", "shipping_zones", "payment_methods", "contact_info"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "fonts"]
+    },
+    "Webflow_Landing Page": {
+        "default_pages": ["Home", "Features", "Pricing", "Contact", "Thank You"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Webflow Development", "Animations", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "features_list", "pricing_plans", "cta_text", "contact_info"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    }
+}
+
+
+@department_router.get("/website/templates")
+async def get_website_templates(request: Request):
+    """Get all website project templates"""
+    from server import get_current_user
+    await get_current_user(request)
+    
+    templates = await db.website_templates.find({}, {"_id": 0}).to_list(100)
+    
+    # If no templates, return defaults
+    if not templates:
+        return {"templates": [], "default_configs": DEFAULT_TEMPLATES, "types": WEBSITE_TYPES, "platforms": WEBSITE_PLATFORMS}
+    
+    return {"templates": templates, "default_configs": DEFAULT_TEMPLATES, "types": WEBSITE_TYPES, "platforms": WEBSITE_PLATFORMS}
+
+
+@department_router.post("/website/templates")
+async def create_website_template(request: Request):
+    """Create a new website project template"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    data = await request.json()
+    template_id = f"tmpl_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    template = {
+        "template_id": template_id,
+        "name": data.get("name"),
+        "website_type": data.get("website_type"),
+        "platform": data.get("platform"),
+        "default_pages": data.get("default_pages", []),
+        "default_tasks": data.get("default_tasks", []),
+        "requirements_fields": data.get("requirements_fields", []),
+        "branding_fields": data.get("branding_fields", []),
+        "description": data.get("description", ""),
+        "is_active": True,
+        "created_by": user.user_id,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_templates.insert_one(template)
+    template.pop("_id", None)
+    
+    return template
+
+
+@department_router.put("/website/templates/{template_id}")
+async def update_website_template(template_id: str, request: Request):
+    """Update a website template"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    data = await request.json()
+    data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.website_templates.update_one(
+        {"template_id": template_id},
+        {"$set": data}
+    )
+    
+    template = await db.website_templates.find_one({"template_id": template_id}, {"_id": 0})
+    return template
+
+
+@department_router.delete("/website/templates/{template_id}")
+async def delete_website_template(template_id: str, request: Request):
+    """Delete a website template"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    await db.website_templates.delete_one({"template_id": template_id})
+    return {"message": "Template deleted"}
+
+
+# ============== WEBSITE PROJECT TASKS (BDE-style) ==============
+
+@department_router.get("/website/projects/{project_id}/tasks")
+async def get_website_project_tasks(project_id: str, request: Request):
+    """Get all tasks for a website project (BDE-style tasks)"""
+    from server import get_current_user
+    await get_current_user(request)
+    
+    tasks = await db.website_project_tasks.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    
+    return tasks
+
+
+@department_router.post("/website/projects/{project_id}/tasks")
+async def create_website_project_task(project_id: str, request: Request):
+    """Create a task for website project (like BDE task)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    data = await request.json()
+    task_id = f"wptask_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    task = {
+        "task_id": task_id,
+        "project_id": project_id,
+        "task_name": data.get("task_name"),
+        "description": data.get("description", ""),
+        "priority": data.get("priority", "medium"),
+        "type": data.get("type", "general"),
+        "status": data.get("status", "pending"),
+        "assigned_to": data.get("assigned_to"),
+        "due_date": data.get("due_date"),
+        "due_time": data.get("due_time"),
+        "all_day": data.get("all_day", False),
+        "estimated_hours": data.get("estimated_hours"),
+        "actual_hours": data.get("actual_hours"),
+        "timer_running": False,
+        "timer_started_at": None,
+        "total_time_seconds": 0,
+        "calendar_event_id": data.get("calendar_event_id"),
+        "recurrence": data.get("recurrence", "none"),
+        "custom_recurrence": data.get("custom_recurrence"),
+        "checklist": data.get("checklist", []),
+        "attachments": data.get("attachments", []),
+        "comments": [],
+        "created_by": user.user_id,
+        "created_at": now,
+        "updated_at": now,
+        "completed_at": None
+    }
+    
+    await db.website_project_tasks.insert_one(task)
+    task.pop("_id", None)
+    
+    return task
+
+
+@department_router.put("/website/projects/{project_id}/tasks/{task_id}")
+async def update_website_project_task(project_id: str, task_id: str, request: Request):
+    """Update a website project task"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    data = await request.json()
+    data["updated_at"] = datetime.now(timezone.utc)
+    
+    # Handle timer actions
+    if data.get("timer_action") == "start":
+        data["timer_running"] = True
+        data["timer_started_at"] = datetime.now(timezone.utc).isoformat()
+    elif data.get("timer_action") == "stop":
+        # Calculate elapsed time
+        task = await db.website_project_tasks.find_one({"task_id": task_id})
+        if task and task.get("timer_started_at"):
+            started = datetime.fromisoformat(task["timer_started_at"].replace("Z", "+00:00"))
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            data["total_time_seconds"] = task.get("total_time_seconds", 0) + elapsed
+        data["timer_running"] = False
+        data["timer_started_at"] = None
+    
+    # Handle status change to completed
+    if data.get("status") == "completed" and not data.get("completed_at"):
+        data["completed_at"] = datetime.now(timezone.utc)
+    
+    # Remove timer_action from update
+    data.pop("timer_action", None)
+    
+    await db.website_project_tasks.update_one(
+        {"task_id": task_id, "project_id": project_id},
+        {"$set": data}
+    )
+    
+    task = await db.website_project_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    return task
+
+
+@department_router.delete("/website/projects/{project_id}/tasks/{task_id}")
+async def delete_website_project_task(project_id: str, task_id: str, request: Request):
+    """Delete a website project task"""
+    from server import get_current_user
+    await get_current_user(request)
+    
+    await db.website_project_tasks.delete_one({"task_id": task_id, "project_id": project_id})
+    return {"message": "Task deleted"}
+
+
+# ============== WEBSITE PROJECT REQUIREMENTS ==============
+
+@department_router.get("/website/projects/{project_id}/requirements")
+async def get_website_project_requirements(project_id: str, request: Request):
+    """Get project requirements"""
+    from server import get_current_user
+    await get_current_user(request)
+    
+    requirements = await db.website_project_requirements.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    
+    return requirements or {"project_id": project_id, "fields": {}}
+
+
+@department_router.put("/website/projects/{project_id}/requirements")
+async def update_website_project_requirements(project_id: str, request: Request):
+    """Update project requirements"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    data = await request.json()
+    now = datetime.now(timezone.utc)
+    
+    await db.website_project_requirements.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "project_id": project_id,
+            "fields": data.get("fields", {}),
+            "updated_by": user.user_id,
+            "updated_at": now
+        }},
+        upsert=True
+    )
+    
+    requirements = await db.website_project_requirements.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    return requirements
+
+
+# ============== WEBSITE PROJECT BRANDING ==============
+
+@department_router.get("/website/projects/{project_id}/branding")
+async def get_website_project_branding(project_id: str, request: Request):
+    """Get project branding"""
+    from server import get_current_user
+    await get_current_user(request)
+    
+    branding = await db.website_project_branding.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    
+    return branding or {"project_id": project_id, "fields": {}}
+
+
+@department_router.put("/website/projects/{project_id}/branding")
+async def update_website_project_branding(project_id: str, request: Request):
+    """Update project branding"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    data = await request.json()
+    now = datetime.now(timezone.utc)
+    
+    await db.website_project_branding.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "project_id": project_id,
+            "logo_url": data.get("logo_url"),
+            "favicon_url": data.get("favicon_url"),
+            "primary_color": data.get("primary_color"),
+            "secondary_color": data.get("secondary_color"),
+            "accent_color": data.get("accent_color"),
+            "fonts": data.get("fonts", {}),
+            "brand_guidelines_url": data.get("brand_guidelines_url"),
+            "color_palette": data.get("color_palette", []),
+            "updated_by": user.user_id,
+            "updated_at": now
+        }},
+        upsert=True
+    )
+    
+    branding = await db.website_project_branding.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    return branding
+
+
+# ============== PROJECT MANAGER ROUTES ==============
+
+@department_router.get("/website/project-managers")
+async def get_project_managers(request: Request):
+    """Get all project managers"""
+    from server import get_current_user
+    await get_current_user(request)
+    
+    managers = await db.users.find(
+        {"$or": [
+            {"role": "project_manager"},
+            {"designation": {"$regex": "project.*manager", "$options": "i"}}
+        ]},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "designation": 1, "profile_photo": 1}
+    ).to_list(100)
+    
+    return managers
+
+
+@department_router.get("/website/approvals")
+async def get_website_approvals(request: Request):
+    """Get pending approvals for website projects"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    # Get projects pending approval
+    approvals = await db.website_project_approvals.find(
+        {"status": "pending"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return approvals
+
+
+@department_router.post("/website/approvals")
+async def create_approval_request(request: Request):
+    """Create an approval request for a project"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    data = await request.json()
+    approval_id = f"appr_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    approval = {
+        "approval_id": approval_id,
+        "project_id": data.get("project_id"),
+        "type": data.get("type", "project_completion"),  # project_completion, scope_change, deadline_extension
+        "title": data.get("title"),
+        "description": data.get("description"),
+        "status": "pending",
+        "requested_by": user.user_id,
+        "requested_by_name": user.name,
+        "assigned_to": data.get("assigned_to"),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_project_approvals.insert_one(approval)
+    approval.pop("_id", None)
+    
+    return approval
+
+
+@department_router.put("/website/approvals/{approval_id}")
+async def update_approval(approval_id: str, request: Request):
+    """Approve or reject an approval request"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    data = await request.json()
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "status": data.get("status"),  # approved, rejected
+        "reviewed_by": user.user_id,
+        "reviewed_by_name": user.name,
+        "review_notes": data.get("review_notes", ""),
+        "reviewed_at": now,
+        "updated_at": now
+    }
+    
+    await db.website_project_approvals.update_one(
+        {"approval_id": approval_id},
+        {"$set": update_data}
+    )
+    
+    approval = await db.website_project_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
+    return approval
