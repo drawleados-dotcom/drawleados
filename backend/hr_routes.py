@@ -137,6 +137,7 @@ class ClockInRequest(BaseModel):
     login_time: Optional[str] = None  # HH:MM format - employee enters their time
     clock_in_time: Optional[str] = None  # Alternative field name
     time: Optional[str] = None  # Alternative field name for login_time
+    outside_hours_reason: Optional[str] = None  # Reason if clocking in outside working hours
 
 class ClockOutRequest(BaseModel):
     notes: Optional[str] = ""
@@ -502,15 +503,19 @@ async def clock_in(clock_data: ClockInRequest, request: Request):
         sessions = existing.get("sessions", [])
         
         # Update for new clock-in (new session)
+        update_data = {
+            "clock_in": now,
+            "clock_out": None,
+            "work_mode": work_mode,
+            "work_location": work_mode,
+            "approval_status": approval_status
+        }
+        if clock_data.outside_hours_reason:
+            update_data["outside_hours_reason"] = clock_data.outside_hours_reason
+            
         await db.attendance.update_one(
             {"attendance_id": existing["attendance_id"]},
-            {"$set": {
-                "clock_in": now,
-                "clock_out": None,
-                "work_mode": work_mode,
-                "work_location": work_mode,
-                "approval_status": approval_status
-            }}
+            {"$set": update_data}
         )
         attendance_id = existing["attendance_id"]
     else:
@@ -537,6 +542,7 @@ async def clock_in(clock_data: ClockInRequest, request: Request):
             "approval_notes": "",
             "approved_by": None,
             "notes": "",
+            "outside_hours_reason": clock_data.outside_hours_reason or None,
             "created_at": datetime.now(timezone.utc)
         }
         await db.attendance.insert_one(attendance_doc)
@@ -1368,6 +1374,21 @@ async def update_settings(request: Request, settings_data: dict):
     )
     
     return await get_hr_settings()
+
+@hr_router.get("/admin/work-settings")
+async def get_work_settings(request: Request):
+    """Get work settings for clock-in validation (accessible to all authenticated users)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    settings = await get_hr_settings()
+    
+    # Return only the fields needed for clock-in validation
+    return {
+        "standard_login_time": settings.get("standard_login_time", "09:00"),
+        "standard_logout_time": settings.get("standard_logout_time", "18:00"),
+        "grace_period_minutes": settings.get("grace_period_minutes", 15)
+    }
 
 # ============== CALENDAR ROUTES ==============
 

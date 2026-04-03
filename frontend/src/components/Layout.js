@@ -41,6 +41,7 @@ const Layout = ({ children }) => {
   
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [workSettings, setWorkSettings] = useState(null);
   
   // Modal states
   const [showClockInModal, setShowClockInModal] = useState(false);
@@ -49,7 +50,7 @@ const Layout = ({ children }) => {
   const [showLunchInModal, setShowLunchInModal] = useState(false);
   
   // Form data for modals - now with separate hour, minute, period
-  const [clockInData, setClockInData] = useState({ hour: 9, minute: 0, period: 'AM', workMode: 'office' });
+  const [clockInData, setClockInData] = useState({ hour: 9, minute: 0, period: 'AM', workMode: 'office', reason: '' });
   const [clockOutData, setClockOutData] = useState({ hour: 6, minute: 0, period: 'PM' });
   const [lunchOutData, setLunchOutData] = useState({ hour: 1, minute: 0, period: 'PM' });
   const [lunchInData, setLunchInData] = useState({ hour: 2, minute: 0, period: 'PM' });
@@ -106,14 +107,51 @@ const Layout = ({ children }) => {
     }
   }, [token]);
 
+  // Load work settings to check working hours
+  const loadWorkSettings = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/work-settings`, { headers });
+      setWorkSettings(res.data);
+    } catch (error) {
+      console.error('Error loading work settings:', error);
+      // Default settings if API fails
+      setWorkSettings({
+        standard_login_time: '09:00',
+        standard_logout_time: '18:00',
+        grace_period_minutes: 15
+      });
+    }
+  }, [token]);
+
   useEffect(() => {
     loadTodayAttendance();
-  }, [loadTodayAttendance]);
+    loadWorkSettings();
+  }, [loadTodayAttendance, loadWorkSettings]);
+
+  // Check if current time is outside working hours
+  const isOutsideWorkingHours = () => {
+    if (!workSettings) return false;
+    
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    // Parse login time (e.g., "09:00" to 540 minutes)
+    const [loginHour, loginMin] = (workSettings.standard_login_time || '09:00').split(':').map(Number);
+    const loginMinutes = loginHour * 60 + loginMin;
+    
+    // Parse logout time (e.g., "18:00" to 1080 minutes)
+    const [logoutHour, logoutMin] = (workSettings.standard_logout_time || '18:00').split(':').map(Number);
+    const logoutMinutes = logoutHour * 60 + logoutMin;
+    
+    // Outside hours: before office start OR after office end
+    return currentMinutes < loginMinutes || currentMinutes > logoutMinutes;
+  };
 
   // Initialize modal times when opening
   const openClockInModal = () => {
     const { hour, minute, period } = getCurrentTimeParts();
-    setClockInData({ hour, minute, period, workMode: 'office' });
+    setClockInData({ hour, minute, period, workMode: 'office', reason: '' });
     setShowClockInModal(true);
   };
 
@@ -137,11 +175,18 @@ const Layout = ({ children }) => {
 
   // Handle Clock In
   const handleClockIn = async () => {
+    // Validate reason if outside working hours
+    if (isOutsideWorkingHours() && !clockInData.reason.trim()) {
+      toast.error('Please provide a reason for clocking in outside working hours');
+      return;
+    }
+    
     setLoading(true);
     try {
       await axios.post(`${API}/api/hr/attendance/clock-in`, {
         time: formatTimeForAPI(clockInData.hour, clockInData.minute, clockInData.period),
-        work_mode: clockInData.workMode
+        work_mode: clockInData.workMode,
+        outside_hours_reason: isOutsideWorkingHours() ? clockInData.reason : null
       }, { headers });
       toast.success('Clocked in successfully!');
       setShowClockInModal(false);
@@ -512,6 +557,40 @@ const Layout = ({ children }) => {
           period={clockInData.period}
           label="Clock In Time"
         />
+        
+        {/* Outside Working Hours Warning & Reason */}
+        {isOutsideWorkingHours() && (
+          <div className={`p-4 rounded-lg ${isDark ? 'bg-[#f59e0b]/10 border-[#f59e0b]/30' : 'bg-amber-50 border-amber-200'} border`}>
+            <div className="flex items-start gap-3">
+              <Clock className="h-5 w-5 text-[#f59e0b] mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <p className={`text-sm font-medium ${isDark ? 'text-[#f59e0b]' : 'text-amber-700'}`}>
+                  Outside Working Hours
+                </p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-[#a1a1aa]' : 'text-amber-600'}`}>
+                  Office hours: {workSettings?.standard_login_time || '09:00'} - {workSettings?.standard_logout_time || '18:00'}
+                </p>
+                <div className="mt-3">
+                  <Label className={`text-sm ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>
+                    Reason for early/late clock-in <span className="text-[#ef4444]">*</span>
+                  </Label>
+                  <textarea
+                    value={clockInData.reason}
+                    onChange={(e) => setClockInData(prev => ({ ...prev, reason: e.target.value }))}
+                    placeholder="Please explain why you're clocking in outside regular hours..."
+                    rows={2}
+                    className={`w-full mt-2 px-3 py-2 rounded-md text-sm ${
+                      isDark 
+                        ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa] placeholder-[#71717a]' 
+                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
+                    } border focus:outline-none focus:ring-2 focus:ring-[#f59e0b]/50`}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Work Mode */}
         <div>
