@@ -2920,6 +2920,78 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
     
     return await db.employee_profiles.find_one({"user_id": user_id}, {"_id": 0})
 
+
+@hr_router.delete("/admin/employee/{user_id}")
+async def delete_employee(user_id: str, request: Request):
+    """Delete an employee (Admin only) - Soft delete by setting status to inactive"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Prevent deleting yourself
+    if user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # Check if user exists
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Prevent deleting super_admin
+    if user.get("role") == "super_admin":
+        raise HTTPException(status_code=400, detail="Cannot delete super admin accounts")
+    
+    # Soft delete - mark as inactive
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "status": "inactive",
+            "deleted_at": datetime.now(timezone.utc),
+            "deleted_by": current_user.user_id
+        }}
+    )
+    
+    # Also update employee profile if exists
+    await db.employee_profiles.update_one(
+        {"user_id": user_id},
+        {"$set": {"status": "inactive"}}
+    )
+    
+    return {"message": "Employee deleted successfully", "user_id": user_id}
+
+
+@hr_router.delete("/admin/employee/{user_id}/permanent")
+async def permanently_delete_employee(user_id: str, request: Request):
+    """Permanently delete an employee and all associated data (Super Admin only)"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+    
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin access required")
+    
+    # Prevent deleting yourself
+    if user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # Check if user exists
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    # Delete from all collections
+    await db.users.delete_one({"user_id": user_id})
+    await db.employee_profiles.delete_one({"user_id": user_id})
+    await db.attendance.delete_many({"user_id": user_id})
+    await db.leave_requests.delete_many({"user_id": user_id})
+    await db.leave_balances.delete_one({"user_id": user_id})
+    await db.permissions.delete_many({"user_id": user_id})
+    await db.wfh_requests.delete_many({"user_id": user_id})
+    
+    return {"message": "Employee permanently deleted", "user_id": user_id}
+
+
 @hr_router.get("/admin/dashboard-stats")
 async def get_hr_dashboard_stats(request: Request):
     """Get HR dashboard statistics (Admin only)"""

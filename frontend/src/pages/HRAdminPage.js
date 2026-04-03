@@ -835,6 +835,19 @@ export default function HRAdminPage() {
     }
   };
 
+  const handleDeleteEmployee = async (userId) => {
+    try {
+      await axios.delete(
+        `${API}/api/hr/admin/employee/${userId}`,
+        { headers }
+      );
+      toast.success('Employee deleted successfully');
+      loadEmployees();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete employee');
+    }
+  };
+
   const handleUpdateCalendar = async (calendarData) => {
     try {
       await axios.put(
@@ -1102,6 +1115,7 @@ export default function HRAdminPage() {
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             onEdit={(emp) => { setSelectedEmployee(emp); setShowEditModal(true); }}
+            onDelete={handleDeleteEmployee}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -2722,11 +2736,13 @@ function DashboardTab({ stats, attendanceOverview, bgCard, bgSecondary, textPrim
 }
 
 // ============== EMPLOYEES TAB ==============
-function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   // Calculate employee stats - active employees only
   const activeEmployees = employees.filter(e => e.status !== 'inactive');
   const officeEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location !== 'home');
   const remoteEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location === 'home');
+  
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   
   return (
     <div className="space-y-6">
@@ -2840,13 +2856,25 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, 
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
-                      <Button
-                        size="sm"
-                        onClick={() => onEdit(emp)}
-                        className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => onEdit(emp)}
+                          className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        {emp.role !== 'super_admin' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDeleteConfirm(emp)}
+                            className="text-[#ef4444] border-[#ef4444] hover:bg-[#ef4444] hover:text-white"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -2855,6 +2883,47 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, 
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} w-full max-w-md`}>
+            <CardContent className="p-6">
+              <div className="text-center">
+                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle className="h-8 w-8 text-red-500" />
+                </div>
+                <h3 className={`text-lg font-semibold ${textPrimary} mb-2`}>Delete Employee?</h3>
+                <p className={`${textSecondary} mb-4`}>
+                  Are you sure you want to delete <span className="font-semibold text-[#ef4444]">{deleteConfirm.name}</span>?
+                </p>
+                <p className={`text-sm ${textSecondary} mb-6`}>
+                  This will deactivate the employee account. Their data will be preserved.
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => setDeleteConfirm(null)}
+                    className={`${textSecondary}`}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      onDelete(deleteConfirm.user_id);
+                      setDeleteConfirm(null);
+                    }}
+                    className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
