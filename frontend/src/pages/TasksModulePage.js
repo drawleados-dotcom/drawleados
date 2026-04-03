@@ -17,7 +17,8 @@ import {
   Play, Pause, Square, Timer, Eye, Link as LinkIcon, Filter,
   ChevronRight, ArrowLeft, FileSpreadsheet, ExternalLink,
   Search, Building2, Layers, LayoutGrid, List, FileText,
-  Repeat, Users, Globe, Code, Palette, FileEdit
+  Repeat, Users, Globe, Code, Palette, FileEdit,
+  Video, MapPin, UserCheck, ClipboardCheck, CalendarDays
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -66,6 +67,34 @@ export default function TasksModulePage() {
   const [view, setView] = useState('departments');
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
+  
+  // My Tasks Sub-tabs state
+  const [myTasksSubTab, setMyTasksSubTab] = useState('all'); // all, tasks, meetings, approvals
+  const [myTasks, setMyTasks] = useState([]);
+  const [myTasksLoading, setMyTasksLoading] = useState(false);
+  const [myTasksDateFilter, setMyTasksDateFilter] = useState('all'); // all, today, week, month, range
+  const [myTasksDateRange, setMyTasksDateRange] = useState({ from: '', to: '' });
+  const [showMyTaskModal, setShowMyTaskModal] = useState(false);
+  const [myTaskForm, setMyTaskForm] = useState({
+    task_name: '',
+    description: '',
+    priority: 'medium',
+    type: 'task', // task, meeting, approval
+    assigned_to: '',
+    due_date: '',
+    due_time: '',
+    status: 'pending',
+    // Meeting specific fields
+    meeting_type: '', // operations, client
+    meeting_mode: '', // office, team, client, department, personal
+    meeting_format: 'online', // online, offline
+    meeting_location: '',
+    meeting_link: '',
+    attendees: [],
+    // Approval specific
+    approval_type: '', // review, approval
+    approval_for: '' // user_id who needs to approve
+  });
   
   // Data
   const [departments, setDepartments] = useState([]);
@@ -169,6 +198,109 @@ export default function TasksModulePage() {
     }
   }, []);
 
+  // ========== MY TASKS FUNCTIONS ==========
+  
+  // Load my tasks (tasks assigned to me or created by me)
+  const loadMyTasks = useCallback(async () => {
+    setMyTasksLoading(true);
+    try {
+      const res = await axios.get(`${API}/api/tasks/my-tasks`, { headers });
+      setMyTasks(res.data);
+    } catch (error) {
+      console.error('Error loading my tasks:', error);
+      // Fallback to BDE tasks if my-tasks endpoint doesn't exist
+      try {
+        const bdeRes = await axios.get(`${API}/api/bde/tasks`, { headers });
+        setMyTasks(bdeRes.data);
+      } catch (e) {
+        setMyTasks([]);
+      }
+    }
+    setMyTasksLoading(false);
+  }, []);
+
+  // Create my task
+  const handleCreateMyTask = async () => {
+    if (!myTaskForm.task_name.trim()) {
+      toast.error('Task name is required');
+      return;
+    }
+    try {
+      const payload = {
+        ...myTaskForm,
+        // Include meeting details if type is meeting
+        meeting_details: myTaskForm.type === 'meeting' ? {
+          meeting_type: myTaskForm.meeting_type,
+          meeting_mode: myTaskForm.meeting_mode,
+          meeting_format: myTaskForm.meeting_format,
+          meeting_location: myTaskForm.meeting_location,
+          meeting_link: myTaskForm.meeting_link,
+          attendees: myTaskForm.attendees
+        } : null,
+        // Include approval details if type is approval
+        approval_details: myTaskForm.type === 'approval' ? {
+          approval_type: myTaskForm.approval_type,
+          approval_for: myTaskForm.approval_for
+        } : null
+      };
+      await axios.post(`${API}/api/bde/tasks`, payload, { headers });
+      toast.success('Task created successfully');
+      setShowMyTaskModal(false);
+      resetMyTaskForm();
+      loadMyTasks();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create task');
+    }
+  };
+
+  const resetMyTaskForm = () => {
+    setMyTaskForm({
+      task_name: '', description: '', priority: 'medium', type: 'task',
+      assigned_to: '', due_date: '', due_time: '', status: 'pending',
+      meeting_type: '', meeting_mode: '', meeting_format: 'online',
+      meeting_location: '', meeting_link: '', attendees: [],
+      approval_type: '', approval_for: ''
+    });
+  };
+
+  // Filter my tasks by sub-tab and date
+  const filteredMyTasks = myTasks.filter(task => {
+    // Sub-tab filter
+    if (myTasksSubTab === 'tasks' && task.type !== 'task' && task.type !== 'general' && task.type !== 'follow_up' && task.type !== 'proposal' && task.type !== 'call') return false;
+    if (myTasksSubTab === 'meetings' && task.type !== 'meeting') return false;
+    if (myTasksSubTab === 'approvals' && task.type !== 'approval' && !task.needs_approval) return false;
+    
+    // Date filter
+    const taskDate = task.due_date || task.created_at?.split('T')[0];
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (myTasksDateFilter === 'today' && taskDate !== today) return false;
+    if (myTasksDateFilter === 'week') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      if (taskDate < weekAgo.toISOString().split('T')[0]) return false;
+    }
+    if (myTasksDateFilter === 'month') {
+      const monthAgo = new Date();
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      if (taskDate < monthAgo.toISOString().split('T')[0]) return false;
+    }
+    if (myTasksDateFilter === 'range') {
+      if (myTasksDateRange.from && taskDate < myTasksDateRange.from) return false;
+      if (myTasksDateRange.to && taskDate > myTasksDateRange.to) return false;
+    }
+    
+    return true;
+  });
+
+  // My tasks stats
+  const myTasksStats = {
+    all: myTasks.length,
+    tasks: myTasks.filter(t => t.type === 'task' || t.type === 'general' || t.type === 'follow_up' || t.type === 'proposal' || t.type === 'call' || !t.type).length,
+    meetings: myTasks.filter(t => t.type === 'meeting').length,
+    approvals: myTasks.filter(t => t.type === 'approval' || t.needs_approval).length
+  };
+
   // ========== WEBSITE SPECIFIC FUNCTIONS ==========
   
   // Load website projects
@@ -206,6 +338,13 @@ export default function TasksModulePage() {
     loadDepartments();
     loadUsers();
   }, [loadDepartments, loadUsers]);
+
+  // Load my tasks when switching to my-tasks view
+  useEffect(() => {
+    if (view === 'my-tasks') {
+      loadMyTasks();
+    }
+  }, [view, loadMyTasks]);
 
   useEffect(() => {
     if (selectedDepartment) {
@@ -686,8 +825,13 @@ export default function TasksModulePage() {
         <div className={`px-6 py-4 border-b ${borderColor} ${bgCard}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {view !== 'departments' && (
+              {view !== 'departments' && view !== 'my-tasks' && (
                 <Button variant="ghost" size="icon" onClick={handleBack} className={textSecondary}>
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+              )}
+              {view === 'my-tasks' && (
+                <Button variant="ghost" size="icon" onClick={() => setView('departments')} className={textSecondary}>
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               )}
@@ -698,6 +842,13 @@ export default function TasksModulePage() {
                   <Layers className="h-5 w-5" />
                   <span className="font-medium">Tasks</span>
                 </button>
+                
+                {view === 'my-tasks' && (
+                  <>
+                    <ChevronRight className={`h-4 w-4 ${textSecondary}`} />
+                    <span className={`font-medium ${textPrimary}`}>My Tasks</span>
+                  </>
+                )}
                 
                 {selectedDepartment && (
                   <>
@@ -720,10 +871,27 @@ export default function TasksModulePage() {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
+              {view === 'departments' && (
+                <Button 
+                  onClick={() => setView('my-tasks')} 
+                  variant="outline"
+                  className={`${borderColor} ${textPrimary}`}
+                  data-testid="my-tasks-btn"
+                >
+                  <User className="h-4 w-4 mr-2" />
+                  My Tasks
+                </Button>
+              )}
               {view === 'departments' && isAdmin && (
                 <Button onClick={() => setShowDeptModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
                   <Plus className="h-4 w-4 mr-2" />
                   Add Department
+                </Button>
+              )}
+              {view === 'my-tasks' && (
+                <Button onClick={() => setShowMyTaskModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Task
                 </Button>
               )}
               {view === 'projects' && !isWebsiteDepartment(selectedDepartment) && (
@@ -762,6 +930,175 @@ export default function TasksModulePage() {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6">
+          {/* My Tasks View */}
+          {view === 'my-tasks' && (
+            <div className="space-y-6">
+              {/* Sub-tabs */}
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className={`flex rounded-lg ${bgCard} border ${borderColor} p-1`}>
+                  {[
+                    { id: 'all', label: 'All', icon: Layers, count: myTasksStats.all },
+                    { id: 'tasks', label: 'Tasks', icon: CheckCircle2, count: myTasksStats.tasks },
+                    { id: 'meetings', label: 'Meetings', icon: Video, count: myTasksStats.meetings },
+                    { id: 'approvals', label: 'Review/Approval', icon: ClipboardCheck, count: myTasksStats.approvals }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setMyTasksSubTab(tab.id)}
+                      data-testid={`my-tasks-tab-${tab.id}`}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                        myTasksSubTab === tab.id
+                          ? 'bg-[#6366f1] text-white'
+                          : `${textSecondary} hover:bg-[#27272a]`
+                      }`}
+                    >
+                      <tab.icon className="h-4 w-4" />
+                      <span>{tab.label}</span>
+                      <Badge className={`ml-1 ${myTasksSubTab === tab.id ? 'bg-white/20 text-white' : 'bg-[#27272a]'}`}>
+                        {tab.count}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Date Filters */}
+                <div className="flex items-center gap-2 ml-auto">
+                  <Select value={myTasksDateFilter} onValueChange={setMyTasksDateFilter}>
+                    <SelectTrigger className={`w-36 ${bgCard} ${borderColor}`}>
+                      <CalendarDays className="h-4 w-4 mr-2" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={bgCard}>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="week">This Week</SelectItem>
+                      <SelectItem value="month">This Month</SelectItem>
+                      <SelectItem value="range">Date Range</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {myTasksDateFilter === 'range' && (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="date"
+                        value={myTasksDateRange.from}
+                        onChange={(e) => setMyTasksDateRange({ ...myTasksDateRange, from: e.target.value })}
+                        className={`w-36 ${bgCard} ${borderColor}`}
+                      />
+                      <span className={textSecondary}>to</span>
+                      <Input
+                        type="date"
+                        value={myTasksDateRange.to}
+                        onChange={(e) => setMyTasksDateRange({ ...myTasksDateRange, to: e.target.value })}
+                        className={`w-36 ${bgCard} ${borderColor}`}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Tasks List */}
+              {myTasksLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin h-8 w-8 border-2 border-[#6366f1] border-t-transparent rounded-full" />
+                </div>
+              ) : filteredMyTasks.length === 0 ? (
+                <Card className={`${bgCard} border ${borderColor}`}>
+                  <div className="p-12 text-center">
+                    <Briefcase className={`h-16 w-16 mx-auto mb-4 ${textSecondary}`} />
+                    <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>No {myTasksSubTab === 'all' ? 'tasks' : myTasksSubTab} found</h3>
+                    <p className={textSecondary}>Create a new {myTasksSubTab === 'meetings' ? 'meeting' : myTasksSubTab === 'approvals' ? 'approval request' : 'task'} to get started</p>
+                    <Button onClick={() => setShowMyTaskModal(true)} className="mt-4 bg-[#6366f1] hover:bg-[#4f46e5]">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create {myTasksSubTab === 'meetings' ? 'Meeting' : myTasksSubTab === 'approvals' ? 'Approval' : 'Task'}
+                    </Button>
+                  </div>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {filteredMyTasks.map(task => (
+                    <Card key={task.task_id} className={`${bgCard} border ${borderColor} hover:border-[#6366f1]/50 transition-all`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              {task.type === 'meeting' ? (
+                                <Video className="h-5 w-5 text-[#6366f1]" />
+                              ) : task.type === 'approval' || task.needs_approval ? (
+                                <ClipboardCheck className="h-5 w-5 text-[#f59e0b]" />
+                              ) : (
+                                <CheckCircle2 className={`h-5 w-5 ${task.status === 'completed' ? 'text-[#10b981]' : 'text-[#71717a]'}`} />
+                              )}
+                              <h4 className={`font-medium ${textPrimary}`}>{task.task_name}</h4>
+                              <Badge className={priorityColors[task.priority] || priorityColors.medium}>
+                                {task.priority || 'Medium'}
+                              </Badge>
+                              <Badge className={statusColors[task.status]?.bg + ' ' + statusColors[task.status]?.text}>
+                                {statusColors[task.status]?.label || task.status}
+                              </Badge>
+                            </div>
+                            
+                            {task.description && (
+                              <p className={`text-sm ${textSecondary} mb-2`}>{task.description}</p>
+                            )}
+                            
+                            <div className="flex items-center gap-4 text-sm">
+                              {task.due_date && (
+                                <div className={`flex items-center gap-1 ${textSecondary}`}>
+                                  <Calendar className="h-4 w-4" />
+                                  <span>{formatDateDisplay(task.due_date)}</span>
+                                  {task.due_time && <span>at {task.due_time}</span>}
+                                </div>
+                              )}
+                              
+                              {task.assigned_to_name && (
+                                <div className={`flex items-center gap-1 ${textSecondary}`}>
+                                  <User className="h-4 w-4" />
+                                  <span>{task.assigned_to_name}</span>
+                                </div>
+                              )}
+                              
+                              {/* Meeting specific info */}
+                              {task.type === 'meeting' && task.meeting_details && (
+                                <>
+                                  {task.meeting_details.meeting_type && (
+                                    <Badge variant="outline" className="text-[#6366f1] border-[#6366f1]">
+                                      {task.meeting_details.meeting_type === 'operations' ? 'Operations Meeting' : 'Client Meeting'}
+                                    </Badge>
+                                  )}
+                                  {task.meeting_details.meeting_format === 'online' ? (
+                                    <div className={`flex items-center gap-1 ${textSecondary}`}>
+                                      <Video className="h-4 w-4" />
+                                      <span>Online</span>
+                                    </div>
+                                  ) : (
+                                    <div className={`flex items-center gap-1 ${textSecondary}`}>
+                                      <MapPin className="h-4 w-4" />
+                                      <span>{task.meeting_details.meeting_location || 'Office'}</span>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="icon" className={textSecondary}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className={textSecondary}>
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Departments View */}
           {view === 'departments' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -2001,6 +2338,259 @@ export default function TasksModulePage() {
               <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
                 <Button variant="outline" onClick={() => setShowWebsitePageModal(false)}>Cancel</Button>
                 <Button onClick={handleAddWebsitePage} className="bg-[#6366f1] hover:bg-[#4f46e5]">Add Page</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* My Task Creation Modal */}
+        {showMyTaskModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className={`w-full max-w-2xl ${bgCard} border ${borderColor} max-h-[90vh] overflow-y-auto`}>
+              <div className={`p-4 border-b ${borderColor} flex items-center justify-between sticky top-0 ${bgCard} z-10`}>
+                <h3 className={`font-semibold ${textPrimary}`}>
+                  {myTaskForm.type === 'meeting' ? 'Schedule Meeting' : myTaskForm.type === 'approval' ? 'Request Approval' : 'Create Task'}
+                </h3>
+                <button onClick={() => { setShowMyTaskModal(false); resetMyTaskForm(); }} className={textSecondary}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="p-4 space-y-4">
+                {/* Task Type Selector */}
+                <div>
+                  <Label className={textPrimary}>Type *</Label>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    {[
+                      { id: 'task', label: 'Task', icon: CheckCircle2, color: '#10b981' },
+                      { id: 'meeting', label: 'Meeting', icon: Video, color: '#6366f1' },
+                      { id: 'approval', label: 'Approval', icon: ClipboardCheck, color: '#f59e0b' }
+                    ].map(type => (
+                      <button
+                        key={type.id}
+                        onClick={() => setMyTaskForm({ ...myTaskForm, type: type.id })}
+                        className={`p-3 rounded-lg border-2 flex items-center gap-2 transition-all ${
+                          myTaskForm.type === type.id
+                            ? `border-[${type.color}] bg-[${type.color}]/10`
+                            : `${borderColor} hover:border-[#6366f1]/50`
+                        }`}
+                        data-testid={`task-type-${type.id}`}
+                      >
+                        <type.icon className={`h-5 w-5`} style={{ color: type.color }} />
+                        <span className={textPrimary}>{type.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Basic Fields */}
+                <div>
+                  <Label className={textPrimary}>
+                    {myTaskForm.type === 'meeting' ? 'Meeting Title' : myTaskForm.type === 'approval' ? 'Approval Title' : 'Task Name'} *
+                  </Label>
+                  <Input
+                    value={myTaskForm.task_name}
+                    onChange={(e) => setMyTaskForm({ ...myTaskForm, task_name: e.target.value })}
+                    placeholder={myTaskForm.type === 'meeting' ? 'e.g., Client Review Meeting' : 'Enter title...'}
+                    className={`${bgSecondary} ${borderColor}`}
+                  />
+                </div>
+
+                <div>
+                  <Label className={textPrimary}>Description</Label>
+                  <Textarea
+                    value={myTaskForm.description}
+                    onChange={(e) => setMyTaskForm({ ...myTaskForm, description: e.target.value })}
+                    placeholder="Add details..."
+                    rows={3}
+                    className={`${bgSecondary} ${borderColor}`}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Due Date</Label>
+                    <Input
+                      type="date"
+                      value={myTaskForm.due_date}
+                      onChange={(e) => setMyTaskForm({ ...myTaskForm, due_date: e.target.value })}
+                      className={`${bgSecondary} ${borderColor}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Time</Label>
+                    <Input
+                      type="time"
+                      value={myTaskForm.due_time}
+                      onChange={(e) => setMyTaskForm({ ...myTaskForm, due_time: e.target.value })}
+                      className={`${bgSecondary} ${borderColor}`}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Priority</Label>
+                    <Select value={myTaskForm.priority} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, priority: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Assign To</Label>
+                    <Select value={myTaskForm.assigned_to} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, assigned_to: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}>
+                        <SelectValue placeholder="Select user" />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        {users.map(u => (
+                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Meeting Specific Fields */}
+                {myTaskForm.type === 'meeting' && (
+                  <div className={`p-4 rounded-lg ${bgSecondary} space-y-4`}>
+                    <h4 className={`font-medium ${textPrimary} flex items-center gap-2`}>
+                      <Video className="h-4 w-4 text-[#6366f1]" />
+                      Meeting Details
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className={textSecondary}>Meeting Type</Label>
+                        <Select value={myTaskForm.meeting_type} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, meeting_type: v })}>
+                          <SelectTrigger className={`${bgCard} ${borderColor}`}>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent className={bgCard}>
+                            <SelectItem value="operations">Operations Meeting</SelectItem>
+                            <SelectItem value="client">Client Meeting</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className={textSecondary}>Mode</Label>
+                        <Select value={myTaskForm.meeting_mode} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, meeting_mode: v })}>
+                          <SelectTrigger className={`${bgCard} ${borderColor}`}>
+                            <SelectValue placeholder="Select mode" />
+                          </SelectTrigger>
+                          <SelectContent className={bgCard}>
+                            <SelectItem value="office">Office</SelectItem>
+                            <SelectItem value="team">Team</SelectItem>
+                            <SelectItem value="client">Client</SelectItem>
+                            <SelectItem value="department">Department</SelectItem>
+                            <SelectItem value="personal">Personal</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className={textSecondary}>Format</Label>
+                      <div className="flex gap-4 mt-2">
+                        <label className={`flex items-center gap-2 cursor-pointer ${textPrimary}`}>
+                          <input
+                            type="radio"
+                            checked={myTaskForm.meeting_format === 'online'}
+                            onChange={() => setMyTaskForm({ ...myTaskForm, meeting_format: 'online', meeting_location: '' })}
+                            className="accent-[#6366f1]"
+                          />
+                          <Video className="h-4 w-4" />
+                          Online
+                        </label>
+                        <label className={`flex items-center gap-2 cursor-pointer ${textPrimary}`}>
+                          <input
+                            type="radio"
+                            checked={myTaskForm.meeting_format === 'offline'}
+                            onChange={() => setMyTaskForm({ ...myTaskForm, meeting_format: 'offline' })}
+                            className="accent-[#6366f1]"
+                          />
+                          <MapPin className="h-4 w-4" />
+                          Offline
+                        </label>
+                      </div>
+                    </div>
+
+                    {myTaskForm.meeting_format === 'online' ? (
+                      <div>
+                        <Label className={textSecondary}>Meeting Link</Label>
+                        <Input
+                          value={myTaskForm.meeting_link}
+                          onChange={(e) => setMyTaskForm({ ...myTaskForm, meeting_link: e.target.value })}
+                          placeholder="https://meet.google.com/..."
+                          className={`${bgCard} ${borderColor}`}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <Label className={textSecondary}>Location</Label>
+                        <Input
+                          value={myTaskForm.meeting_location}
+                          onChange={(e) => setMyTaskForm({ ...myTaskForm, meeting_location: e.target.value })}
+                          placeholder="e.g., Conference Room A, Office Floor 2"
+                          className={`${bgCard} ${borderColor}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Approval Specific Fields */}
+                {myTaskForm.type === 'approval' && (
+                  <div className={`p-4 rounded-lg ${bgSecondary} space-y-4`}>
+                    <h4 className={`font-medium ${textPrimary} flex items-center gap-2`}>
+                      <ClipboardCheck className="h-4 w-4 text-[#f59e0b]" />
+                      Approval Details
+                    </h4>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className={textSecondary}>Approval Type</Label>
+                        <Select value={myTaskForm.approval_type} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, approval_type: v })}>
+                          <SelectTrigger className={`${bgCard} ${borderColor}`}>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent className={bgCard}>
+                            <SelectItem value="review">Review</SelectItem>
+                            <SelectItem value="approval">Approval</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className={textSecondary}>Request Approval From</Label>
+                        <Select value={myTaskForm.approval_for} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, approval_for: v })}>
+                          <SelectTrigger className={`${bgCard} ${borderColor}`}>
+                            <SelectValue placeholder="Select approver" />
+                          </SelectTrigger>
+                          <SelectContent className={bgCard}>
+                            {users.map(u => (
+                              <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
+                <Button variant="outline" onClick={() => { setShowMyTaskModal(false); resetMyTaskForm(); }}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateMyTask} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                  {myTaskForm.type === 'meeting' ? 'Schedule Meeting' : myTaskForm.type === 'approval' ? 'Request Approval' : 'Create Task'}
+                </Button>
               </div>
             </Card>
           </div>

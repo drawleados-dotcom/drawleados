@@ -518,7 +518,7 @@ export default function BDETasksPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className={`text-2xl font-bold ${textPrimary}`}>BDE Tasks</h1>
+            <h1 className={`text-2xl font-bold ${textPrimary}`}>Business Development</h1>
             <p className={textSecondary}>Manage your business development tasks</p>
           </div>
           <Button onClick={() => setShowCreateModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">

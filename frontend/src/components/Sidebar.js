@@ -315,16 +315,16 @@ const Sidebar = () => {
           {!isCollapsed && 'Calendar'}
         </Link>
 
-        {/* BDE Tasks - Direct link for BDE users or users with bde designation */}
+        {/* Business Development Tasks - Direct link for BDE users or users with bde designation */}
         {(isBDE || canSeeDepartment('bde')) && (
         <Link
           to="/bde-tasks"
           data-testid="nav-bde-tasks"
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/bde-tasks' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'BDE Tasks' : ''}
+          title={isCollapsed ? 'Business Development' : ''}
         >
           <Briefcase className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'BDE Tasks'}
+          {!isCollapsed && 'Business Development'}
         </Link>
         )}
 
@@ -479,7 +479,7 @@ const Sidebar = () => {
               </div>
               )}
 
-              {/* BDE Tasks */}
+              {/* Business Development Tasks */}
               {canSeeDepartment('bde') && (
               <Link
                 to="/bde-tasks"
@@ -490,7 +490,7 @@ const Sidebar = () => {
                 }`}
               >
                 <span className="text-base">💼</span>
-                <span>BDE Tasks</span>
+                <span>Business Development</span>
               </Link>
               )}
 
