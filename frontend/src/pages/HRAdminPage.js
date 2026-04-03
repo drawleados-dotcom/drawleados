@@ -761,9 +761,9 @@ export default function HRAdminPage() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 data-testid={`hr-admin-tab-${tab.id}`}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'bg-[#6366f1] text-white'
+                    ? 'bg-[#6366f1] text-white font-medium'
                     : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
                 }`}
               >
@@ -1857,7 +1857,7 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, 
                 <Button
                   size="sm"
                   onClick={() => onEdit(emp)}
-                  className={`${bgSecondary} hover:bg-[#3f3f46]`}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
@@ -3318,6 +3318,12 @@ function EnhancedAttendanceTab({
   const presentCount = employeesWithStatus.filter(e => e.status === 'present' || e.status === 'working').length;
   const absentCount = employeesWithStatus.filter(e => e.status === 'absent').length;
   const yetToLoginCount = employeesWithStatus.filter(e => e.status === 'yet_to_login').length;
+  
+  // Calculate WFH count from records
+  const wfhCount = records.filter(r => 
+    r.date?.split('T')[0] === selectedDate && 
+    r.work_location === 'home'
+  ).length;
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -3418,7 +3424,7 @@ function EnhancedAttendanceTab({
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-4 text-center">
             <div className="text-3xl font-bold text-[#6366f1]">{employees.length}</div>
@@ -3429,6 +3435,12 @@ function EnhancedAttendanceTab({
           <CardContent className="p-4 text-center">
             <div className="text-3xl font-bold text-[#22c55e]">{presentCount}</div>
             <div className={`text-sm ${textSecondary}`}>Present/Working</div>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#8b5cf6]`}>
+          <CardContent className="p-4 text-center">
+            <div className="text-3xl font-bold text-[#8b5cf6]">{wfhCount}</div>
+            <div className={`text-sm ${textSecondary}`}>Work from Home</div>
           </CardContent>
         </Card>
         <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#f59e0b]`}>
@@ -3578,13 +3590,19 @@ function DesignationsDeptsTab({
   bgCard, bgSecondary, textPrimary, textSecondary, borderColor
 }) {
   const [activeSubTab, setActiveSubTab] = useState('designations');
+  const [viewDesignation, setViewDesignation] = useState(null);
 
   const MODULES = [
     { value: 'leads', label: 'Leads' },
     { value: 'operations', label: 'Operations' },
     { value: 'hr', label: 'HR' },
     { value: 'finance', label: 'Finance' },
-    { value: 'tasks', label: 'Tasks' },
+    { value: 'tasks', label: 'Tasks (BDE Tasks)' },
+    { value: 'bde_tasks', label: 'BDE Tasks' },
+    { value: 'seo_tasks', label: 'SEO Tasks' },
+    { value: 'social_media_tasks', label: 'Social Media Tasks' },
+    { value: 'project_manager_tasks', label: 'PM Tasks' },
+    { value: 'ceo_tasks', label: 'CEO Tasks' },
   ];
 
   return (
@@ -3619,110 +3637,45 @@ function DesignationsDeptsTab({
             </Button>
           </div>
           
-          <div className="grid gap-4">
+          {/* 3-Column Card Grid */}
+          <div className="grid md:grid-cols-3 gap-4">
             {designations.length > 0 ? designations.map((desg) => (
-              <Card key={desg.designation_id} className={`${bgCard} border ${borderColor}`}>
+              <Card key={desg.designation_id} className={`${bgCard} border ${borderColor} hover:border-[#6366f1] transition-colors cursor-pointer`}>
                 <CardContent className="p-4">
-                  {editingDesignation?.designation_id === desg.designation_id ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className={textPrimary}>Title *</Label>
-                          <Input
-                            value={editingDesignation.title}
-                            onChange={(e) => setEditingDesignation(prev => ({ ...prev, title: e.target.value }))}
-                            className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                          />
-                        </div>
-                        <div>
-                          <Label className={textPrimary}>Description</Label>
-                          <Input
-                            value={editingDesignation.description}
-                            onChange={(e) => setEditingDesignation(prev => ({ ...prev, description: e.target.value }))}
-                            className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <Label className={textPrimary}>Roles & Responsibilities</Label>
-                        <textarea
-                          value={editingDesignation.roles_responsibilities}
-                          onChange={(e) => setEditingDesignation(prev => ({ ...prev, roles_responsibilities: e.target.value }))}
-                          rows={3}
-                          className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
-                        />
-                      </div>
-                      <div>
-                        <Label className={textPrimary}>Module Access</Label>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {MODULES.map(m => (
-                            <button
-                              key={m.value}
-                              type="button"
-                              onClick={() => {
-                                const access = editingDesignation.module_access || [];
-                                setEditingDesignation(prev => ({
-                                  ...prev,
-                                  module_access: access.includes(m.value)
-                                    ? access.filter(x => x !== m.value)
-                                    : [...access, m.value]
-                                }));
-                              }}
-                              className={`px-3 py-1 rounded-full text-sm ${
-                                (editingDesignation.module_access || []).includes(m.value)
-                                  ? 'bg-[#6366f1] text-white'
-                                  : `${bgSecondary} ${textSecondary}`
-                              }`}
-                            >
-                              {m.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <Button variant="ghost" onClick={() => setEditingDesignation(null)}>Cancel</Button>
-                        <Button onClick={onUpdateDesignation} className="bg-[#10b981] hover:bg-[#059669]">Save</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className={`text-lg font-semibold ${textPrimary}`}>{desg.title}</h3>
-                          <Badge className="bg-[#10b981]/20 text-[#10b981]">
-                            <Users className="h-3 w-3 mr-1" />
-                            {desg.employee_count || 0} Employees
-                          </Badge>
-                        </div>
-                        {desg.description && <p className={`text-sm ${textSecondary} mt-1`}>{desg.description}</p>}
-                        {desg.roles_responsibilities && (
-                          <div className="mt-2">
-                            <span className={`text-xs ${textSecondary}`}>Responsibilities:</span>
-                            <p className={`text-sm ${textPrimary} whitespace-pre-wrap`}>{desg.roles_responsibilities}</p>
-                          </div>
-                        )}
-                        {desg.module_access?.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {desg.module_access.map(m => (
-                              <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1]">{m}</Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => setEditingDesignation(desg)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => onDeleteDesignation(desg.designation_id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className={`font-semibold ${textPrimary}`}>{desg.title}</h3>
+                    <Badge className="bg-[#10b981]/20 text-[#10b981] text-xs">
+                      {desg.employee_count || 0}
+                    </Badge>
+                  </div>
+                  <p className={`text-sm ${textSecondary} line-clamp-2 mb-3`}>
+                    {desg.description || 'No description'}
+                  </p>
+                  {desg.module_access?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {desg.module_access.slice(0, 3).map(m => (
+                        <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{m}</Badge>
+                      ))}
+                      {desg.module_access.length > 3 && (
+                        <Badge className={`${bgSecondary} ${textSecondary} text-xs`}>+{desg.module_access.length - 3}</Badge>
+                      )}
                     </div>
                   )}
+                  <div className="flex gap-2 justify-end pt-2 border-t border-[#27272a]">
+                    <Button size="sm" variant="ghost" onClick={() => setViewDesignation(desg)}>
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingDesignation(desg)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-[#ef4444]" onClick={() => onDeleteDesignation(desg.designation_id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             )) : (
-              <Card className={`${bgCard} border ${borderColor}`}>
+              <Card className={`${bgCard} border ${borderColor} col-span-3`}>
                 <CardContent className="p-8 text-center">
                   <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                   <p className={textSecondary}>No designations created yet</p>
@@ -3730,6 +3683,140 @@ function DesignationsDeptsTab({
               </Card>
             )}
           </div>
+          
+          {/* View Designation Modal */}
+          {viewDesignation && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <Card className={`${bgCard} w-full max-w-lg`}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className={`text-xl font-semibold ${textPrimary}`}>{viewDesignation.title}</h3>
+                      <Badge className="bg-[#10b981]/20 text-[#10b981] mt-1">
+                        <Users className="h-3 w-3 mr-1" />
+                        {viewDesignation.employee_count || 0} Employees
+                      </Badge>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setViewDesignation(null)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className={`text-xs ${textSecondary} uppercase`}>Description</label>
+                      <p className={textPrimary}>{viewDesignation.description || 'No description'}</p>
+                    </div>
+                    
+                    {viewDesignation.roles_responsibilities && (
+                      <div>
+                        <label className={`text-xs ${textSecondary} uppercase`}>Roles & Responsibilities</label>
+                        <p className={`${textPrimary} whitespace-pre-wrap`}>{viewDesignation.roles_responsibilities}</p>
+                      </div>
+                    )}
+                    
+                    <div>
+                      <label className={`text-xs ${textSecondary} uppercase`}>Module Access</label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {viewDesignation.module_access?.length > 0 ? (
+                          viewDesignation.module_access.map(m => (
+                            <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1]">{m}</Badge>
+                          ))
+                        ) : (
+                          <span className={textSecondary}>No modules assigned</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2 justify-end mt-6">
+                    <Button variant="ghost" onClick={() => setViewDesignation(null)}>Close</Button>
+                    <Button 
+                      onClick={() => { setEditingDesignation(viewDesignation); setViewDesignation(null); }}
+                      className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          
+          {/* Edit Designation Modal */}
+          {editingDesignation && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <Card className={`${bgCard} w-full max-w-lg max-h-[90vh] overflow-y-auto`}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>Edit Designation</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingDesignation(null)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className={textPrimary}>Title *</Label>
+                      <Input
+                        value={editingDesignation.title}
+                        onChange={(e) => setEditingDesignation(prev => ({ ...prev, title: e.target.value }))}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Description</Label>
+                      <Input
+                        value={editingDesignation.description || ''}
+                        onChange={(e) => setEditingDesignation(prev => ({ ...prev, description: e.target.value }))}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Roles & Responsibilities</Label>
+                      <textarea
+                        value={editingDesignation.roles_responsibilities || ''}
+                        onChange={(e) => setEditingDesignation(prev => ({ ...prev, roles_responsibilities: e.target.value }))}
+                        rows={4}
+                        className={`w-full px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textPrimary}>Module Access</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {MODULES.map(m => (
+                          <button
+                            key={m.value}
+                            type="button"
+                            onClick={() => {
+                              const access = editingDesignation.module_access || [];
+                              setEditingDesignation(prev => ({
+                                ...prev,
+                                module_access: access.includes(m.value)
+                                  ? access.filter(x => x !== m.value)
+                                  : [...access, m.value]
+                              }));
+                            }}
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              (editingDesignation.module_access || []).includes(m.value)
+                                ? 'bg-[#6366f1] text-white'
+                                : `${bgSecondary} ${textSecondary}`
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end mt-6">
+                    <Button variant="ghost" onClick={() => setEditingDesignation(null)}>Cancel</Button>
+                    <Button onClick={onUpdateDesignation} className="bg-[#22c55e] hover:bg-[#16a34a]">Save Changes</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
           
           {/* Add Designation Modal */}
           {showDesignationModal && (
@@ -3885,132 +3972,411 @@ function DesignationsDeptsTab({
   );
 }
 
-// ============ Enhanced Approvals Tab (Leave Requests + Approvals Combined) ============
+// ============ Enhanced Approvals Tab (3 Sub-tabs with Filters) ============
 function EnhancedApprovalsTab({
   pendingApprovals, leaveRequests, leaveFilter, setLeaveFilter,
   onApproveAttendance, onApprovePermission, onApproveLeave, onRejectLeave,
   onViewTasks, onSendForVerification, onFinalApprove,
   formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('pending');
+  const [activeSubTab, setActiveSubTab] = useState('attendance');
+  const [dateFilter, setDateFilter] = useState('day');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  
+  // Approval modals
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [approvalType, setApprovalType] = useState(''); // attendance, permission, leave
+  const [remarks, setRemarks] = useState('');
+  const [rejectReason, setRejectReason] = useState('');
+  const [enableLOP, setEnableLOP] = useState(false);
 
   const attendanceApprovals = pendingApprovals?.attendance || [];
   const permissionApprovals = pendingApprovals?.permissions || [];
   const leaveApprovals = pendingApprovals?.leaves || [];
-  const totalPending = attendanceApprovals.length + permissionApprovals.length + leaveApprovals.length;
+
+  // Open approve modal
+  const openApproveModal = (item, type) => {
+    setSelectedItem(item);
+    setApprovalType(type);
+    setRemarks('');
+    setEnableLOP(false);
+    setShowApproveModal(true);
+  };
+
+  // Open reject modal
+  const openRejectModal = (item, type) => {
+    setSelectedItem(item);
+    setApprovalType(type);
+    setRejectReason('');
+    setShowRejectModal(true);
+  };
+
+  // Handle approve with remarks
+  const handleApprove = () => {
+    if (approvalType === 'attendance') {
+      onApproveAttendance({ ...selectedItem, remarks, lop_deduction: enableLOP });
+    } else if (approvalType === 'permission') {
+      onApprovePermission({ ...selectedItem, remarks, lop_deduction: enableLOP });
+    } else if (approvalType === 'leave') {
+      onApproveLeave(selectedItem.request_id, remarks, enableLOP);
+    }
+    setShowApproveModal(false);
+    toast.success('Approved successfully');
+  };
+
+  // Handle reject with reason
+  const handleReject = () => {
+    if (!rejectReason) {
+      toast.error('Please enter a rejection reason');
+      return;
+    }
+    onRejectLeave(selectedItem.request_id, rejectReason);
+    setShowRejectModal(false);
+    toast.success('Rejected');
+  };
 
   return (
     <div className="space-y-4">
-      {/* Sub-tabs */}
-      <div className="flex gap-2">
+      {/* Sub-tabs: Attendance | Leave | Permission */}
+      <div className="flex gap-2 flex-wrap">
         <Button
-          variant={activeSubTab === 'pending' ? 'default' : 'outline'}
-          onClick={() => setActiveSubTab('pending')}
-          className={activeSubTab === 'pending' ? 'bg-[#6366f1]' : ''}
+          onClick={() => setActiveSubTab('attendance')}
+          className={`${activeSubTab === 'attendance' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`}`}
         >
-          <CheckCircle className="h-4 w-4 mr-2" />
-          Pending Approvals ({totalPending})
+          <Clock className="h-4 w-4 mr-2" />
+          Attendance ({attendanceApprovals.length})
         </Button>
         <Button
-          variant={activeSubTab === 'leaves' ? 'default' : 'outline'}
-          onClick={() => setActiveSubTab('leaves')}
-          className={activeSubTab === 'leaves' ? 'bg-[#6366f1]' : ''}
+          onClick={() => setActiveSubTab('leave')}
+          className={`${activeSubTab === 'leave' ? 'bg-[#22c55e] text-white' : `${bgSecondary} ${textSecondary}`}`}
         >
           <Calendar className="h-4 w-4 mr-2" />
-          Leave Requests ({leaveRequests?.length || 0})
+          Leave ({leaveApprovals.length + (leaveRequests?.length || 0)})
+        </Button>
+        <Button
+          onClick={() => setActiveSubTab('permission')}
+          className={`${activeSubTab === 'permission' ? 'bg-[#f59e0b] text-white' : `${bgSecondary} ${textSecondary}`}`}
+        >
+          <AlertCircle className="h-4 w-4 mr-2" />
+          Permission ({permissionApprovals.length})
         </Button>
       </div>
 
-      {activeSubTab === 'pending' && (
-        <div className="space-y-6">
-          {/* Attendance Approvals */}
-          {attendanceApprovals.length > 0 && (
-            <div>
-              <h3 className={`font-semibold ${textPrimary} mb-3`}>Attendance Corrections ({attendanceApprovals.length})</h3>
-              <div className="space-y-3">
-                {attendanceApprovals.map((item, idx) => (
-                  <Card key={idx} className={`${bgCard} border ${borderColor}`}>
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
-                          <p className={`text-sm ${textSecondary}`}>{item.type}: {item.reason}</p>
-                          <p className={`text-xs ${textSecondary}`}>{formatDate(item.date)} | {formatTime(item.time)}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={() => onApproveAttendance(item)} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                            <CheckCircle className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+      {/* Date Filters */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex gap-2">
+              {['day', 'range', 'month'].map(filter => (
+                <Button
+                  key={filter}
+                  variant={dateFilter === filter ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setDateFilter(filter)}
+                  className={dateFilter === filter ? 'bg-[#6366f1] text-white' : ''}
+                >
+                  {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                </Button>
+              ))}
             </div>
-          )}
-
-          {/* Permission Approvals */}
-          {permissionApprovals.length > 0 && (
-            <div>
-              <h3 className={`font-semibold ${textPrimary} mb-3`}>Permission Requests ({permissionApprovals.length})</h3>
-              <div className="space-y-3">
-                {permissionApprovals.map((item, idx) => (
-                  <Card key={idx} className={`${bgCard} border ${borderColor}`}>
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
-                          <p className={`text-sm ${textSecondary}`}>{item.hours}h - {item.reason}</p>
-                          <p className={`text-xs ${textSecondary}`}>{formatDate(item.date)}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={() => onApprovePermission(item)} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                            <CheckCircle className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+            
+            {dateFilter === 'day' && (
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className={`w-48 ${bgSecondary} ${borderColor}`}
+              />
+            )}
+            
+            {dateFilter === 'range' && (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  className={`w-40 ${bgSecondary} ${borderColor}`}
+                />
+                <span className={textSecondary}>to</span>
+                <Input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  className={`w-40 ${bgSecondary} ${borderColor}`}
+                />
               </div>
-            </div>
-          )}
+            )}
+            
+            {dateFilter === 'month' && (
+              <Input
+                type="month"
+                value={selectedDate.substring(0, 7)}
+                onChange={(e) => setSelectedDate(e.target.value + '-01')}
+                className={`w-48 ${bgSecondary} ${borderColor}`}
+              />
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-          {/* Leave Approvals */}
-          {leaveApprovals.length > 0 && (
-            <div>
-              <h3 className={`font-semibold ${textPrimary} mb-3`}>Leave Approvals ({leaveApprovals.length})</h3>
-              <div className="space-y-3">
-                {leaveApprovals.map((item, idx) => (
-                  <Card key={idx} className={`${bgCard} border ${borderColor}`}>
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
-                          <p className={`text-sm ${textSecondary}`}>{item.leave_type}: {item.reason}</p>
-                          <p className={`text-xs ${textSecondary}`}>{formatDate(item.from_date)} - {formatDate(item.to_date)}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" onClick={() => onApproveLeave(item.request_id)} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                            Approve
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => onRejectLeave(item.request_id)} className="text-[#ef4444] border-[#ef4444]">
-                            Reject
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {totalPending === 0 && (
+      {/* Attendance Approvals Tab */}
+      {activeSubTab === 'attendance' && (
+        <div className="space-y-3">
+          {attendanceApprovals.length > 0 ? attendanceApprovals.map((item, idx) => (
+            <Card key={idx} className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">{item.type}</Badge>
+                    </div>
+                    <p className={`text-sm ${textSecondary}`}>{item.reason}</p>
+                    <p className={`text-xs ${textSecondary} mt-1`}>{formatDate(item.date)} | {formatTime(item.time)}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => openApproveModal(item, 'attendance')} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'attendance')} className="text-[#ef4444] border-[#ef4444]">
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )) : (
             <Card className={`${bgCard} border ${borderColor}`}>
               <CardContent className="p-8 text-center">
                 <CheckCircle className={`h-12 w-12 mx-auto mb-3 text-[#22c55e]`} />
+                <p className={textPrimary}>No pending attendance approvals</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Leave Approvals Tab */}
+      {activeSubTab === 'leave' && (
+        <div className="space-y-3">
+          {/* Filter */}
+          <div className="flex gap-2">
+            {['all', 'pending', 'approved', 'rejected'].map(f => (
+              <Button
+                key={f}
+                variant={leaveFilter === f ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setLeaveFilter(f)}
+                className={leaveFilter === f ? 'bg-[#6366f1] text-white' : ''}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Button>
+            ))}
+          </div>
+
+          {(leaveApprovals.length > 0 || leaveRequests?.length > 0) ? (
+            [...leaveApprovals, ...(leaveRequests || [])].map((item, idx) => (
+              <Card key={idx} className={`${bgCard} border ${borderColor}`}>
+                <CardContent className="p-4">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                        <Badge className={`${
+                          item.leave_type === 'casual' ? 'bg-blue-500/20 text-blue-400' :
+                          item.leave_type === 'sick' ? 'bg-orange-500/20 text-orange-400' :
+                          item.leave_type === 'wfh' ? 'bg-purple-500/20 text-purple-400' :
+                          'bg-green-500/20 text-green-400'
+                        }`}>
+                          {item.leave_type?.toUpperCase()}
+                        </Badge>
+                        <Badge className={`${
+                          item.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                          item.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {item.status}
+                        </Badge>
+                      </div>
+                      <p className={`text-sm ${textSecondary}`}>{item.reason}</p>
+                      <p className={`text-xs ${textSecondary} mt-1`}>
+                        {formatDate(item.from_date || item.start_date)} - {formatDate(item.to_date || item.end_date)}
+                        {item.days && ` (${item.days} days)`}
+                      </p>
+                    </div>
+                    {item.status === 'pending' && (
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => openApproveModal(item, 'leave')} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'leave')} className="text-[#ef4444] border-[#ef4444]">
+                          Reject
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-8 text-center">
+                <Calendar className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                <p className={textSecondary}>No leave requests found</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Permission Approvals Tab */}
+      {activeSubTab === 'permission' && (
+        <div className="space-y-3">
+          {permissionApprovals.length > 0 ? permissionApprovals.map((item, idx) => (
+            <Card key={idx} className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                      <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{item.hours}h Permission</Badge>
+                    </div>
+                    <p className={`text-sm ${textSecondary}`}>{item.reason}</p>
+                    <p className={`text-xs ${textSecondary} mt-1`}>
+                      {formatDate(item.date)} {item.from_time && `| ${item.from_time} - ${item.to_time}`}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => openApproveModal(item, 'permission')} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'permission')} className="text-[#ef4444] border-[#ef4444]">
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )) : (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-8 text-center">
+                <Clock className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                <p className={textSecondary}>No pending permission requests</p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Approve Modal with Remarks */}
+      {showApproveModal && selectedItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} w-full max-w-md`}>
+            <CardContent className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className={`text-lg font-semibold ${textPrimary}`}>Approve Request</h3>
+                <Button variant="ghost" size="sm" onClick={() => setShowApproveModal(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className={`p-3 rounded-lg ${bgSecondary} mb-4`}>
+                <p className={`font-medium ${textPrimary}`}>{selectedItem.employee_name}</p>
+                <p className={`text-sm ${textSecondary}`}>
+                  {approvalType === 'leave' ? `${selectedItem.leave_type} Leave` : 
+                   approvalType === 'permission' ? `${selectedItem.hours}h Permission` :
+                   selectedItem.type}
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label className={textPrimary}>Remarks (Optional)</Label>
+                  <textarea
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    rows={3}
+                    placeholder="Add remarks for the employee..."
+                    className={`w-full mt-1 px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                </div>
+                
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="enableLOP"
+                    checked={enableLOP}
+                    onChange={(e) => setEnableLOP(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                  />
+                  <Label htmlFor="enableLOP" className={`${textPrimary} cursor-pointer`}>
+                    Enable LOP Deduction (Loss of Pay)
+                  </Label>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end mt-6">
+                <Button variant="ghost" onClick={() => setShowApproveModal(false)}>Cancel</Button>
+                <Button onClick={handleApprove} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Reject Modal with Reason */}
+      {showRejectModal && selectedItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} w-full max-w-md`}>
+            <CardContent className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className={`text-lg font-semibold ${textPrimary}`}>Reject Request</h3>
+                <Button variant="ghost" size="sm" onClick={() => setShowRejectModal(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              <div className={`p-3 rounded-lg ${bgSecondary} mb-4`}>
+                <p className={`font-medium ${textPrimary}`}>{selectedItem.employee_name}</p>
+                <p className={`text-sm ${textSecondary}`}>
+                  {approvalType === 'leave' ? `${selectedItem.leave_type} Leave` : 
+                   approvalType === 'permission' ? `${selectedItem.hours}h Permission` :
+                   selectedItem.type}
+                </p>
+              </div>
+
+              <div>
+                <Label className={textPrimary}>Rejection Reason *</Label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={3}
+                  placeholder="Enter reason for rejection..."
+                  className={`w-full mt-1 px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  required
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end mt-6">
+                <Button variant="ghost" onClick={() => setShowRejectModal(false)}>Cancel</Button>
+                <Button onClick={handleReject} className="bg-[#ef4444] hover:bg-[#dc2626]">
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
                 <p className={textPrimary}>All caught up!</p>
                 <p className={`text-sm ${textSecondary}`}>No pending approvals</p>
               </CardContent>
