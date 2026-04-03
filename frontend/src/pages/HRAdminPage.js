@@ -42,13 +42,34 @@ const ROLES = [
 
 // Module access options
 const MODULES = [
+  // Core Modules
+  { value: 'calendar', label: 'Calendar', icon: Calendar },
+  { value: 'my_tasks', label: 'My Tasks', icon: ClipboardList },
+  { value: 'our_tasks', label: 'Our Tasks', icon: ClipboardList },
+  { value: 'my_profile', label: 'My Profile', icon: User },
+  
+  // Sales
+  { value: 'sales', label: 'Sales', icon: Users },
   { value: 'leads', label: 'Leads', icon: Users },
+  { value: 'bde_tasks', label: 'BDE Tasks', icon: Briefcase },
+  
+  // Operations
   { value: 'operations', label: 'Operations', icon: Briefcase },
   { value: 'tasks', label: 'Tasks', icon: Briefcase },
+  { value: 'website_projects', label: 'Website Projects', icon: Globe },
+  { value: 'seo_works', label: 'SEO Works', icon: Globe },
+  { value: 'social_media', label: 'Social Media', icon: Globe },
+  { value: 'creative_board', label: 'Creative Board', icon: FileText },
+  { value: 'meta_ads', label: 'Meta Ads', icon: Globe },
+  
+  // Admin Modules
   { value: 'hr', label: 'HR', icon: Users },
   { value: 'hr_admin', label: 'HR Admin', icon: Shield },
   { value: 'finance', label: 'Finance', icon: CreditCard },
-  { value: 'settings', label: 'Settings', icon: Shield },
+  { value: 'settings', label: 'Settings', icon: Settings },
+  { value: 'documentations', label: 'Documentations', icon: FileText },
+  
+  // Reports
   { value: 'reports', label: 'Reports', icon: FileText },
 ];
 
@@ -4876,16 +4897,35 @@ function DesignationsDeptsTab({
   const [viewDesignation, setViewDesignation] = useState(null);
 
   const MODULES = [
+    // Core Modules
+    { value: 'calendar', label: 'Calendar' },
+    { value: 'my_tasks', label: 'My Tasks' },
+    { value: 'our_tasks', label: 'Our Tasks' },
+    { value: 'my_profile', label: 'My Profile' },
+    
+    // Sales
+    { value: 'sales', label: 'Sales' },
     { value: 'leads', label: 'Leads' },
-    { value: 'operations', label: 'Operations' },
-    { value: 'hr', label: 'HR' },
-    { value: 'finance', label: 'Finance' },
-    { value: 'tasks', label: 'Tasks (BDE Tasks)' },
     { value: 'bde_tasks', label: 'BDE Tasks' },
-    { value: 'seo_tasks', label: 'SEO Tasks' },
-    { value: 'social_media_tasks', label: 'Social Media Tasks' },
-    { value: 'project_manager_tasks', label: 'PM Tasks' },
-    { value: 'ceo_tasks', label: 'CEO Tasks' },
+    
+    // Operations
+    { value: 'operations', label: 'Operations' },
+    { value: 'tasks', label: 'Tasks' },
+    { value: 'website_projects', label: 'Website Projects' },
+    { value: 'seo_works', label: 'SEO Works' },
+    { value: 'social_media', label: 'Social Media' },
+    { value: 'creative_board', label: 'Creative Board' },
+    { value: 'meta_ads', label: 'Meta Ads' },
+    
+    // Admin Modules
+    { value: 'hr', label: 'HR' },
+    { value: 'hr_admin', label: 'HR Admin' },
+    { value: 'finance', label: 'Finance' },
+    { value: 'settings', label: 'Settings' },
+    { value: 'documentations', label: 'Documentations' },
+    
+    // Reports
+    { value: 'reports', label: 'Reports' },
   ];
 
   return (

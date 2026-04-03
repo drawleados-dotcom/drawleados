@@ -49,13 +49,35 @@ const SettingsPage = () => {
   ];
 
   const modules = [
+    // Core Modules
+    { value: 'calendar', label: 'Calendar' },
+    { value: 'my_tasks', label: 'My Tasks' },
+    { value: 'our_tasks', label: 'Our Tasks' },
+    { value: 'my_profile', label: 'My Profile' },
+    
+    // Sales
+    { value: 'sales', label: 'Sales' },
     { value: 'leads', label: 'Leads' },
-    { value: 'hr', label: 'HR' },
+    { value: 'bde_tasks', label: 'BDE Tasks' },
+    
+    // Operations
     { value: 'operations', label: 'Operations' },
     { value: 'tasks', label: 'Tasks' },
+    { value: 'website_projects', label: 'Website Projects' },
+    { value: 'seo_works', label: 'SEO Works' },
+    { value: 'social_media', label: 'Social Media' },
+    { value: 'creative_board', label: 'Creative Board' },
+    { value: 'meta_ads', label: 'Meta Ads' },
+    
+    // Admin Modules
+    { value: 'hr', label: 'HR' },
+    { value: 'hr_admin', label: 'HR Admin' },
     { value: 'finance', label: 'Finance' },
-    { value: 'reports', label: 'Reports' },
     { value: 'settings', label: 'Settings' },
+    { value: 'documentations', label: 'Documentations' },
+    
+    // Reports
+    { value: 'reports', label: 'Reports' },
   ];
 
   useEffect(() => {
