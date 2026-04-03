@@ -2844,11 +2844,11 @@ async def get_all_leave_requests(request: Request, status: Optional[str] = None)
 
 @hr_router.get("/admin/employees")
 async def get_all_employee_details(request: Request):
-    """Get all employees with full details (Admin only)"""
+    """Get all employees with full details (Admin and HR Manager)"""
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     employees = await db.users.find(
@@ -2994,11 +2994,11 @@ async def permanently_delete_employee(user_id: str, request: Request):
 
 @hr_router.get("/admin/dashboard-stats")
 async def get_hr_dashboard_stats(request: Request):
-    """Get HR dashboard statistics (Admin only)"""
+    """Get HR dashboard statistics (Admin and HR Manager)"""
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)

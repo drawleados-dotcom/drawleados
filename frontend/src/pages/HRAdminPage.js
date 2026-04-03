@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -75,9 +76,14 @@ const MODULES = [
 
 export default function HRAdminPage() {
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
+  
+  // Check if user can edit (super_admin and admin can edit, hr_manager is view-only)
+  const canEdit = user?.role === 'super_admin' || user?.role === 'admin';
+  const isHRManager = user?.role === 'hr_manager';
   
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -1116,6 +1122,7 @@ export default function HRAdminPage() {
             setSearchQuery={setSearchQuery}
             onEdit={(emp) => { setSelectedEmployee(emp); setShowEditModal(true); }}
             onDelete={handleDeleteEmployee}
+            canEdit={canEdit}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -2736,7 +2743,7 @@ function DashboardTab({ stats, attendanceOverview, bgCard, bgSecondary, textPrim
 }
 
 // ============== EMPLOYEES TAB ==============
-function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete, canEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   // Calculate employee stats - active employees only
   const activeEmployees = employees.filter(e => e.status !== 'inactive');
   const officeEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location !== 'home');
@@ -2861,22 +2868,36 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => onEdit(emp)}
-                          className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                          data-testid={`edit-employee-${emp.user_id}`}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {emp.role !== 'super_admin' && (
+                        {canEdit ? (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => onEdit(emp)}
+                              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                              data-testid={`edit-employee-${emp.user_id}`}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {emp.role !== 'super_admin' && (
+                              <Button
+                                size="sm"
+                                onClick={() => setDeleteConfirm(emp)}
+                                className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                                data-testid={`delete-employee-${emp.user_id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </>
+                        ) : (
                           <Button
                             size="sm"
-                            onClick={() => setDeleteConfirm(emp)}
-                            className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                            data-testid={`delete-employee-${emp.user_id}`}
+                            variant="outline"
+                            onClick={() => onEdit(emp)}
+                            className={`${textSecondary} border ${borderColor}`}
+                            data-testid={`view-employee-${emp.user_id}`}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Eye className="h-4 w-4 mr-1" /> View
                           </Button>
                         )}
                       </div>
