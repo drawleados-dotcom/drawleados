@@ -684,3 +684,83 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 ### Approval Flow
 - Approvals from departments (HR salary, Finance, etc.) appear in Review/Approval tab
 - CEO can view summary, add remarks, approve, reject, or resend for review
+
+
+
+---
+
+### Website Project Detail View Redesign (DONE - April 2026)
+**Purpose:** Redesigned the Tasks > Website > Projects board to match the "Operations Website Project" style based on reference images.
+
+**Project Header Card:**
+- Project name with Globe icon
+- ACTIVE/On Hold/Completed status badge
+- Docs button (links to Google Docs if configured)
+- Drive button (links to Google Drive if configured)
+- Edit button (opens edit modal)
+- Progress bar with gradient (purple to violet)
+- Completed/Total pages count (e.g., "0/8")
+- Onboarding date and Deadline (red "Not Set" if missing)
+
+**Project Details Info Row (6 cards):**
+- Domain: Clickable link to website
+- Developer: Avatar with initials + name
+- Platform: Website/Web App/etc.
+- Type: Business Website/E-commerce/Portfolio/etc.
+- Client: Client/Company name
+- Location: City, Country
+
+**Pages/Tasks Tabs:**
+- Pages tab (default): Shows pages table
+- Tasks tab: Placeholder for future project-level tasks
+
+**Enhanced Pages Table:**
+- Columns: #, PAGE NAME, WIREFRAME, UI DESIGN, CONTENT, DEVELOPMENT, OVERALL, ACTIONS
+- Column headers show "STATUS / ASSIGNEE / DUE" subtitle
+- Search pages input with placeholder
+- Add Page button
+
+**Per-Column Controls (Wireframe, UI Design, Content, Development):**
+- Status dropdown: To-Do, In Progress, Client Review, Client Approved, Completed, On Hold
+- Assignee selector: Circular avatar with initials, color-coded per column
+  - Wireframe: Purple (#8b5cf6)
+  - UI Design: Pink (#ec4899)
+  - Content: Amber (#f59e0b)
+  - Development: Green (#10b981)
+- Date picker for due date
+- "+ Add URL" button (opens modal to add link)
+- Shows "View URL" link when URL is saved
+
+**Overall Column:**
+- Status dropdown (same options)
+- "+ Add URL" button for final deliverable
+
+**Actions Column:**
+- Delete button (trash icon, red) with confirmation
+
+**Edit Project Modal:**
+- Project Name *
+- Client Name, Location
+- Website Type dropdown
+- Status dropdown
+- Onboarding Date, Deadline (date pickers)
+- Developer dropdown
+- Domain URL
+- Docs Link, Drive Link
+- Cancel and Save Changes buttons
+
+**New Backend Fields:**
+- `website_projects`: Added `client_name`, `location` fields
+- `website_page_tasks`: Added per-column assignees (`wireframe_assignee`, `ui_assignee`, `content_assignee`, `dev_assignee`), `overall_url`
+
+**API Endpoints:**
+- `GET/POST /api/departments/website/projects` - List/Create website projects
+- `GET/PUT/DELETE /api/departments/website/projects/{project_id}` - Project CRUD
+- `POST /api/departments/website/projects/{project_id}/pages` - Add page
+- `PUT /api/departments/website/pages/{task_id}` - Update page (status, assignee, due, URL)
+- `DELETE /api/departments/website/pages/{task_id}` - Delete page
+- `GET /api/departments/website/developers` - Get available developers
+
+**Files Modified:**
+- `/app/frontend/src/pages/TasksModulePage.js`: Lines 2220-2710 - Complete redesign
+- `/app/backend/department_routes.py`: Lines 283-510 - Enhanced schema and endpoints
