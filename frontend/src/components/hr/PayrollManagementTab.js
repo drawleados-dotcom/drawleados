@@ -46,6 +46,7 @@ export default function PayrollManagementTab({
   onBulkSubmitOperations,
   onRefreshPayslips,
   companySettings,
+  canEdit = true,
   bgCard,
   bgSecondary,
   bgInput,
@@ -53,6 +54,8 @@ export default function PayrollManagementTab({
   textSecondary,
   borderColor
 }) {
+  // HR Manager view-only check
+  const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('employees');
   const [employeeSubTab, setEmployeeSubTab] = useState('salary'); // salary | history
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -298,17 +301,19 @@ export default function PayrollManagementTab({
               ))}
             </select>
           </div>
-          <Button
-            onClick={() => {
-              setNewSalaryRecord({ user_id: selectedEmployee?.user_id || '', amount: '', effective_from: '', reason: 'initial', notes: '' });
-              setShowAddModal(true);
-            }}
-            className="bg-[#10b981] hover:bg-[#059669] text-white"
-            data-testid="add-salary-btn"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Salary Record
-          </Button>
+          {!isViewOnly && (
+            <Button
+              onClick={() => {
+                setNewSalaryRecord({ user_id: selectedEmployee?.user_id || '', amount: '', effective_from: '', reason: 'initial', notes: '' });
+                setShowAddModal(true);
+              }}
+              className="bg-[#10b981] hover:bg-[#059669] text-white"
+              data-testid="add-salary-btn"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Salary Record
+            </Button>
+          )}
         </div>
       </div>
 
@@ -488,6 +493,7 @@ export default function PayrollManagementTab({
               getReasonLabel={getReasonLabel}
               getReasonColor={getReasonColor}
               calculateDuration={calculateDuration}
+              isViewOnly={isViewOnly}
               bgCard={bgCard}
               bgSecondary={bgSecondary}
               textPrimary={textPrimary}
@@ -1322,6 +1328,7 @@ function SalaryHistoryView({
   getReasonLabel,
   getReasonColor,
   calculateDuration,
+  isViewOnly = false,
   bgCard,
   bgSecondary,
   textPrimary,
@@ -1360,17 +1367,19 @@ function SalaryHistoryView({
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className={textPrimary}>Salary History</CardTitle>
-          <Button
-            onClick={() => {
-              setNewSalaryRecord({ user_id: employee.user_id, amount: '', effective_from: '', reason: salaryHistory.length === 0 ? 'initial' : 'performance', notes: '' });
-              setShowAddModal(true);
-            }}
-            size="sm"
-            className="bg-[#10b981] hover:bg-[#059669] text-white"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add Record
-          </Button>
+          {!isViewOnly && (
+            <Button
+              onClick={() => {
+                setNewSalaryRecord({ user_id: employee.user_id, amount: '', effective_from: '', reason: salaryHistory.length === 0 ? 'initial' : 'performance', notes: '' });
+                setShowAddModal(true);
+              }}
+              size="sm"
+              className="bg-[#10b981] hover:bg-[#059669] text-white"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Record
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {salaryHistory.length > 0 ? (
@@ -1412,14 +1421,16 @@ function SalaryHistoryView({
                           )}
                         </td>
                         <td className="p-3">
-                          <Button
-                            onClick={() => onDeleteSalary(record.record_id)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-400 hover:bg-red-400/10"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {!isViewOnly && (
+                            <Button
+                              onClick={() => onDeleteSalary(record.record_id)}
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-400 hover:bg-red-400/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1431,16 +1442,18 @@ function SalaryHistoryView({
             <div className="text-center py-12">
               <CreditCard className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
               <p className={textSecondary}>No salary history available</p>
-              <Button
-                onClick={() => {
-                  setNewSalaryRecord({ user_id: employee.user_id, amount: '', effective_from: '', reason: 'initial', notes: '' });
-                  setShowAddModal(true);
-                }}
-                className="mt-4 bg-[#10b981] hover:bg-[#059669] text-white"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add First Salary
-              </Button>
+              {!isViewOnly && (
+                <Button
+                  onClick={() => {
+                    setNewSalaryRecord({ user_id: employee.user_id, amount: '', effective_from: '', reason: 'initial', notes: '' });
+                    setShowAddModal(true);
+                  }}
+                  className="mt-4 bg-[#10b981] hover:bg-[#059669] text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add First Salary
+                </Button>
+              )}
             </div>
           )}
         </CardContent>

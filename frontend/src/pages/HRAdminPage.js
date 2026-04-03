@@ -1057,7 +1057,7 @@ export default function HRAdminPage() {
             </h1>
             <p className={textSecondary}>Manage employees, leave requests, and attendance</p>
           </div>
-          {activeTab === 'employees' && (
+          {activeTab === 'employees' && canEdit && (
             <Button 
               onClick={() => setShowAddModal(true)}
               className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
@@ -1150,6 +1150,7 @@ export default function HRAdminPage() {
             onDeleteDesignation={handleDeleteDesignation}
             onCreateDepartment={handleCreateDepartment}
             onDeleteDepartment={handleDeleteDepartment}
+            canEdit={canEdit}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -1176,6 +1177,7 @@ export default function HRAdminPage() {
             onViewTasks={handleViewTasks}
             onSendForVerification={handleSendForVerification}
             onFinalApprove={handleFinalApprove}
+            canEdit={canEdit}
             formatDate={formatDate}
             formatTime={formatTime}
             bgCard={bgCard}
@@ -1216,6 +1218,7 @@ export default function HRAdminPage() {
             onBulkSubmitOperations={handleBulkSubmitOperations}
             onRefreshPayslips={() => loadPayslips(payslipMonth, payslipYear)}
             companySettings={companySettings}
+            canEdit={canEdit}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             bgInput={bgInput}
@@ -1237,6 +1240,7 @@ export default function HRAdminPage() {
             onUpdateSettings={handleUpdateHRSettings}
             onRefresh={loadCalendar}
             loadHRSettings={loadHRSettings}
+            canEdit={canEdit}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -1254,10 +1258,12 @@ export default function HRAdminPage() {
                 <h2 className={`text-xl font-bold ${textPrimary}`}>Motivational Quotes</h2>
                 <p className={textSecondary}>Manage daily quotes shown to employees on their task dashboard</p>
               </div>
-              <Button onClick={() => setShowAddQuoteModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Quote
-              </Button>
+              {canEdit && (
+                <Button onClick={() => setShowAddQuoteModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Quote
+                </Button>
+              )}
             </div>
 
             {/* Quotes List */}
@@ -1295,30 +1301,39 @@ export default function HRAdminPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleUpdateQuote(quote.quote_id, { active: !quote.active })}
-                          className={quote.active ? 'text-[#10b981]' : textSecondary}
-                        >
-                          {quote.active ? 'Active' : 'Inactive'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setEditingQuote(quote.quote_id)}
-                          className={textSecondary}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteQuote(quote.quote_id)}
-                          className="text-red-500 hover:text-red-400"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {canEdit && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUpdateQuote(quote.quote_id, { active: !quote.active })}
+                              className={quote.active ? 'text-[#10b981]' : textSecondary}
+                            >
+                              {quote.active ? 'Active' : 'Inactive'}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setEditingQuote(quote.quote_id)}
+                              className={textSecondary}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteQuote(quote.quote_id)}
+                              className="text-red-500 hover:text-red-400"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        {!canEdit && (
+                          <Badge className={quote.active ? 'bg-[#10b981]/20 text-[#10b981]' : 'bg-gray-500/20 text-gray-400'}>
+                            {quote.active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -4987,8 +5002,11 @@ function DesignationsDeptsTab({
   newDesignation, setNewDesignation, newDepartment, setNewDepartment,
   onCreateDesignation, onUpdateDesignation, onDeleteDesignation,
   onCreateDepartment, onDeleteDepartment,
+  canEdit = true,
   bgCard, bgSecondary, textPrimary, textSecondary, borderColor
 }) {
+  // HR Manager cannot edit - view only
+  const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('designations');
   const [viewDesignation, setViewDesignation] = useState(null);
 
@@ -5049,12 +5067,14 @@ function DesignationsDeptsTab({
       {/* Designations Sub-Tab */}
       {activeSubTab === 'designations' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Designation
-            </Button>
-          </div>
+          {!isViewOnly && (
+            <div className="flex justify-end">
+              <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Designation
+              </Button>
+            </div>
+          )}
           
           {/* 3-Column Card Grid */}
           <div className="grid md:grid-cols-3 gap-4">
@@ -5084,12 +5104,16 @@ function DesignationsDeptsTab({
                     <Button size="sm" variant="ghost" onClick={() => setViewDesignation(desg)}>
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditingDesignation(desg)}>
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-[#ef4444]" onClick={() => onDeleteDesignation(desg.designation_id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {!isViewOnly && (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingDesignation(desg)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-[#ef4444]" onClick={() => onDeleteDesignation(desg.designation_id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -5318,12 +5342,14 @@ function DesignationsDeptsTab({
       {/* Departments Sub-Tab */}
       {activeSubTab === 'departments' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
-            <Button onClick={() => setShowDepartmentModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Department
-            </Button>
-          </div>
+          {!isViewOnly && (
+            <div className="flex justify-end">
+              <Button onClick={() => setShowDepartmentModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Department
+              </Button>
+            </div>
+          )}
           
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {departments.length > 0 ? departments.map((dept) => (
@@ -5339,9 +5365,11 @@ function DesignationsDeptsTab({
                         </Badge>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => onDeleteDepartment(dept.department_id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {!isViewOnly && (
+                      <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => onDeleteDepartment(dept.department_id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -5398,8 +5426,11 @@ function EnhancedApprovalsTab({
   onApproveAttendance, onApprovePermission, onApproveLeave, onRejectLeave,
   onApproveWfh, onRejectWfh,
   onViewTasks, onSendForVerification, onFinalApprove,
+  canEdit = true,
   formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor
 }) {
+  // HR Manager cannot approve/reject - view only
+  const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('attendance');
   const [dateFilter, setDateFilter] = useState('day');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -5638,12 +5669,19 @@ function EnhancedApprovalsTab({
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 ml-4">
-                    <Button size="sm" onClick={() => openApproveModal(item, 'attendance')} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                      Approve
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'attendance')} className="text-[#ef4444] border-[#ef4444]">
-                      Reject
-                    </Button>
+                    {!isViewOnly && (
+                      <>
+                        <Button size="sm" onClick={() => openApproveModal(item, 'attendance')} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'attendance')} className="text-[#ef4444] border-[#ef4444]">
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                    {isViewOnly && (
+                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">View Only</Badge>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -5744,7 +5782,7 @@ function EnhancedApprovalsTab({
                         </p>
                       )}
                     </div>
-                    {item.status === 'pending' && (
+                    {item.status === 'pending' && !isViewOnly && (
                       <div className="flex flex-col gap-2 ml-4">
                         <Button size="sm" onClick={() => openApproveModal(item, 'leave')} className="bg-[#22c55e] hover:bg-[#16a34a]">
                           Approve
@@ -5753,6 +5791,9 @@ function EnhancedApprovalsTab({
                           Reject
                         </Button>
                       </div>
+                    )}
+                    {item.status === 'pending' && isViewOnly && (
+                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b] ml-4">View Only</Badge>
                     )}
                   </div>
                 </CardContent>
@@ -5787,12 +5828,18 @@ function EnhancedApprovalsTab({
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => openApproveModal(item, 'permission')} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                      Approve
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'permission')} className="text-[#ef4444] border-[#ef4444]">
-                      Reject
-                    </Button>
+                    {!isViewOnly ? (
+                      <>
+                        <Button size="sm" onClick={() => openApproveModal(item, 'permission')} className="bg-[#22c55e] hover:bg-[#16a34a]">
+                          Approve
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'permission')} className="text-[#ef4444] border-[#ef4444]">
+                          Reject
+                        </Button>
+                      </>
+                    ) : (
+                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">View Only</Badge>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -5962,7 +6009,7 @@ function EnhancedApprovalsTab({
                         <Eye className="h-4 w-4 mr-1" /> View
                       </Button>
                       
-                      {item.status === 'pending' && (
+                      {item.status === 'pending' && !isViewOnly && (
                         <>
                           <Button 
                             size="sm" 
@@ -5980,6 +6027,9 @@ function EnhancedApprovalsTab({
                             Reject
                           </Button>
                         </>
+                      )}
+                      {item.status === 'pending' && isViewOnly && (
+                        <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">View Only</Badge>
                       )}
                     </div>
                   </div>
@@ -6239,8 +6289,11 @@ function EnhancedApprovalsTab({
 function EnhancedCalendarTab({
   calendar, hrSettings, month, year, setMonth, setYear,
   onUpdateCalendar, onUpdateSettings, onRefresh, loadHRSettings,
+  canEdit = true,
   bgCard, bgSecondary, textPrimary, textSecondary, borderColor
 }) {
+  // HR Manager cannot edit calendar - view only
+  const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('calendar');
   const [editingSettings, setEditingSettings] = useState(false);
   const [formData, setFormData] = useState({
@@ -6505,8 +6558,9 @@ function EnhancedCalendarTab({
     toast.success(updated.includes(dateStr) ? 'Marked as working day' : 'Marked as holiday');
   };
 
-  // Open Sunday modal
+  // Open Sunday modal (only if canEdit)
   const handleSundayClick = (day) => {
+    if (isViewOnly) return; // View-only users cannot edit
     if (day.isSunday) {
       setSelectedSunday(day);
       setSundayRemarks('');
@@ -6624,7 +6678,12 @@ function EnhancedCalendarTab({
                 ))}
               </div>
               <div className={`mt-4 p-3 rounded ${bgSecondary} text-sm ${textSecondary}`}>
-                <strong>Tip:</strong> Click on any Sunday to configure it as a working day, team holiday, or add remarks.
+                {isViewOnly ? (
+                  <strong>View Only:</strong>
+                ) : (
+                  <><strong>Tip:</strong> Click on any Sunday to configure it as a working day, team holiday, or add remarks.</>
+                )}
+                {isViewOnly && ' You have read-only access to this calendar.'}
               </div>
             </CardContent>
           </Card>
@@ -6759,11 +6818,14 @@ function EnhancedCalendarTab({
           <CardContent className="p-6 space-y-6">
             <div className="flex justify-between items-center">
               <h3 className={`text-lg font-semibold ${textPrimary}`}>Work Settings</h3>
-              {!editingSettings && (
+              {!editingSettings && !isViewOnly && (
                 <Button onClick={() => setEditingSettings(true)} className="bg-[#6366f1]">
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Settings
                 </Button>
+              )}
+              {isViewOnly && (
+                <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">View Only</Badge>
               )}
             </div>
 
@@ -6940,30 +7002,32 @@ function EnhancedCalendarTab({
             />
           </div>
 
-          {/* Add Custom Holiday */}
-          <Card className={`${bgCard} border ${borderColor}`}>
-            <CardContent className="p-4">
-              <h4 className={`font-medium ${textPrimary} mb-3`}>Add Custom Holiday</h4>
-              <div className="flex gap-3 flex-wrap">
-                <Input
-                  type="date"
-                  value={newHoliday.date}
-                  onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
-                  className={`${bgSecondary} ${borderColor} w-40`}
-                />
-                <Input
-                  placeholder="Holiday name"
-                  value={newHoliday.name}
-                  onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
-                  className={`${bgSecondary} ${borderColor} flex-1 min-w-[200px]`}
-                />
-                <Button onClick={handleAddCustomHoliday} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Holiday
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Add Custom Holiday - hide for view only */}
+          {!isViewOnly && (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4">
+                <h4 className={`font-medium ${textPrimary} mb-3`}>Add Custom Holiday</h4>
+                <div className="flex gap-3 flex-wrap">
+                  <Input
+                    type="date"
+                    value={newHoliday.date}
+                    onChange={(e) => setNewHoliday({ ...newHoliday, date: e.target.value })}
+                    className={`${bgSecondary} ${borderColor} w-40`}
+                  />
+                  <Input
+                    placeholder="Holiday name"
+                    value={newHoliday.name}
+                    onChange={(e) => setNewHoliday({ ...newHoliday, name: e.target.value })}
+                    className={`${bgSecondary} ${borderColor} flex-1 min-w-[200px]`}
+                  />
+                  <Button onClick={handleAddCustomHoliday} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Holiday
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Holidays List */}
           <Card className={`${bgCard} border ${borderColor}`}>
@@ -7034,32 +7098,36 @@ function EnhancedCalendarTab({
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            onClick={() => handleEditHoliday({ ...holiday, originalDate: holiday.date })}
-                            className="h-8"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          {holiday.approved ? (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => handleUnapproveHoliday(holiday)}
-                              className="h-8 text-[#ef4444] border-[#ef4444]"
-                            >
-                              Remove
-                            </Button>
-                          ) : (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleApproveHoliday(holiday)}
-                              className="h-8 bg-[#22c55e] hover:bg-[#16a34a]"
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
+                          {!isViewOnly && (
+                            <>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => handleEditHoliday({ ...holiday, originalDate: holiday.date })}
+                                className="h-8"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              {holiday.approved ? (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => handleUnapproveHoliday(holiday)}
+                                  className="h-8 text-[#ef4444] border-[#ef4444]"
+                                >
+                                  Remove
+                                </Button>
+                              ) : (
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => handleApproveHoliday(holiday)}
+                                  className="h-8 bg-[#22c55e] hover:bg-[#16a34a]"
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-1" />
+                                  Approve
+                                </Button>
+                              )}
+                            </>
                           )}
                         </div>
                       </div>
