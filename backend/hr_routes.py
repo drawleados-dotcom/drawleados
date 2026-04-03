@@ -3054,6 +3054,7 @@ class CreateEmployeeRequest(BaseModel):
     joining_date: Optional[str] = None
     reporting_manager: Optional[str] = ""
     work_location: Optional[str] = "office"
+    work_mode: Optional[str] = "office"  # office, remote, hybrid
     # Documents
     resume_link: Optional[str] = ""
     id_proof_link: Optional[str] = ""
@@ -3129,6 +3130,7 @@ async def create_employee(data: CreateEmployeeRequest, request: Request):
         "joining_date": data.joining_date,
         "reporting_manager": data.reporting_manager,
         "work_location": data.work_location,
+        "work_mode": data.work_mode or data.work_location,
         # Bank Details
         "bank_name": data.bank_name,
         "account_number": data.account_number,

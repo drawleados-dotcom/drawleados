@@ -2842,10 +2842,14 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete
                     </td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.profile?.department || '-'}</td>
                     <td className="px-4 py-3">
-                      {emp.today_attendance ? (
-                        <Badge className={emp.today_attendance.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}>
-                          {emp.today_attendance.work_location === 'home' ? 'Remote' : 'Office'}
-                        </Badge>
+                      {emp.profile?.work_mode === 'remote' ? (
+                        <Badge className="bg-purple-500/20 text-purple-400">Remote</Badge>
+                      ) : emp.profile?.work_mode === 'hybrid' ? (
+                        <Badge className="bg-blue-500/20 text-blue-400">Hybrid</Badge>
+                      ) : emp.profile?.work_mode === 'office' || emp.today_attendance?.work_location === 'office' ? (
+                        <Badge className="bg-green-500/20 text-green-400">Office</Badge>
+                      ) : emp.today_attendance?.work_location === 'home' ? (
+                        <Badge className="bg-purple-500/20 text-purple-400">Remote</Badge>
                       ) : (
                         <Badge className="bg-gray-500/20 text-gray-400">-</Badge>
                       )}
@@ -2861,15 +2865,16 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete
                           size="sm"
                           onClick={() => onEdit(emp)}
                           className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                          data-testid={`edit-employee-${emp.user_id}`}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
                         {emp.role !== 'super_admin' && (
                           <Button
                             size="sm"
-                            variant="outline"
                             onClick={() => setDeleteConfirm(emp)}
-                            className="text-[#ef4444] border-[#ef4444] hover:bg-[#ef4444] hover:text-white"
+                            className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                            data-testid={`delete-employee-${emp.user_id}`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -3280,6 +3285,7 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
     joining_date: employee.profile?.joining_date ? employee.profile.joining_date.split('T')[0] : '',
     reporting_manager: employee.profile?.reporting_manager || '',
     work_location: employee.profile?.work_location || 'office',
+    work_mode: employee.profile?.work_mode || employee.profile?.work_location || 'office',
     // Emergency Contact
     emergency_contact_name: employee.profile?.emergency_contact_name || '',
     emergency_contact_phone: employee.profile?.emergency_contact_phone || '',
@@ -3595,10 +3601,10 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                     />
                   </div>
                   <div>
-                    <Label className={textPrimary}>Work Location</Label>
-                    <Select value={formData.work_location} onValueChange={(v) => handleChange('work_location', v)}>
+                    <Label className={textPrimary}>Work Mode</Label>
+                    <Select value={formData.work_mode} onValueChange={(v) => { handleChange('work_mode', v); handleChange('work_location', v); }}>
                       <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue placeholder="Select location" />
+                        <SelectValue placeholder="Select work mode" />
                       </SelectTrigger>
                       <SelectContent className={`${bgCard} border ${borderColor}`}>
                         <SelectItem value="office">Office</SelectItem>

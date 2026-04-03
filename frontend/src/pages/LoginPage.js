@@ -13,7 +13,7 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 // Demo users for quick testing
 const DEMO_USERS = [
-  { id: 'admin', name: 'Vinoth (Super Admin)', email: 'Vinoth@drawlead.com', password: '6383145061', role: 'super_admin' },
+  { id: 'admin', name: 'Vinoth (Super Admin)', email: 'vinoth@drawlead.com', password: 'admin123', role: 'super_admin' },
   { id: 'pm', name: 'Project Manager', email: 'pm@drawlead.com', password: 'pm123', role: 'project_manager' },
   { id: 'hr', name: 'HR Manager', email: 'hr@drawlead.com', password: 'hr123456', role: 'hr_manager' },
   { id: 'bde', name: 'Business Dev', email: 'bde@drawlead.com', password: 'bde123456', role: 'business_development' },
