@@ -14,6 +14,7 @@ const API = process.env.REACT_APP_BACKEND_URL;
 // Demo users for quick testing
 const DEMO_USERS = [
   { id: 'admin', name: 'Vinoth (Super Admin)', email: 'Vinoth@drawlead.com', password: '6383145061', role: 'super_admin' },
+  { id: 'pm', name: 'Project Manager', email: 'pm@drawlead.com', password: 'pm123', role: 'project_manager' },
   { id: 'hr', name: 'HR Manager', email: 'hr@drawlead.com', password: 'hr123456', role: 'hr_manager' },
   { id: 'bde', name: 'Business Dev', email: 'bde@drawlead.com', password: 'bde123456', role: 'business_development' },
   { id: 'dev', name: 'Web Developer', email: 'dev@drawlead.com', password: 'dev123456', role: 'website_developer' },
@@ -65,7 +66,14 @@ export default function LoginPage() {
       try {
         await login(demoUser.email, demoUser.password);
         toast.success(`Logged in as ${demoUser.name}`);
-        navigate('/leads');
+        // Navigate based on role
+        if (demoUser.role === 'project_manager') {
+          navigate('/website-projects');
+        } else if (demoUser.role === 'hr_manager') {
+          navigate('/hr');
+        } else {
+          navigate('/leads');
+        }
       } catch (error) {
         toast.error(error.response?.data?.detail || 'Login failed');
       } finally {

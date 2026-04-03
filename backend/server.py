@@ -862,6 +862,15 @@ async def seed_demo_users():
     """Seed demo users for testing - creates users if they don't exist"""
     demo_users = [
         {
+            "email": "pm@drawlead.com",
+            "name": "Project Manager",
+            "password": "pm123",
+            "role": "project_manager",
+            "designation": "Project Manager",
+            "department": "Website",
+            "module_access": ["website_projects", "tasks", "operations"]
+        },
+        {
             "email": "hr@drawlead.com",
             "name": "HR Manager",
             "password": "hr123456",

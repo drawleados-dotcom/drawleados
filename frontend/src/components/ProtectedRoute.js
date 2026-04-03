@@ -29,10 +29,14 @@ export default function ProtectedRoute({ children }) {
 
   // Check if user has ONLY tasks module (Operations Head view)
   const moduleAccess = user?.module_access || [];
-  const hasTasksModuleOnly = moduleAccess.includes('tasks') && !isAdmin;
+  const hasTasksModuleOnly = moduleAccess.length === 1 && moduleAccess.includes('tasks') && !isAdmin;
+  
+  // Also check user role - project managers should have full access
+  const userRole = user?.role || '';
+  const isProjectManager = userRole === 'project_manager';
   
   // Redirect tasks-only users from unauthorized pages to /my-tasks
-  if (hasTasksModuleOnly) {
+  if (hasTasksModuleOnly && !isProjectManager) {
     const allowedPaths = ['/calendar', '/my-tasks', '/tasks', '/hr', '/my-documents'];
     const isAllowed = allowedPaths.some(path => location.pathname === path || location.pathname.startsWith(path + '/'));
     

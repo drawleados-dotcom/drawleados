@@ -437,7 +437,7 @@ const Sidebar = () => {
               </Link>
 
               {/* Website Development */}
-              {(canSeeDepartment('website') || isAdmin) && (
+              {(canSeeDepartment('website') || isAdmin || isProjectManager) && (
               <Link
                 to="/website-projects"
                 data-testid="nav-website-projects"

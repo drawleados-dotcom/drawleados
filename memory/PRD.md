@@ -992,3 +992,31 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 **Files Modified:**
 - `/app/frontend/src/pages/WebsiteProjectsPage.js`: Added isMobile state, responsive classes, bottom navigation, card views
 - `/app/frontend/src/index.css`: Added hide-scrollbar and safe-area-inset-bottom classes
+
+---
+
+### Project Manager Demo Login (DONE - April 2026)
+**Purpose:** Added a dedicated Project Manager demo account for quick testing of the Website Projects module.
+
+**Demo Credentials:**
+- **Email:** pm@drawlead.com
+- **Password:** pm123
+- **Role:** project_manager
+
+**Features:**
+- Added to Quick Demo Login dropdown on login page
+- Automatically redirects to /website-projects after login
+- Has full access to Website Projects, Tasks, and Operations modules
+- Shows in sidebar navigation for Website Development link
+- Role-based navigation in Quick Demo Login
+
+**Access Permissions:**
+- `website_projects`: view, create, edit, delete
+- `tasks`: view, create, edit, delete
+- `operations`: view, create, edit
+
+**Files Modified:**
+- `/app/frontend/src/pages/LoginPage.js`: Added Project Manager to DEMO_USERS array, role-based redirect
+- `/app/backend/server.py`: Added Project Manager to seed-demo-users endpoint
+- `/app/frontend/src/components/Sidebar.js`: Added isProjectManager check for Website Development link
+- `/app/frontend/src/components/ProtectedRoute.js`: Fixed module access check for project_manager role
