@@ -109,6 +109,12 @@ const WebsiteProjectsPage = () => {
   const [workflowStage, setWorkflowStage] = useState(searchParams.get('stage') || 'all');
   const isProjectManager = user?.role === 'project_manager';
   
+  // Content Stage Specific Filters
+  const [contentWriterFilter, setContentWriterFilter] = useState('all');
+  const [pageAssigneeFilter, setPageAssigneeFilter] = useState('all');
+  const [contentDateFilter, setContentDateFilter] = useState('');
+  const [contentDayFilter, setContentDayFilter] = useState('all'); // all, today, this_week, overdue
+  
   // Workflow Stage Definitions
   const WORKFLOW_STAGES = [
     { id: 'creation', label: 'Project Creation', color: 'bg-yellow-500', description: 'New projects awaiting initial setup' },
@@ -554,6 +560,23 @@ const WebsiteProjectsPage = () => {
   // Workflow Stage Transition
   const handleStageTransition = async (projectId, newStage, notes = '') => {
     try {
+      // Frontend validation for Project Creation -> Discovery Call
+      if (newStage === 'discovery') {
+        const project = allProjectsSummary.find(p => p.project_id === projectId);
+        if (project) {
+          const missingFields = [];
+          if (!project.name?.trim()) missingFields.push('Project Name');
+          if (!project.client_name?.trim()) missingFields.push('Client Name');
+          if (!project.website_type?.trim()) missingFields.push('Website Type');
+          if (!project.platform?.trim()) missingFields.push('Platform');
+          
+          if (missingFields.length > 0) {
+            toast.error(`Cannot move to Discovery Call. Missing: ${missingFields.join(', ')}. Please edit the project first.`);
+            return;
+          }
+        }
+      }
+      
       await axios.put(
         `${API}/api/website-projects/projects/${projectId}/transition`,
         { stage: newStage, notes },
@@ -565,7 +588,8 @@ const WebsiteProjectsPage = () => {
         loadProjectDetail(projectId);
       }
     } catch (error) {
-      toast.error('Failed to move project');
+      const errorMsg = error.response?.data?.detail || 'Failed to move project';
+      toast.error(errorMsg);
     }
   };
 
@@ -826,7 +850,51 @@ const WebsiteProjectsPage = () => {
     const projectStage = p.workflow_stage || 'creation';
     const matchesStage = workflowStage === 'all' || projectStage === workflowStage;
     
-    return matchesSearch && matchesDeveloper && matchesStage;
+    // Content stage-specific filters
+    let matchesContentFilters = true;
+    if (workflowStage === 'content') {
+      // Content Writer filter (project level)
+      if (contentWriterFilter !== 'all') {
+        matchesContentFilters = matchesContentFilters && (p.content_writer === contentWriterFilter);
+      }
+      
+      // Page Assignee filter (check if any page has this assignee)
+      if (pageAssigneeFilter !== 'all') {
+        const hasPageWithAssignee = (p.pages || []).some(pg => 
+          pg.content_assignee === pageAssigneeFilter
+        );
+        matchesContentFilters = matchesContentFilters && hasPageWithAssignee;
+      }
+      
+      // Content Date filter (check if any page has this due date)
+      if (contentDateFilter) {
+        const hasPageWithDate = (p.pages || []).some(pg => 
+          pg.content_due === contentDateFilter
+        );
+        matchesContentFilters = matchesContentFilters && hasPageWithDate;
+      }
+      
+      // Day filter for content
+      if (contentDayFilter !== 'all') {
+        const today = new Date().toISOString().split('T')[0];
+        const weekFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        
+        const matchesDayFilter = (p.pages || []).some(pg => {
+          const pageDue = pg.content_due;
+          if (!pageDue) return contentDayFilter === 'no_date';
+          
+          switch (contentDayFilter) {
+            case 'today': return pageDue === today;
+            case 'this_week': return pageDue >= today && pageDue <= weekFromNow;
+            case 'overdue': return pageDue < today;
+            default: return true;
+          }
+        });
+        matchesContentFilters = matchesContentFilters && matchesDayFilter;
+      }
+    }
+    
+    return matchesSearch && matchesDeveloper && matchesStage && matchesContentFilters;
   });
 
   if (loading) {
@@ -1037,8 +1105,69 @@ const WebsiteProjectsPage = () => {
                 </SelectContent>
               </Select>
 
+              {/* Content Stage Specific Filters */}
+              {workflowStage === 'content' && (
+                <>
+                  {/* Content Writer Filter */}
+                  <Select value={contentWriterFilter} onValueChange={setContentWriterFilter}>
+                    <SelectTrigger className={`w-44 ${bgSecondary} border-none`}>
+                      <FileEdit className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Content Writer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Writers</SelectItem>
+                      {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Page Assignee Filter */}
+                  <Select value={pageAssigneeFilter} onValueChange={setPageAssigneeFilter}>
+                    <SelectTrigger className={`w-44 ${bgSecondary} border-none`}>
+                      <User className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Page Assignee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Assignees</SelectItem>
+                      {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Content Due Date Filter */}
+                  <div className="flex items-center gap-2">
+                    <Input 
+                      type="date" 
+                      value={contentDateFilter} 
+                      onChange={(e) => setContentDateFilter(e.target.value)} 
+                      className={`w-40 ${bgSecondary} border-none`} 
+                      placeholder="Content Due" 
+                    />
+                    {contentDateFilter && (
+                      <Button variant="ghost" size="sm" onClick={() => setContentDateFilter('')} className="h-8 w-8 p-0">
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Day Filter */}
+                  <Select value={contentDayFilter} onValueChange={setContentDayFilter}>
+                    <SelectTrigger className={`w-36 ${bgSecondary} border-none`}>
+                      <Calendar className="h-4 w-4 mr-2" />
+                      <SelectValue placeholder="Day Filter" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Days</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="this_week">This Week</SelectItem>
+                      <SelectItem value="overdue">Overdue</SelectItem>
+                      <SelectItem value="no_date">No Date Set</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
+
               {/* Clear All Filters */}
-              {(dueDateFilter || developerFilter !== 'all' || phaseFil !== 'all' || statusFilter !== 'all' || searchTerm) && (
+              {(dueDateFilter || developerFilter !== 'all' || phaseFil !== 'all' || statusFilter !== 'all' || searchTerm || 
+                contentWriterFilter !== 'all' || pageAssigneeFilter !== 'all' || contentDateFilter || contentDayFilter !== 'all') && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
@@ -1048,6 +1177,10 @@ const WebsiteProjectsPage = () => {
                     setPhaseFil('all');
                     setStatusFilter('all');
                     setSearchTerm('');
+                    setContentWriterFilter('all');
+                    setPageAssigneeFilter('all');
+                    setContentDateFilter('');
+                    setContentDayFilter('all');
                   }}
                   className="text-red-400"
                 >

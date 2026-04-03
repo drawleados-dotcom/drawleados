@@ -1,0 +1,74 @@
+{
+  "summary": "Tested Website Projects 8-stage workflow with stage transition validation and content stage-specific filters. Fixed a critical backend bug where client_name was not being saved during project creation. All features now working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_website_projects_workflow.py",
+    "/app/test_reports/pytest/website_projects_workflow_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/website_projects_routes.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 tests passed)",
+    "frontend": "100%"
+  },
+  "test_credentials": {
+    "admin": "vinoth@drawlead.com / admin123",
+    "project_manager": "pm@drawlead.com / pm123"
+  },
+  "seed_data_creation": "Created and cleaned up test projects during backend testing",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Website Projects 8-stage workflow fully tested. Features verified: 1) Stage transition validation - cannot move from 'creation' to 'discovery' without mandatory fields (Project Name, Client Name, Website Type, Platform) 2) Stage transition succeeds with all mandatory fields 3) Content stage specific filters (All Writers, All Assignees, Date, All Days) appear only in Content stage 4) Other stages (Wireframe, UI Design, etc.) do NOT show content-specific filters 5) Workflow stage tabs visible for Project Manager with counts 6) Discovery Call button appears for projects in 'creation' stage 7) Error toast shown when trying to transition without required fields. Bug fixed: client_name was not being saved during project creation - added all missing fields to create_project function.",
+  "features_tested": {
+    "stage_transition_validation_missing_fields": {
+      "status": "PASS",
+      "details": "Transition from creation to discovery correctly blocked when client_name is missing. Error message: 'Cannot move to Discovery Call. Missing mandatory fields: Client Name'"
+    },
+    "stage_transition_validation_all_fields": {
+      "status": "PASS",
+      "details": "Transition from creation to discovery succeeds when all mandatory fields (name, client_name, website_type, platform) are provided"
+    },
+    "content_stage_filters_visible": {
+      "status": "PASS",
+      "details": "Content stage shows additional filters: All Writers, All Assignees, Date filter, All Days filter"
+    },
+    "content_filters_hidden_other_stages": {
+      "status": "PASS",
+      "details": "Wireframe, UI Design, and other stages do NOT show content-specific filters"
+    },
+    "workflow_stage_tabs": {
+      "status": "PASS",
+      "details": "8 workflow stage tabs visible: All, Project Creation, Discovery Call, Content, Wireframe, UI Design, Development, Testing, Delivered"
+    },
+    "discovery_call_button": {
+      "status": "PASS",
+      "details": "Discovery Call button appears for all projects in 'creation' stage"
+    },
+    "url_stage_parameter": {
+      "status": "PASS",
+      "details": "URL updates with ?stage=content when clicking Content tab"
+    }
+  },
+  "bugs_fixed": {
+    "client_name_not_saved": {
+      "file": "/app/backend/website_projects_routes.py",
+      "issue": "create_project function was not saving client_name and other fields (designer, content_writer, project_manager, etc.) to the database",
+      "fix": "Added all missing fields from ProjectCreate model to the project dictionary in create_project function"
+    }
+  },
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}

@@ -295,12 +295,41 @@ async def create_project(request: Request, project_data: ProjectCreate):
         "domain_url": project_data.domain_url,
         "platform": project_data.platform,
         "website_type": project_data.website_type,
+        "workflow_stage": project_data.workflow_stage,
         "developer": project_data.developer,
+        "designer": project_data.designer,
+        "content_writer": project_data.content_writer,
+        "project_manager": project_data.project_manager,
         "server_details": project_data.server_details,
         "client_drive_url": project_data.client_drive_url,
         "documents_url": project_data.documents_url,
         "communication_url": project_data.communication_url,
         "client_id": project_data.client_id,
+        # Client Information
+        "client_name": project_data.client_name,
+        "client_location": project_data.client_location,
+        "client_email": project_data.client_email,
+        "client_phone": project_data.client_phone,
+        # Domain & Hosting
+        "domain_username": project_data.domain_username,
+        "domain_password": project_data.domain_password,
+        "domain_2fa": project_data.domain_2fa,
+        "domain_email_dns": project_data.domain_email_dns,
+        # WordPress
+        "wp_username": project_data.wp_username,
+        "wp_password": project_data.wp_password,
+        "wp_backup": project_data.wp_backup,
+        # Email
+        "email_address": project_data.email_address,
+        "email_password": project_data.email_password,
+        "email_2fa": project_data.email_2fa,
+        # Server
+        "server_username": project_data.server_username,
+        "server_password": project_data.server_password,
+        "server_2fa": project_data.server_2fa,
+        # Product
+        "product_details": project_data.product_details,
+        "onboarding_form": project_data.onboarding_form,
         "status": "active",
         "created_by": user["user_id"],
         "created_at": now,
@@ -463,6 +492,29 @@ async def transition_project_stage(request: Request, project_id: str, data: dict
         raise HTTPException(status_code=400, detail=f"Invalid stage: {new_stage}")
     
     current_stage = project.get("workflow_stage", "creation")
+    
+    # Validation: Cannot move from "creation" to "discovery" unless mandatory fields are filled
+    if current_stage == "creation" and new_stage == "discovery":
+        missing_fields = []
+        
+        # Define mandatory fields for moving out of Project Creation
+        mandatory_fields = {
+            "name": "Project Name",
+            "client_name": "Client Name",
+            "website_type": "Website Type",
+            "platform": "Platform"
+        }
+        
+        for field, label in mandatory_fields.items():
+            value = project.get(field)
+            if not value or (isinstance(value, str) and not value.strip()):
+                missing_fields.append(label)
+        
+        if missing_fields:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot move to Discovery Call. Missing mandatory fields: {', '.join(missing_fields)}"
+            )
     
     # Log the transition
     transition_log = {
@@ -1208,15 +1260,55 @@ async def get_all_projects_summary(request: Request):
             sum(phases.values()) / (total_pages * 4) * 100 if total_pages > 0 else 0, 1
         )
         
+        # Build pages data for Content stage filtering
+        pages_data = []
+        for pt in page_tasks:
+            pages_data.append({
+                "page_id": pt.get("task_id"),
+                "page_name": pt.get("page_name"),
+                "content_status": pt.get("content_status", "To-Do"),
+                "content_due": pt.get("content_due"),
+                "content_assignee": pt.get("content_assignee"),
+                "wireframe": {
+                    "status": pt.get("wireframe_status", "To-Do"),
+                    "url": pt.get("wireframe_url"),
+                    "due_date": pt.get("wireframe_due"),
+                    "assignee": pt.get("wireframe_assignee")
+                },
+                "ui": {
+                    "status": pt.get("ui_status", "To-Do"),
+                    "url": pt.get("ui_url"),
+                    "due_date": pt.get("ui_due"),
+                    "assignee": pt.get("ui_assignee")
+                },
+                "content": {
+                    "status": pt.get("content_status", "To-Do"),
+                    "url": pt.get("content_url"),
+                    "due_date": pt.get("content_due"),
+                    "assignee": pt.get("content_assignee")
+                },
+                "dev": {
+                    "status": pt.get("dev_status", "To-Do"),
+                    "url": pt.get("dev_url"),
+                    "due_date": pt.get("dev_due"),
+                    "assignee": pt.get("dev_assignee")
+                }
+            })
+        
         summaries.append({
             "project_id": project_id,
             "name": project.get("name"),
             "domain_url": project.get("domain_url"),
             "platform": project.get("platform"),
+            "website_type": project.get("website_type"),
             "developer": project.get("developer"),
+            "content_writer": project.get("content_writer"),
+            "designer": project.get("designer"),
+            "client_name": project.get("client_name"),
             "onboarding_date": project.get("onboarding_date"),
             "deadline": project.get("deadline"),
             "status": project.get("status", "active"),
+            "workflow_stage": project.get("workflow_stage", "creation"),
             "total_pages": total_pages,
             "dev_percent": dev_percent,
             "overall_percent": overall_percent,
@@ -1225,7 +1317,8 @@ async def get_all_projects_summary(request: Request):
                 "ui": round(phases["ui"] / total_pages * 100 if total_pages > 0 else 0, 1),
                 "content": round(phases["content"] / total_pages * 100 if total_pages > 0 else 0, 1),
                 "dev": dev_percent
-            }
+            },
+            "pages": pages_data
         })
     
     # Sort by deadline
