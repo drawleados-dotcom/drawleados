@@ -294,14 +294,6 @@ export default function HRPage() {
     { id: 'permission', label: 'Permission', icon: Clock, count: tabCounts.permission },
     { id: 'remote', label: 'Remote', icon: Home, count: tabCounts.remote },
   ];
-  
-  // Secondary tabs (Profile, Payroll, Reviews, Security)
-  const secondaryTabs = [
-    { id: 'profile', label: 'My Profile', icon: User },
-    { id: 'payroll', label: 'Payroll', icon: FileText },
-    { id: 'reviews', label: 'Reviews', icon: Award },
-    { id: 'security', label: 'Security', icon: Shield },
-  ];
 
   return (
     <Layout>
@@ -315,8 +307,8 @@ export default function HRPage() {
           <p className={textSecondary}>Manage your attendance, leaves, payslips and more</p>
         </div>
 
-        {/* Primary Tabs - Attendance, Leave, Permission, Remote */}
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+        {/* Single Row Tabs - Attendance, Leave, Permission, Remote */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {primaryTabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -346,28 +338,6 @@ export default function HRPage() {
                     {tab.count}
                   </span>
                 )}
-              </Button>
-            );
-          })}
-        </div>
-        
-        {/* Secondary Tabs - Profile, Payroll, Reviews, Security */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {secondaryTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <Button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                data-testid={`hr-tab-${tab.id}`}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                  activeTab === tab.id
-                    ? 'bg-[#10b981] text-white'
-                    : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
               </Button>
             );
           })}
@@ -1699,28 +1669,55 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
 
   return (
     <div className="space-y-6">
-      {/* Leave Tab Content */}
-      <div className="space-y-6">
-        {/* Leave Balance Dashboard */}
-        <Card className={`${bgCard} border ${borderColor}`}>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className={textPrimary}>Leave Balance ({new Date().getFullYear()})</CardTitle>
-            <Button 
-              onClick={() => setShowModal(true)}
-              className="bg-[#10b981] hover:bg-[#059669] text-white"
-              data-testid="request-leave-btn"
-            >
-              <Send className="mr-2 h-4 w-4" />
-              Request Leave
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className={`p-4 ${bgSecondary} rounded-lg`}>
-                <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>
-                <p className="text-2xl font-bold text-[#6366f1]">
-                  {(leaveBalance?.casual_leave || 12) - (leaveBalance?.casual_used || 0)}
-                  <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.casual_leave || 12}</span>
+      {/* Sub-tabs: Request Leave | Request Permission */}
+      <div className="flex gap-2 mb-4">
+        <Button
+          onClick={() => setActiveSubTab('leave')}
+          className={`px-6 py-3 rounded-lg transition-all ${
+            activeSubTab === 'leave'
+              ? 'bg-[#10b981] text-white'
+              : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+          }`}
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          Request Leave
+        </Button>
+        <Button
+          onClick={() => setActiveSubTab('permission')}
+          className={`px-6 py-3 rounded-lg transition-all ${
+            activeSubTab === 'permission'
+              ? 'bg-[#8b5cf6] text-white'
+              : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+          }`}
+        >
+          <Clock className="h-4 w-4 mr-2" />
+          Request Permission
+        </Button>
+      </div>
+
+      {/* Request Leave Sub-Tab */}
+      {activeSubTab === 'leave' && (
+        <div className="space-y-6">
+          {/* Leave Balance Dashboard */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={textPrimary}>Leave Balance ({new Date().getFullYear()})</CardTitle>
+              <Button 
+                onClick={() => setShowModal(true)}
+                className="bg-[#10b981] hover:bg-[#059669] text-white"
+                data-testid="request-leave-btn"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Request Leave
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>
+                  <p className="text-2xl font-bold text-[#6366f1]">
+                    {(leaveBalance?.casual_leave || 12) - (leaveBalance?.casual_used || 0)}
+                    <span className={`text-sm ${textSecondary}`}>/{leaveBalance?.casual_leave || 12}</span>
                   </p>
                 </div>
                 <div className={`p-4 ${bgSecondary} rounded-lg`}>
@@ -1829,6 +1826,108 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Permission Sub-Tab */}
+      {activeSubTab === 'permission' && (
+        <div className="space-y-6">
+          {/* Permission Dashboard Header */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className={textPrimary}>Permission Requests</CardTitle>
+              <Button 
+                onClick={() => setShowPermissionModal(true)}
+                className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white"
+              >
+                <Clock className="mr-2 h-4 w-4" />
+                Request Permission
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <p className={`text-sm ${textSecondary}`}>
+                Request permission for late arrival, early leave, or short breaks during work hours.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Permission Status Summary */}
+          <div className="grid grid-cols-3 gap-4">
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#8b5cf6]">
+                  {permissionRequests.filter(r => r.status === 'pending').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Pending</div>
+              </CardContent>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#22c55e]">
+                  {permissionRequests.filter(r => r.status === 'approved').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Approved</div>
+              </CardContent>
+            </Card>
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4 text-center">
+                <div className="text-3xl font-bold text-[#ef4444]">
+                  {permissionRequests.filter(r => r.status === 'rejected').length}
+                </div>
+                <div className={`text-sm ${textSecondary}`}>Rejected</div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Permission Requests List */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <CardTitle className={textPrimary}>My Permission Requests</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {permissionRequests.map((req, idx) => (
+                  <div 
+                    key={req.permission_id || idx}
+                    className={`p-4 ${bgSecondary} rounded-lg flex items-center justify-between`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge className="bg-[#8b5cf6]/20 text-[#8b5cf6]">
+                          {req.hours || 1}h Permission
+                        </Badge>
+                        <Badge className={getStatusBadge(req.status)}>
+                          {req.status}
+                        </Badge>
+                      </div>
+                      <p className={`text-sm ${textPrimary}`}>
+                        {formatDate(req.date)} {req.from_time && `| ${req.from_time} - ${req.to_time}`}
+                      </p>
+                      <p className={`text-xs ${textSecondary} mt-1`}>{req.reason}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {req.status === 'approved' && <CheckCircle className="h-5 w-5 text-green-400" />}
+                      {req.status === 'rejected' && <XCircle className="h-5 w-5 text-red-400" />}
+                      {req.status === 'pending' && <AlertCircle className="h-5 w-5 text-yellow-400" />}
+                    </div>
+                  </div>
+                ))}
+                {permissionRequests.length === 0 && (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <Clock className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No permission requests found</p>
+                    <Button 
+                      onClick={() => setShowPermissionModal(true)}
+                      className="mt-4 bg-[#8b5cf6] hover:bg-[#7c3aed]"
+                    >
+                      Request Your First Permission
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Leave Request Modal */}
       {showModal && (
