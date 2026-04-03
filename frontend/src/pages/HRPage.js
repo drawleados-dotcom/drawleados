@@ -3252,6 +3252,11 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
     r.approval_status === 'pending_early_login' || r.early_login_reason
   );
   
+  const lateLoginRecords = attendanceHistory.filter(r => 
+    r.late_login_reason || r.approval_status === 'pending_late_login' || 
+    (r.clock_in && new Date(`2000-01-01 ${r.clock_in}`) > new Date('2000-01-01 09:15'))
+  );
+  
   const lateLogoutRecords = attendanceHistory.filter(r => 
     r.late_logout_reason || (r.clock_out && new Date(`2000-01-01 ${r.clock_out}`) > new Date('2000-01-01 18:30'))
   );
@@ -3263,7 +3268,7 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-[#f59e0b]">{pendingRecords.length}</p>
@@ -3274,6 +3279,12 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-[#6366f1]">{earlyLoginRecords.length}</p>
             <p className={`text-sm ${textSecondary}`}>Early Logins</p>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-[#f97316]">{lateLoginRecords.length}</p>
+            <p className={`text-sm ${textSecondary}`}>Late Logins</p>
           </CardContent>
         </Card>
         <Card className={`${bgCard} border ${borderColor}`}>
@@ -3320,14 +3331,14 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
                     type = 'Early Login';
                     typeColor = 'bg-[#6366f1]/20 text-[#6366f1]';
                     reason = record.early_login_reason || 'Early login recorded';
+                  } else if (record.late_login_reason || record.approval_status === 'pending_late_login') {
+                    type = 'Late Login';
+                    typeColor = 'bg-[#f97316]/20 text-[#f97316]';
+                    reason = record.late_login_reason || 'Late login recorded';
                   } else if (record.approval_status === 'pending_early_logout' || record.early_logout_reason) {
                     type = 'Early Logout';
                     typeColor = 'bg-[#ef4444]/20 text-[#ef4444]';
                     reason = record.early_logout_reason || 'Early logout recorded';
-                  } else if (record.late_login_reason) {
-                    type = 'Late Login';
-                    typeColor = 'bg-[#f59e0b]/20 text-[#f59e0b]';
-                    reason = record.late_login_reason;
                   } else if (record.late_logout_reason) {
                     type = 'Late Logout';
                     typeColor = 'bg-[#10b981]/20 text-[#10b981]';
