@@ -569,3 +569,33 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 ### Test Report
 - All 5 features passed testing (iteration_43.json)
 - 100% frontend success rate
+
+---
+
+## Latest Updates (April 2026 - Session 44)
+
+### Payslip Edit/Delete/Regenerate Functionality (DONE)
+- **Edit Payslip** (for non-finalized payslips):
+  - Opens modal with HR Remarks textarea
+  - Can update HR Remarks field
+  - Cannot edit finalized (generated/acknowledged/paid) payslips
+  - API: `PUT /api/hr/admin/payslip/{id}/edit`
+
+- **Delete Payslip** (for non-finalized payslips):
+  - Shows confirmation dialog before deletion
+  - Cannot delete finalized payslips
+  - API: `DELETE /api/hr/admin/payslip/{id}`
+
+- **Regenerate Payslip** (for all payslips):
+  - Recalculates payslip from latest attendance/salary data
+  - Resets status to draft after regeneration
+  - Clears previous Operations and CEO reviews
+  - API: `POST /api/hr/admin/payslip/{id}/regenerate`
+
+**Button Visibility:**
+- Draft/Operations Review/CEO Review status → Edit, Delete, Regenerate + Submit buttons
+- Generated status → Download PDF, Regenerate only
+
+**Test Report:**
+- All 8 backend tests passed (iteration_44.json)
+- 100% frontend/backend success rate
