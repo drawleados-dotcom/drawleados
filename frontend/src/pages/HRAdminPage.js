@@ -1188,6 +1188,7 @@ export default function HRAdminPage() {
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            isDark={isDark}
           />
         )}
 
@@ -5430,7 +5431,7 @@ function EnhancedApprovalsTab({
   onApproveWfh, onRejectWfh,
   onViewTasks, onSendForVerification, onFinalApprove,
   canEdit = true,
-  formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor
+  formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark
 }) {
   // HR Manager cannot approve/reject - view only
   const isViewOnly = !canEdit;
@@ -5620,83 +5621,145 @@ function EnhancedApprovalsTab({
         </CardContent>
       </Card>
 
-      {/* Attendance Approvals Tab */}
+      {/* Attendance Approvals Tab - Enhanced with Rules */}
       {activeSubTab === 'attendance' && (
-        <div className="space-y-3">
-          {attendanceApprovals.length > 0 ? attendanceApprovals.map((item, idx) => (
-            <Card key={idx} className={`${bgCard} border ${borderColor}`}>
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-bold">
-                        {item.employee_name?.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
-                        <p className={`text-xs ${textSecondary}`}>{item.employee_email || '-'}</p>
-                      </div>
-                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b] ml-2">{item.type}</Badge>
-                      {item.work_location && (
-                        <Badge className={item.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}>
-                          {item.work_location === 'home' ? 'Remote' : 'Office'}
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-2">
-                      <div>
-                        <span className={textSecondary}>Date: </span>
-                        <span className={textPrimary}>{formatDate(item.date)}</span>
-                      </div>
-                      <div>
-                        <span className={textSecondary}>Time: </span>
-                        <span className={textPrimary}>{formatTime(item.time)}</span>
-                      </div>
-                      {item.check_in && (
-                        <div>
-                          <span className={textSecondary}>Check In: </span>
-                          <span className={textPrimary}>{item.check_in}</span>
-                        </div>
-                      )}
-                      {item.check_out && (
-                        <div>
-                          <span className={textSecondary}>Check Out: </span>
-                          <span className={textPrimary}>{item.check_out}</span>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <p className={`text-sm ${textSecondary}`}>
-                      <span className="font-medium">Reason:</span> {item.reason}
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-2 ml-4">
-                    {!isViewOnly && (
-                      <>
-                        <Button size="sm" onClick={() => openApproveModal(item, 'attendance')} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                          Approve
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => openRejectModal(item, 'attendance')} className="text-[#ef4444] border-[#ef4444]">
-                          Reject
-                        </Button>
-                      </>
-                    )}
-                    {isViewOnly && (
-                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">View Only</Badge>
-                    )}
-                  </div>
+        <div className="space-y-4">
+          {/* Attendance Rules Info */}
+          <Card className={`${bgCard} border border-[#6366f1]/30`}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle className="h-5 w-5 text-[#6366f1]" />
+                <p className={`font-medium ${textPrimary}`}>Attendance Approval Rules</p>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary}`}>Early Login</p>
+                  <p className={`font-medium text-blue-400`}>1 hour before work time</p>
                 </div>
-              </CardContent>
-            </Card>
-          )) : (
-            <Card className={`${bgCard} border ${borderColor}`}>
-              <CardContent className="p-8 text-center">
-                <CheckCircle className={`h-12 w-12 mx-auto mb-3 text-[#22c55e]`} />
-                <p className={textPrimary}>No pending attendance approvals</p>
-              </CardContent>
-            </Card>
-          )}
+                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary}`}>Late Login</p>
+                  <p className={`font-medium text-orange-400`}>15 mins after start</p>
+                </div>
+                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary}`}>Early Logout</p>
+                  <p className={`font-medium text-red-400`}>30 mins before 9 hours</p>
+                </div>
+                <div className={`p-2 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary}`}>Late Logout</p>
+                  <p className={`font-medium text-green-400`}>10 mins after expected</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Attendance List View Table */}
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className={textPrimary}>Attendance Approvals ({attendanceApprovals.length})</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className={`border-b ${borderColor} ${bgSecondary}`}>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Date</th>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Day</th>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Employee</th>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Type</th>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Time</th>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Difference</th>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Reason</th>
+                      <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceApprovals.length > 0 ? attendanceApprovals.map((item, idx) => {
+                      // Calculate day of week
+                      const dateObj = new Date(item.date);
+                      const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dateObj.getDay()];
+                      
+                      // Determine type color and badge
+                      const getTypeStyle = (type) => {
+                        const typeStr = (type || '').toLowerCase();
+                        if (typeStr.includes('early_login') || typeStr.includes('early login')) {
+                          return { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Early Login' };
+                        } else if (typeStr.includes('late_login') || typeStr.includes('late login')) {
+                          return { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Late Login' };
+                        } else if (typeStr.includes('early_logout') || typeStr.includes('early logout')) {
+                          return { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Early Logout' };
+                        } else if (typeStr.includes('late_logout') || typeStr.includes('late logout')) {
+                          return { bg: 'bg-green-500/20', text: 'text-green-400', label: 'Late Logout' };
+                        }
+                        return { bg: 'bg-gray-500/20', text: 'text-gray-400', label: type || 'Other' };
+                      };
+                      
+                      const typeStyle = getTypeStyle(item.type || item.approval_status);
+                      
+                      // Calculate hours difference
+                      const hoursDiff = item.hours_difference || item.difference_hours || 0;
+                      const isPositive = hoursDiff >= 0;
+
+                      return (
+                        <tr key={idx} className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/50' : 'hover:bg-gray-50'}`}>
+                          <td className={`p-3 ${textPrimary}`}>{formatDate(item.date)}</td>
+                          <td className={`p-3 ${textSecondary}`}>{dayName}</td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white text-sm font-bold">
+                                {item.employee_name?.charAt(0).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                                {item.work_location && (
+                                  <Badge className={`text-xs ${item.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}`}>
+                                    {item.work_location === 'home' ? 'Remote' : 'Office'}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <Badge className={`${typeStyle.bg} ${typeStyle.text}`}>{typeStyle.label}</Badge>
+                          </td>
+                          <td className={`p-3 ${textPrimary}`}>
+                            {item.time || item.clock_in || item.clock_out || '-'}
+                          </td>
+                          <td className="p-3">
+                            <span className={`font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                              {isPositive ? '+' : ''}{typeof hoursDiff === 'number' ? hoursDiff.toFixed(1) : hoursDiff} hrs
+                            </span>
+                          </td>
+                          <td className={`p-3 ${textSecondary} max-w-[200px] truncate`} title={item.reason}>
+                            {item.reason || '-'}
+                          </td>
+                          <td className="p-3">
+                            <Button 
+                              size="sm" 
+                              onClick={() => openApproveModal(item, 'attendance')}
+                              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                              disabled={isViewOnly}
+                            >
+                              <Eye className="h-4 w-4 mr-1" /> Review
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center">
+                          <CheckCircle className={`h-12 w-12 mx-auto mb-3 text-[#22c55e]`} />
+                          <p className={textPrimary}>No pending attendance approvals</p>
+                          <p className={`text-sm ${textSecondary}`}>All attendance requests have been processed</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -6181,30 +6244,98 @@ function EnhancedApprovalsTab({
         </div>
       )}
 
-      {/* Approve Modal with Remarks */}
+      {/* Approve Modal with Remarks - Enhanced for Attendance Review */}
       {showApproveModal && selectedItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className={`${bgCard} w-full max-w-md`}>
+          <Card className={`${bgCard} w-full max-w-lg`}>
             <CardContent className="p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className={`text-lg font-semibold ${textPrimary}`}>Approve Request</h3>
+                <h3 className={`text-lg font-semibold ${textPrimary}`}>
+                  {approvalType === 'attendance' ? 'Review Attendance Request' : 'Approve Request'}
+                </h3>
                 <Button variant="ghost" size="sm" onClick={() => setShowApproveModal(false)}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
               
-              <div className={`p-3 rounded-lg ${bgSecondary} mb-4`}>
-                <p className={`font-medium ${textPrimary}`}>{selectedItem.employee_name}</p>
-                <p className={`text-sm ${textSecondary}`}>
-                  {approvalType === 'leave' ? `${selectedItem.leave_type} Leave` : 
-                   approvalType === 'permission' ? `${selectedItem.hours}h Permission` :
-                   selectedItem.type}
-                </p>
+              {/* Employee Info */}
+              <div className={`p-4 rounded-lg ${bgSecondary} mb-4`}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-bold text-lg">
+                    {selectedItem.employee_name?.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className={`font-medium text-lg ${textPrimary}`}>{selectedItem.employee_name}</p>
+                    <p className={`text-sm ${textSecondary}`}>{selectedItem.employee_email || selectedItem.department || '-'}</p>
+                  </div>
+                </div>
               </div>
+
+              {/* Summary Details for Attendance */}
+              {approvalType === 'attendance' && (
+                <div className="space-y-3 mb-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary} mb-1`}>Date</p>
+                      <p className={`font-medium ${textPrimary}`}>{formatDate(selectedItem.date)}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary} mb-1`}>Type</p>
+                      <Badge className={`${
+                        (selectedItem.type || '').toLowerCase().includes('early_login') ? 'bg-blue-500/20 text-blue-400' :
+                        (selectedItem.type || '').toLowerCase().includes('late_login') ? 'bg-orange-500/20 text-orange-400' :
+                        (selectedItem.type || '').toLowerCase().includes('early_logout') ? 'bg-red-500/20 text-red-400' :
+                        (selectedItem.type || '').toLowerCase().includes('late_logout') ? 'bg-green-500/20 text-green-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {selectedItem.type || 'Attendance'}
+                      </Badge>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary} mb-1`}>Time</p>
+                      <p className={`font-medium ${textPrimary}`}>{selectedItem.time || selectedItem.clock_in || selectedItem.clock_out || '-'}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary} mb-1`}>Hours Difference</p>
+                      <p className={`font-bold ${(selectedItem.hours_difference || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {(selectedItem.hours_difference || 0) >= 0 ? '+' : ''}{(selectedItem.hours_difference || selectedItem.difference_hours || 0).toFixed ? (selectedItem.hours_difference || selectedItem.difference_hours || 0).toFixed(1) : selectedItem.hours_difference || 0} hrs
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Work Location */}
+                  {selectedItem.work_location && (
+                    <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                      <p className={`text-xs ${textSecondary} mb-1`}>Work Location</p>
+                      <Badge className={selectedItem.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}>
+                        {selectedItem.work_location === 'home' ? 'Work From Home' : 'Office'}
+                      </Badge>
+                    </div>
+                  )}
+                  
+                  {/* Employee's Reason */}
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>Employee's Reason</p>
+                    <p className={textPrimary}>{selectedItem.reason || 'No reason provided'}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Non-attendance request summary */}
+              {approvalType !== 'attendance' && (
+                <div className={`p-3 rounded-lg ${bgSecondary} mb-4`}>
+                  <p className={`text-sm ${textSecondary}`}>
+                    {approvalType === 'leave' ? `${selectedItem.leave_type} Leave` : 
+                     approvalType === 'permission' ? `${selectedItem.hours}h Permission` :
+                     approvalType === 'wfh' ? `${selectedItem.days} Days WFH` :
+                     selectedItem.type}
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-4">
                 <div>
-                  <Label className={textPrimary}>Remarks (Optional)</Label>
+                  <Label className={textPrimary}>HR Remarks</Label>
                   <textarea
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
@@ -6230,6 +6361,14 @@ function EnhancedApprovalsTab({
 
               <div className="flex gap-2 justify-end mt-6">
                 <Button variant="ghost" onClick={() => setShowApproveModal(false)}>Cancel</Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => { setShowApproveModal(false); openRejectModal(selectedItem, approvalType); }} 
+                  className="text-[#ef4444] border-[#ef4444]"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
                 <Button onClick={handleApprove} className="bg-[#22c55e] hover:bg-[#16a34a]">
                   <CheckCircle className="h-4 w-4 mr-2" />
                   Approve
