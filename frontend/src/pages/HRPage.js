@@ -287,21 +287,26 @@ export default function HRPage() {
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  // Primary tabs with counts (Attendance, Leave, Permission, Remote)
-  const primaryTabs = [
-    { id: 'attendance', label: 'Attendance', icon: Clock, count: tabCounts.attendance },
-    { id: 'leave', label: 'Leave', icon: Calendar, count: tabCounts.leave },
-    { id: 'permission', label: 'Permission', icon: Clock, count: tabCounts.permission },
-    { id: 'remote', label: 'Remote', icon: Home, count: tabCounts.remote },
-  ];
-
-  // Secondary tabs (Profile, Payroll, Reviews, Security)
-  const secondaryTabs = [
+  // Main tabs
+  const mainTabs = [
+    { id: 'attendance', label: 'Attendance', icon: Clock },
     { id: 'profile', label: 'My Profile', icon: User },
+    { id: 'requests', label: 'Requests', icon: Send },
     { id: 'payroll', label: 'Payroll', icon: FileText },
     { id: 'reviews', label: 'Reviews', icon: Award },
     { id: 'security', label: 'Security', icon: Shield },
   ];
+
+  // Request sub-tabs with counts
+  const requestSubTabs = [
+    { id: 'req-attendance', label: 'Attendance', icon: Clock, count: tabCounts.attendance },
+    { id: 'req-leave', label: 'Leave', icon: Calendar, count: tabCounts.leave },
+    { id: 'req-permission', label: 'Permission', icon: Clock, count: tabCounts.permission },
+    { id: 'req-remote', label: 'Remote', icon: Home, count: tabCounts.remote },
+  ];
+
+  // State for request sub-tab
+  const [activeRequestSubTab, setActiveRequestSubTab] = useState('req-leave');
 
   return (
     <Layout>
@@ -315,9 +320,9 @@ export default function HRPage() {
           <p className={textSecondary}>Manage your attendance, leaves, payslips and more</p>
         </div>
 
-        {/* Primary Tabs - Attendance, Leave, Permission, Remote */}
-        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-          {primaryTabs.map((tab) => {
+        {/* Main Tabs Row */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          {mainTabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <Button
@@ -328,42 +333,6 @@ export default function HRPage() {
                   activeTab === tab.id
                     ? 'bg-[#6366f1] text-white shadow-lg'
                     : `${bgCard} ${textSecondary} hover:bg-[#3f3f46] border ${borderColor}`
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-                {tab.count > 0 && (
-                  <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    activeTab === tab.id ? 'bg-white/20' : 'bg-[#f59e0b]/20 text-[#f59e0b]'
-                  }`}>
-                    {tab.count}
-                  </span>
-                )}
-                {tab.count === 0 && (
-                  <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
-                    activeTab === tab.id ? 'bg-white/20' : 'bg-gray-500/20 text-gray-400'
-                  }`}>
-                    {tab.count}
-                  </span>
-                )}
-              </Button>
-            );
-          })}
-        </div>
-
-        {/* Secondary Tabs - Profile, Payroll, Reviews, Security */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {secondaryTabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <Button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                data-testid={`hr-tab-${tab.id}`}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-                  activeTab === tab.id
-                    ? 'bg-[#10b981] text-white'
-                    : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -401,48 +370,105 @@ export default function HRPage() {
           />
         )}
 
-        {activeTab === 'leave' && (
-          <LeaveTab
-            leaveRequests={leaveRequests}
-            leaveBalance={leaveBalance}
-            showModal={showLeaveModal}
-            setShowModal={setShowLeaveModal}
-            leaveForm={leaveForm}
-            setLeaveForm={setLeaveForm}
-            onSubmit={handleLeaveSubmit}
-            formatDate={formatDate}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
+        {/* Requests Tab with Sub-tabs */}
+        {activeTab === 'requests' && (
+          <div className="space-y-6">
+            {/* Sub-tabs: Attendance | Leave | Permission | Remote */}
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {requestSubTabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <Button
+                    key={tab.id}
+                    onClick={() => setActiveRequestSubTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                      activeRequestSubTab === tab.id
+                        ? 'bg-[#10b981] text-white'
+                        : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {tab.label}
+                    {tab.count > 0 && (
+                      <span className={`ml-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        activeRequestSubTab === tab.id ? 'bg-white/20' : 'bg-[#f59e0b]/20 text-[#f59e0b]'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                    {tab.count === 0 && (
+                      <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${
+                        activeRequestSubTab === tab.id ? 'bg-white/20' : 'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    )}
+                  </Button>
+                );
+              })}
+            </div>
 
-        {activeTab === 'permission' && (
-          <PermissionTab
-            permissionRequests={permissionRequests}
-            onRefresh={loadPermissionRequests}
-            formatDate={formatDate}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
+            {/* Attendance Requests Sub-Tab */}
+            {activeRequestSubTab === 'req-attendance' && (
+              <RequestsAttendanceTab
+                attendanceHistory={attendanceHistory}
+                formatDate={formatDate}
+                formatTime={formatTime}
+                bgCard={bgCard}
+                bgSecondary={bgSecondary}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+              />
+            )}
 
-        {activeTab === 'remote' && (
-          <RemoteTab
-            wfhRequests={wfhRequests}
-            onRefresh={loadWfhRequests}
-            formatDate={formatDate}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
+            {/* Leave Requests Sub-Tab */}
+            {activeRequestSubTab === 'req-leave' && (
+              <LeaveTab
+                leaveRequests={leaveRequests}
+                leaveBalance={leaveBalance}
+                showModal={showLeaveModal}
+                setShowModal={setShowLeaveModal}
+                leaveForm={leaveForm}
+                setLeaveForm={setLeaveForm}
+                onSubmit={handleLeaveSubmit}
+                formatDate={formatDate}
+                bgCard={bgCard}
+                bgSecondary={bgSecondary}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+              />
+            )}
+
+            {/* Permission Requests Sub-Tab */}
+            {activeRequestSubTab === 'req-permission' && (
+              <PermissionTab
+                permissionRequests={permissionRequests}
+                onRefresh={loadPermissionRequests}
+                formatDate={formatDate}
+                bgCard={bgCard}
+                bgSecondary={bgSecondary}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+              />
+            )}
+
+            {/* Remote/WFH Requests Sub-Tab */}
+            {activeRequestSubTab === 'req-remote' && (
+              <RemoteTab
+                wfhRequests={wfhRequests}
+                onRefresh={loadWfhRequests}
+                formatDate={formatDate}
+                bgCard={bgCard}
+                bgSecondary={bgSecondary}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+              />
+            )}
+          </div>
         )}
 
         {activeTab === 'payroll' && (
@@ -3211,6 +3237,141 @@ function RemoteTab({ wfhRequests, onRefresh, formatDate, bgCard, bgSecondary, te
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============ Requests Attendance Tab (Login/Early Login/Late Logout) ============
+function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  // Filter attendance records that have pending approvals or special status
+  const pendingRecords = attendanceHistory.filter(r => 
+    r.approval_status && r.approval_status.includes('pending')
+  );
+  
+  const earlyLoginRecords = attendanceHistory.filter(r => 
+    r.approval_status === 'pending_early_login' || r.early_login_reason
+  );
+  
+  const lateLogoutRecords = attendanceHistory.filter(r => 
+    r.late_logout_reason || (r.clock_out && new Date(`2000-01-01 ${r.clock_out}`) > new Date('2000-01-01 18:30'))
+  );
+  
+  const earlyLogoutRecords = attendanceHistory.filter(r => 
+    r.approval_status === 'pending_early_logout' || r.early_logout_reason
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-[#f59e0b]">{pendingRecords.length}</p>
+            <p className={`text-sm ${textSecondary}`}>Pending Approval</p>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-[#6366f1]">{earlyLoginRecords.length}</p>
+            <p className={`text-sm ${textSecondary}`}>Early Logins</p>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-[#10b981]">{lateLogoutRecords.length}</p>
+            <p className={`text-sm ${textSecondary}`}>Late Logouts</p>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-[#ef4444]">{earlyLogoutRecords.length}</p>
+            <p className={`text-sm ${textSecondary}`}>Early Logouts</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Attendance Records with Reasons */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader>
+          <CardTitle className={textPrimary}>Attendance Approvals & Reasons</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className={`border-b ${borderColor}`}>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Date</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Login</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Logout</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Work Hrs</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Type</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendanceHistory.map((record, index) => {
+                  // Determine the type and reason
+                  let type = 'Normal';
+                  let typeColor = 'bg-gray-500/20 text-gray-400';
+                  let reason = record.notes || '-';
+                  
+                  if (record.approval_status === 'pending_early_login' || record.early_login_reason) {
+                    type = 'Early Login';
+                    typeColor = 'bg-[#6366f1]/20 text-[#6366f1]';
+                    reason = record.early_login_reason || 'Early login recorded';
+                  } else if (record.approval_status === 'pending_early_logout' || record.early_logout_reason) {
+                    type = 'Early Logout';
+                    typeColor = 'bg-[#ef4444]/20 text-[#ef4444]';
+                    reason = record.early_logout_reason || 'Early logout recorded';
+                  } else if (record.late_login_reason) {
+                    type = 'Late Login';
+                    typeColor = 'bg-[#f59e0b]/20 text-[#f59e0b]';
+                    reason = record.late_login_reason;
+                  } else if (record.late_logout_reason) {
+                    type = 'Late Logout';
+                    typeColor = 'bg-[#10b981]/20 text-[#10b981]';
+                    reason = record.late_logout_reason;
+                  }
+                  
+                  return (
+                    <tr key={index} className={`border-b ${borderColor} hover:${bgSecondary}`}>
+                      <td className={`p-3 ${textPrimary} font-medium`}>{formatDate(record.date)}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in) || '-'}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out) || '-'}</td>
+                      <td className={`p-3 font-medium text-[#10b981]`}>{record.total_hours?.toFixed(2) || '-'}</td>
+                      <td className="p-3">
+                        <Badge className={`${
+                          record.approval_status === 'approved' || record.approval_status === 'auto' 
+                            ? 'bg-green-500/20 text-green-400' 
+                            : record.approval_status?.includes('pending')
+                            ? 'bg-yellow-500/20 text-yellow-400'
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {record.approval_status === 'auto' ? 'OK' : record.approval_status || 'N/A'}
+                        </Badge>
+                      </td>
+                      <td className="p-3">
+                        <Badge className={typeColor}>{type}</Badge>
+                      </td>
+                      <td className={`p-3 ${textSecondary} text-sm max-w-[200px] truncate`} title={reason}>
+                        {reason}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {attendanceHistory.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className={`p-8 text-center ${textSecondary}`}>
+                      No attendance records found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
