@@ -42,6 +42,7 @@ export default function OurTasksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [mainTab, setMainTab] = useState('assigned_to_me'); // assigned_to_me, assign_to_team
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
@@ -219,10 +220,44 @@ export default function OurTasksPage() {
   };
 
   // Get time tracking button based on status
-  const getTimeTrackingButton = (task) => {
+  // For "Assign to Team" tab: only show status, no action buttons
+  const getTimeTrackingButton = (task, isTeamView = false) => {
     const tracking = task.time_tracking || { status: 'not_started', total_seconds: 0 };
     const status = tracking.status;
     
+    // For team view (tasks assigned to others), only show status indicators
+    if (isTeamView) {
+      switch (status) {
+        case 'not_started':
+          return (
+            <Badge className="bg-[#71717a]/20 text-[#71717a]">
+              <Circle className="h-3 w-3 mr-1" /> Not Started
+            </Badge>
+          );
+        case 'running':
+          return (
+            <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">
+              <Play className="h-3 w-3 mr-1" /> Running
+            </Badge>
+          );
+        case 'paused':
+          return (
+            <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">
+              <Pause className="h-3 w-3 mr-1" /> Paused
+            </Badge>
+          );
+        case 'finished':
+          return (
+            <Badge className="bg-[#10b981]/20 text-[#10b981]">
+              <CheckCircle2 className="h-3 w-3 mr-1" /> Done
+            </Badge>
+          );
+        default:
+          return null;
+      }
+    }
+    
+    // For "Assigned to Me" tab - show action buttons
     switch (status) {
       case 'not_started':
         return (
@@ -450,6 +485,15 @@ export default function OurTasksPage() {
   };
 
   const filteredTasks = tasks.filter(task => {
+    // Main Tab filter - Assigned to Me vs Assign to Team
+    if (mainTab === 'assigned_to_me') {
+      // Tasks assigned to me (by others) OR tasks I created for myself
+      if (!(task.assigned_to === user?.user_id)) return false;
+    } else if (mainTab === 'assign_to_team') {
+      // Tasks I created and assigned to others (not myself)
+      if (!(task.created_by === user?.user_id && task.assigned_to !== user?.user_id)) return false;
+    }
+    
     // Quick filter (tabs)
     if (filter === 'my' && !(task.created_by === user?.user_id || task.assigned_to === user?.user_id)) return false;
     if (filter !== 'all' && filter !== 'my' && task.status !== filter) return false;
@@ -504,12 +548,20 @@ export default function OurTasksPage() {
     });
   };
 
-  // Stats
+  // Stats - based on main tab
+  const assignedToMeTasks = tasks.filter(t => t.assigned_to === user?.user_id && t.created_by !== user?.user_id);
+  const assignedToTeamTasks = tasks.filter(t => t.created_by === user?.user_id && t.assigned_to !== user?.user_id);
+  const myOwnTasks = tasks.filter(t => t.created_by === user?.user_id && t.assigned_to === user?.user_id);
+  
+  const currentTabTasks = mainTab === 'assigned_to_me' 
+    ? [...assignedToMeTasks, ...myOwnTasks.filter(t => t.assigned_to === user?.user_id)]
+    : assignedToTeamTasks;
+  
   const stats = {
-    total: tasks.length,
-    pending: tasks.filter(t => t.status === 'pending').length,
-    in_progress: tasks.filter(t => t.status === 'in_progress').length,
-    completed: tasks.filter(t => t.status === 'completed').length
+    total: currentTabTasks.length,
+    pending: currentTabTasks.filter(t => t.status === 'pending').length,
+    in_progress: currentTabTasks.filter(t => t.status === 'in_progress').length,
+    completed: currentTabTasks.filter(t => t.status === 'completed').length
   };
 
   return (
@@ -525,6 +577,32 @@ export default function OurTasksPage() {
             <Plus className="h-4 w-4 mr-2" />
             Create Task
           </Button>
+        </div>
+
+        {/* Main Tabs - Assigned to Me / Assign to Team */}
+        <div className="flex gap-4 border-b border-gray-700 pb-2">
+          <button
+            onClick={() => { setMainTab('assigned_to_me'); setFilter('all'); }}
+            className={`px-4 py-2 font-medium transition-all ${
+              mainTab === 'assigned_to_me' 
+                ? 'text-[#6366f1] border-b-2 border-[#6366f1]' 
+                : `${textSecondary} hover:text-[#6366f1]`
+            }`}
+          >
+            <User className="h-4 w-4 inline mr-2" />
+            Assigned to Me ({assignedToMeTasks.length + myOwnTasks.length})
+          </button>
+          <button
+            onClick={() => { setMainTab('assign_to_team'); setFilter('all'); }}
+            className={`px-4 py-2 font-medium transition-all ${
+              mainTab === 'assign_to_team' 
+                ? 'text-[#8b5cf6] border-b-2 border-[#8b5cf6]' 
+                : `${textSecondary} hover:text-[#8b5cf6]`
+            }`}
+          >
+            <Users className="h-4 w-4 inline mr-2" />
+            Assign to Team ({assignedToTeamTasks.length})
+          </button>
         </div>
 
         {/* Stats Cards */}
@@ -866,7 +944,7 @@ export default function OurTasksPage() {
                         )}
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        {getTimeTrackingButton(task)}
+                        {getTimeTrackingButton(task, mainTab === 'assign_to_team')}
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1">

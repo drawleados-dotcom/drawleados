@@ -2702,8 +2702,53 @@ function DashboardTab({ stats, attendanceOverview, bgCard, bgSecondary, textPrim
 
 // ============== EMPLOYEES TAB ==============
 function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  // Calculate employee stats - active employees only
+  const activeEmployees = employees.filter(e => e.status !== 'inactive');
+  const officeEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location !== 'home');
+  const remoteEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location === 'home');
+  
   return (
     <div className="space-y-6">
+      {/* Summary Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm ${textSecondary}`}>Total Employees</p>
+                <p className={`text-3xl font-bold ${textPrimary}`}>{activeEmployees.length}</p>
+                <p className={`text-xs ${textSecondary}`}>Active only</p>
+              </div>
+              <Users className="h-10 w-10 text-[#6366f1]" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm ${textSecondary}`}>Office</p>
+                <p className={`text-3xl font-bold text-[#22c55e]`}>{officeEmployees.length}</p>
+                <p className={`text-xs ${textSecondary}`}>Working from office</p>
+              </div>
+              <Building className="h-10 w-10 text-[#22c55e]" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm ${textSecondary}`}>Remote</p>
+                <p className={`text-3xl font-bold text-[#8b5cf6]`}>{remoteEmployees.length}</p>
+                <p className={`text-xs ${textSecondary}`}>Working from home</p>
+              </div>
+              <Home className="h-10 w-10 text-[#8b5cf6]" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Search */}
       <div className="flex gap-4">
         <div className="relative flex-1">
@@ -2717,59 +2762,78 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, 
         </div>
       </div>
 
-      {/* Employee Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {employees.map((emp) => (
-          <Card key={emp.user_id} className={`${bgCard} border ${borderColor}`}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white text-lg font-bold">
-                    {emp.name?.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className={`font-semibold ${textPrimary}`}>{emp.name}</p>
-                    <p className={`text-xs ${textSecondary}`}>{emp.email}</p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() => onEdit(emp)}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                  data-testid={`edit-employee-${emp._id || emp.email}`}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className={textSecondary}>Role</span>
-                  <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{emp.role}</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className={textSecondary}>Department</span>
-                  <span className={textPrimary}>{emp.profile?.department || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={textSecondary}>Designation</span>
-                  <span className={textPrimary}>{emp.profile?.designation || '-'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className={textSecondary}>Today</span>
-                  {emp.today_attendance ? (
-                    <Badge className={emp.today_attendance.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}>
-                      {emp.today_attendance.work_location === 'home' ? 'WFH' : 'Office'}
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-gray-500/20 text-gray-400">Absent</Badge>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {/* Employees List View */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardHeader className="pb-2">
+          <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+            <ClipboardList className="h-5 w-5" />
+            Employees List
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className={`border-b ${borderColor}`}>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Employee</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Role</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Department</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Work Mode</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employees.filter(e => 
+                  e.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  e.email?.toLowerCase().includes(searchQuery.toLowerCase())
+                ).map((emp) => (
+                  <tr key={emp.user_id} className={`border-b ${borderColor} hover:${bgSecondary}`}>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-bold">
+                          {emp.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{emp.name}</p>
+                          <p className={`text-xs ${textSecondary}`}>{emp.email}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{emp.role}</Badge>
+                    </td>
+                    <td className={`px-4 py-3 ${textPrimary}`}>{emp.profile?.department || '-'}</td>
+                    <td className="px-4 py-3">
+                      {emp.today_attendance ? (
+                        <Badge className={emp.today_attendance.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}>
+                          {emp.today_attendance.work_location === 'home' ? 'Remote' : 'Office'}
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-gray-500/20 text-gray-400">-</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge className={emp.status === 'inactive' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}>
+                        {emp.status === 'inactive' ? 'Inactive' : 'Active'}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button
+                        size="sm"
+                        onClick={() => onEdit(emp)}
+                        className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -5394,14 +5458,50 @@ function EnhancedApprovalsTab({
               <CardContent className="p-4">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
-                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">{item.type}</Badge>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-bold">
+                        {item.employee_name?.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                        <p className={`text-xs ${textSecondary}`}>{item.employee_email || '-'}</p>
+                      </div>
+                      <Badge className="bg-[#f59e0b]/20 text-[#f59e0b] ml-2">{item.type}</Badge>
+                      {item.work_location && (
+                        <Badge className={item.work_location === 'home' ? 'bg-purple-500/20 text-purple-400' : 'bg-green-500/20 text-green-400'}>
+                          {item.work_location === 'home' ? 'Remote' : 'Office'}
+                        </Badge>
+                      )}
                     </div>
-                    <p className={`text-sm ${textSecondary}`}>{item.reason}</p>
-                    <p className={`text-xs ${textSecondary} mt-1`}>{formatDate(item.date)} | {formatTime(item.time)}</p>
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-2">
+                      <div>
+                        <span className={textSecondary}>Date: </span>
+                        <span className={textPrimary}>{formatDate(item.date)}</span>
+                      </div>
+                      <div>
+                        <span className={textSecondary}>Time: </span>
+                        <span className={textPrimary}>{formatTime(item.time)}</span>
+                      </div>
+                      {item.check_in && (
+                        <div>
+                          <span className={textSecondary}>Check In: </span>
+                          <span className={textPrimary}>{item.check_in}</span>
+                        </div>
+                      )}
+                      {item.check_out && (
+                        <div>
+                          <span className={textSecondary}>Check Out: </span>
+                          <span className={textPrimary}>{item.check_out}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <p className={`text-sm ${textSecondary}`}>
+                      <span className="font-medium">Reason:</span> {item.reason}
+                    </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 ml-4">
                     <Button size="sm" onClick={() => openApproveModal(item, 'attendance')} className="bg-[#22c55e] hover:bg-[#16a34a]">
                       Approve
                     </Button>
@@ -5447,8 +5547,14 @@ function EnhancedApprovalsTab({
                 <CardContent className="p-4">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#22c55e] to-[#16a34a] flex items-center justify-center text-white font-bold">
+                          {item.employee_name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
+                          <p className={`text-xs ${textSecondary}`}>{item.employee_email || '-'}</p>
+                        </div>
                         <Badge className={`${
                           item.leave_type === 'casual' ? 'bg-blue-500/20 text-blue-400' :
                           item.leave_type === 'sick' ? 'bg-orange-500/20 text-orange-400' :
@@ -5465,14 +5571,45 @@ function EnhancedApprovalsTab({
                           {item.status}
                         </Badge>
                       </div>
-                      <p className={`text-sm ${textSecondary}`}>{item.reason}</p>
-                      <p className={`text-xs ${textSecondary} mt-1`}>
-                        {formatDate(item.from_date || item.start_date)} - {formatDate(item.to_date || item.end_date)}
-                        {item.days && ` (${item.days} days)`}
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-2">
+                        <div>
+                          <span className={textSecondary}>From: </span>
+                          <span className={textPrimary}>{formatDate(item.from_date || item.start_date)}</span>
+                        </div>
+                        <div>
+                          <span className={textSecondary}>To: </span>
+                          <span className={textPrimary}>{formatDate(item.to_date || item.end_date)}</span>
+                        </div>
+                        <div>
+                          <span className={textSecondary}>Days: </span>
+                          <span className={`font-medium ${textPrimary}`}>{item.days || '-'}</span>
+                        </div>
+                        {item.half_day && (
+                          <div>
+                            <Badge className="bg-blue-500/20 text-blue-400">Half Day</Badge>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <p className={`text-sm ${textSecondary}`}>
+                        <span className="font-medium">Reason:</span> {item.reason}
                       </p>
+                      
+                      {item.approved_by_name && item.status === 'approved' && (
+                        <p className={`text-xs text-[#22c55e] mt-1`}>
+                          Approved by: {item.approved_by_name} {item.approved_at && `on ${formatDate(item.approved_at.split('T')[0])}`}
+                        </p>
+                      )}
+                      
+                      {item.rejection_reason && item.status === 'rejected' && (
+                        <p className={`text-xs text-[#ef4444] mt-1`}>
+                          Rejected: {item.rejection_reason}
+                        </p>
+                      )}
                     </div>
                     {item.status === 'pending' && (
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 ml-4">
                         <Button size="sm" onClick={() => openApproveModal(item, 'leave')} className="bg-[#22c55e] hover:bg-[#16a34a]">
                           Approve
                         </Button>
@@ -6274,7 +6411,7 @@ function EnhancedCalendarTab({
           className={activeSubTab === 'holidays' ? 'bg-[#6366f1]' : ''}
         >
           <Globe className="h-4 w-4 mr-2" />
-          Indian Holidays
+          Holidays
         </Button>
       </div>
 
@@ -6641,9 +6778,32 @@ function EnhancedCalendarTab({
         </Card>
       )}
 
-      {/* Indian Holidays - with Edit & Approve */}
+      {/* Holidays - with Edit & Approve */}
       {activeSubTab === 'holidays' && (
         <div className="space-y-4">
+          {/* Month/Year Filter */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <select
+              value={month}
+              onChange={(e) => setMonth(parseInt(e.target.value))}
+              className={`px-3 py-2 rounded-md ${bgSecondary} ${borderColor} ${textPrimary}`}
+            >
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i} value={i + 1}>
+                  {new Date(2000, i).toLocaleString('default', { month: 'long' })}
+                </option>
+              ))}
+            </select>
+            <Input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+              className={`w-24 ${bgSecondary} ${borderColor}`}
+              min="2020"
+              max="2030"
+            />
+          </div>
+
           {/* Add Custom Holiday */}
           <Card className={`${bgCard} border ${borderColor}`}>
             <CardContent className="p-4">
@@ -6673,16 +6833,27 @@ function EnhancedCalendarTab({
           <Card className={`${bgCard} border ${borderColor}`}>
             <CardContent className="p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className={`text-lg font-semibold ${textPrimary}`}>Indian National Holidays {year}</h3>
+                <h3 className={`text-lg font-semibold ${textPrimary}`}>Holidays {year}</h3>
                 <div className={`text-sm ${textSecondary}`}>
                   <span className="text-[#22c55e]">{allHolidays.filter(h => h.approved).length} Approved</span>
                   {' / '}
-                  <span>{allHolidays.length} Total</span>
+                  <span>{allHolidays.filter(h => {
+                    // Filter by selected month
+                    const holidayMonth = new Date(h.date).getMonth() + 1;
+                    return holidayMonth === month;
+                  }).length} This Month</span>
                 </div>
               </div>
               
               <div className="space-y-3">
-                {allHolidays.length > 0 ? allHolidays.map((holiday, idx) => (
+                {allHolidays.filter(h => {
+                  // Filter by selected month and year
+                  const holidayDate = new Date(h.date);
+                  return holidayDate.getMonth() + 1 === month && holidayDate.getFullYear() === year;
+                }).length > 0 ? allHolidays.filter(h => {
+                  const holidayDate = new Date(h.date);
+                  return holidayDate.getMonth() + 1 === month && holidayDate.getFullYear() === year;
+                }).map((holiday, idx) => (
                   <div key={idx} className={`p-4 rounded-lg ${bgSecondary} ${holiday.approved ? 'border-l-4 border-[#22c55e]' : ''}`}>
                     {editingHoliday?.date === holiday.date ? (
                       // Edit Mode
@@ -6761,7 +6932,7 @@ function EnhancedCalendarTab({
                 )) : (
                   <div className={`text-center py-8 ${textSecondary}`}>
                     <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    <p>No holidays data for {year}</p>
+                    <p>No holidays for {new Date(year, month - 1).toLocaleString('default', { month: 'long' })} {year}</p>
                   </div>
                 )}
               </div>
