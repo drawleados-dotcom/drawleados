@@ -6842,9 +6842,7 @@ function EnhancedCalendarTab({
   };
 
   // Sunday popup state
-  const [showSundayModal, setShowSundayModal] = useState(false);
-  const [selectedSunday, setSelectedSunday] = useState(null);
-  const [sundayRemarks, setSundayRemarks] = useState('');
+  // Sunday modal removed - calendar now only displays holidays
 
   // Toggle a day as working day (for Sundays) - from modal
   const handleToggleWorkingDay = (dateStr, isSunday, action = 'toggle') => {
@@ -6878,15 +6876,7 @@ function EnhancedCalendarTab({
     toast.success(updated.includes(dateStr) ? 'Marked as working day' : 'Marked as holiday');
   };
 
-  // Open Sunday modal (only if canEdit)
-  const handleSundayClick = (day) => {
-    if (isViewOnly) return; // View-only users cannot edit
-    if (day.isSunday) {
-      setSelectedSunday(day);
-      setSundayRemarks('');
-      setShowSundayModal(true);
-    }
-  };
+  // Sunday click functionality removed - calendar is now view-only for holidays
 
   // Calculate work hours display
   const formatWorkHours = (hours) => {
@@ -6967,14 +6957,13 @@ function EnhancedCalendarTab({
                 {calendarGrid.map((day, idx) => (
                   <div
                     key={idx}
-                    onClick={() => day.date && day.isSunday && handleSundayClick(day)}
                     data-testid={day.isSunday ? `sunday-cell-${day.date}` : undefined}
-                    className={`p-2 min-h-[60px] rounded text-center transition-colors ${day.isSunday ? 'cursor-pointer' : ''} ${
+                    className={`p-2 min-h-[60px] rounded text-center transition-colors ${
                       !day.date ? '' :
-                      day.isSpecialWorkingDay ? 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30' :
+                      day.isSpecialWorkingDay ? 'bg-[#22c55e]/20' :
                       day.isHoliday && day.holidayName !== 'Sunday' ? 'bg-[#ef4444]/20' :
-                      day.isSunday ? 'bg-[#6366f1]/20 hover:bg-[#6366f1]/30' :
-                      `${bgSecondary} hover:bg-[#6366f1]/10`
+                      day.isSunday ? 'bg-[#6366f1]/20' :
+                      `${bgSecondary}`
                     } ${day.isToday ? 'ring-2 ring-[#6366f1]' : ''}`}
                   >
                     {day.date && (
@@ -6998,137 +6987,11 @@ function EnhancedCalendarTab({
                 ))}
               </div>
               <div className={`mt-4 p-3 rounded ${bgSecondary} text-sm ${textSecondary}`}>
-                {isViewOnly ? (
-                  <strong>View Only:</strong>
-                ) : (
-                  <><strong>Tip:</strong> Click on any Sunday to configure it as a working day, team holiday, or add remarks.</>
-                )}
-                {isViewOnly && ' You have read-only access to this calendar.'}
+                <strong>Note:</strong> This calendar displays all finalized holidays and leaves approved by HR Admin. Go to the Holidays tab to manage holidays.
               </div>
             </CardContent>
           </Card>
 
-          {/* Sunday Configuration Modal */}
-          {showSundayModal && selectedSunday && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <Card className={`${bgCard} border ${borderColor} w-full max-w-md`}>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
-                    <Calendar className="h-5 w-5 text-[#6366f1]" />
-                    Configure Sunday
-                  </CardTitle>
-                  <Button variant="ghost" onClick={() => setShowSundayModal(false)} className={textSecondary}>
-                    <X className="h-5 w-5" />
-                  </Button>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Date Display */}
-                  <div className={`p-4 rounded-lg ${bgSecondary} text-center`}>
-                    <p className={`text-2xl font-bold ${textPrimary}`}>
-                      {new Date(selectedSunday.date).toLocaleDateString('en-IN', { 
-                        weekday: 'long', 
-                        day: 'numeric', 
-                        month: 'long', 
-                        year: 'numeric' 
-                      })}
-                    </p>
-                    <p className={`text-sm mt-1 ${textSecondary}`}>
-                      Currently: {selectedSunday.isSpecialWorkingDay ? 'Working Day' : 'Holiday'}
-                    </p>
-                  </div>
-
-                  {/* Options */}
-                  <div className="space-y-3">
-                    <p className={`font-medium ${textPrimary}`}>Set this Sunday as:</p>
-                    
-                    <button
-                      onClick={() => handleToggleWorkingDay(selectedSunday.date, true, 'working')}
-                      className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
-                        selectedSunday.isSpecialWorkingDay 
-                          ? 'border-[#22c55e] bg-[#22c55e]/10' 
-                          : `border-[#3f3f46] ${bgSecondary} hover:border-[#22c55e]`
-                      }`}
-                      data-testid="set-working-day-btn"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-[#22c55e]/20 flex items-center justify-center">
-                        <Briefcase className="h-5 w-5 text-[#22c55e]" />
-                      </div>
-                      <div className="text-left">
-                        <p className={`font-medium ${textPrimary}`}>Working Day</p>
-                        <p className={`text-sm ${textSecondary}`}>Mark this Sunday as a working day</p>
-                      </div>
-                      {selectedSunday.isSpecialWorkingDay && (
-                        <CheckCircle className="h-5 w-5 text-[#22c55e] ml-auto" />
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => handleToggleWorkingDay(selectedSunday.date, true, 'holiday')}
-                      className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
-                        !selectedSunday.isSpecialWorkingDay 
-                          ? 'border-[#6366f1] bg-[#6366f1]/10' 
-                          : `border-[#3f3f46] ${bgSecondary} hover:border-[#6366f1]`
-                      }`}
-                      data-testid="set-holiday-btn"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-[#6366f1]/20 flex items-center justify-center">
-                        <Home className="h-5 w-5 text-[#6366f1]" />
-                      </div>
-                      <div className="text-left">
-                        <p className={`font-medium ${textPrimary}`}>Holiday</p>
-                        <p className={`text-sm ${textSecondary}`}>Keep this Sunday as a regular holiday</p>
-                      </div>
-                      {!selectedSunday.isSpecialWorkingDay && (
-                        <CheckCircle className="h-5 w-5 text-[#6366f1] ml-auto" />
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        // Add as a team holiday with custom name
-                        const customHoliday = {
-                          date: selectedSunday.date,
-                          name: 'Team Holiday',
-                          type: 'team_holiday',
-                          approved: true
-                        };
-                        const newApproved = [...approvedHolidays.filter(h => h.date !== selectedSunday.date), customHoliday];
-                        setApprovedHolidays(newApproved);
-                        onUpdateCalendar({ 
-                          holidays: newApproved, 
-                          special_working_days: specialWorkingDays.filter(d => d !== selectedSunday.date) 
-                        });
-                        setShowSundayModal(false);
-                        toast.success('Marked as Team Holiday');
-                      }}
-                      className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors border-[#3f3f46] ${bgSecondary} hover:border-[#ef4444]`}
-                      data-testid="set-team-holiday-btn"
-                    >
-                      <div className="h-10 w-10 rounded-full bg-[#ef4444]/20 flex items-center justify-center">
-                        <Users className="h-5 w-5 text-[#ef4444]" />
-                      </div>
-                      <div className="text-left">
-                        <p className={`font-medium ${textPrimary}`}>Team Holiday</p>
-                        <p className={`text-sm ${textSecondary}`}>Mark as a special team holiday</p>
-                      </div>
-                    </button>
-                  </div>
-
-                  {/* Remarks */}
-                  <div>
-                    <Label className={textPrimary}>Remarks (Optional)</Label>
-                    <textarea
-                      value={sundayRemarks}
-                      onChange={(e) => setSundayRemarks(e.target.value)}
-                      placeholder="Add any notes or remarks..."
-                      rows={2}
-                      className={`w-full mt-1 px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
         </div>
       )}
 

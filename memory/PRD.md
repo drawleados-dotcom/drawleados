@@ -1319,10 +1319,24 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ---
 
+### HR Admin Calendar Simplified (DONE - December 2025)
+**Purpose:** Removed the "Configure Sunday" popup functionality from the HR Admin Calendar. The calendar now serves as a view-only display for finalized holidays and leaves.
+
+**Changes:**
+- Removed the Sunday configuration popup/modal completely
+- Removed click handler from Sunday cells (no more hover effects or interactions)
+- Calendar now displays holidays and leaves approved by HR Admin without edit functionality
+- Updated tip text to: "This calendar displays all finalized holidays and leaves approved by HR Admin. Go to the Holidays tab to manage holidays."
+- Holidays can still be managed via the "Holidays" sub-tab
+
+**Files Modified:**
+- `/app/frontend/src/pages/HRAdminPage.js`: Removed `showSundayModal`, `selectedSunday`, `sundayRemarks` states, removed `handleSundayClick` function, removed Sunday Configuration Modal JSX
+
+---
+
 ## Backlog / Future Tasks
 
 ### High Priority (P0)
-- **HR Admin Calendar Cleanup**: Remove Sunday configuration popup from `EnhancedCalendarTab` - calendar should only display finalized leaves/holidays
 - **SOP/Template Creation UI**: Build the UI for managing "Website SOP Creation / Templates" within the Website Development flow
 
 ### Medium Priority (P1)
