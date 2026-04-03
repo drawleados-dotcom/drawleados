@@ -1165,6 +1165,66 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ---
 
+### Our Tasks - Assigned to Me / Assign to Team Tabs (DONE - April 2026)
+**Purpose:** Enhanced the Our Tasks page with two main tabs to better organize task visibility based on assignment direction.
+
+**Tab Structure:**
+1. **Assigned to Me** - Tasks where the current user is the assignee
+   - Shows tasks assigned by others to you
+   - Shows tasks you created for yourself
+   - Has full Start/Pause/Resume/Finish timer buttons
+   - Count badge shows total tasks assigned to you
+
+2. **Assign to Team** - Tasks the user created and assigned to others
+   - Shows tasks you assigned to team members (not yourself)
+   - **Status-only view** (no Start button) - shows Not Started/Running/Paused/Done badges
+   - Can view if task is started or not
+   - Has Edit and Delete buttons
+
+**Features:**
+- Full filter support on both tabs (Date, Assigned To, Assigned By, Type, Status)
+- Stats cards update based on selected tab
+- Task counts displayed in tab badges
+
+**Files Modified:**
+- `/app/frontend/src/pages/OurTasksPage.js`: Added mainTab state, updated filteredTasks logic, modified getTimeTrackingButton with isTeamView parameter
+
+---
+
+### HR Admin UI Enhancements (DONE - April 2026)
+
+**1. Employees Tab - Summary Stats & List View:**
+- Added summary cards: Total Employees | Office | Remote (active employees only)
+- Replaced card grid with table list view
+- Added Work Mode column showing Office/Remote badges
+- Added Status column showing Active/Inactive badges
+
+**2. Approvals Tab - Detailed Views:**
+- **Attendance approvals** now show:
+  - Employee avatar
+  - Work Mode badge (Office/Remote)
+  - Date, Time, Check In, Check Out fields
+  - Reason with full text
+- **Leave approvals** now show:
+  - Employee avatar with email
+  - Leave type and status badges
+  - From/To dates, Days count, Half Day badge if applicable
+  - Approved by name and date for approved leaves
+  - Rejection reason for rejected leaves
+
+**3. Calendar Tab - Holidays Renamed:**
+- Renamed "Indian Holidays" to "Holidays"
+- Added month/year filter to Holidays sub-tab
+- Holiday list now filters by selected month and year
+
+**Files Modified:**
+- `/app/frontend/src/pages/HRAdminPage.js`:
+  - EmployeesTab: Added summary stats, list view with Work Mode column
+  - EnhancedApprovalsTab: Enhanced attendance and leave cards
+  - EnhancedCalendarTab: Renamed holidays, added month/year filter
+
+---
+
 ## Backlog / Future Tasks
 
 ### High Priority (P0)
