@@ -1020,3 +1020,65 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - `/app/backend/server.py`: Added Project Manager to seed-demo-users endpoint
 - `/app/frontend/src/components/Sidebar.js`: Added isProjectManager check for Website Development link
 - `/app/frontend/src/components/ProtectedRoute.js`: Fixed module access check for project_manager role
+
+---
+
+### 8-Stage Project Workflow for Project Manager (DONE - April 2026)
+**Purpose:** Implemented a comprehensive 8-stage workflow system for Website Projects, allowing Project Managers to track projects through their lifecycle from creation to delivery.
+
+**Workflow Stages:**
+1. **Project Creation** - New projects awaiting initial setup
+2. **Discovery Call** - Requirements gathering and planning
+3. **Content** - Content writing and collection
+4. **Wireframe** - Wireframe design and client approval
+5. **UI Design** - UI design and client approval
+6. **Development** - Development in progress
+7. **Testing** - QA testing and bug fixes
+8. **Delivered** - Project completed and delivered
+
+**Features:**
+1. **Stage Filter Tabs** - Horizontal tabs to filter projects by workflow stage
+2. **Stage Transition Buttons** - Quick "Move to Next Stage" buttons in project list
+3. **Stage Transition Validation** - Cannot move from "Project Creation" to "Discovery Call" until mandatory fields are filled:
+   - Project Name
+   - Client Name
+   - Website Type
+   - Platform
+4. **Content Stage Specific Filters** - When viewing Content stage, additional filters appear:
+   - Content Writer filter (project-level)
+   - Page Assignee filter (page-level)
+   - Content Due Date filter
+   - Day filter (Today, This Week, Overdue, No Date Set)
+5. **URL Parameter Sync** - Stage selection syncs with URL (?stage=content)
+6. **Stage Counts in Tabs** - Each stage tab shows the count of projects in that stage
+
+**Backend Changes:**
+- Added `workflow_stage` field to project schema (default: "creation")
+- Added validation in `/api/website-projects/projects/{project_id}/transition` endpoint
+- Updated `/api/website-projects/all-projects-summary` to include workflow_stage, content_writer, and page-level content data
+
+**Frontend Changes:**
+- Added workflow stage states and Content stage filter states
+- Updated `handleStageTransition` with frontend validation
+- Added Content stage-specific filters (conditionally rendered)
+- Extended `filteredProjectsSummary` to support Content stage filters
+
+**Files Modified:**
+- `/app/backend/website_projects_routes.py`: Stage transition validation, all-projects-summary enhancement
+- `/app/frontend/src/pages/WebsiteProjectsPage.js`: Workflow stage UI, Content stage filters, transition validation
+
+---
+
+## Backlog / Future Tasks
+
+### High Priority (P0)
+- **SOP/Template Creation UI**: Build the UI for managing "Website SOP Creation / Templates" within the Website Development flow
+
+### Medium Priority (P1)
+- **Google Sheets Integration**: Implement "Connect Sheets" functionality in the Leads module
+- **Leads Custom Fields**: Implement "Notion-style" custom fields functionality in the Leads module
+- **Finance/Operations Approvals**: Expand the Review/Approval tab in "My Tasks" to support budget and expense approvals
+
+### Low Priority (P2)
+- **Refactor Large Components**: `WebsiteProjectsPage.js` (~3600 lines), `HRAdminPage.js` (~5800 lines), `TasksModulePage.js` (~3600 lines) need component breakdown
+- **Chat Backend Refactor**: Migrate the in-memory chat backend to use MongoDB for persistence
