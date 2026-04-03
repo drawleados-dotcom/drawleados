@@ -16,7 +16,8 @@ import {
   Plus, Globe, Calendar, Clock, User, ExternalLink, Link2, Folder, Server,
   ChevronDown, ChevronUp, Search, Filter, Edit2, Trash2, CheckCircle, Circle, X,
   Image, FileText, ListTodo, LayoutGrid, Send, Check, ArrowLeft, Percent,
-  Users, CalendarDays, Code, Palette, FileEdit, Box, Mail, PanelLeftClose, PanelLeft
+  Users, CalendarDays, Code, Palette, FileEdit, Box, Mail, PanelLeftClose, PanelLeft,
+  Play, Pause, Square, Timer, Eye, RefreshCw, AlertCircle, CheckCircle2
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -84,6 +85,19 @@ const WebsiteProjectsPage = () => {
   const [isSectionSidebarOpen, setIsSectionSidebarOpen] = useState(false);
   const [sectionActiveTab, setSectionActiveTab] = useState('wireframe');
   const [docPopupUrl, setDocPopupUrl] = useState(null);
+  
+  // BDE-style Task States
+  const [projectBDETasks, setProjectBDETasks] = useState([]);
+  const [taskFilter, setTaskFilter] = useState('all'); // all, pending, in_progress, completed
+  const [taskDateFilter, setTaskDateFilter] = useState('all'); // all, today, this_week, this_month
+  const [viewingTask, setViewingTask] = useState(null);
+  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
+  const [runningTimers, setRunningTimers] = useState({});
+  
+  // SOP/Template Management
+  const [templates, setTemplates] = useState([]);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [newTemplate, setNewTemplate] = useState({ name: '', website_type: '', platform: '', default_pages: [], default_tasks: [] });
   
   // Default pages for new projects
   const DEFAULT_PAGES = [
@@ -323,6 +337,111 @@ const WebsiteProjectsPage = () => {
     }
   }, [token]);
 
+  // Load BDE-style tasks for website project
+  const loadProjectBDETasks = useCallback(async (projectId) => {
+    if (!projectId) return;
+    try {
+      const res = await axios.get(`${API}/api/departments/website/projects/${projectId}/tasks`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setProjectBDETasks(res.data);
+    } catch (error) {
+      console.error('Error loading BDE tasks:', error);
+    }
+  }, [token]);
+
+  // Load templates
+  const loadTemplates = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/departments/website/templates`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setTemplates(res.data?.templates || []);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  }, [token]);
+
+  // Format duration helper
+  const formatDuration = (seconds) => {
+    if (!seconds) return '0:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    if (hrs > 0) return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Timer actions for BDE tasks
+  const handleTimerAction = async (taskId, action) => {
+    try {
+      const res = await axios.put(
+        `${API}/api/departments/website/projects/${selectedProject}/tasks/${taskId}`,
+        { timer_action: action },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Update task in state
+      setProjectBDETasks(prev => prev.map(t => t.task_id === taskId ? res.data : t));
+      
+      // Handle running timer UI
+      if (action === 'start') {
+        setRunningTimers(prev => ({ ...prev, [taskId]: true }));
+        toast.success('Timer started');
+      } else if (action === 'stop') {
+        setRunningTimers(prev => ({ ...prev, [taskId]: false }));
+        toast.success('Timer stopped');
+      }
+    } catch (error) {
+      toast.error('Failed to update timer');
+    }
+  };
+
+  // Create BDE task
+  const handleCreateBDETask = async (taskData) => {
+    try {
+      await axios.post(
+        `${API}/api/departments/website/projects/${selectedProject}/tasks`,
+        taskData,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Task created');
+      loadProjectBDETasks(selectedProject);
+      setIsAddTaskModalOpen(false);
+    } catch (error) {
+      toast.error('Failed to create task');
+    }
+  };
+
+  // Update BDE task status
+  const handleBDETaskStatusChange = async (taskId, status) => {
+    try {
+      await axios.put(
+        `${API}/api/departments/website/projects/${selectedProject}/tasks/${taskId}`,
+        { status },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      loadProjectBDETasks(selectedProject);
+    } catch (error) {
+      toast.error('Failed to update task');
+    }
+  };
+
+  // Delete BDE task
+  const handleDeleteBDETask = async (taskId) => {
+    if (!window.confirm('Delete this task?')) return;
+    try {
+      await axios.delete(
+        `${API}/api/departments/website/projects/${selectedProject}/tasks/${taskId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Task deleted');
+      loadProjectBDETasks(selectedProject);
+    } catch (error) {
+      toast.error('Failed to delete task');
+    }
+  };
+
   // Initial load
   useEffect(() => {
     loadProjects();
@@ -344,8 +463,9 @@ const WebsiteProjectsPage = () => {
     if (selectedProject && currentView === 'project-detail') {
       loadProjectDetail(selectedProject);
       loadProjectTasks(selectedProject);
+      loadProjectBDETasks(selectedProject);
     }
-  }, [selectedProject, currentView, loadProjectDetail, loadProjectTasks]);
+  }, [selectedProject, currentView, loadProjectDetail, loadProjectTasks, loadProjectBDETasks]);
 
   // Load page data when selected
   useEffect(() => {
@@ -1124,7 +1244,9 @@ const WebsiteProjectsPage = () => {
             <div className={`sticky top-0 z-10 border-b ${borderColor} ${bgCard} px-4 pt-2 pb-2 flex items-center justify-between`}>
               <TabsList className={bgSecondary}>
                 <TabsTrigger value="pages"><LayoutGrid className="h-4 w-4 mr-1" /> Pages</TabsTrigger>
-                <TabsTrigger value="tasks"><ListTodo className="h-4 w-4 mr-1" /> Tasks <Badge className="ml-1 bg-[#6366f1]/20 text-[#6366f1]">{projectTasks.length}</Badge></TabsTrigger>
+                <TabsTrigger value="tasks"><ListTodo className="h-4 w-4 mr-1" /> Tasks <Badge className="ml-1 bg-[#6366f1]/20 text-[#6366f1]">{projectBDETasks.length}</Badge></TabsTrigger>
+                <TabsTrigger value="requirements"><FileText className="h-4 w-4 mr-1" /> Requirements</TabsTrigger>
+                <TabsTrigger value="branding"><Palette className="h-4 w-4 mr-1" /> Branding</TabsTrigger>
               </TabsList>
               <div className="flex items-center gap-2">
                 <Input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-48 ${bgSecondary} border-none`} />
@@ -1186,27 +1308,439 @@ const WebsiteProjectsPage = () => {
               </table>
             </TabsContent>
 
-            <TabsContent value="tasks" className="flex-1 overflow-auto m-0 p-4">
-              <div className="space-y-2">
-                {filteredTasks.map(task => (
-                  <div key={task.task_id} className={`p-4 rounded-lg border ${borderColor} ${bgCard} flex items-center justify-between`}>
-                    <div className="flex items-center gap-4">
-                      <button onClick={() => handleTaskStatusChange(task.task_id, task.status === 'Completed' ? 'To-Do' : 'Completed')}>
-                        {task.status === 'Completed' ? <CheckCircle className="h-5 w-5 text-green-500" /> : <Circle className="h-5 w-5 text-gray-400" />}
-                      </button>
+            <TabsContent value="tasks" className="flex-1 overflow-auto m-0">
+              {/* BDE-Style Tasks View */}
+              <div className="p-4 space-y-4">
+                {/* Task Stats Cards */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-[#6366f1]/10">
+                        <ListTodo className="h-5 w-5 text-[#6366f1]" />
+                      </div>
                       <div>
-                        <p className={`font-medium ${task.status === 'Completed' ? 'line-through text-gray-500' : textPrimary}`}>{task.title}</p>
-                        {task.description && <p className={`text-sm ${textSecondary}`}>{task.description}</p>}
+                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.length}</p>
+                        <p className={`text-xs ${textSecondary}`}>Total Tasks</p>
                       </div>
                     </div>
+                  </div>
+                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
                     <div className="flex items-center gap-3">
-                      <Badge className={PRIORITY_COLORS[task.priority]}>{task.priority}</Badge>
-                      {task.due_date && <span className={`text-sm ${textSecondary}`}>{task.due_date}</span>}
-                      <Button variant="ghost" size="sm" onClick={() => handleDeleteTask(task.task_id)} className="text-red-400 h-7 w-7 p-0"><Trash2 className="h-4 w-4" /></Button>
+                      <div className="p-2 rounded-lg bg-[#f59e0b]/10">
+                        <AlertCircle className="h-5 w-5 text-[#f59e0b]" />
+                      </div>
+                      <div>
+                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'pending').length}</p>
+                        <p className={`text-xs ${textSecondary}`}>Pending</p>
+                      </div>
                     </div>
                   </div>
-                ))}
-                {filteredTasks.length === 0 && <p className={`text-center ${textSecondary} py-8`}>No tasks. Click "Add Task" to create one.</p>}
+                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-[#3b82f6]/10">
+                        <Timer className="h-5 w-5 text-[#3b82f6]" />
+                      </div>
+                      <div>
+                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'in_progress').length}</p>
+                        <p className={`text-xs ${textSecondary}`}>In Progress</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-[#22c55e]/10">
+                        <CheckCircle2 className="h-5 w-5 text-[#22c55e]" />
+                      </div>
+                      <div>
+                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'completed').length}</p>
+                        <p className={`text-xs ${textSecondary}`}>Completed</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filters Row */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Status Filter Pills */}
+                  <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
+                    {['all', 'pending', 'in_progress', 'completed'].map(status => (
+                      <Button
+                        key={status}
+                        size="sm"
+                        variant={taskFilter === status ? 'default' : 'ghost'}
+                        onClick={() => setTaskFilter(status)}
+                        className={taskFilter === status ? 'bg-[#6366f1]' : ''}
+                      >
+                        {status === 'all' ? 'All' : status === 'in_progress' ? 'In Progress' : status.charAt(0).toUpperCase() + status.slice(1)}
+                      </Button>
+                    ))}
+                  </div>
+
+                  {/* Date Filter */}
+                  <Select value={taskDateFilter} onValueChange={setTaskDateFilter}>
+                    <SelectTrigger className={`w-40 ${bgSecondary} border-none`}>
+                      <CalendarDays className="h-4 w-4 mr-2" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="this_week">This Week</SelectItem>
+                      <SelectItem value="this_month">This Month</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Tasks Table */}
+                <div className={`rounded-xl border ${borderColor} overflow-hidden`}>
+                  <table className="w-full">
+                    <thead className={bgSecondary}>
+                      <tr className={`text-xs ${textSecondary} uppercase`}>
+                        <th className="px-4 py-3 text-left font-semibold">Task</th>
+                        <th className="px-4 py-3 text-center font-semibold">Status</th>
+                        <th className="px-4 py-3 text-center font-semibold">Priority</th>
+                        <th className="px-4 py-3 text-center font-semibold">Due Date</th>
+                        <th className="px-4 py-3 text-center font-semibold">Time</th>
+                        <th className="px-4 py-3 text-center font-semibold">Timer</th>
+                        <th className="px-4 py-3 text-center font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projectBDETasks
+                        .filter(task => {
+                          if (taskFilter !== 'all' && task.status !== taskFilter) return false;
+                          if (taskDateFilter === 'today') {
+                            const today = new Date().toISOString().split('T')[0];
+                            return task.due_date === today;
+                          }
+                          return true;
+                        })
+                        .map(task => (
+                          <tr key={task.task_id} className={`border-t ${borderColor} hover:${bgSecondary}`}>
+                            <td className="px-4 py-3">
+                              <div>
+                                <p className={`font-medium ${textPrimary}`}>{task.task_name}</p>
+                                {task.description && <p className={`text-xs ${textSecondary} mt-1`}>{task.description}</p>}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Badge className={`text-xs ${
+                                task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                                task.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                                task.status === 'on_hold' ? 'bg-orange-500/20 text-orange-400' :
+                                'bg-gray-500/20 text-gray-400'
+                              }`}>
+                                {task.status === 'in_progress' ? 'In Progress' : task.status?.charAt(0).toUpperCase() + task.status?.slice(1)}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Badge className={PRIORITY_COLORS[task.priority]}>{task.priority}</Badge>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className={`text-sm ${textSecondary}`}>
+                                {task.due_date || '-'}
+                                {task.due_time && <span className="block text-xs">{task.due_time}</span>}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Timer className={`h-4 w-4 ${task.timer_running ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
+                                <span className={`text-sm font-medium ${textPrimary}`}>{formatDuration(task.total_time_seconds || 0)}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {!task.timer_running ? (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleTimerAction(task.task_id, 'start')}
+                                    className="h-8 w-8 p-0 text-[#10b981] hover:bg-[#10b981]/10"
+                                  >
+                                    <Play className="h-4 w-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleTimerAction(task.task_id, 'stop')}
+                                    className="h-8 w-8 p-0 text-[#f59e0b] hover:bg-[#f59e0b]/10"
+                                  >
+                                    <Pause className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {task.status === 'completed' && (
+                                  <Badge className="bg-green-500/20 text-green-400 text-xs">Done</Badge>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => { setViewingTask(task); setIsTaskDetailOpen(true); }}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteBDETask(task.task_id)}
+                                  className="h-8 w-8 p-0 text-red-400 hover:bg-red-400/10"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  {projectBDETasks.length === 0 && (
+                    <div className={`p-8 text-center ${textSecondary}`}>
+                      <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p>No tasks yet. Click "Add Task" to create one.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Task Detail Modal */}
+              <Dialog open={isTaskDetailOpen} onOpenChange={setIsTaskDetailOpen}>
+                <DialogContent className={`${bgCard} ${textPrimary} max-w-lg`}>
+                  <DialogHeader>
+                    <DialogTitle>{viewingTask?.task_name}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    {viewingTask?.description && (
+                      <div>
+                        <label className={`text-sm ${textSecondary}`}>Description</label>
+                        <p className={textPrimary}>{viewingTask.description}</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`text-sm ${textSecondary}`}>Status</label>
+                        <Badge className={`mt-1 ${
+                          viewingTask?.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                          viewingTask?.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {viewingTask?.status}
+                        </Badge>
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary}`}>Priority</label>
+                        <Badge className={`mt-1 ${PRIORITY_COLORS[viewingTask?.priority]}`}>{viewingTask?.priority}</Badge>
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary}`}>Due Date</label>
+                        <p className={textPrimary}>{viewingTask?.due_date || 'Not set'}</p>
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary}`}>Time Spent</label>
+                        <p className={textPrimary}>{formatDuration(viewingTask?.total_time_seconds || 0)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsTaskDetailOpen(false)}>Close</Button>
+                    {viewingTask?.status !== 'completed' && (
+                      <Button
+                        onClick={() => { handleBDETaskStatusChange(viewingTask.task_id, 'completed'); setIsTaskDetailOpen(false); }}
+                        className="bg-[#22c55e] hover:bg-[#16a34a]"
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" /> Mark Complete
+                      </Button>
+                    )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </TabsContent>
+
+            {/* Requirements Tab */}
+            <TabsContent value="requirements" className="flex-1 overflow-auto m-0 p-6">
+              <div className="max-w-4xl mx-auto space-y-6">
+                <div className={`p-6 rounded-xl border ${borderColor} ${bgCard}`}>
+                  <h3 className={`text-lg font-semibold ${textPrimary} mb-4`}>Project Requirements</h3>
+                  <p className={`text-sm ${textSecondary} mb-6`}>
+                    Based on {projectDetail?.platform} {projectDetail?.website_type}
+                  </p>
+                  
+                  {/* Dynamic Requirements based on Type */}
+                  <div className="space-y-6">
+                    {/* Business Info Section */}
+                    <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                      <h4 className={`font-medium ${textPrimary} mb-4`}>Business Information</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Business/Store Name</label>
+                          <Input placeholder="Enter business name..." className={bgCard} />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Tagline</label>
+                          <Input placeholder="Enter tagline..." className={bgCard} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={`text-sm ${textSecondary} block mb-1`}>About Text</label>
+                          <Textarea placeholder="Describe the business..." className={bgCard} rows={3} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Services/Products Section */}
+                    <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                      <h4 className={`font-medium ${textPrimary} mb-4`}>
+                        {['Shopify Store', 'E-commerce'].includes(projectDetail?.website_type) ? 'Products & Collections' : 'Services'}
+                      </h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        {['Shopify Store', 'E-commerce'].includes(projectDetail?.website_type) ? (
+                          <>
+                            <div>
+                              <label className={`text-sm ${textSecondary} block mb-1`}>Product Categories</label>
+                              <Input placeholder="e.g., Clothing, Electronics" className={bgCard} />
+                            </div>
+                            <div>
+                              <label className={`text-sm ${textSecondary} block mb-1`}>Approx. Products Count</label>
+                              <Input type="number" placeholder="e.g., 50" className={bgCard} />
+                            </div>
+                            <div className="col-span-2">
+                              <label className={`text-sm ${textSecondary} block mb-1`}>Collections List</label>
+                              <Textarea placeholder="List your product collections..." className={bgCard} rows={2} />
+                            </div>
+                            <div>
+                              <label className={`text-sm ${textSecondary} block mb-1`}>Shipping Zones</label>
+                              <Input placeholder="e.g., Local, National, International" className={bgCard} />
+                            </div>
+                            <div>
+                              <label className={`text-sm ${textSecondary} block mb-1`}>Payment Methods</label>
+                              <Input placeholder="e.g., COD, Card, UPI" className={bgCard} />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="col-span-2">
+                              <label className={`text-sm ${textSecondary} block mb-1`}>Services List</label>
+                              <Textarea placeholder="List your services (one per line)..." className={bgCard} rows={3} />
+                            </div>
+                            {projectDetail?.website_type !== 'Landing Page' && (
+                              <div className="col-span-2">
+                                <label className={`text-sm ${textSecondary} block mb-1`}>Portfolio Items</label>
+                                <Textarea placeholder="List portfolio items or projects..." className={bgCard} rows={2} />
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Contact Section */}
+                    <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                      <h4 className={`font-medium ${textPrimary} mb-4`}>Contact Information</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Email</label>
+                          <Input placeholder="contact@example.com" className={bgCard} />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Phone</label>
+                          <Input placeholder="+91 XXXXX XXXXX" className={bgCard} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Address</label>
+                          <Input placeholder="Business address..." className={bgCard} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Social Media Links</label>
+                          <Input placeholder="Instagram, Facebook, LinkedIn URLs..." className={bgCard} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end mt-6">
+                    <Button className="bg-[#6366f1]">Save Requirements</Button>
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Branding Tab */}
+            <TabsContent value="branding" className="flex-1 overflow-auto m-0 p-6">
+              <div className="max-w-4xl mx-auto space-y-6">
+                <div className={`p-6 rounded-xl border ${borderColor} ${bgCard}`}>
+                  <h3 className={`text-lg font-semibold ${textPrimary} mb-4`}>Brand Guidelines</h3>
+                  
+                  <div className="space-y-6">
+                    {/* Logo & Assets */}
+                    <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                      <h4 className={`font-medium ${textPrimary} mb-4`}>Logo & Assets</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Logo URL</label>
+                          <Input placeholder="Google Drive / Dropbox link" className={bgCard} />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Favicon URL</label>
+                          <Input placeholder="Favicon link" className={bgCard} />
+                        </div>
+                        <div className="col-span-2">
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Brand Guidelines Document</label>
+                          <Input placeholder="Link to brand guidelines PDF/Doc" className={bgCard} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Color Palette */}
+                    <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                      <h4 className={`font-medium ${textPrimary} mb-4`}>Color Palette</h4>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Primary Color</label>
+                          <div className="flex gap-2">
+                            <input type="color" defaultValue="#6366f1" className="w-10 h-10 rounded cursor-pointer" />
+                            <Input placeholder="#6366f1" className={`flex-1 ${bgCard}`} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Secondary Color</label>
+                          <div className="flex gap-2">
+                            <input type="color" defaultValue="#22c55e" className="w-10 h-10 rounded cursor-pointer" />
+                            <Input placeholder="#22c55e" className={`flex-1 ${bgCard}`} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Accent Color</label>
+                          <div className="flex gap-2">
+                            <input type="color" defaultValue="#f59e0b" className="w-10 h-10 rounded cursor-pointer" />
+                            <Input placeholder="#f59e0b" className={`flex-1 ${bgCard}`} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Typography */}
+                    <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                      <h4 className={`font-medium ${textPrimary} mb-4`}>Typography</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Primary Font</label>
+                          <Input placeholder="e.g., Inter, Roboto" className={bgCard} />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Secondary Font</label>
+                          <Input placeholder="e.g., Playfair Display" className={bgCard} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-end mt-6">
+                    <Button className="bg-[#6366f1]">Save Branding</Button>
+                  </div>
+                </div>
               </div>
             </TabsContent>
           </Tabs>
@@ -1269,26 +1803,78 @@ const WebsiteProjectsPage = () => {
           </Dialog>
 
           <Dialog open={isAddTaskModalOpen} onOpenChange={setIsAddTaskModalOpen}>
-            <DialogContent className={`${bgCard} ${textPrimary}`}>
+            <DialogContent className={`${bgCard} ${textPrimary} max-w-lg`}>
               <DialogHeader><DialogTitle>Add New Task</DialogTitle></DialogHeader>
-              <div className="space-y-3">
-                <Input value={newTask.title} onChange={(e) => setNewTask({...newTask, title: e.target.value})} placeholder="Task title" className={bgSecondary} />
-                <Textarea value={newTask.description} onChange={(e) => setNewTask({...newTask, description: e.target.value})} placeholder="Description" className={bgSecondary} />
+              <div className="space-y-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Task Name *</label>
+                  <Input value={newTask.title} onChange={(e) => setNewTask({...newTask, title: e.target.value})} placeholder="Task title" className={bgSecondary} />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Description</label>
+                  <Textarea value={newTask.description} onChange={(e) => setNewTask({...newTask, description: e.target.value})} placeholder="Description" className={bgSecondary} rows={3} />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <Select value={newTask.assigned_to} onValueChange={(v) => setNewTask({...newTask, assigned_to: v})}>
-                    <SelectTrigger className={bgSecondary}><SelectValue placeholder="Assign to" /></SelectTrigger>
-                    <SelectContent>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                  <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v})}>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Assign To</label>
+                    <Select value={newTask.assigned_to} onValueChange={(v) => setNewTask({...newTask, assigned_to: v})}>
+                      <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select team member" /></SelectTrigger>
+                      <SelectContent>{teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Priority</label>
+                    <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v})}>
+                      <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Due Date</label>
+                    <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask({...newTask, due_date: e.target.value})} className={bgSecondary} />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Due Time</label>
+                    <Input type="time" value={newTask.due_time || ''} onChange={(e) => setNewTask({...newTask, due_time: e.target.value})} className={bgSecondary} />
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Task Type</label>
+                  <Select value={newTask.type || 'general'} onValueChange={(v) => setNewTask({...newTask, type: v})}>
                     <SelectTrigger className={bgSecondary}><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="low">Low</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="high">High</SelectItem></SelectContent>
+                    <SelectContent>
+                      <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="meeting">Meeting</SelectItem>
+                      <SelectItem value="follow_up">Follow Up</SelectItem>
+                      <SelectItem value="proposal">Proposal</SelectItem>
+                      <SelectItem value="call">Call</SelectItem>
+                    </SelectContent>
                   </Select>
                 </div>
-                <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask({...newTask, due_date: e.target.value})} className={bgSecondary} />
               </div>
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setIsAddTaskModalOpen(false)}>Cancel</Button>
-                <Button onClick={handleAddTask} className="bg-[#6366f1]">Add Task</Button>
+                <Button 
+                  onClick={() => handleCreateBDETask({ 
+                    task_name: newTask.title, 
+                    description: newTask.description, 
+                    assigned_to: newTask.assigned_to, 
+                    priority: newTask.priority, 
+                    due_date: newTask.due_date,
+                    due_time: newTask.due_time,
+                    type: newTask.type || 'general'
+                  })} 
+                  className="bg-[#6366f1]"
+                  disabled={!newTask.title}
+                >
+                  Add Task
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -1631,7 +2217,7 @@ const PhaseTableCell = ({ task, phase, onUpdate, teamMembers, isDark }) => {
 
 const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, options, teamMembers, isDark, isEdit }) => {
   const [activeTab, setActiveTab] = useState('basic');
-  const [createStep, setCreateStep] = useState(isEdit ? 2 : 1); // Step 1: Type/Platform, Step 2: Full form
+  const [createStep, setCreateStep] = useState(isEdit ? 4 : 1); // Step 1: Type/Platform, Step 2: Requirements, Step 3: Branding, Step 4: Details
   const [showPassword, setShowPassword] = useState({});
   const [showAddTypeInput, setShowAddTypeInput] = useState(false);
   const [newWebsiteType, setNewWebsiteType] = useState('');
@@ -1650,10 +2236,79 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
   const WEBSITE_TYPES = ['Landing Page', 'Business Website', 'Shopify Store', 'Web App', 'E-commerce', 'Portfolio', 'Blog', 'SaaS', 'Corporate', ...customWebsiteTypes];
   const PROJECT_STATUS = ['active', 'completed', 'on-hold', 'cancelled'];
 
+  // Dynamic requirements based on website type
+  const getRequirementsConfig = () => {
+    const type = project.website_type;
+    const configs = {
+      'Landing Page': {
+        sections: [
+          { title: 'Basic Info', fields: ['business_name', 'tagline', 'about_text'] },
+          { title: 'Content', fields: ['services_list', 'cta_text', 'contact_info'] },
+        ],
+        noShopify: true
+      },
+      'Business Website': {
+        sections: [
+          { title: 'Company Info', fields: ['business_name', 'tagline', 'about_text', 'team_info'] },
+          { title: 'Content', fields: ['services_list', 'portfolio_items', 'testimonials', 'contact_info', 'social_links'] },
+        ],
+        noShopify: true
+      },
+      'Shopify Store': {
+        sections: [
+          { title: 'Store Info', fields: ['store_name', 'tagline', 'about_text'] },
+          { title: 'Products & Collections', fields: ['product_categories', 'products_count', 'collections_list', 'variants_info'] },
+          { title: 'Shipping & Payments', fields: ['shipping_zones', 'payment_methods', 'return_policy'] },
+        ],
+        hasShopify: true
+      },
+      'E-commerce': {
+        sections: [
+          { title: 'Store Info', fields: ['store_name', 'tagline', 'about_text'] },
+          { title: 'Products', fields: ['product_categories', 'products_count', 'collections_list'] },
+          { title: 'Checkout', fields: ['shipping_zones', 'payment_methods'] },
+        ],
+        hasShopify: true
+      },
+      'Web App': {
+        sections: [
+          { title: 'App Info', fields: ['app_name', 'tagline', 'description'] },
+          { title: 'Features', fields: ['core_features', 'user_roles', 'integrations'] },
+          { title: 'Technical', fields: ['tech_stack', 'api_requirements', 'auth_method'] },
+        ],
+        noShopify: true
+      },
+      'Portfolio': {
+        sections: [
+          { title: 'Personal Info', fields: ['full_name', 'tagline', 'bio'] },
+          { title: 'Work', fields: ['skills_list', 'projects_list', 'experience'] },
+          { title: 'Contact', fields: ['contact_info', 'social_links'] },
+        ],
+        noShopify: true
+      },
+    };
+    return configs[type] || configs['Business Website'];
+  };
+
+  const fieldLabels = {
+    business_name: 'Business Name', tagline: 'Tagline', about_text: 'About Text',
+    services_list: 'Services (one per line)', cta_text: 'Call to Action Text', contact_info: 'Contact Information',
+    team_info: 'Team Information', portfolio_items: 'Portfolio Items', testimonials: 'Testimonials',
+    social_links: 'Social Media Links', store_name: 'Store Name', product_categories: 'Product Categories',
+    products_count: 'Approx. Products Count', collections_list: 'Collections List', variants_info: 'Product Variants Info',
+    shipping_zones: 'Shipping Zones', payment_methods: 'Payment Methods', return_policy: 'Return/Refund Policy',
+    app_name: 'Application Name', description: 'Description', core_features: 'Core Features',
+    user_roles: 'User Roles', integrations: 'Required Integrations', tech_stack: 'Tech Stack',
+    api_requirements: 'API Requirements', auth_method: 'Authentication Method',
+    full_name: 'Full Name', bio: 'Bio', skills_list: 'Skills', projects_list: 'Projects', experience: 'Experience',
+  };
+
   // Reset step when modal opens for create
   useEffect(() => {
     if (isOpen && !isEdit) {
       setCreateStep(1);
+      // Initialize requirements object
+      setProject(prev => ({ ...prev, requirements: prev.requirements || {}, branding: prev.branding || {} }));
     }
   }, [isOpen, isEdit]);
 
@@ -1673,12 +2328,34 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
   };
 
   const handleNext = () => {
-    if (!project.website_type || !project.platform) {
-      toast.error('Please select Website Type and Platform');
-      return;
+    if (createStep === 1) {
+      if (!project.website_type || !project.platform) {
+        toast.error('Please select Website Type and Platform');
+        return;
+      }
     }
-    setCreateStep(2);
+    setCreateStep(createStep + 1);
   };
+
+  const handleBack = () => {
+    setCreateStep(createStep - 1);
+  };
+
+  // Step Progress Indicator
+  const StepIndicator = () => (
+    <div className="flex items-center justify-center gap-2 mb-6">
+      {[1, 2, 3, 4].map(step => (
+        <div key={step} className="flex items-center">
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+            createStep >= step ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`
+          }`}>
+            {createStep > step ? <Check className="h-4 w-4" /> : step}
+          </div>
+          {step < 4 && <div className={`w-8 h-0.5 mx-1 ${createStep > step ? 'bg-[#6366f1]' : bgSecondary}`} />}
+        </div>
+      ))}
+    </div>
+  );
 
   // Step 1: Type and Platform Selection
   if (createStep === 1 && !isEdit) {
@@ -1686,11 +2363,12 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className={`${bgCard} ${textPrimary} max-w-2xl`}>
           <DialogHeader><DialogTitle className="text-xl">Create Website Project</DialogTitle></DialogHeader>
+          <StepIndicator />
           
-          <div className="space-y-6 py-4">
+          <div className="space-y-6 py-2">
             {/* Website Type Selection */}
             <div>
-              <label className={`text-base font-semibold ${textPrimary} block mb-3`}>1. Select Website Type</label>
+              <label className={`text-base font-semibold ${textPrimary} block mb-3`}>Select Website Type</label>
               <div className="grid grid-cols-3 gap-3">
                 {WEBSITE_TYPES.slice(0, 6).map(type => (
                   <button
@@ -1718,7 +2396,7 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
 
             {/* Platform Selection */}
             <div>
-              <label className={`text-base font-semibold ${textPrimary} block mb-3`}>2. Select Platform</label>
+              <label className={`text-base font-semibold ${textPrimary} block mb-3`}>Select Platform</label>
               <div className="grid grid-cols-4 gap-3">
                 {PLATFORMS.slice(0, 8).map(platform => (
                   <button
@@ -1752,7 +2430,7 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
               className="bg-[#6366f1] hover:bg-[#4f46e5]"
               disabled={!project.website_type || !project.platform}
             >
-              Next: Project Details
+              Next: Requirements
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1760,12 +2438,214 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
     );
   }
 
+  // Step 2: Dynamic Requirements based on Type
+  if (createStep === 2 && !isEdit) {
+    const config = getRequirementsConfig();
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className={`${bgCard} ${textPrimary} max-w-3xl max-h-[85vh] overflow-y-auto`}>
+          <DialogHeader>
+            <DialogTitle className="text-xl">Project Requirements</DialogTitle>
+            <p className={`text-sm ${textSecondary}`}>{project.platform} • {project.website_type}</p>
+          </DialogHeader>
+          <StepIndicator />
+          
+          <div className="space-y-6 py-2">
+            {config.sections.map((section, idx) => (
+              <div key={idx} className={`p-4 rounded-lg border ${borderColor}`}>
+                <h3 className={`font-semibold ${textPrimary} mb-4`}>{section.title}</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  {section.fields.map(field => (
+                    <div key={field}>
+                      <label className={`text-sm ${textSecondary} block mb-1`}>{fieldLabels[field] || field}</label>
+                      {['about_text', 'services_list', 'testimonials', 'collections_list', 'core_features', 'bio', 'experience'].includes(field) ? (
+                        <Textarea
+                          value={project.requirements?.[field] || ''}
+                          onChange={(e) => setProject({ ...project, requirements: { ...project.requirements, [field]: e.target.value } })}
+                          placeholder={`Enter ${fieldLabels[field] || field}...`}
+                          className={bgSecondary}
+                          rows={3}
+                        />
+                      ) : (
+                        <Input
+                          value={project.requirements?.[field] || ''}
+                          onChange={(e) => setProject({ ...project, requirements: { ...project.requirements, [field]: e.target.value } })}
+                          placeholder={`Enter ${fieldLabels[field] || field}...`}
+                          className={bgSecondary}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            
+            <p className={`text-xs ${textSecondary} italic`}>
+              You can skip optional fields and fill them later from the project details.
+            </p>
+          </div>
+
+          <DialogFooter className="flex justify-between">
+            <Button variant="outline" onClick={handleBack}>Back</Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setCreateStep(4)}>Skip to Details</Button>
+              <Button onClick={handleNext} className="bg-[#6366f1] hover:bg-[#4f46e5]">Next: Branding</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Step 3: Branding Information
+  if (createStep === 3 && !isEdit) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className={`${bgCard} ${textPrimary} max-w-2xl`}>
+          <DialogHeader>
+            <DialogTitle className="text-xl">Branding Information</DialogTitle>
+            <p className={`text-sm ${textSecondary}`}>{project.platform} • {project.website_type}</p>
+          </DialogHeader>
+          <StepIndicator />
+          
+          <div className="space-y-6 py-2">
+            {/* Logo & Favicon */}
+            <div className={`p-4 rounded-lg border ${borderColor}`}>
+              <h3 className={`font-semibold ${textPrimary} mb-4`}>Logo & Assets</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Logo URL</label>
+                  <Input
+                    value={project.branding?.logo_url || ''}
+                    onChange={(e) => setProject({ ...project, branding: { ...project.branding, logo_url: e.target.value } })}
+                    placeholder="https://drive.google.com/..."
+                    className={bgSecondary}
+                  />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Favicon URL</label>
+                  <Input
+                    value={project.branding?.favicon_url || ''}
+                    onChange={(e) => setProject({ ...project, branding: { ...project.branding, favicon_url: e.target.value } })}
+                    placeholder="https://drive.google.com/..."
+                    className={bgSecondary}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Colors */}
+            <div className={`p-4 rounded-lg border ${borderColor}`}>
+              <h3 className={`font-semibold ${textPrimary} mb-4`}>Color Palette</h3>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Primary Color</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={project.branding?.primary_color || '#6366f1'}
+                      onChange={(e) => setProject({ ...project, branding: { ...project.branding, primary_color: e.target.value } })}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <Input
+                      value={project.branding?.primary_color || ''}
+                      onChange={(e) => setProject({ ...project, branding: { ...project.branding, primary_color: e.target.value } })}
+                      placeholder="#6366f1"
+                      className={`flex-1 ${bgSecondary}`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Secondary Color</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={project.branding?.secondary_color || '#22c55e'}
+                      onChange={(e) => setProject({ ...project, branding: { ...project.branding, secondary_color: e.target.value } })}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <Input
+                      value={project.branding?.secondary_color || ''}
+                      onChange={(e) => setProject({ ...project, branding: { ...project.branding, secondary_color: e.target.value } })}
+                      placeholder="#22c55e"
+                      className={`flex-1 ${bgSecondary}`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Accent Color</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={project.branding?.accent_color || '#f59e0b'}
+                      onChange={(e) => setProject({ ...project, branding: { ...project.branding, accent_color: e.target.value } })}
+                      className="w-10 h-10 rounded cursor-pointer"
+                    />
+                    <Input
+                      value={project.branding?.accent_color || ''}
+                      onChange={(e) => setProject({ ...project, branding: { ...project.branding, accent_color: e.target.value } })}
+                      placeholder="#f59e0b"
+                      className={`flex-1 ${bgSecondary}`}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Fonts & Guidelines */}
+            <div className={`p-4 rounded-lg border ${borderColor}`}>
+              <h3 className={`font-semibold ${textPrimary} mb-4`}>Typography & Guidelines</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Primary Font</label>
+                  <Input
+                    value={project.branding?.primary_font || ''}
+                    onChange={(e) => setProject({ ...project, branding: { ...project.branding, primary_font: e.target.value } })}
+                    placeholder="Inter, Roboto, etc."
+                    className={bgSecondary}
+                  />
+                </div>
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Secondary Font</label>
+                  <Input
+                    value={project.branding?.secondary_font || ''}
+                    onChange={(e) => setProject({ ...project, branding: { ...project.branding, secondary_font: e.target.value } })}
+                    placeholder="Playfair Display, etc."
+                    className={bgSecondary}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Brand Guidelines URL</label>
+                  <Input
+                    value={project.branding?.guidelines_url || ''}
+                    onChange={(e) => setProject({ ...project, branding: { ...project.branding, guidelines_url: e.target.value } })}
+                    placeholder="Link to brand guidelines document"
+                    className={bgSecondary}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex justify-between">
+            <Button variant="outline" onClick={handleBack}>Back</Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setCreateStep(4)}>Skip</Button>
+              <Button onClick={handleNext} className="bg-[#6366f1] hover:bg-[#4f46e5]">Next: Project Details</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Step 4: Full Project Details Form
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className={`${bgCard} ${textPrimary} max-w-4xl max-h-[85vh] overflow-y-auto`}>
         <DialogHeader>
           <DialogTitle className="text-xl">
-            {isEdit ? title : 'Create Website Project'}
+            {isEdit ? title : 'Project Details'}
           </DialogTitle>
           {!isEdit && (
             <p className={`text-sm ${textSecondary}`}>
@@ -1774,6 +2654,21 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
             </p>
           )}
         </DialogHeader>
+        
+        {!isEdit && (
+          <div className="flex items-center justify-center gap-2 mb-4">
+            {[1, 2, 3, 4].map(step => (
+              <div key={step} className="flex items-center">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                  createStep >= step ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`
+                }`}>
+                  {createStep > step ? <Check className="h-4 w-4" /> : step}
+                </div>
+                {step < 4 && <div className={`w-8 h-0.5 mx-1 ${createStep > step ? 'bg-[#6366f1]' : bgSecondary}`} />}
+              </div>
+            ))}
+          </div>
+        )}
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-5 mb-4">
@@ -2041,9 +2936,12 @@ const ProjectModal = ({ isOpen, onClose, title, project, setProject, onSubmit, o
           </TabsContent>
         </Tabs>
 
-        <DialogFooter className="mt-4">
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button onClick={onSubmit} className="bg-[#6366f1] hover:bg-[#5855eb]">{isEdit ? 'Update' : 'Create'} Project</Button>
+        <DialogFooter className="mt-4 flex justify-between">
+          {!isEdit && <Button variant="outline" onClick={handleBack}>Back</Button>}
+          <div className="flex gap-2 ml-auto">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button onClick={onSubmit} className="bg-[#6366f1] hover:bg-[#5855eb]">{isEdit ? 'Update' : 'Create'} Project</Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
