@@ -1225,6 +1225,49 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ---
 
+### HR Manager View-Only Permissions (DONE - April 2026)
+**Purpose:** Implement role-based access control within HR Admin module - HR Admin has full access, HR Manager has view-only access (but can write reviews).
+
+**User Roles:**
+1. **HR Admin / Super Admin / Admin:**
+   - Full access to all HR Admin features
+   - Add/Edit/Delete employees
+   - Add/Edit/Delete designations and departments
+   - Approve/Reject all requests (attendance, leave, permission, WFH)
+   - Edit calendar settings and manage holidays
+   - Add/delete salary records, create payslips
+
+2. **HR Manager:**
+   - View-only access to all HR Admin data
+   - CAN access Reviews tab and write reviews/feedback
+   - CANNOT add/edit/delete employees
+   - CANNOT add/edit/delete designations or departments
+   - CANNOT approve/reject requests (sees "View Only" badges)
+   - CANNOT edit calendar settings or add holidays
+
+**Implementation Details:**
+- `canEdit` boolean: `true` for super_admin/admin, `false` for hr_manager
+- `isViewOnly` flag used in sub-components to conditionally render action buttons
+- Calendar shows "View Only: You have read-only access to this calendar" message for HR Manager
+- Approvals tab shows "View Only" badges instead of Approve/Reject buttons
+
+**Files Modified:**
+- `/app/frontend/src/pages/HRAdminPage.js`:
+  - Added `canEdit` and `isHRManager` variables based on user role
+  - Passed `canEdit` prop to all sub-tabs (EmployeesTab, DesignationsDeptsTab, EnhancedApprovalsTab, EnhancedCalendarTab, etc.)
+  - Wrapped Add/Edit/Delete buttons with `{canEdit && ...}` or `{!isViewOnly && ...}` checks
+  - Added "View Only" badges for HR Manager in Approvals and Calendar tabs
+- `/app/frontend/src/components/hr/PayrollManagementTab.js`:
+  - Added `canEdit` and `isViewOnly` props
+  - Hid Add Salary buttons and Delete buttons for view-only users
+  - Updated SalaryHistoryView component with isViewOnly prop
+
+**Test Credentials:**
+- HR Manager: hr@drawlead.com / admin123
+- Super Admin: vinoth@drawlead.com / admin123
+
+---
+
 ## Backlog / Future Tasks
 
 ### High Priority (P0)
@@ -1236,5 +1279,5 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - **Finance/Operations Approvals**: Expand the Review/Approval tab in "My Tasks" to support budget and expense approvals
 
 ### Low Priority (P2)
-- **Refactor Large Components**: `WebsiteProjectsPage.js` (~3600 lines), `HRAdminPage.js` (~5800 lines), `TasksModulePage.js` (~3600 lines) need component breakdown
+- **Refactor Large Components**: `WebsiteProjectsPage.js` (~3600 lines), `HRAdminPage.js` (~7000+ lines), `TasksModulePage.js` (~3600 lines) need component breakdown
 - **Chat Backend Refactor**: Migrate the in-memory chat backend to use MongoDB for persistence
