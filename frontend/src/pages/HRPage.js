@@ -29,6 +29,7 @@ export default function HRPage() {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
+  const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
   
   // Get token from localStorage
   const token = localStorage.getItem('session_token');
@@ -332,7 +333,7 @@ export default function HRPage() {
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
                   activeTab === tab.id
                     ? 'bg-[#6366f1] text-white shadow-lg'
-                    : `${bgCard} ${textSecondary} hover:bg-[#3f3f46] border ${borderColor}`
+                    : `${bgCard} ${textSecondary} ${hoverBg} border ${borderColor}`
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -384,7 +385,7 @@ export default function HRPage() {
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
                       activeRequestSubTab === tab.id
                         ? 'bg-[#10b981] text-white'
-                        : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                        : `${bgSecondary} ${textSecondary} ${hoverBg}`
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -438,6 +439,8 @@ export default function HRPage() {
                 textPrimary={textPrimary}
                 textSecondary={textSecondary}
                 borderColor={borderColor}
+                hoverBg={hoverBg}
+                isDark={isDark}
               />
             )}
 
@@ -479,6 +482,8 @@ export default function HRPage() {
             textSecondary={textSecondary}
             borderColor={borderColor}
             currentUser={authUser}
+            hoverBg={hoverBg}
+            isDark={isDark}
           />
         )}
 
@@ -1585,7 +1590,7 @@ function ProfileTab({ profile, bgCard, bgSecondary, textPrimary, textSecondary, 
   );
 }
 
-function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveForm, setLeaveForm, onSubmit, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveForm, setLeaveForm, onSubmit, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, hoverBg, isDark }) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedRequest, setSelectedRequest] = useState(null);
@@ -1934,7 +1939,7 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                   <Button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className={`flex-1 ${bgSecondary} hover:bg-[#3f3f46] ${textPrimary}`}
+                    className={`flex-1 ${bgSecondary} ${hoverBg} ${textPrimary}`}
                   >
                     Cancel
                   </Button>
@@ -2003,7 +2008,7 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
   );
 }
 
-function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderColor, currentUser }) {
+function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderColor, currentUser, hoverBg, isDark }) {
   const [activeSubTab, setActiveSubTab] = useState('current');
   const [salaryHistory, setSalaryHistory] = useState([]);
   const [currentSalary, setCurrentSalary] = useState(0);
@@ -2122,7 +2127,7 @@ function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCol
   return (
     <div className="space-y-6">
       {/* Sub-tabs */}
-      <div className="flex gap-2 border-b border-[#27272a] pb-2">
+      <div className={`flex gap-2 border-b ${borderColor} pb-2`}>
         {subTabs.map((tab) => (
           <Button
             key={tab.id}
@@ -2130,7 +2135,7 @@ function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCol
             variant={activeSubTab === tab.id ? 'default' : 'ghost'}
             className={activeSubTab === tab.id 
               ? 'bg-[#10b981] text-white' 
-              : `${textSecondary} hover:bg-[#27272a]`
+              : `${textSecondary} ${hoverBg}`
             }
             size="sm"
           >

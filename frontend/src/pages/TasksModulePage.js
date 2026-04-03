@@ -236,6 +236,7 @@ export default function TasksModulePage() {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+  const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
 
   // Load departments
   const loadDepartments = useCallback(async () => {
@@ -1283,7 +1284,7 @@ export default function TasksModulePage() {
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                           myTasksAssignFilter === 'to_me'
                             ? 'bg-[#6366f1] text-white'
-                            : `${textSecondary} hover:bg-[#3f3f46]`
+                            : `${textSecondary} ${hoverBg}`
                         }`}
                         data-testid="filter-assigned-to-me"
                       >
@@ -1294,7 +1295,7 @@ export default function TasksModulePage() {
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                           myTasksAssignFilter === 'by_me'
                             ? 'bg-[#6366f1] text-white'
-                            : `${textSecondary} hover:bg-[#3f3f46]`
+                            : `${textSecondary} ${hoverBg}`
                         }`}
                         data-testid="filter-assigned-by-me"
                       >
@@ -1345,7 +1346,7 @@ export default function TasksModulePage() {
                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                           myTasksDeptFilter === dept.id
                             ? 'bg-[#6366f1] text-white'
-                            : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                            : `${bgSecondary} ${textSecondary} ${hoverBg}`
                         }`}
                         data-testid={`dept-filter-${dept.id}`}
                       >

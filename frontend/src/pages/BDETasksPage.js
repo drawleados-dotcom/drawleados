@@ -68,6 +68,7 @@ export default function BDETasksPage() {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+  const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
 
   // Form state
   const [formData, setFormData] = useState({
@@ -1177,7 +1178,7 @@ export default function BDETasksPage() {
                           className={`w-8 h-8 rounded-full text-sm font-medium transition-colors ${
                             formData.custom_recurrence.repeat_on_days.includes(idx)
                               ? 'bg-[#6366f1] text-white'
-                              : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                              : `${bgSecondary} ${textSecondary} ${hoverBg}`
                           }`}
                         >
                           {day}

@@ -92,6 +92,7 @@ export default function HRAdminPage() {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#3f3f46]' : 'border-gray-200';
+  const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
   
   // Dashboard stats
   const [stats, setStats] = useState({});
@@ -1080,7 +1081,7 @@ export default function HRAdminPage() {
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-[#6366f1] !text-white font-medium'
-                    : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                    : `${bgSecondary} ${textSecondary} ${hoverBg}`
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -1112,6 +1113,8 @@ export default function HRAdminPage() {
             textSecondary={textSecondary}
             borderColor={borderColor}
             token={token}
+            isDark={isDark}
+            hoverBg={hoverBg}
           />
         )}
 
@@ -1397,7 +1400,7 @@ export default function HRAdminPage() {
                       className={`px-4 py-2 rounded-lg transition-all ${
                         reviewTab === tab.id
                           ? 'bg-[#6366f1] text-white'
-                          : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                          : `${bgSecondary} ${textSecondary} ${hoverBg}`
                       }`}
                     >
                       {tab.label}
@@ -1587,14 +1590,14 @@ export default function HRAdminPage() {
                           <span className={`${textPrimary} font-medium`}>{reviewSummary.delivery_timeline?.total_tasks || 0}</span>
                         </div>
                         <div 
-                          className="flex justify-between cursor-pointer hover:bg-[#3f3f46]/30 p-1 rounded -mx-1"
+                          className={`flex justify-between cursor-pointer ${isDark ? 'hover:bg-[#3f3f46]/30' : 'hover:bg-gray-200/50'} p-1 rounded -mx-1`}
                           onClick={() => handleViewReviewTasks('on_time')}
                         >
                           <span className={textSecondary}>On Time</span>
                           <span className="text-[#10b981] font-medium underline">{reviewSummary.delivery_timeline?.on_time || 0}</span>
                         </div>
                         <div 
-                          className="flex justify-between cursor-pointer hover:bg-[#3f3f46]/30 p-1 rounded -mx-1"
+                          className={`flex justify-between cursor-pointer ${isDark ? 'hover:bg-[#3f3f46]/30' : 'hover:bg-gray-200/50'} p-1 rounded -mx-1`}
                           onClick={() => handleViewReviewTasks('overdue')}
                         >
                           <span className={textSecondary}>Overdue</span>
@@ -3023,7 +3026,7 @@ function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, on
             className={`${
               filter === f
                 ? 'bg-[#6366f1] text-white'
-                : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                : `${bgSecondary} ${textSecondary} ${hoverBg}`
             }`}
           >
             {f === 'pending_verification' ? 'Verification' : 
@@ -3733,7 +3736,7 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
           <Button
             type="button"
             onClick={onClose}
-            className={`flex-1 ${bgSecondary} hover:bg-[#3f3f46] ${textPrimary}`}
+            className={`flex-1 ${bgSecondary} ${hoverBg} ${textPrimary}`}
           >
             Cancel
           </Button>
@@ -4645,7 +4648,7 @@ function WorkSettingsTab({ settings, onUpdate, onRefresh, bgCard, bgSecondary, t
 // ============ Enhanced Attendance Tab with Date Filters ============
 function EnhancedAttendanceTab({ 
   records, employees, stats, month, year, setMonth, setYear, onRefresh, 
-  formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, token 
+  formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, token, isDark, hoverBg 
 }) {
   const [dateFilter, setDateFilter] = useState('day'); // day, range, month, year
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -4895,7 +4898,7 @@ function EnhancedAttendanceTab({
               </thead>
               <tbody className={`divide-y ${borderColor}`}>
                 {employeesWithStatus.map(emp => (
-                  <tr key={emp.user_id} className="hover:bg-[#27272a]/30">
+                  <tr key={emp.user_id} className={isDark ? 'hover:bg-[#27272a]/30' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-full bg-[#6366f1] flex items-center justify-center text-white font-medium`}>

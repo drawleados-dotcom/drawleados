@@ -39,6 +39,7 @@ const SettingsPage = () => {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+  const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
 
   const roles = [
     { value: 'super_admin', label: 'Super Admin', color: '#ef4444' },
@@ -385,7 +386,7 @@ const SettingsPage = () => {
                               size="sm"
                               onClick={() => handleEditUser(user)}
                               data-testid={`edit-user-${user.user_id}`}
-                              className={`${bgSecondary} hover:bg-[#3f3f46] ${textPrimary} h-8`}
+                              className={`${bgSecondary} ${hoverBg} ${textPrimary} h-8`}
                             >
                               <Edit className="h-3 w-3" />
                             </Button>
@@ -451,7 +452,7 @@ const SettingsPage = () => {
                         <Button
                           size="sm"
                           onClick={() => handleEditService(service)}
-                          className={`${bgSecondary} hover:bg-[#3f3f46] ${textPrimary} h-7 w-7 p-0`}
+                          className={`${bgSecondary} ${hoverBg} ${textPrimary} h-7 w-7 p-0`}
                         >
                           <Edit className="h-3 w-3" />
                         </Button>
