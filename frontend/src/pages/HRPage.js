@@ -684,6 +684,33 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const casualUsed = monthlyStats?.casual_leave || 0;
   const sickUsed = monthlyStats?.sick_leave || 0;
 
+  // ===== COMPREHENSIVE HOURS TRACKING =====
+  const STANDARD_WORK_HOURS = 8;
+  const totalWorkingDays = monthlyStats?.total_working_days || 22;
+  const presentDays = monthlyStats?.present || filteredHistory.length;
+  
+  // Expected working hours for the month
+  const expectedMonthlyHours = presentDays * STANDARD_WORK_HOURS;
+  
+  // Total worked hours (sum of all work hours)
+  const totalWorkedHours = filteredHistory.reduce((sum, r) => sum + (r.total_hours || 0), 0);
+  
+  // Extra hours (hours beyond 8 per day)
+  const extraHours = filteredHistory.reduce((sum, r) => {
+    const hours = r.total_hours || 0;
+    if (hours > STANDARD_WORK_HOURS) {
+      return sum + (hours - STANDARD_WORK_HOURS);
+    }
+    return sum;
+  }, 0);
+  
+  // Permission hours taken (will be passed from parent or fetched)
+  const permissionHours = monthlyStats?.permission_hours || 0;
+  
+  // Final balance: Total worked - Expected + Extra - Permission
+  const finalBalance = totalWorkedHours - expectedMonthlyHours;
+  const isPositiveBalance = finalBalance >= 0;
+
   // State for day detail popup
   const [selectedDayRecord, setSelectedDayRecord] = useState(null);
   const [showDayDetailModal, setShowDayDetailModal] = useState(false);
@@ -811,11 +838,11 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="monthly-stats-cards">
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Total Working Days</p>
-          <p className="text-2xl font-bold text-[#10b981]">{monthlyStats?.total_working_days || 22}</p>
+          <p className="text-2xl font-bold text-[#10b981]">{totalWorkingDays}</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
-          <p className={`text-xs ${textSecondary} mb-1`}>Presentable Days</p>
-          <p className="text-2xl font-bold text-[#6366f1]">{monthlyStats?.present || 0}</p>
+          <p className={`text-xs ${textSecondary} mb-1`}>Present Days</p>
+          <p className="text-2xl font-bold text-[#6366f1]">{presentDays}</p>
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Total Absent</p>
@@ -835,9 +862,53 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
         </Card>
         <Card className={`${bgCard} border ${borderColor} p-4`}>
           <p className={`text-xs ${textSecondary} mb-1`}>Extra Hours</p>
-          <p className="text-2xl font-bold text-[#8b5cf6]">{monthlyStats?.extra_hours?.toFixed(1) || 0}</p>
+          <p className="text-2xl font-bold text-[#8b5cf6]">{extraHours.toFixed(1)}</p>
         </Card>
       </div>
+
+      {/* 3b. Hours Summary - NEW */}
+      <Card className={`${bgCard} border-2 border-[#6366f1]`}>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock className="h-5 w-5 text-[#6366f1]" />
+            <h3 className={`font-semibold ${textPrimary}`}>Monthly Hours Summary - {monthNames[selectedMonth - 1]} {selectedYear}</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className={`p-3 ${bgSecondary} rounded-lg text-center`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Expected Hours</p>
+              <p className="text-xl font-bold text-[#6366f1]">{expectedMonthlyHours.toFixed(1)}</p>
+              <p className={`text-xs ${textSecondary}`}>({presentDays} × 8h)</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg text-center`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Total Worked</p>
+              <p className="text-xl font-bold text-[#10b981]">{totalWorkedHours.toFixed(1)}</p>
+              <p className={`text-xs ${textSecondary}`}>Actual hours</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg text-center`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Extra Hours</p>
+              <p className="text-xl font-bold text-[#8b5cf6]">+{extraHours.toFixed(1)}</p>
+              <p className={`text-xs ${textSecondary}`}>Overtime</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg text-center`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Permission</p>
+              <p className="text-xl font-bold text-[#f59e0b]">-{permissionHours.toFixed(1)}</p>
+              <p className={`text-xs ${textSecondary}`}>Hours taken</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg text-center`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Net Worked</p>
+              <p className="text-xl font-bold text-[#10b981]">{(totalWorkedHours - permissionHours).toFixed(1)}</p>
+              <p className={`text-xs ${textSecondary}`}>Effective</p>
+            </div>
+            <div className={`p-3 rounded-lg text-center ${isPositiveBalance ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Balance</p>
+              <p className={`text-xl font-bold ${isPositiveBalance ? 'text-[#10b981]' : 'text-[#ef4444]'}`}>
+                {isPositiveBalance ? '+' : ''}{finalBalance.toFixed(1)}
+              </p>
+              <p className={`text-xs ${textSecondary}`}>{isPositiveBalance ? 'Ahead' : 'Behind'}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 4. Attendance History Table */}
       <Card className={`${bgCard} border ${borderColor}`}>
@@ -2746,6 +2817,11 @@ function PermissionTab({ permissionRequests, onRefresh, formatDate, bgCard, bgSe
   const pendingCount = filteredRequests.filter(r => r.status === 'pending').length;
   const approvedCount = filteredRequests.filter(r => r.status === 'approved').length;
   const rejectedCount = filteredRequests.filter(r => r.status === 'rejected').length;
+  
+  // Calculate total hours taken (approved permissions only)
+  const totalHoursTaken = filteredRequests
+    .filter(r => r.status === 'approved')
+    .reduce((sum, r) => sum + (parseFloat(r.hours) || 1), 0);
 
   return (
     <div className="space-y-6">
@@ -2779,8 +2855,8 @@ function PermissionTab({ permissionRequests, onRefresh, formatDate, bgCard, bgSe
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Stats Cards - includes Total Hours Taken */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-[#f59e0b]">{pendingCount}</p>
@@ -2797,6 +2873,12 @@ function PermissionTab({ permissionRequests, onRefresh, formatDate, bgCard, bgSe
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-[#ef4444]">{rejectedCount}</p>
             <p className={`text-sm ${textSecondary}`}>Rejected</p>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border-2 border-[#8b5cf6]`}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-[#8b5cf6]">{totalHoursTaken.toFixed(1)}</p>
+            <p className={`text-sm ${textSecondary}`}>Total Hours Taken</p>
           </CardContent>
         </Card>
       </div>
@@ -3143,6 +3225,19 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
     r.approval_status === 'pending_early_logout' || r.early_logout_reason
   );
 
+  // Calculate Extra Hours worked (hours beyond 8 hours standard)
+  const STANDARD_WORK_HOURS = 8;
+  const extraHoursWorked = filteredHistory.reduce((sum, r) => {
+    const totalHours = r.total_hours || 0;
+    if (totalHours > STANDARD_WORK_HOURS) {
+      return sum + (totalHours - STANDARD_WORK_HOURS);
+    }
+    return sum;
+  }, 0);
+
+  // Calculate Total Worked Hours
+  const totalWorkedHours = filteredHistory.reduce((sum, r) => sum + (r.total_hours || 0), 0);
+
   return (
     <div className="space-y-6">
       {/* Month/Year Filter */}
@@ -3169,8 +3264,8 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
         </select>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {/* Summary Cards - includes Extra Hours */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-[#f59e0b]">{pendingRecords.length}</p>
@@ -3199,6 +3294,12 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
           <CardContent className="p-4 text-center">
             <p className="text-3xl font-bold text-[#ef4444]">{earlyLogoutRecords.length}</p>
             <p className={`text-sm ${textSecondary}`}>Early Logouts</p>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border-2 border-[#8b5cf6]`}>
+          <CardContent className="p-4 text-center">
+            <p className="text-3xl font-bold text-[#8b5cf6]">{extraHoursWorked.toFixed(1)}</p>
+            <p className={`text-sm ${textSecondary}`}>Extra Hours</p>
           </CardContent>
         </Card>
       </div>
