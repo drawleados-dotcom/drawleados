@@ -936,3 +936,59 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ### Mocked Integrations
 - Resend email integration (uses placeholder API keys)
+
+---
+
+### Website Projects Mobile Responsive (DONE - April 2026)
+**Purpose:** Made the Website Projects page fully mobile responsive with a bottom navigation bar for touch-friendly interaction.
+
+**Mobile Projects List View:**
+- Card-based layout instead of table (at viewport <768px)
+- Project cards showing: Icon, Name, Platform, Status badge, Progress bar, Page count, Chevron
+- Compact header with "Projects" title and count badge
+- Purple "+" button for quick project creation
+- Search bar with filter pills (Projects, Tasks, Filter)
+- Expandable filters panel with Status/Developer dropdowns
+
+**Mobile Bottom Navigation (All Projects):**
+- 5 tabs: Projects | Tasks | New (+) | Filter | More
+- Elevated "New" button with shadow for primary action
+- Active state highlighting with purple background
+
+**Mobile Project Detail View:**
+- Compact sticky header: Back arrow, Project name (truncated), Status badge, Edit button
+- Scrollable quick links row: Docs, Drive, Deadline, Progress
+- Collapsible "Hide Project Details" section
+- Icon-only tabs on mobile: Pages, Tasks, Requirements, Branding
+- Mobile "+" button for adding pages/tasks
+
+**Mobile Bottom Navigation (Project Detail):**
+- 5 tabs: Pages | Tasks | Add (+) | Info | Brand
+- Tab switching controls the active content tab
+- Elevated "Add" button for context-aware action (Page or Task)
+
+**Mobile Page Cards:**
+- Card layout showing page name, status dropdown
+- 4-phase progress bars (Wireframe, UI, Content, Dev)
+- Due date with calendar icon
+- Tap to open page detail
+
+**Mobile Task Cards:**
+- Task name, description (truncated), status badge
+- Priority badge, due date
+- Timer display with Play/Pause controls
+- Tap to open task detail modal
+
+**Mobile Create Project Modal:**
+- Full-screen modal with step indicators (1-2-3-4)
+- All steps scrollable on mobile
+- Touch-friendly card selection for Type/Platform
+- Responsive form layouts
+
+**CSS Additions:**
+- `.hide-scrollbar` - Hides scrollbars for horizontal scroll areas
+- `.safe-area-inset-bottom` - Respects notched device safe areas
+
+**Files Modified:**
+- `/app/frontend/src/pages/WebsiteProjectsPage.js`: Added isMobile state, responsive classes, bottom navigation, card views
+- `/app/frontend/src/index.css`: Added hide-scrollbar and safe-area-inset-bottom classes
