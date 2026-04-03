@@ -473,14 +473,15 @@ const Layout = ({ children }) => {
           </div>
           
           {/* Right: Task Manager & Theme Toggle */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <Button
               size="sm"
               onClick={() => navigate('/bde-tasks')}
-              className={`h-8 px-3 text-xs ${location.pathname === '/bde-tasks' ? 'bg-[#6366f1]' : isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${isDark ? 'text-white' : 'text-gray-700'}`}
+              className={`h-8 px-2 sm:px-3 text-xs whitespace-nowrap ${location.pathname === '/bde-tasks' ? 'bg-[#6366f1]' : isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${isDark ? 'text-white' : 'text-gray-700'}`}
+              data-testid="task-manager-btn"
             >
-              <ClipboardList className="h-3 w-3 mr-1" />
-              Task Manager
+              <ClipboardList className="h-3 w-3 sm:mr-1" />
+              <span className="hidden sm:inline">Task Manager</span>
             </Button>
             <ThemeToggle />
           </div>

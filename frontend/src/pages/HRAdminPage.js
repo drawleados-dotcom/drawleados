@@ -763,7 +763,7 @@ export default function HRAdminPage() {
                 data-testid={`hr-admin-tab-${tab.id}`}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'bg-[#6366f1] text-white font-medium'
+                    ? 'bg-[#6366f1] !text-white font-medium'
                     : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
                 }`}
               >
@@ -1858,6 +1858,7 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, bgCard, 
                   size="sm"
                   onClick={() => onEdit(emp)}
                   className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  data-testid={`edit-employee-${emp._id || emp.email}`}
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
@@ -2217,30 +2218,68 @@ function AttendanceTab({ overview, formatTime, bgCard, bgSecondary, textPrimary,
 
 // ============== EDIT EMPLOYEE MODAL ==============
 function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [activeTab, setActiveTab] = useState('basic');
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState(employee.profile?.profile_picture || employee.picture || '');
+  const [uploading, setUploading] = useState(false);
+  
   const [formData, setFormData] = useState({
+    // Basic Details
     full_name: employee.profile?.full_name || employee.name || '',
     email: employee.profile?.email || employee.email || '',
     phone: employee.profile?.phone || '',
-    designation: employee.profile?.designation || '',
+    date_of_birth: employee.profile?.date_of_birth ? employee.profile.date_of_birth.split('T')[0] : '',
+    gender: employee.profile?.gender || '',
+    blood_group: employee.profile?.blood_group || '',
+    profile_picture: employee.profile?.profile_picture || employee.picture || '',
+    // Account Details
+    account_holder_name: employee.profile?.account_holder_name || '',
+    bank_name: employee.profile?.bank_name || '',
+    branch: employee.profile?.branch || '',
+    account_number: employee.profile?.account_number || '',
+    ifsc_code: employee.profile?.ifsc_code || '',
+    upi_id: employee.profile?.upi_id || '',
+    pan_number: employee.profile?.pan_number || '',
+    aadhar_number: employee.profile?.aadhar_number || '',
+    // Employment Details
+    employee_id: employee.profile?.employee_id || '',
+    designation: employee.profile?.designation || employee.role || '',
     department: employee.profile?.department || '',
     employment_type: employee.profile?.employment_type || 'full-time',
     joining_date: employee.profile?.joining_date ? employee.profile.joining_date.split('T')[0] : '',
     reporting_manager: employee.profile?.reporting_manager || '',
+    work_location: employee.profile?.work_location || 'office',
+    // Emergency Contact
+    emergency_contact_name: employee.profile?.emergency_contact_name || '',
+    emergency_contact_phone: employee.profile?.emergency_contact_phone || '',
+    emergency_contact_relation: employee.profile?.emergency_contact_relation || '',
+    // Address
     address: employee.profile?.address || '',
     city: employee.profile?.city || '',
     state: employee.profile?.state || '',
     pincode: employee.profile?.pincode || '',
-    bank_name: employee.profile?.bank_name || '',
-    account_number: employee.profile?.account_number || '',
-    ifsc_code: employee.profile?.ifsc_code || '',
-    pan_number: employee.profile?.pan_number || '',
-    emergency_contact_name: employee.profile?.emergency_contact_name || '',
-    emergency_contact_phone: employee.profile?.emergency_contact_phone || '',
-    emergency_contact_relation: employee.profile?.emergency_contact_relation || '',
   });
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size must be less than 2MB');
+      return;
+    }
+    
+    // Preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfilePhotoPreview(reader.result);
+      handleChange('profile_picture', reader.result);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = (e) => {
@@ -2248,89 +2287,391 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
     onSave(formData);
   };
 
+  const tabConfig = [
+    { id: 'basic', label: 'Basic Details', icon: Users },
+    { id: 'account', label: 'Account Details', icon: CreditCard },
+    { id: 'employment', label: 'Employment', icon: Briefcase },
+    { id: 'address', label: 'Address & Emergency', icon: Home },
+  ];
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[90vh] overflow-y-auto`}>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className={textPrimary}>Edit Employee Profile</CardTitle>
+      <Card className={`${bgCard} border ${borderColor} w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col`}>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className={`flex items-center gap-3 ${textPrimary}`}>
+            <Edit className="h-5 w-5 text-[#6366f1]" />
+            Edit Employee Profile
+          </CardTitle>
           <Button variant="ghost" onClick={onClose} className={textSecondary}>
             <X className="h-5 w-5" />
           </Button>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Personal Info */}
-            <div>
-              <h3 className={`text-sm font-medium ${textSecondary} mb-3`}>Personal Information</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className={textPrimary}>Full Name</Label>
-                  <Input
-                    value={formData.full_name}
-                    onChange={(e) => handleChange('full_name', e.target.value)}
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
+        
+        {/* Profile Photo Section */}
+        <div className={`px-6 pb-4 flex items-center gap-6 border-b ${borderColor}`}>
+          <div className="relative">
+            <div className="h-20 w-20 rounded-full overflow-hidden bg-[#27272a] border-2 border-[#6366f1]">
+              {profilePhotoPreview ? (
+                <img src={profilePhotoPreview} alt="Profile" className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-2xl font-bold text-[#6366f1]">
+                  {formData.full_name?.charAt(0)?.toUpperCase() || 'E'}
                 </div>
-                <div>
-                  <Label className={textPrimary}>Email</Label>
-                  <Input
-                    value={formData.email}
-                    onChange={(e) => handleChange('email', e.target.value)}
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>Phone</Label>
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) => handleChange('phone', e.target.value)}
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
+              )}
+            </div>
+            <label className="absolute bottom-0 right-0 p-1 bg-[#6366f1] rounded-full cursor-pointer hover:bg-[#4f46e5] transition-colors">
+              <Plus className="h-4 w-4 text-white" />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoUpload}
+                className="hidden"
+                data-testid="profile-photo-input"
+              />
+            </label>
+          </div>
+          <div>
+            <p className={`font-medium ${textPrimary}`}>{formData.full_name || 'Employee Name'}</p>
+            <p className={`text-sm ${textSecondary}`}>{formData.designation || 'No designation'}</p>
+            <p className="text-xs text-[#6366f1]">Click + to upload profile photo</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 border-b border-[#3f3f46] px-6 overflow-x-auto">
+          {tabConfig.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'border-[#6366f1] text-[#6366f1]'
+                    : `border-transparent ${textSecondary} hover:text-[#fafafa]`
+                }`}
+                data-testid={`edit-employee-tab-${tab.id}`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          <form onSubmit={handleSubmit}>
+            {/* Basic Details Tab */}
+            {activeTab === 'basic' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Full Name *</Label>
+                    <Input
+                      value={formData.full_name}
+                      onChange={(e) => handleChange('full_name', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Email</Label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleChange('email', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Phone</Label>
+                    <Input
+                      value={formData.phone}
+                      onChange={(e) => handleChange('phone', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Date of Birth</Label>
+                    <Input
+                      type="date"
+                      value={formData.date_of_birth}
+                      onChange={(e) => handleChange('date_of_birth', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Gender</Label>
+                    <Select value={formData.gender} onValueChange={(v) => handleChange('gender', v)}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                        <SelectValue placeholder="Select gender" />
+                      </SelectTrigger>
+                      <SelectContent className={`${bgCard} border ${borderColor}`}>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Blood Group</Label>
+                    <Select value={formData.blood_group} onValueChange={(v) => handleChange('blood_group', v)}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                        <SelectValue placeholder="Select blood group" />
+                      </SelectTrigger>
+                      <SelectContent className={`${bgCard} border ${borderColor}`}>
+                        {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bg => (
+                          <SelectItem key={bg} value={bg}>{bg}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Employment Info */}
-            <div>
-              <h3 className={`text-sm font-medium ${textSecondary} mb-3`}>Employment Details</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className={textPrimary}>Designation</Label>
-                  <Input
-                    value={formData.designation}
-                    onChange={(e) => handleChange('designation', e.target.value)}
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>Department</Label>
-                  <Input
-                    value={formData.department}
-                    onChange={(e) => handleChange('department', e.target.value)}
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
+            {/* Account Details Tab */}
+            {activeTab === 'account' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Account Holder Name</Label>
+                    <Input
+                      value={formData.account_holder_name}
+                      onChange={(e) => handleChange('account_holder_name', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Bank Name</Label>
+                    <Input
+                      value={formData.bank_name}
+                      onChange={(e) => handleChange('bank_name', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Branch</Label>
+                    <Input
+                      value={formData.branch}
+                      onChange={(e) => handleChange('branch', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Account Number</Label>
+                    <Input
+                      value={formData.account_number}
+                      onChange={(e) => handleChange('account_number', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>IFSC Code</Label>
+                    <Input
+                      value={formData.ifsc_code}
+                      onChange={(e) => handleChange('ifsc_code', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>UPI ID</Label>
+                    <Input
+                      value={formData.upi_id}
+                      onChange={(e) => handleChange('upi_id', e.target.value)}
+                      placeholder="name@upi"
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>PAN Number</Label>
+                    <Input
+                      value={formData.pan_number}
+                      onChange={(e) => handleChange('pan_number', e.target.value.toUpperCase())}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Aadhar Number</Label>
+                    <Input
+                      value={formData.aadhar_number}
+                      onChange={(e) => handleChange('aadhar_number', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* Actions */}
-            <div className="flex gap-3 pt-4">
-              <Button
-                type="button"
-                onClick={onClose}
-                className={`flex-1 ${bgSecondary} hover:bg-[#3f3f46] ${textPrimary}`}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-              >
-                Save Changes
-              </Button>
-            </div>
+            {/* Employment Tab */}
+            {activeTab === 'employment' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Employee ID</Label>
+                    <Input
+                      value={formData.employee_id}
+                      onChange={(e) => handleChange('employee_id', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Designation</Label>
+                    <Input
+                      value={formData.designation}
+                      onChange={(e) => handleChange('designation', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Department</Label>
+                    <Input
+                      value={formData.department}
+                      onChange={(e) => handleChange('department', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Employment Type</Label>
+                    <Select value={formData.employment_type} onValueChange={(v) => handleChange('employment_type', v)}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent className={`${bgCard} border ${borderColor}`}>
+                        <SelectItem value="full-time">Full Time</SelectItem>
+                        <SelectItem value="part-time">Part Time</SelectItem>
+                        <SelectItem value="contract">Contract</SelectItem>
+                        <SelectItem value="intern">Intern</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Joining Date</Label>
+                    <Input
+                      type="date"
+                      value={formData.joining_date}
+                      onChange={(e) => handleChange('joining_date', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Reporting Manager</Label>
+                    <Input
+                      value={formData.reporting_manager}
+                      onChange={(e) => handleChange('reporting_manager', e.target.value)}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Work Location</Label>
+                    <Select value={formData.work_location} onValueChange={(v) => handleChange('work_location', v)}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                        <SelectValue placeholder="Select location" />
+                      </SelectTrigger>
+                      <SelectContent className={`${bgCard} border ${borderColor}`}>
+                        <SelectItem value="office">Office</SelectItem>
+                        <SelectItem value="remote">Remote</SelectItem>
+                        <SelectItem value="hybrid">Hybrid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Address & Emergency Tab */}
+            {activeTab === 'address' && (
+              <div className="space-y-6">
+                <div>
+                  <h4 className={`font-medium ${textPrimary} mb-3`}>Address</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label className={textSecondary}>Street Address</Label>
+                      <Input
+                        value={formData.address}
+                        onChange={(e) => handleChange('address', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>City</Label>
+                      <Input
+                        value={formData.city}
+                        onChange={(e) => handleChange('city', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>State</Label>
+                      <Input
+                        value={formData.state}
+                        onChange={(e) => handleChange('state', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Pincode</Label>
+                      <Input
+                        value={formData.pincode}
+                        onChange={(e) => handleChange('pincode', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className={`font-medium ${textPrimary} mb-3`}>Emergency Contact</h4>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label className={textSecondary}>Name</Label>
+                      <Input
+                        value={formData.emergency_contact_name}
+                        onChange={(e) => handleChange('emergency_contact_name', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Phone</Label>
+                      <Input
+                        value={formData.emergency_contact_phone}
+                        onChange={(e) => handleChange('emergency_contact_phone', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Relation</Label>
+                      <Input
+                        value={formData.emergency_contact_relation}
+                        onChange={(e) => handleChange('emergency_contact_relation', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </form>
-        </CardContent>
+        </div>
+
+        {/* Actions */}
+        <div className={`flex gap-3 p-6 border-t ${borderColor}`}>
+          <Button
+            type="button"
+            onClick={onClose}
+            className={`flex-1 ${bgSecondary} hover:bg-[#3f3f46] ${textPrimary}`}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+            data-testid="save-employee-btn"
+          >
+            Save Changes
+          </Button>
+        </div>
       </Card>
     </div>
   );
@@ -4377,89 +4718,6 @@ function EnhancedApprovalsTab({
     </div>
   );
 }
-                <p className={textPrimary}>All caught up!</p>
-                <p className={`text-sm ${textSecondary}`}>No pending approvals</p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {activeSubTab === 'leaves' && (
-        <div className="space-y-4">
-          {/* Filter */}
-          <div className="flex gap-2">
-            {['all', 'pending', 'approved', 'rejected'].map(f => (
-              <Button
-                key={f}
-                variant={leaveFilter === f ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setLeaveFilter(f)}
-                className={leaveFilter === f ? 'bg-[#6366f1]' : ''}
-              >
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </Button>
-            ))}
-          </div>
-
-          {/* Leave Requests List */}
-          <div className="space-y-3">
-            {leaveRequests?.length > 0 ? leaveRequests.map((request) => (
-              <Card key={request.request_id} className={`${bgCard} border ${borderColor}`}>
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <p className={`font-medium ${textPrimary}`}>{request.employee_name}</p>
-                        <Badge className={
-                          request.status === 'approved' ? 'bg-[#22c55e]/20 text-[#22c55e]' :
-                          request.status === 'rejected' ? 'bg-[#ef4444]/20 text-[#ef4444]' :
-                          request.status === 'pending_verification' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
-                          'bg-[#6366f1]/20 text-[#6366f1]'
-                        }>
-                          {request.status}
-                        </Badge>
-                      </div>
-                      <p className={`text-sm ${textSecondary}`}>{request.leave_type}: {request.reason}</p>
-                      <p className={`text-xs ${textSecondary}`}>{formatDate(request.from_date)} - {formatDate(request.to_date)} ({request.days || 1} days)</p>
-                    </div>
-                    {request.status === 'pending' && (
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => onApproveLeave(request.request_id)} className="bg-[#22c55e] hover:bg-[#16a34a]">
-                          Approve
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => onRejectLeave(request.request_id)} className="text-[#ef4444] border-[#ef4444]">
-                          Reject
-                        </Button>
-                      </div>
-                    )}
-                    {request.status === 'pending_verification' && (
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => onViewTasks(request)} className="bg-[#3b82f6]">
-                          View Tasks
-                        </Button>
-                        <Button size="sm" onClick={() => onFinalApprove(request.request_id)} className="bg-[#22c55e]">
-                          Final Approve
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )) : (
-              <Card className={`${bgCard} border ${borderColor}`}>
-                <CardContent className="p-8 text-center">
-                  <Calendar className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
-                  <p className={textSecondary}>No leave requests found</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ============ Enhanced Calendar Tab with Work Settings ============
 function EnhancedCalendarTab({
@@ -4694,17 +4952,29 @@ function EnhancedCalendarTab({
     toast.success(`${holiday.name} removed from calendar`);
   };
 
-  // Toggle a day as working day (for Sundays)
-  const handleToggleWorkingDay = (dateStr, isSunday) => {
+  // Sunday popup state
+  const [showSundayModal, setShowSundayModal] = useState(false);
+  const [selectedSunday, setSelectedSunday] = useState(null);
+  const [sundayRemarks, setSundayRemarks] = useState('');
+
+  // Toggle a day as working day (for Sundays) - from modal
+  const handleToggleWorkingDay = (dateStr, isSunday, action = 'toggle') => {
     if (!isSunday) return; // Only Sundays can be toggled
     
     let updated;
-    if (specialWorkingDays.includes(dateStr)) {
-      // Remove from special working days (make it a holiday again)
+    if (action === 'working') {
+      // Make it a working day
+      updated = [...specialWorkingDays.filter(d => d !== dateStr), dateStr];
+    } else if (action === 'holiday') {
+      // Make it a holiday (remove from special working days)
       updated = specialWorkingDays.filter(d => d !== dateStr);
     } else {
-      // Add to special working days (make it a working day)
-      updated = [...specialWorkingDays, dateStr];
+      // Toggle behavior (fallback)
+      if (specialWorkingDays.includes(dateStr)) {
+        updated = specialWorkingDays.filter(d => d !== dateStr);
+      } else {
+        updated = [...specialWorkingDays, dateStr];
+      }
     }
     setSpecialWorkingDays(updated);
     
@@ -4712,7 +4982,20 @@ function EnhancedCalendarTab({
       holidays: approvedHolidays, 
       special_working_days: updated 
     });
+    
+    setShowSundayModal(false);
+    setSelectedSunday(null);
+    setSundayRemarks('');
     toast.success(updated.includes(dateStr) ? 'Marked as working day' : 'Marked as holiday');
+  };
+
+  // Open Sunday modal
+  const handleSundayClick = (day) => {
+    if (day.isSunday) {
+      setSelectedSunday(day);
+      setSundayRemarks('');
+      setShowSundayModal(true);
+    }
   };
 
   // Calculate work hours display
@@ -4794,8 +5077,9 @@ function EnhancedCalendarTab({
                 {calendarGrid.map((day, idx) => (
                   <div
                     key={idx}
-                    onClick={() => day.date && day.isSunday && handleToggleWorkingDay(day.date, day.isSunday)}
-                    className={`p-2 min-h-[60px] rounded text-center transition-colors cursor-pointer ${
+                    onClick={() => day.date && day.isSunday && handleSundayClick(day)}
+                    data-testid={day.isSunday ? `sunday-cell-${day.date}` : undefined}
+                    className={`p-2 min-h-[60px] rounded text-center transition-colors ${day.isSunday ? 'cursor-pointer' : ''} ${
                       !day.date ? '' :
                       day.isSpecialWorkingDay ? 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30' :
                       day.isHoliday && day.holidayName !== 'Sunday' ? 'bg-[#ef4444]/20' :
@@ -4824,10 +5108,132 @@ function EnhancedCalendarTab({
                 ))}
               </div>
               <div className={`mt-4 p-3 rounded ${bgSecondary} text-sm ${textSecondary}`}>
-                <strong>Tip:</strong> Click on any Sunday to toggle it as a working day. Approved holidays from "Indian Holidays" tab will appear here.
+                <strong>Tip:</strong> Click on any Sunday to configure it as a working day, team holiday, or add remarks.
               </div>
             </CardContent>
           </Card>
+
+          {/* Sunday Configuration Modal */}
+          {showSundayModal && selectedSunday && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <Card className={`${bgCard} border ${borderColor} w-full max-w-md`}>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                    <Calendar className="h-5 w-5 text-[#6366f1]" />
+                    Configure Sunday
+                  </CardTitle>
+                  <Button variant="ghost" onClick={() => setShowSundayModal(false)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Date Display */}
+                  <div className={`p-4 rounded-lg ${bgSecondary} text-center`}>
+                    <p className={`text-2xl font-bold ${textPrimary}`}>
+                      {new Date(selectedSunday.date).toLocaleDateString('en-IN', { 
+                        weekday: 'long', 
+                        day: 'numeric', 
+                        month: 'long', 
+                        year: 'numeric' 
+                      })}
+                    </p>
+                    <p className={`text-sm mt-1 ${textSecondary}`}>
+                      Currently: {selectedSunday.isSpecialWorkingDay ? 'Working Day' : 'Holiday'}
+                    </p>
+                  </div>
+
+                  {/* Options */}
+                  <div className="space-y-3">
+                    <p className={`font-medium ${textPrimary}`}>Set this Sunday as:</p>
+                    
+                    <button
+                      onClick={() => handleToggleWorkingDay(selectedSunday.date, true, 'working')}
+                      className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+                        selectedSunday.isSpecialWorkingDay 
+                          ? 'border-[#22c55e] bg-[#22c55e]/10' 
+                          : `border-[#3f3f46] ${bgSecondary} hover:border-[#22c55e]`
+                      }`}
+                      data-testid="set-working-day-btn"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-[#22c55e]/20 flex items-center justify-center">
+                        <Briefcase className="h-5 w-5 text-[#22c55e]" />
+                      </div>
+                      <div className="text-left">
+                        <p className={`font-medium ${textPrimary}`}>Working Day</p>
+                        <p className={`text-sm ${textSecondary}`}>Mark this Sunday as a working day</p>
+                      </div>
+                      {selectedSunday.isSpecialWorkingDay && (
+                        <CheckCircle className="h-5 w-5 text-[#22c55e] ml-auto" />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleWorkingDay(selectedSunday.date, true, 'holiday')}
+                      className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+                        !selectedSunday.isSpecialWorkingDay 
+                          ? 'border-[#6366f1] bg-[#6366f1]/10' 
+                          : `border-[#3f3f46] ${bgSecondary} hover:border-[#6366f1]`
+                      }`}
+                      data-testid="set-holiday-btn"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-[#6366f1]/20 flex items-center justify-center">
+                        <Home className="h-5 w-5 text-[#6366f1]" />
+                      </div>
+                      <div className="text-left">
+                        <p className={`font-medium ${textPrimary}`}>Holiday</p>
+                        <p className={`text-sm ${textSecondary}`}>Keep this Sunday as a regular holiday</p>
+                      </div>
+                      {!selectedSunday.isSpecialWorkingDay && (
+                        <CheckCircle className="h-5 w-5 text-[#6366f1] ml-auto" />
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        // Add as a team holiday with custom name
+                        const customHoliday = {
+                          date: selectedSunday.date,
+                          name: 'Team Holiday',
+                          type: 'team_holiday',
+                          approved: true
+                        };
+                        const newApproved = [...approvedHolidays.filter(h => h.date !== selectedSunday.date), customHoliday];
+                        setApprovedHolidays(newApproved);
+                        onUpdateCalendar({ 
+                          holidays: newApproved, 
+                          special_working_days: specialWorkingDays.filter(d => d !== selectedSunday.date) 
+                        });
+                        setShowSundayModal(false);
+                        toast.success('Marked as Team Holiday');
+                      }}
+                      className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors border-[#3f3f46] ${bgSecondary} hover:border-[#ef4444]`}
+                      data-testid="set-team-holiday-btn"
+                    >
+                      <div className="h-10 w-10 rounded-full bg-[#ef4444]/20 flex items-center justify-center">
+                        <Users className="h-5 w-5 text-[#ef4444]" />
+                      </div>
+                      <div className="text-left">
+                        <p className={`font-medium ${textPrimary}`}>Team Holiday</p>
+                        <p className={`text-sm ${textSecondary}`}>Mark as a special team holiday</p>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Remarks */}
+                  <div>
+                    <Label className={textPrimary}>Remarks (Optional)</Label>
+                    <textarea
+                      value={sundayRemarks}
+                      onChange={(e) => setSundayRemarks(e.target.value)}
+                      placeholder="Add any notes or remarks..."
+                      rows={2}
+                      className={`w-full mt-1 px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       )}
 
