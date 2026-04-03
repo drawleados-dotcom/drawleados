@@ -764,3 +764,61 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 **Files Modified:**
 - `/app/frontend/src/pages/TasksModulePage.js`: Lines 2220-2710 - Complete redesign
 - `/app/backend/department_routes.py`: Lines 283-510 - Enhanced schema and endpoints
+
+
+---
+
+### HR Admin Employee Reviews Tab (DONE - April 2026)
+**Purpose:** Created a comprehensive employee performance review system with monthly, quarterly, and yearly review capabilities.
+
+**Review Type Tabs:**
+- Monthly Review: Date filter shows month picker (YYYY-MM)
+- Quarterly Review: Date filter shows quarter dropdown (2026-Q1, etc.)
+- Yearly Review: Date filter shows year dropdown
+
+**Employee List:**
+- Lists all active employees with avatar, name, designation
+- "Click to Review" action to open review popup
+
+**Review Popup Modal:**
+- **Employee Header**: Avatar, name, designation, period
+- **Attendance Card**: Present days, Absent days, Leave days (color-coded)
+- **Working Hours Card**: Total Hours, Extra Hours (+X), Average Daily
+- **Delivery Timeline Card**: Total Tasks, On Time (clickable), Overdue (clickable)
+  - Clicking On Time/Overdue opens a filtered tasks popup
+
+**Write Review Section:**
+- **Reviewer Tabs**: HR (pink), Operations (purple), CEO (amber)
+- **5-Star Rating**: Clickable stars with amber fill
+- **Review Comments**: Text area for detailed review
+- **Submit Review Button**: Creates/updates review with toast notification
+
+**Submitted Reviews:**
+- Shows reviewer badge (HR/Operations/CEO)
+- Star rating display
+- Review text
+- Author name and date
+- Edit button (pencil icon)
+- Delete button (trash icon)
+
+**Visibility Rules:**
+- HR users see: Operations + CEO reviews (not their own HR reviews)
+- Operations users see: HR + CEO reviews (not their own Operations reviews)
+- CEO sees: HR + Operations reviews (not their own CEO reviews)
+- Employees can see all their own reviews
+
+**New DB Collection:**
+- `employee_reviews`: `review_id`, `employee_id`, `reviewer_id`, `reviewer_name`, `reviewer_role` (hr/operations/ceo), `review_type` (monthly/quarterly/yearly), `period`, `rating` (1-5), `review_text`, `created_at`, `updated_at`
+
+**API Endpoints:**
+- `GET /api/hr/employee-reviews/employees` - Get all employees for review
+- `GET /api/hr/employee-reviews/employee/{id}/summary` - Get attendance, hours, delivery stats
+- `GET /api/hr/employee-reviews/employee/{id}/tasks` - Get tasks with On Time/Overdue status
+- `GET /api/hr/performance-reviews` - Get reviews with filters
+- `POST /api/hr/performance-reviews` - Create new review
+- `PUT /api/hr/performance-reviews/{id}` - Update review
+- `DELETE /api/hr/performance-reviews/{id}` - Delete review
+
+**Files Modified:**
+- `/app/backend/hr_routes.py`: Lines 3369-3762 - Employee review API endpoints
+- `/app/frontend/src/pages/HRAdminPage.js`: Reviews Tab UI component
