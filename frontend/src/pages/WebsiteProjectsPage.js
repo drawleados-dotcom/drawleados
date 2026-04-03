@@ -17,7 +17,8 @@ import {
   ChevronDown, ChevronUp, Search, Filter, Edit2, Trash2, CheckCircle, Circle, X,
   Image, FileText, ListTodo, LayoutGrid, Send, Check, ArrowLeft, Percent,
   Users, CalendarDays, Code, Palette, FileEdit, Box, Mail, PanelLeftClose, PanelLeft,
-  Play, Pause, Square, Timer, Eye, RefreshCw, AlertCircle, CheckCircle2
+  Play, Pause, Square, Timer, Eye, RefreshCw, AlertCircle, CheckCircle2,
+  Home, FolderKanban, Settings, Menu, ChevronRight
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -98,6 +99,18 @@ const WebsiteProjectsPage = () => {
   const [templates, setTemplates] = useState([]);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [newTemplate, setNewTemplate] = useState({ name: '', website_type: '', platform: '', default_pages: [], default_tasks: [] });
+  
+  // Mobile Responsive States
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mobileActiveTab, setMobileActiveTab] = useState('projects'); // projects, tasks, filters
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  
+  // Mobile resize detection
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Default pages for new projects
   const DEFAULT_PAGES = [
@@ -810,23 +823,30 @@ const WebsiteProjectsPage = () => {
 
     return (
       <Layout>
-        <div className="flex flex-col h-full" data-testid="website-projects-page">
-          {/* Header */}
-          <div className={`p-4 border-b ${borderColor}`}>
+        <div className="flex flex-col h-full pb-16 md:pb-0" data-testid="website-projects-page">
+          {/* Header - Mobile Responsive */}
+          <div className={`p-3 md:p-4 border-b ${borderColor}`}>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Globe className="h-6 w-6 text-[#6366f1]" />
-                <h1 className={`text-xl font-bold ${textPrimary}`}>All Website Projects</h1>
-                <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{allProjectsSummary.length} Projects</Badge>
+              <div className="flex items-center gap-2 md:gap-3">
+                <Globe className="h-5 w-5 md:h-6 md:w-6 text-[#6366f1]" />
+                <h1 className={`text-base md:text-xl font-bold ${textPrimary}`}>
+                  {isMobile ? 'Projects' : 'All Website Projects'}
+                </h1>
+                <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{allProjectsSummary.length}</Badge>
               </div>
-              <Button onClick={() => setIsCreateModalOpen(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="create-project-btn">
-                <Plus className="h-4 w-4 mr-2" /> New Project
+              <Button 
+                onClick={() => setIsCreateModalOpen(true)} 
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-9 px-3 md:px-4" 
+                data-testid="create-project-btn"
+              >
+                <Plus className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">New Project</span>
               </Button>
             </div>
           </div>
 
-          {/* View Mode Toggle & Filters */}
-          <div className={`p-4 border-b ${borderColor}`}>
+          {/* View Mode Toggle & Filters - Desktop */}
+          <div className={`hidden md:block p-4 border-b ${borderColor}`}>
             {/* View Mode Toggle */}
             <div className="flex items-center gap-4 mb-4">
               <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
@@ -937,11 +957,89 @@ const WebsiteProjectsPage = () => {
             </div>
           </div>
 
+          {/* Mobile Search & Quick Filters */}
+          <div className={`md:hidden p-3 border-b ${borderColor} space-y-3`}>
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input 
+                placeholder="Search projects..." 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+                className={`pl-10 ${bgSecondary} border-none h-10`} 
+              />
+            </div>
+            
+            {/* Quick Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 hide-scrollbar">
+              <Button 
+                size="sm" 
+                variant={viewMode === 'projects' ? 'default' : 'outline'}
+                onClick={() => setViewMode('projects')}
+                className={`h-8 ${viewMode === 'projects' ? 'bg-[#6366f1]' : ''} whitespace-nowrap`}
+              >
+                <LayoutGrid className="h-3 w-3 mr-1" /> Projects
+              </Button>
+              <Button 
+                size="sm" 
+                variant={viewMode === 'tasks' ? 'default' : 'outline'}
+                onClick={() => setViewMode('tasks')}
+                className={`h-8 ${viewMode === 'tasks' ? 'bg-[#6366f1]' : ''} whitespace-nowrap`}
+              >
+                <ListTodo className="h-3 w-3 mr-1" /> Tasks
+              </Button>
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                className="h-8 whitespace-nowrap"
+              >
+                <Filter className="h-3 w-3 mr-1" /> Filters
+                {(statusFilter !== 'all' || developerFilter !== 'all') && (
+                  <span className="ml-1 w-2 h-2 rounded-full bg-[#6366f1]" />
+                )}
+              </Button>
+            </div>
+
+            {/* Expandable Filters */}
+            {showMobileFilters && (
+              <div className={`p-3 rounded-lg ${bgSecondary} space-y-3`}>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className={`w-full ${bgCard}`}><SelectValue placeholder="All Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="on-hold">On Hold</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={developerFilter} onValueChange={setDeveloperFilter}>
+                  <SelectTrigger className={`w-full ${bgCard}`}><SelectValue placeholder="All Developers" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Developers</SelectItem>
+                    {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {(statusFilter !== 'all' || developerFilter !== 'all') && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => { setStatusFilter('all'); setDeveloperFilter('all'); }}
+                    className="text-red-400 w-full"
+                  >
+                    <X className="h-4 w-4 mr-1" /> Clear Filters
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-1 overflow-hidden">
             {/* Projects List View */}
             {viewMode === 'projects' && (
               <div className="flex-1 overflow-auto">
-                <table className="w-full">
+                {/* Desktop Table View */}
+                <table className="w-full hidden md:table">
                   <thead className={`${bgSecondary} sticky top-0 z-10`}>
                     <tr className={`text-xs ${textSecondary} uppercase`}>
                       <th className="px-4 py-3 text-left font-semibold">Project</th>
@@ -1006,6 +1104,69 @@ const WebsiteProjectsPage = () => {
                     ))}
                   </tbody>
                 </table>
+
+                {/* Mobile Card View */}
+                <div className="md:hidden p-3 space-y-3">
+                  {filteredProjectsSummary.length === 0 ? (
+                    <div className={`text-center py-12 ${textSecondary}`}>
+                      <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p>No projects found</p>
+                    </div>
+                  ) : (
+                    filteredProjectsSummary.map(project => (
+                      <div 
+                        key={project.project_id} 
+                        onClick={() => openProject(project.project_id)}
+                        className={`p-4 rounded-xl border ${borderColor} ${bgCard} active:scale-[0.98] transition-all cursor-pointer`}
+                      >
+                        {/* Project Header */}
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-10 h-10 rounded-lg bg-[#6366f1]/10 flex items-center justify-center">
+                              <Globe className="h-5 w-5 text-[#6366f1]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`font-semibold ${textPrimary} truncate`}>{project.name}</p>
+                              <p className={`text-xs ${textSecondary} truncate`}>{project.platform || 'Website'}</p>
+                            </div>
+                          </div>
+                          <Badge className={`text-xs ${
+                            project.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                            project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
+                            project.status === 'on-hold' ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {project.status || 'active'}
+                          </Badge>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="mb-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-xs ${textSecondary}`}>Overall Progress</span>
+                            <span className={`text-xs font-semibold ${textPrimary}`}>{project.overall_percent}%</span>
+                          </div>
+                          <Progress value={project.overall_percent} className="h-2" />
+                        </div>
+
+                        {/* Stats Row */}
+                        <div className="flex items-center justify-between text-xs">
+                          <div className={`flex items-center gap-1 ${textSecondary}`}>
+                            <FileText className="h-3 w-3" />
+                            <span>{project.total_pages} pages</span>
+                          </div>
+                          {project.deadline && (
+                            <div className={`flex items-center gap-1 ${new Date(project.deadline) < new Date() ? 'text-red-400' : textSecondary}`}>
+                              <Calendar className="h-3 w-3" />
+                              <span>{project.deadline}</span>
+                            </div>
+                          )}
+                          <ChevronRight className={`h-4 w-4 ${textSecondary}`} />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
 
@@ -1113,6 +1274,52 @@ const WebsiteProjectsPage = () => {
             )}
           </div>
 
+          {/* Mobile Bottom Navigation */}
+          <div className={`md:hidden fixed bottom-0 left-0 right-0 ${bgCard} border-t ${borderColor} px-2 py-2 z-50 safe-area-inset-bottom`}>
+            <div className="flex items-center justify-around">
+              <button 
+                onClick={() => setViewMode('projects')}
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all ${
+                  viewMode === 'projects' ? 'text-[#6366f1] bg-[#6366f1]/10' : textSecondary
+                }`}
+              >
+                <FolderKanban className="h-5 w-5" />
+                <span className="text-xs font-medium">Projects</span>
+              </button>
+              <button 
+                onClick={() => setViewMode('tasks')}
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all ${
+                  viewMode === 'tasks' ? 'text-[#6366f1] bg-[#6366f1]/10' : textSecondary
+                }`}
+              >
+                <ListTodo className="h-5 w-5" />
+                <span className="text-xs font-medium">Tasks</span>
+              </button>
+              <button 
+                onClick={() => setIsCreateModalOpen(true)}
+                className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl bg-[#6366f1] text-white -mt-4 shadow-lg"
+              >
+                <Plus className="h-6 w-6" />
+                <span className="text-xs font-medium">New</span>
+              </button>
+              <button 
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all ${
+                  showMobileFilters ? 'text-[#6366f1] bg-[#6366f1]/10' : textSecondary
+                }`}
+              >
+                <Filter className="h-5 w-5" />
+                <span className="text-xs font-medium">Filter</span>
+              </button>
+              <button 
+                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all ${textSecondary}`}
+              >
+                <Settings className="h-5 w-5" />
+                <span className="text-xs font-medium">More</span>
+              </button>
+            </div>
+          </div>
+
           <ProjectModal isOpen={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create Website Project" project={newProject} setProject={setNewProject} onSubmit={handleCreateProject} options={options} teamMembers={teamMembers} isDark={isDark} />
         </div>
       </Layout>
@@ -1132,79 +1339,74 @@ const WebsiteProjectsPage = () => {
 
     return (
       <Layout>
-        <div className="flex flex-col h-full" data-testid="project-detail-view">
-          {/* Sticky Header Bar */}
+        <div className="flex flex-col h-full pb-16 md:pb-0" data-testid="project-detail-view">
+          {/* Sticky Header Bar - Mobile Responsive */}
           <div className={`sticky top-0 z-20 border-b ${borderColor} ${bgCard} shadow-sm`}>
             {/* Top Row - Back button, title, actions */}
-            <div className={`p-3 flex items-center justify-between`}>
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="sm" onClick={goBackToAllProjects} className={textSecondary}>
-                  <ArrowLeft className="h-4 w-4 mr-1" /> Back
+            <div className={`p-2 md:p-3 flex items-center justify-between`}>
+              <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                <Button variant="ghost" size="sm" onClick={goBackToAllProjects} className={`${textSecondary} p-1 md:p-2`}>
+                  <ArrowLeft className="h-4 w-4 md:mr-1" />
+                  <span className="hidden md:inline">Back</span>
                 </Button>
-                <h1 className={`text-lg font-bold ${textPrimary}`}>{projectDetail.name}</h1>
-                <Badge className={`${statusStyle.bg} ${statusStyle.text} px-3 py-1 font-semibold`}>
+                <h1 className={`text-sm md:text-lg font-bold ${textPrimary} truncate`}>{projectDetail.name}</h1>
+                <Badge className={`${statusStyle.bg} ${statusStyle.text} px-2 py-0.5 md:px-3 md:py-1 font-semibold text-xs md:text-sm shrink-0`}>
                   {(projectDetail.status || 'Active').toUpperCase()}
                 </Badge>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 md:gap-2 shrink-0">
                 {canEdit && (
-                  <>
-                    <Button variant="outline" size="sm" onClick={() => { setNewProject(projectDetail); setIsEditProjectModalOpen(true); }}>
-                      <Edit2 className="h-4 w-4 mr-1" /> Edit
-                    </Button>
-                  </>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => { setNewProject(projectDetail); setIsEditProjectModalOpen(true); }}
+                    className="h-8 px-2 md:px-3"
+                  >
+                    <Edit2 className="h-4 w-4 md:mr-1" />
+                    <span className="hidden md:inline">Edit</span>
+                  </Button>
                 )}
               </div>
             </div>
 
-            {/* Quick Links Bar - Docs, Drive, Deadline, Onboarding */}
-            <div className={`px-3 pb-3 flex items-center gap-4 flex-wrap`}>
-              {/* Documents - Opens Popup */}
+            {/* Quick Links Bar - Scrollable on Mobile */}
+            <div className={`px-2 md:px-3 pb-2 md:pb-3 flex items-center gap-2 md:gap-4 overflow-x-auto hide-scrollbar`}>
+              {/* Documents */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => projectDetail.documents_url && setDocPopupUrl(projectDetail.documents_url)}
-                className={`gap-2 ${projectDetail.documents_url ? 'text-[#6366f1] border-[#6366f1]/30' : `${textSecondary} opacity-50`}`}
+                className={`gap-1 md:gap-2 shrink-0 h-8 ${projectDetail.documents_url ? 'text-[#6366f1] border-[#6366f1]/30' : `${textSecondary} opacity-50`}`}
                 disabled={!projectDetail.documents_url}
               >
                 <FileText className="h-4 w-4" />
-                Docs
+                <span className="text-xs md:text-sm">Docs</span>
               </Button>
 
-              {/* Drive - Opens Popup */}
+              {/* Drive */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => projectDetail.client_drive_url && setDocPopupUrl(projectDetail.client_drive_url)}
-                className={`gap-2 ${projectDetail.client_drive_url ? 'text-[#22c55e] border-[#22c55e]/30' : `${textSecondary} opacity-50`}`}
+                className={`gap-1 md:gap-2 shrink-0 h-8 ${projectDetail.client_drive_url ? 'text-[#22c55e] border-[#22c55e]/30' : `${textSecondary} opacity-50`}`}
                 disabled={!projectDetail.client_drive_url}
               >
                 <Folder className="h-4 w-4" />
-                Drive
+                <span className="text-xs md:text-sm">Drive</span>
               </Button>
 
-              {/* Deadline */}
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
-                <Clock className="h-4 w-4 text-[#f59e0b]" />
-                <span className={`text-sm ${textSecondary}`}>Deadline:</span>
-                <span className={`text-sm font-medium ${projectDetail.deadline ? textPrimary : 'text-red-400'}`}>
-                  {projectDetail.deadline || 'Not Set'}
-                </span>
-              </div>
-
-              {/* Onboarding */}
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
-                <Calendar className="h-4 w-4 text-[#6366f1]" />
-                <span className={`text-sm ${textSecondary}`}>Onboarding:</span>
-                <span className={`text-sm font-medium ${textPrimary}`}>
-                  {projectDetail.onboarding_date || 'Not Set'}
+              {/* Deadline - Mobile Compact */}
+              <div className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} shrink-0`}>
+                <Clock className="h-3 w-3 md:h-4 md:w-4 text-[#f59e0b]" />
+                <span className={`text-xs md:text-sm font-medium ${projectDetail.deadline ? textPrimary : 'text-red-400'}`}>
+                  {projectDetail.deadline || 'No Deadline'}
                 </span>
               </div>
 
               {/* Progress */}
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
-                <Progress value={projectDetail.stats?.overall_completed / projectDetail.stats?.total_pages * 100 || 0} className="w-24 h-2" />
-                <span className={`text-sm ${textSecondary}`}>{projectDetail.stats?.overall_completed || 0}/{projectDetail.stats?.total_pages || 0}</span>
+              <div className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} shrink-0`}>
+                <Progress value={projectDetail.stats?.overall_completed / projectDetail.stats?.total_pages * 100 || 0} className="w-16 md:w-24 h-2" />
+                <span className={`text-xs md:text-sm ${textSecondary}`}>{projectDetail.stats?.overall_completed || 0}/{projectDetail.stats?.total_pages || 0}</span>
               </div>
             </div>
           </div>
@@ -1239,24 +1441,57 @@ const WebsiteProjectsPage = () => {
             )}
           </div>
 
-          {/* Tabs - Sticky */}
+          {/* Tabs - Sticky with Mobile Responsiveness */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-            <div className={`sticky top-0 z-10 border-b ${borderColor} ${bgCard} px-4 pt-2 pb-2 flex items-center justify-between`}>
-              <TabsList className={bgSecondary}>
-                <TabsTrigger value="pages"><LayoutGrid className="h-4 w-4 mr-1" /> Pages</TabsTrigger>
-                <TabsTrigger value="tasks"><ListTodo className="h-4 w-4 mr-1" /> Tasks <Badge className="ml-1 bg-[#6366f1]/20 text-[#6366f1]">{projectBDETasks.length}</Badge></TabsTrigger>
-                <TabsTrigger value="requirements"><FileText className="h-4 w-4 mr-1" /> Requirements</TabsTrigger>
-                <TabsTrigger value="branding"><Palette className="h-4 w-4 mr-1" /> Branding</TabsTrigger>
-              </TabsList>
-              <div className="flex items-center gap-2">
-                <Input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-48 ${bgSecondary} border-none`} />
-                {activeTab === 'pages' && <Button onClick={() => setIsAddPageModalOpen(true)} size="sm" className="bg-[#6366f1]"><Plus className="h-4 w-4 mr-1" /> Add Page</Button>}
-                {activeTab === 'tasks' && <Button onClick={() => setIsAddTaskModalOpen(true)} size="sm" className="bg-[#6366f1]"><Plus className="h-4 w-4 mr-1" /> Add Task</Button>}
+            <div className={`sticky top-0 z-10 border-b ${borderColor} ${bgCard} px-2 md:px-4 pt-2 pb-2`}>
+              {/* Mobile Tab Bar - Scrollable */}
+              <div className="flex items-center justify-between gap-2">
+                <TabsList className={`${bgSecondary} overflow-x-auto hide-scrollbar flex-shrink-0`}>
+                  <TabsTrigger value="pages" className="text-xs md:text-sm px-2 md:px-3">
+                    <LayoutGrid className="h-3 w-3 md:h-4 md:w-4 md:mr-1" />
+                    <span className="hidden md:inline">Pages</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="tasks" className="text-xs md:text-sm px-2 md:px-3">
+                    <ListTodo className="h-3 w-3 md:h-4 md:w-4 md:mr-1" />
+                    <span className="hidden md:inline">Tasks</span>
+                    <Badge className="ml-1 bg-[#6366f1]/20 text-[#6366f1] text-xs">{projectBDETasks.length}</Badge>
+                  </TabsTrigger>
+                  <TabsTrigger value="requirements" className="text-xs md:text-sm px-2 md:px-3">
+                    <FileText className="h-3 w-3 md:h-4 md:w-4 md:mr-1" />
+                    <span className="hidden md:inline">Requirements</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="branding" className="text-xs md:text-sm px-2 md:px-3">
+                    <Palette className="h-3 w-3 md:h-4 md:w-4 md:mr-1" />
+                    <span className="hidden md:inline">Branding</span>
+                  </TabsTrigger>
+                </TabsList>
+                
+                {/* Desktop Search & Actions */}
+                <div className="hidden md:flex items-center gap-2">
+                  <Input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className={`w-48 ${bgSecondary} border-none`} />
+                  {activeTab === 'pages' && <Button onClick={() => setIsAddPageModalOpen(true)} size="sm" className="bg-[#6366f1]"><Plus className="h-4 w-4 mr-1" /> Add Page</Button>}
+                  {activeTab === 'tasks' && <Button onClick={() => setIsAddTaskModalOpen(true)} size="sm" className="bg-[#6366f1]"><Plus className="h-4 w-4 mr-1" /> Add Task</Button>}
+                </div>
+                
+                {/* Mobile Add Button */}
+                <div className="md:hidden flex gap-1">
+                  {activeTab === 'pages' && (
+                    <Button onClick={() => setIsAddPageModalOpen(true)} size="sm" className="bg-[#6366f1] h-8 w-8 p-0">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {activeTab === 'tasks' && (
+                    <Button onClick={() => setIsAddTaskModalOpen(true)} size="sm" className="bg-[#6366f1] h-8 w-8 p-0">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
             <TabsContent value="pages" className="flex-1 overflow-auto m-0">
-              <table className="w-full">
+              {/* Desktop Table */}
+              <table className="w-full hidden md:table">
                 <thead className={`${bgSecondary} sticky top-0 z-10`}>
                   <tr className={`text-xs ${textSecondary} uppercase`}>
                     <th className="px-4 py-3 text-left font-semibold w-8">#</th>
@@ -1306,80 +1541,134 @@ const WebsiteProjectsPage = () => {
                   ))}
                 </tbody>
               </table>
+              
+              {/* Mobile Pages Card View */}
+              <div className="md:hidden p-3 space-y-3">
+                {filteredPages.length === 0 ? (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>No pages yet</p>
+                  </div>
+                ) : (
+                  filteredPages.map((task, idx) => (
+                    <div 
+                      key={task.task_id}
+                      onClick={() => openPage(task)}
+                      className={`p-4 rounded-xl border ${borderColor} ${bgCard} active:scale-[0.98] transition-all cursor-pointer`}
+                    >
+                      {/* Page Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-medium ${bgSecondary} px-2 py-1 rounded`}>{task.sno}</span>
+                          <p className={`font-semibold ${textPrimary}`}>{task.page_name}</p>
+                        </div>
+                        <StatusBadge status={task.overall_status} onChange={(v) => handleStatusChange(task.task_id, 'overall_status', v)} />
+                      </div>
+                      
+                      {/* Phase Progress */}
+                      <div className="grid grid-cols-4 gap-2 mb-2">
+                        {['wireframe', 'ui', 'content', 'dev'].map(phase => {
+                          const status = task[`${phase}_status`];
+                          const isComplete = status === 'Completed';
+                          const isProgress = status === 'In Progress';
+                          return (
+                            <div key={phase} className="text-center">
+                              <div className={`w-full h-1.5 rounded-full mb-1 ${
+                                isComplete ? 'bg-[#22c55e]' : 
+                                isProgress ? 'bg-[#6366f1]' : 
+                                bgSecondary
+                              }`} />
+                              <span className={`text-[10px] ${textSecondary} capitalize`}>{phase === 'dev' ? 'Dev' : phase}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Due Date if any */}
+                      {task.wireframe_due && (
+                        <div className={`flex items-center gap-1 text-xs ${textSecondary}`}>
+                          <Calendar className="h-3 w-3" />
+                          <span>Due: {task.wireframe_due}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="tasks" className="flex-1 overflow-auto m-0">
               {/* BDE-Style Tasks View */}
-              <div className="p-4 space-y-4">
-                {/* Task Stats Cards */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-[#6366f1]/10">
-                        <ListTodo className="h-5 w-5 text-[#6366f1]" />
+              <div className="p-3 md:p-4 space-y-3 md:space-y-4">
+                {/* Task Stats Cards - Responsive Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4">
+                  <div className={`p-3 md:p-4 rounded-xl ${bgCard} border ${borderColor}`}>
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className="p-1.5 md:p-2 rounded-lg bg-[#6366f1]/10">
+                        <ListTodo className="h-4 w-4 md:h-5 md:w-5 text-[#6366f1]" />
                       </div>
                       <div>
-                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.length}</p>
-                        <p className={`text-xs ${textSecondary}`}>Total Tasks</p>
+                        <p className={`text-lg md:text-2xl font-bold ${textPrimary}`}>{projectBDETasks.length}</p>
+                        <p className={`text-[10px] md:text-xs ${textSecondary}`}>Total</p>
                       </div>
                     </div>
                   </div>
-                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-[#f59e0b]/10">
-                        <AlertCircle className="h-5 w-5 text-[#f59e0b]" />
+                  <div className={`p-3 md:p-4 rounded-xl ${bgCard} border ${borderColor}`}>
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className="p-1.5 md:p-2 rounded-lg bg-[#f59e0b]/10">
+                        <AlertCircle className="h-4 w-4 md:h-5 md:w-5 text-[#f59e0b]" />
                       </div>
                       <div>
-                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'pending').length}</p>
-                        <p className={`text-xs ${textSecondary}`}>Pending</p>
+                        <p className={`text-lg md:text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'pending').length}</p>
+                        <p className={`text-[10px] md:text-xs ${textSecondary}`}>Pending</p>
                       </div>
                     </div>
                   </div>
-                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-[#3b82f6]/10">
-                        <Timer className="h-5 w-5 text-[#3b82f6]" />
+                  <div className={`p-3 md:p-4 rounded-xl ${bgCard} border ${borderColor}`}>
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className="p-1.5 md:p-2 rounded-lg bg-[#3b82f6]/10">
+                        <Timer className="h-4 w-4 md:h-5 md:w-5 text-[#3b82f6]" />
                       </div>
                       <div>
-                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'in_progress').length}</p>
-                        <p className={`text-xs ${textSecondary}`}>In Progress</p>
+                        <p className={`text-lg md:text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'in_progress').length}</p>
+                        <p className={`text-[10px] md:text-xs ${textSecondary}`}>In Progress</p>
                       </div>
                     </div>
                   </div>
-                  <div className={`p-4 rounded-xl ${bgCard} border ${borderColor}`}>
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-[#22c55e]/10">
-                        <CheckCircle2 className="h-5 w-5 text-[#22c55e]" />
+                  <div className={`p-3 md:p-4 rounded-xl ${bgCard} border ${borderColor}`}>
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className="p-1.5 md:p-2 rounded-lg bg-[#22c55e]/10">
+                        <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5 text-[#22c55e]" />
                       </div>
                       <div>
-                        <p className={`text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'completed').length}</p>
-                        <p className={`text-xs ${textSecondary}`}>Completed</p>
+                        <p className={`text-lg md:text-2xl font-bold ${textPrimary}`}>{projectBDETasks.filter(t => t.status === 'completed').length}</p>
+                        <p className={`text-[10px] md:text-xs ${textSecondary}`}>Done</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Filters Row */}
-                <div className="flex items-center gap-3 flex-wrap">
+                {/* Filters Row - Mobile Responsive */}
+                <div className="flex items-center gap-2 md:gap-3 flex-wrap overflow-x-auto hide-scrollbar">
                   {/* Status Filter Pills */}
-                  <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
+                  <div className={`inline-flex rounded-lg p-0.5 md:p-1 ${bgSecondary} shrink-0`}>
                     {['all', 'pending', 'in_progress', 'completed'].map(status => (
                       <Button
                         key={status}
                         size="sm"
                         variant={taskFilter === status ? 'default' : 'ghost'}
                         onClick={() => setTaskFilter(status)}
-                        className={taskFilter === status ? 'bg-[#6366f1]' : ''}
+                        className={`text-xs md:text-sm h-7 md:h-8 px-2 md:px-3 ${taskFilter === status ? 'bg-[#6366f1]' : ''}`}
                       >
-                        {status === 'all' ? 'All' : status === 'in_progress' ? 'In Progress' : status.charAt(0).toUpperCase() + status.slice(1)}
+                        {status === 'all' ? 'All' : status === 'in_progress' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1)}
                       </Button>
                     ))}
                   </div>
 
-                  {/* Date Filter */}
+                  {/* Date Filter - Hidden on Mobile */}
                   <Select value={taskDateFilter} onValueChange={setTaskDateFilter}>
-                    <SelectTrigger className={`w-40 ${bgSecondary} border-none`}>
-                      <CalendarDays className="h-4 w-4 mr-2" />
+                    <SelectTrigger className={`w-28 md:w-40 ${bgSecondary} border-none h-8 text-xs md:text-sm`}>
+                      <CalendarDays className="h-3 w-3 md:h-4 md:w-4 mr-1 md:mr-2" />
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1391,8 +1680,8 @@ const WebsiteProjectsPage = () => {
                   </Select>
                 </div>
 
-                {/* Tasks Table */}
-                <div className={`rounded-xl border ${borderColor} overflow-hidden`}>
+                {/* Tasks Table - Desktop */}
+                <div className={`hidden md:block rounded-xl border ${borderColor} overflow-hidden`}>
                   <table className="w-full">
                     <thead className={bgSecondary}>
                       <tr className={`text-xs ${textSecondary} uppercase`}>
@@ -1502,6 +1791,86 @@ const WebsiteProjectsPage = () => {
                     <div className={`p-8 text-center ${textSecondary}`}>
                       <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-30" />
                       <p>No tasks yet. Click "Add Task" to create one.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Tasks Cards - Mobile */}
+                <div className="md:hidden space-y-3">
+                  {projectBDETasks
+                    .filter(task => {
+                      if (taskFilter !== 'all' && task.status !== taskFilter) return false;
+                      if (taskDateFilter === 'today') {
+                        const today = new Date().toISOString().split('T')[0];
+                        return task.due_date === today;
+                      }
+                      return true;
+                    })
+                    .map(task => (
+                      <div 
+                        key={task.task_id} 
+                        className={`p-4 rounded-xl border ${borderColor} ${bgCard}`}
+                        onClick={() => { setViewingTask(task); setIsTaskDetailOpen(true); }}
+                      >
+                        {/* Task Header */}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-semibold ${textPrimary} truncate`}>{task.task_name}</p>
+                            {task.description && <p className={`text-xs ${textSecondary} mt-0.5 line-clamp-1`}>{task.description}</p>}
+                          </div>
+                          <Badge className={`text-xs shrink-0 ml-2 ${
+                            task.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                            task.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {task.status === 'in_progress' ? 'Active' : task.status?.charAt(0).toUpperCase() + task.status?.slice(1)}
+                          </Badge>
+                        </div>
+                        
+                        {/* Task Meta Row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Badge className={`text-xs ${PRIORITY_COLORS[task.priority]}`}>{task.priority}</Badge>
+                            {task.due_date && (
+                              <span className={`text-xs ${textSecondary} flex items-center gap-1`}>
+                                <Calendar className="h-3 w-3" />
+                                {task.due_date}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Timer */}
+                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                            <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${bgSecondary}`}>
+                              <Timer className={`h-3 w-3 ${task.timer_running ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
+                              <span className={`text-xs font-medium ${textPrimary}`}>{formatDuration(task.total_time_seconds || 0)}</span>
+                            </div>
+                            {!task.timer_running ? (
+                              <Button
+                                size="sm"
+                                onClick={() => handleTimerAction(task.task_id, 'start')}
+                                className="h-7 w-7 p-0 bg-[#10b981] hover:bg-[#10b981]/80"
+                              >
+                                <Play className="h-3 w-3" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => handleTimerAction(task.task_id, 'stop')}
+                                className="h-7 w-7 p-0 bg-[#f59e0b] hover:bg-[#f59e0b]/80"
+                              >
+                                <Pause className="h-3 w-3" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  
+                  {projectBDETasks.length === 0 && (
+                    <div className={`p-8 text-center ${textSecondary}`}>
+                      <ListTodo className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                      <p className="text-sm">No tasks yet. Tap + to create one.</p>
                     </div>
                   )}
                 </div>
@@ -1878,6 +2247,58 @@ const WebsiteProjectsPage = () => {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Mobile Bottom Navigation for Project Detail */}
+          <div className={`md:hidden fixed bottom-0 left-0 right-0 ${bgCard} border-t ${borderColor} px-2 py-2 z-50 safe-area-inset-bottom`}>
+            <div className="flex items-center justify-around">
+              <button 
+                onClick={() => setActiveTab('pages')}
+                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${
+                  activeTab === 'pages' ? 'text-[#6366f1] bg-[#6366f1]/10' : textSecondary
+                }`}
+              >
+                <LayoutGrid className="h-5 w-5" />
+                <span className="text-xs font-medium">Pages</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('tasks')}
+                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${
+                  activeTab === 'tasks' ? 'text-[#6366f1] bg-[#6366f1]/10' : textSecondary
+                }`}
+              >
+                <ListTodo className="h-5 w-5" />
+                <span className="text-xs font-medium">Tasks</span>
+              </button>
+              <button 
+                onClick={() => {
+                  if (activeTab === 'pages') setIsAddPageModalOpen(true);
+                  else if (activeTab === 'tasks') setIsAddTaskModalOpen(true);
+                }}
+                className="flex flex-col items-center gap-1 px-4 py-2 rounded-xl bg-[#6366f1] text-white -mt-4 shadow-lg"
+              >
+                <Plus className="h-6 w-6" />
+                <span className="text-xs font-medium">Add</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('requirements')}
+                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${
+                  activeTab === 'requirements' ? 'text-[#6366f1] bg-[#6366f1]/10' : textSecondary
+                }`}
+              >
+                <FileText className="h-5 w-5" />
+                <span className="text-xs font-medium">Info</span>
+              </button>
+              <button 
+                onClick={() => setActiveTab('branding')}
+                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all ${
+                  activeTab === 'branding' ? 'text-[#6366f1] bg-[#6366f1]/10' : textSecondary
+                }`}
+              >
+                <Palette className="h-5 w-5" />
+                <span className="text-xs font-medium">Brand</span>
+              </button>
+            </div>
+          </div>
 
           <ProjectModal isOpen={isEditProjectModalOpen} onClose={() => setIsEditProjectModalOpen(false)} title="Edit Project" project={newProject} setProject={setNewProject} onSubmit={handleUpdateProject} options={options} teamMembers={teamMembers} isDark={isDark} isEdit />
         </div>
