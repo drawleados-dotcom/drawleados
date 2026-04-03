@@ -66,6 +66,7 @@ const MODULES = [
   // Admin Modules
   { value: 'hr', label: 'HR', icon: Users },
   { value: 'hr_admin', label: 'HR Admin', icon: Shield },
+  { value: 'hr_manager', label: 'HR Manager', icon: Shield },
   { value: 'finance', label: 'Finance', icon: CreditCard },
   { value: 'settings', label: 'Settings', icon: Settings },
   { value: 'documentations', label: 'Documentations', icon: FileText },
@@ -5056,6 +5057,7 @@ function DesignationsDeptsTab({
     // Admin Modules
     { value: 'hr', label: 'HR' },
     { value: 'hr_admin', label: 'HR Admin' },
+    { value: 'hr_manager', label: 'HR Manager' },
     { value: 'finance', label: 'Finance' },
     { value: 'settings', label: 'Settings' },
     { value: 'documentations', label: 'Documentations' },
