@@ -838,24 +838,6 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="flex flex-wrap gap-3">
-        <Button 
-          onClick={() => setShowLeaveRequestModal(true)}
-          className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
-        >
-          <Calendar className="h-4 w-4 mr-2" />
-          Request Leave
-        </Button>
-        <Button 
-          onClick={() => { setPermissionForm({...permissionForm, date: new Date().toISOString().split('T')[0]}); setShowPermissionModal(true); }}
-          className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white"
-        >
-          <Clock className="h-4 w-4 mr-2" />
-          Request Permission
-        </Button>
-      </div>
-
       {/* Login Time Modal */}
       {showLoginModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
