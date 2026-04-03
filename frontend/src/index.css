@@ -151,3 +151,20 @@
 .safe-area-inset-bottom {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+
+/* Hide Emergent AI bot and any floating assistant buttons */
+#emergent-ai-button,
+#emergent-bot,
+#emergent-chat,
+.emergent-ai-button,
+.emergent-bot,
+[data-emergent-bot],
+[id*="emergent"],
+[class*="emergent-bot"],
+iframe[src*="emergent"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
