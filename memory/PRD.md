@@ -1302,9 +1302,27 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ---
 
+## Latest Updates (December 2025 - Session 48)
+
+### Settings Page Theme Bug Fix (DONE)
+**Issue:** Input fields on the Settings > Company Profile page displayed black/dark backgrounds in light mode, creating poor UX.
+
+**Root Cause:** The `CompanyProfileTab.js` file had broken template literals (e.g., `'${bgCard}'` as literal strings instead of computed values) and hardcoded dark theme colors (`bg-[#09090b]`) on all input elements.
+
+**Fix Applied:**
+- Replaced all hardcoded dark colors with properly computed theme-aware variables
+- Fixed template literal syntax to properly use `isDark` context values
+- All inputs now use `bgInput` variable which resolves to `bg-[#09090b]` in dark mode and `bg-white` in light mode
+
+**Files Modified:**
+- `/app/frontend/src/components/settings/CompanyProfileTab.js`: Complete rewrite of theme classes
+
+---
+
 ## Backlog / Future Tasks
 
 ### High Priority (P0)
+- **HR Admin Calendar Cleanup**: Remove Sunday configuration popup from `EnhancedCalendarTab` - calendar should only display finalized leaves/holidays
 - **SOP/Template Creation UI**: Build the UI for managing "Website SOP Creation / Templates" within the Website Development flow
 
 ### Medium Priority (P1)
