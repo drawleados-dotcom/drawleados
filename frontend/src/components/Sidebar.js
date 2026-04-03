@@ -176,20 +176,20 @@ const Sidebar = () => {
     return () => clearInterval(interval);
   }, [loadDatabases, loadUnreadCount, loadWebsiteProjects]);
 
-  // Expand Operations if we're on that page
+  // Expand the relevant dropdown based on current page (accordion style - only one open)
   useEffect(() => {
-    if (location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works')) {
+    // Operations pages
+    if (location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works') || 
+        location.pathname.startsWith('/website-projects') || location.pathname === '/social-media' ||
+        location.pathname === '/creative-board' || location.pathname === '/meta-ads' ||
+        (location.pathname === '/tasks' && !location.search.includes('my-tasks'))) {
       setOperationsExpanded(true);
+      setSalesExpanded(false);
     }
-    if (location.pathname.startsWith('/website-projects')) {
-      setOperationsExpanded(true);
-    }
-    if (location.pathname === '/tasks' && !location.search.includes('my-tasks')) {
-      setOperationsExpanded(true);
-    }
-    // Expand Sales if on leads or bde-tasks
-    if (location.pathname === '/leads' || location.pathname === '/bde-tasks') {
+    // Sales pages
+    else if (location.pathname === '/leads' || location.pathname === '/bde-tasks') {
       setSalesExpanded(true);
+      setOperationsExpanded(false);
     }
   }, [location.pathname, location.search]);
 
@@ -330,8 +330,10 @@ const Sidebar = () => {
               if (isCollapsed) {
                 setIsCollapsed(false);
                 setSalesExpanded(true);
+                setOperationsExpanded(false); // Close other dropdown
               } else {
                 setSalesExpanded(!salesExpanded);
+                if (!salesExpanded) setOperationsExpanded(false); // Close other when opening
               }
             }}
             data-testid="nav-sales"
@@ -393,8 +395,10 @@ const Sidebar = () => {
               if (isCollapsed) {
                 setIsCollapsed(false);
                 setOperationsExpanded(true);
+                setSalesExpanded(false); // Close other dropdown
               } else {
                 setOperationsExpanded(!operationsExpanded);
+                if (!operationsExpanded) setSalesExpanded(false); // Close other when opening
               }
             }}
             data-testid="nav-operations"
