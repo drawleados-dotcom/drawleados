@@ -1594,29 +1594,32 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const years = [2024, 2025, 2026, 2027];
 
-  // Calculate leave balance
-  const casualUsed = leaveBalance?.casual_used || 0;
-  const casualTotal = leaveBalance?.casual_leave || 12;
-  const casualRemaining = casualTotal - casualUsed;
-  
-  const sickUsed = leaveBalance?.sick_used || 0;
-  const sickTotal = leaveBalance?.sick_leave || 6;
-  const sickRemaining = sickTotal - sickUsed;
-  
-  const lopCount = leaveRequests.filter(r => r.leave_type === 'lop' || r.leave_type === 'LOP').length;
-  const totalLeaves = leaveRequests.length;
-
-  // Pending counts for summary
-  const casualPending = leaveRequests.filter(r => r.leave_type === 'casual' && r.status === 'pending').length;
-  const sickPending = leaveRequests.filter(r => r.leave_type === 'sick' && r.status === 'pending').length;
-
-  // Filter leave requests by month/year
+  // Filter leave requests by selected month/year
   const filteredRequests = leaveRequests.filter(r => {
     const reqDate = new Date(r.start_date || r.from_date);
     return reqDate.getMonth() + 1 === selectedMonth && reqDate.getFullYear() === selectedYear;
   });
 
-  // Check if leave type is exhausted
+  // MONTHLY QUOTA SYSTEM: 1 Casual + 1 Sick per month, then LOP
+  // Calculate monthly usage based on approved/pending leaves in selected month
+  const casualUsedThisMonth = filteredRequests.filter(r => 
+    r.leave_type?.toLowerCase() === 'casual' && (r.status === 'approved' || r.status === 'pending')
+  ).length;
+  const sickUsedThisMonth = filteredRequests.filter(r => 
+    r.leave_type?.toLowerCase() === 'sick' && (r.status === 'approved' || r.status === 'pending')
+  ).length;
+  const lopThisMonth = filteredRequests.filter(r => 
+    r.leave_type?.toLowerCase() === 'lop'
+  ).length;
+  
+  // Monthly limits: 1 casual, 1 sick per month
+  const MONTHLY_CASUAL_LIMIT = 1;
+  const MONTHLY_SICK_LIMIT = 1;
+  
+  const casualRemaining = MONTHLY_CASUAL_LIMIT - casualUsedThisMonth;
+  const sickRemaining = MONTHLY_SICK_LIMIT - sickUsedThisMonth;
+
+  // Check if leave type is exhausted for this month
   const isCasualExhausted = casualRemaining <= 0;
   const isSickExhausted = sickRemaining <= 0;
 
@@ -1658,18 +1661,6 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
 
   return (
     <div className="space-y-6">
-      {/* Year Leave Summary - Pending */}
-      <div className="flex gap-4 flex-wrap">
-        <div className={`px-4 py-2 ${bgSecondary} rounded-lg flex items-center gap-2`}>
-          <span className={textSecondary}>Casual Leave Pending:</span>
-          <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{casualPending}</Badge>
-        </div>
-        <div className={`px-4 py-2 ${bgSecondary} rounded-lg flex items-center gap-2`}>
-          <span className={textSecondary}>Sick Leave Pending:</span>
-          <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">{sickPending}</Badge>
-        </div>
-      </div>
-
       {/* Month/Year Filter + Request Button */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-3">
@@ -1677,6 +1668,7 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
             className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+            data-testid="leave-month-filter"
           >
             {months.map((m, idx) => (
               <option key={idx} value={idx + 1}>{m}</option>
@@ -1686,6 +1678,7 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
             value={selectedYear}
             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
             className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+            data-testid="leave-year-filter"
           >
             {years.map(y => (
               <option key={y} value={y}>{y}</option>
@@ -1695,42 +1688,47 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
         <Button 
           onClick={() => setShowModal(true)}
           className="bg-[#10b981] hover:bg-[#059669] text-white"
+          data-testid="request-leave-btn"
         >
           <Send className="mr-2 h-4 w-4" />
           Request Leave
         </Button>
       </div>
 
-      {/* Leave Balance Summary Cards */}
+      {/* Monthly Leave Balance Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className={`${bgCard} border ${borderColor} ${isCasualExhausted ? 'opacity-50' : ''}`}>
+        <Card className={`${bgCard} border ${borderColor} ${isCasualExhausted ? 'opacity-50' : ''}`} data-testid="casual-leave-card">
           <CardContent className="p-4 text-center">
             <p className={`text-xs ${textSecondary} mb-1`}>Casual Leave</p>
             <p className="text-2xl font-bold text-[#6366f1]">
-              {casualUsed}<span className={`text-sm ${textSecondary}`}>/{casualTotal}</span>
+              {casualUsedThisMonth}<span className={`text-sm ${textSecondary}`}>/{MONTHLY_CASUAL_LIMIT}</span>
             </p>
-            {isCasualExhausted && <Badge className="mt-2 bg-red-500/20 text-red-400 text-xs">Exhausted</Badge>}
+            <p className={`text-xs ${textSecondary} mt-1`}>{months[selectedMonth - 1]} {selectedYear}</p>
+            {isCasualExhausted && <Badge className="mt-2 bg-red-500/20 text-red-400 text-xs">Limit Reached</Badge>}
           </CardContent>
         </Card>
-        <Card className={`${bgCard} border ${borderColor} ${isSickExhausted ? 'opacity-50' : ''}`}>
+        <Card className={`${bgCard} border ${borderColor} ${isSickExhausted ? 'opacity-50' : ''}`} data-testid="sick-leave-card">
           <CardContent className="p-4 text-center">
             <p className={`text-xs ${textSecondary} mb-1`}>Sick Leave</p>
             <p className="text-2xl font-bold text-[#f59e0b]">
-              {sickUsed}<span className={`text-sm ${textSecondary}`}>/{sickTotal}</span>
+              {sickUsedThisMonth}<span className={`text-sm ${textSecondary}`}>/{MONTHLY_SICK_LIMIT}</span>
             </p>
-            {isSickExhausted && <Badge className="mt-2 bg-red-500/20 text-red-400 text-xs">Exhausted</Badge>}
+            <p className={`text-xs ${textSecondary} mt-1`}>{months[selectedMonth - 1]} {selectedYear}</p>
+            {isSickExhausted && <Badge className="mt-2 bg-red-500/20 text-red-400 text-xs">Limit Reached</Badge>}
           </CardContent>
         </Card>
-        <Card className={`${bgCard} border ${borderColor}`}>
+        <Card className={`${bgCard} border ${borderColor}`} data-testid="lop-leave-card">
           <CardContent className="p-4 text-center">
             <p className={`text-xs ${textSecondary} mb-1`}>LOP</p>
-            <p className="text-2xl font-bold text-[#ef4444]">{lopCount}</p>
+            <p className="text-2xl font-bold text-[#ef4444]">{lopThisMonth}</p>
+            <p className={`text-xs ${textSecondary} mt-1`}>Deducted</p>
           </CardContent>
         </Card>
-        <Card className={`${bgCard} border ${borderColor}`}>
+        <Card className={`${bgCard} border ${borderColor}`} data-testid="total-leave-card">
           <CardContent className="p-4 text-center">
-            <p className={`text-xs ${textSecondary} mb-1`}>Total Leave</p>
-            <p className="text-2xl font-bold text-[#10b981]">{totalLeaves}</p>
+            <p className={`text-xs ${textSecondary} mb-1`}>Total Leaves</p>
+            <p className="text-2xl font-bold text-[#10b981]">{filteredRequests.length}</p>
+            <p className={`text-xs ${textSecondary} mt-1`}>This Month</p>
           </CardContent>
         </Card>
       </div>
@@ -1810,14 +1808,23 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className={`${bgCard} border ${borderColor} w-full max-w-md`}>
             <CardHeader>
-              <CardTitle className={textPrimary}>Request Leave</CardTitle>
+              <CardTitle className={textPrimary}>Request Leave - {months[selectedMonth - 1]} {selectedYear}</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={onSubmit} className="space-y-4">
-                {/* Leave Type Selection */}
+                {/* Monthly Leave Quota Info */}
+                <div className={`p-3 ${bgSecondary} rounded-lg text-sm ${textSecondary}`}>
+                  <p className="font-medium mb-1">Monthly Quota:</p>
+                  <p>• Casual: {casualUsedThisMonth}/{MONTHLY_CASUAL_LIMIT} used</p>
+                  <p>• Sick: {sickUsedThisMonth}/{MONTHLY_SICK_LIMIT} used</p>
+                  <p className="mt-1 text-xs italic">If both exhausted, LOP will be deducted</p>
+                </div>
+
+                {/* Leave Type Selection - Cascading Logic */}
                 <div>
                   <Label className={textPrimary}>Leave Type</Label>
                   <div className="grid grid-cols-3 gap-2 mt-2">
+                    {/* Casual - Primary option */}
                     <button
                       type="button"
                       onClick={() => !isCasualExhausted && setLeaveForm({...leaveForm, leave_type: 'casual'})}
@@ -1825,14 +1832,16 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                         leaveForm.leave_type === 'casual'
                           ? 'bg-[#6366f1] border-[#6366f1] text-white'
                           : isCasualExhausted
-                          ? `${bgSecondary} ${borderColor} opacity-40 cursor-not-allowed`
+                          ? `${bgSecondary} ${borderColor} opacity-40 cursor-not-allowed line-through`
                           : `${bgSecondary} ${borderColor} ${textPrimary} hover:border-[#6366f1]`
                       }`}
                       disabled={isCasualExhausted}
+                      data-testid="leave-type-casual"
                     >
                       <p className="font-medium">Casual</p>
-                      <p className="text-xs opacity-70">{casualRemaining} left</p>
+                      <p className="text-xs opacity-70">{casualRemaining}/{MONTHLY_CASUAL_LIMIT}</p>
                     </button>
+                    {/* Sick - Secondary option (use after casual exhausted) */}
                     <button
                       type="button"
                       onClick={() => !isSickExhausted && setLeaveForm({...leaveForm, leave_type: 'sick'})}
@@ -1840,14 +1849,16 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                         leaveForm.leave_type === 'sick'
                           ? 'bg-[#f59e0b] border-[#f59e0b] text-white'
                           : isSickExhausted
-                          ? `${bgSecondary} ${borderColor} opacity-40 cursor-not-allowed`
+                          ? `${bgSecondary} ${borderColor} opacity-40 cursor-not-allowed line-through`
                           : `${bgSecondary} ${borderColor} ${textPrimary} hover:border-[#f59e0b]`
                       }`}
                       disabled={isSickExhausted}
+                      data-testid="leave-type-sick"
                     >
                       <p className="font-medium">Sick</p>
-                      <p className="text-xs opacity-70">{sickRemaining} left</p>
+                      <p className="text-xs opacity-70">{sickRemaining}/{MONTHLY_SICK_LIMIT}</p>
                     </button>
+                    {/* LOP - Last resort (always available) */}
                     <button
                       type="button"
                       onClick={() => setLeaveForm({...leaveForm, leave_type: 'lop'})}
@@ -1856,11 +1867,19 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                           ? 'bg-[#ef4444] border-[#ef4444] text-white'
                           : `${bgSecondary} ${borderColor} ${textPrimary} hover:border-[#ef4444]`
                       }`}
+                      data-testid="leave-type-lop"
                     >
                       <p className="font-medium">LOP</p>
                       <p className="text-xs opacity-70">Deducted</p>
                     </button>
                   </div>
+                  {/* Cascading logic hint */}
+                  {isCasualExhausted && !isSickExhausted && (
+                    <p className="text-xs text-[#f59e0b] mt-2">Casual limit reached. Use Sick leave.</p>
+                  )}
+                  {isCasualExhausted && isSickExhausted && (
+                    <p className="text-xs text-[#ef4444] mt-2">Both Casual & Sick exhausted. LOP will be deducted.</p>
+                  )}
                 </div>
 
                 {/* Date Range */}
@@ -2692,6 +2711,20 @@ function PermissionTab({ permissionRequests, onRefresh, formatDate, bgCard, bgSe
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
+  // Month/Year filter state
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const years = [2024, 2025, 2026, 2027];
+
+  // Filter permission requests by selected month/year
+  const filteredRequests = permissionRequests.filter(r => {
+    const reqDate = new Date(r.date);
+    return reqDate.getMonth() + 1 === selectedMonth && reqDate.getFullYear() === selectedYear;
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -2705,16 +2738,37 @@ function PermissionTab({ permissionRequests, onRefresh, formatDate, bgCard, bgSe
     }
   };
 
-  const pendingCount = permissionRequests.filter(r => r.status === 'pending').length;
-  const approvedCount = permissionRequests.filter(r => r.status === 'approved').length;
-  const rejectedCount = permissionRequests.filter(r => r.status === 'rejected').length;
+  const pendingCount = filteredRequests.filter(r => r.status === 'pending').length;
+  const approvedCount = filteredRequests.filter(r => r.status === 'approved').length;
+  const rejectedCount = filteredRequests.filter(r => r.status === 'rejected').length;
 
   return (
     <div className="space-y-6">
-      {/* Header with Request Button */}
-      <div className="flex justify-between items-center">
-        <h2 className={`text-xl font-bold ${textPrimary}`}>Permission Requests</h2>
-        <Button onClick={() => setShowModal(true)} className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
+      {/* Header with Filter and Request Button */}
+      <div className="flex justify-between items-center flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+            className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+            data-testid="permission-month-filter"
+          >
+            {months.map((m, idx) => (
+              <option key={idx} value={idx + 1}>{m}</option>
+            ))}
+          </select>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+            data-testid="permission-year-filter"
+          >
+            {years.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        <Button onClick={() => setShowModal(true)} className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white" data-testid="request-permission-btn">
           <Send className="h-4 w-4 mr-2" />
           Request Permission
         </Button>
@@ -2745,12 +2799,12 @@ function PermissionTab({ permissionRequests, onRefresh, formatDate, bgCard, bgSe
       {/* Requests List */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
-          <CardTitle className={textPrimary}>My Permission Requests</CardTitle>
+          <CardTitle className={textPrimary}>My Permission Requests - {months[selectedMonth - 1]} {selectedYear}</CardTitle>
         </CardHeader>
         <CardContent>
-          {permissionRequests.length > 0 ? (
+          {filteredRequests.length > 0 ? (
             <div className="space-y-3">
-              {permissionRequests.map((req) => (
+              {filteredRequests.map((req) => (
                 <div key={req.permission_id} className={`p-4 ${bgSecondary} rounded-lg`}>
                   <div className="flex justify-between items-start">
                     <div>
@@ -2774,7 +2828,7 @@ function PermissionTab({ permissionRequests, onRefresh, formatDate, bgCard, bgSe
           ) : (
             <div className="text-center py-8">
               <Clock className="h-12 w-12 text-[#3f3f46] mx-auto mb-3" />
-              <p className={textSecondary}>No permission requests found</p>
+              <p className={textSecondary}>No permission requests found for {months[selectedMonth - 1]} {selectedYear}</p>
               <Button onClick={() => setShowModal(true)} className="mt-4 bg-[#8b5cf6] hover:bg-[#7c3aed] text-white">
                 Request Your First Permission
               </Button>
@@ -2872,6 +2926,20 @@ function RemoteTab({ wfhRequests, onRefresh, formatDate, bgCard, bgSecondary, te
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
+  // Month/Year filter state
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const years = [2024, 2025, 2026, 2027];
+
+  // Filter WFH requests by selected month/year
+  const filteredRequests = wfhRequests.filter(r => {
+    const reqDate = new Date(r.date);
+    return reqDate.getMonth() + 1 === selectedMonth && reqDate.getFullYear() === selectedYear;
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -2885,16 +2953,37 @@ function RemoteTab({ wfhRequests, onRefresh, formatDate, bgCard, bgSecondary, te
     }
   };
 
-  const pendingCount = wfhRequests.filter(r => r.status === 'pending').length;
-  const approvedCount = wfhRequests.filter(r => r.status === 'approved').length;
-  const rejectedCount = wfhRequests.filter(r => r.status === 'rejected').length;
+  const pendingCount = filteredRequests.filter(r => r.status === 'pending').length;
+  const approvedCount = filteredRequests.filter(r => r.status === 'approved').length;
+  const rejectedCount = filteredRequests.filter(r => r.status === 'rejected').length;
 
   return (
     <div className="space-y-6">
-      {/* Header with Request Button */}
-      <div className="flex justify-between items-center">
-        <h2 className={`text-xl font-bold ${textPrimary}`}>Work from Home Requests</h2>
-        <Button onClick={() => setShowModal(true)} className="bg-[#10b981] hover:bg-[#059669] text-white">
+      {/* Header with Filter and Request Button */}
+      <div className="flex justify-between items-center flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+            className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+            data-testid="remote-month-filter"
+          >
+            {months.map((m, idx) => (
+              <option key={idx} value={idx + 1}>{m}</option>
+            ))}
+          </select>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+            data-testid="remote-year-filter"
+          >
+            {years.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        <Button onClick={() => setShowModal(true)} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="request-wfh-btn">
           <Home className="h-4 w-4 mr-2" />
           Request WFH
         </Button>
@@ -2925,12 +3014,12 @@ function RemoteTab({ wfhRequests, onRefresh, formatDate, bgCard, bgSecondary, te
       {/* Requests List */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
-          <CardTitle className={textPrimary}>My WFH Requests</CardTitle>
+          <CardTitle className={textPrimary}>My WFH Requests - {months[selectedMonth - 1]} {selectedYear}</CardTitle>
         </CardHeader>
         <CardContent>
-          {wfhRequests.length > 0 ? (
+          {filteredRequests.length > 0 ? (
             <div className="space-y-3">
-              {wfhRequests.map((req) => (
+              {filteredRequests.map((req) => (
                 <div key={req.wfh_id} className={`p-4 ${bgSecondary} rounded-lg`}>
                   <div className="flex justify-between items-start">
                     <div>
@@ -2956,7 +3045,7 @@ function RemoteTab({ wfhRequests, onRefresh, formatDate, bgCard, bgSecondary, te
           ) : (
             <div className="text-center py-8">
               <Home className="h-12 w-12 text-[#3f3f46] mx-auto mb-3" />
-              <p className={textSecondary}>No work from home requests found</p>
+              <p className={textSecondary}>No work from home requests found for {months[selectedMonth - 1]} {selectedYear}</p>
               <Button onClick={() => setShowModal(true)} className="mt-4 bg-[#10b981] hover:bg-[#059669] text-white">
                 Request Your First WFH
               </Button>
@@ -3013,30 +3102,68 @@ function RemoteTab({ wfhRequests, onRefresh, formatDate, bgCard, bgSecondary, te
 
 // ============ Requests Attendance Tab (Login/Early Login/Late Logout) ============
 function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
-  // Filter attendance records that have pending approvals or special status
-  const pendingRecords = attendanceHistory.filter(r => 
+  // Month/Year filter state
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const years = [2024, 2025, 2026, 2027];
+
+  // Filter attendance by selected month/year
+  const filteredHistory = attendanceHistory.filter(r => {
+    const recordDate = new Date(r.date);
+    return recordDate.getMonth() + 1 === selectedMonth && recordDate.getFullYear() === selectedYear;
+  });
+
+  // Filter records based on filtered history
+  const pendingRecords = filteredHistory.filter(r => 
     r.approval_status && r.approval_status.includes('pending')
   );
   
-  const earlyLoginRecords = attendanceHistory.filter(r => 
+  const earlyLoginRecords = filteredHistory.filter(r => 
     r.approval_status === 'pending_early_login' || r.early_login_reason
   );
   
-  const lateLoginRecords = attendanceHistory.filter(r => 
+  const lateLoginRecords = filteredHistory.filter(r => 
     r.late_login_reason || r.approval_status === 'pending_late_login' || 
     (r.clock_in && new Date(`2000-01-01 ${r.clock_in}`) > new Date('2000-01-01 09:15'))
   );
   
-  const lateLogoutRecords = attendanceHistory.filter(r => 
+  const lateLogoutRecords = filteredHistory.filter(r => 
     r.late_logout_reason || (r.clock_out && new Date(`2000-01-01 ${r.clock_out}`) > new Date('2000-01-01 18:30'))
   );
   
-  const earlyLogoutRecords = attendanceHistory.filter(r => 
+  const earlyLogoutRecords = filteredHistory.filter(r => 
     r.approval_status === 'pending_early_logout' || r.early_logout_reason
   );
 
   return (
     <div className="space-y-6">
+      {/* Month/Year Filter */}
+      <div className="flex items-center gap-3">
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+          className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+          data-testid="attendance-req-month-filter"
+        >
+          {months.map((m, idx) => (
+            <option key={idx} value={idx + 1}>{m}</option>
+          ))}
+        </select>
+        <select
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+          className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+          data-testid="attendance-req-year-filter"
+        >
+          {years.map(y => (
+            <option key={y} value={y}>{y}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className={`${bgCard} border ${borderColor}`}>
@@ -3074,7 +3201,7 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
       {/* Attendance Records with Reasons */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
-          <CardTitle className={textPrimary}>Attendance Approvals & Reasons</CardTitle>
+          <CardTitle className={textPrimary}>Attendance Approvals & Reasons - {months[selectedMonth - 1]} {selectedYear}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -3091,7 +3218,7 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
                 </tr>
               </thead>
               <tbody>
-                {attendanceHistory.map((record, index) => {
+                {filteredHistory.map((record, index) => {
                   // Determine the type and reason
                   let type = 'Normal';
                   let typeColor = 'bg-gray-500/20 text-gray-400';
@@ -3141,10 +3268,10 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
                     </tr>
                   );
                 })}
-                {attendanceHistory.length === 0 && (
+                {filteredHistory.length === 0 && (
                   <tr>
                     <td colSpan={7} className={`p-8 text-center ${textSecondary}`}>
-                      No attendance records found
+                      No attendance records found for {months[selectedMonth - 1]} {selectedYear}
                     </td>
                   </tr>
                 )}

@@ -29,26 +29,60 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 ---
 
 ## Implemented Features
-### My Profile / HR Portal Redesign (NEW - April 2026)
+
+### Monthly Leave Quota System (NEW - April 2026)
+**Purpose:** Implemented monthly-based leave quota system with cascading logic for all request sub-tabs.
+
+**Changes:**
+1. **Monthly Leave Quotas:**
+   - Casual Leave: 1 per month (not yearly)
+   - Sick Leave: 1 per month (not yearly)
+   - LOP (Loss of Pay): Deducted when both Casual and Sick are exhausted
+
+2. **Cascading Leave Logic:**
+   - First priority: Use Casual leave (1/month)
+   - Second priority: If Casual exhausted, use Sick leave (1/month)
+   - Last resort: If both exhausted, LOP is deducted
+
+3. **Month/Year Filters on ALL Request Sub-tabs:**
+   - **Attendance**: Filter to show attendance records for selected month/year
+   - **Leave**: Filter to show leave requests and quotas for selected month/year
+   - **Permission**: Filter to show permission requests for selected month/year
+   - **Remote (WFH)**: Filter to show WFH requests for selected month/year
+
+4. **Leave Tab Summary Cards:**
+   - Casual Leave: X/1 (for selected month)
+   - Sick Leave: X/1 (for selected month)
+   - LOP: X (Deducted)
+   - Total Leaves: X (This Month)
+
+5. **Leave Request Modal:**
+   - Title shows selected month/year
+   - Monthly Quota info box displays current usage
+   - Leave type buttons show remaining quota (1/1)
+   - Disabled/crossed-out when limit reached
+   - Helpful messages for cascading logic
+
+**Files Modified:**
+- `/app/frontend/src/pages/HRPage.js` - LeaveTab, RequestsAttendanceTab, PermissionTab, RemoteTab
+
+---
+
+### My Profile / HR Portal Redesign (April 2026)
 **Purpose:** Redesigned HR Portal page with personalized greeting and improved leave/permission management.
 
 **Changes:**
 1. **Title**: Changed from "HR Portal" to "Hi, [Username]" (personalized greeting)
 
-2. **Leave Tab - Two Sub-tabs:**
-   - **Request Leave**: 
-     - Leave Balance card (Casual, Sick, Earned, WFH)
-     - Request Leave button and modal
-     - Status summary cards (Pending, Approved, Rejected)
-     - Leave requests list (clickable for detail popup with timeline)
-   
-   - **Request Permission**:
-     - Permission request header with description
-     - Request Permission button and modal (Date, From/To Time, Hours, Reason)
-     - Status summary cards (Pending, Approved, Rejected)
-     - Permission requests list
+2. **Main Tabs:** Attendance | My Profile | Requests | Payroll | Reviews | Security
 
-3. **Leave Detail Popup**:
+3. **Requests Tab - Four Sub-tabs:**
+   - **Attendance**: Shows attendance approvals/reasons with early/late login/logout tracking
+   - **Leave**: Monthly quota system (Casual 0/1, Sick 0/1, LOP deducted)
+   - **Permission**: Permission requests with hour tracking
+   - **Remote**: Work from Home requests
+
+4. **Leave Detail Popup**:
    - Request summary (type, dates, days, reason)
    - Timeline showing: Request Submitted → HR Review → Approved/Rejected
    - HR Remarks section (if any)
