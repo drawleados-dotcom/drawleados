@@ -467,6 +467,17 @@ const Sidebar = () => {
           {!isCollapsed && 'My Tasks'}
         </Link>
 
+        {/* Our Tasks - Team-wide task management accessible to all */}
+        <Link
+          to="/our-tasks"
+          data-testid="nav-our-tasks"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/our-tasks' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Our Tasks' : ''}
+        >
+          <ClipboardList className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'Our Tasks'}
+        </Link>
+
         {/* 3. Sales - Expandable menu with Leads and BDE Tasks */}
         {(hasAccess('leads') || isBDE || canSeeDepartment('bde')) && (
         <div>

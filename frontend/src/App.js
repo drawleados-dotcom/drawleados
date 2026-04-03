@@ -27,6 +27,7 @@ import SEOBoardPage from './pages/SEOBoardPage';
 import AdminSignupPage from './pages/AdminSignupPage';
 import ProfilePage from './pages/ProfilePage';
 import BDETasksPage from './pages/BDETasksPage';
+import OurTasksPage from './pages/OurTasksPage';
 import CalendarDayDetailPage from './pages/CalendarDayDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import LeaveVerificationPage from './pages/LeaveVerificationPage';
@@ -220,6 +221,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <BDETasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/our-tasks"
+        element={
+          <ProtectedRoute>
+            <OurTasksPage />
           </ProtectedRoute>
         }
       />
