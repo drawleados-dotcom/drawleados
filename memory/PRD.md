@@ -599,3 +599,37 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 **Test Report:**
 - All 8 backend tests passed (iteration_44.json)
 - 100% frontend/backend success rate
+
+---
+
+## Latest Updates (April 2026 - Session 45)
+
+### Tasks Module Sub-tabs Enhancement (DONE)
+- **My Tasks Button**: Added to Tasks Module header, opens personal task view
+- **4 Sub-tabs with count badges**:
+  1. **All** - Shows all tasks
+  2. **Tasks** - Regular tasks (general, follow_up, proposal, call)
+  3. **Meetings** - Meeting type tasks only
+  4. **Review/Approval** - Approval type tasks
+  
+- **Date Filters**:
+  - All Time
+  - Today
+  - This Week
+  - This Month
+  - Date Range (with from/to date pickers)
+
+### Meeting Creation Enhancement (DONE)
+- **Create Task Modal** has 3 type selectors: Task | Meeting | Approval
+- **Meeting-specific fields**:
+  - Meeting Type: Operations Meeting | Client Meeting
+  - Mode: Office | Team | Client | Department | Personal
+  - Format: Online | Offline (radio buttons)
+  - Meeting Link (for Online) or Location (for Offline)
+
+### Sidebar Rename (DONE)
+- "BDE Tasks" → "Business Development"
+
+**Test Report:**
+- All frontend tests passed (iteration_45.json)
+- 100% success rate
