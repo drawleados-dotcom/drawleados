@@ -236,6 +236,112 @@ DEFAULT_WEBSITE_PAGES = [
 
 WEBSITE_STATUS_OPTIONS = ["To-Do", "In Progress", "Client Review", "Client Approved", "Completed", "On Hold"]
 
+WEBSITE_TYPES = ["Landing Page", "Business Website", "Shopify Store", "Web App", "E-commerce", "Portfolio", "Blog", "SaaS", "Corporate"]
+WEBSITE_PLATFORMS = ["WordPress", "Shopify", "Wix", "Webflow", "Framer", "AI Builder", "Custom Code", "React", "Next.js"]
+
+# Default template configurations - MUST be defined before the create_website_project function
+DEFAULT_TEMPLATES = {
+    # Landing Page - Single page only
+    "WordPress_Landing Page": {
+        "default_pages": ["Landing Page"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Content Writing", "Development", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "contact_info", "cta_text"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    "Webflow_Landing Page": {
+        "default_pages": ["Landing Page"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Webflow Development", "Animations", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "features_list", "pricing_plans", "cta_text", "contact_info"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    "Framer_Landing Page": {
+        "default_pages": ["Landing Page"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Framer Development", "Animations", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "features_list", "cta_text", "contact_info"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    "Wix_Landing Page": {
+        "default_pages": ["Landing Page"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Wix Development", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "contact_info"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    "AI Builder_Landing Page": {
+        "default_pages": ["Landing Page"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "AI Generation", "Content Refinement", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "cta_text"],
+        "branding": ["logo", "primary_color", "secondary_color"]
+    },
+    
+    # Business Website - Default multi-page
+    "WordPress_Business Website": {
+        "default_pages": ["Home", "About Us", "Services", "Portfolio", "Team", "Blog", "Contact", "Privacy Policy"],
+        "default_tasks": ["Discovery Call", "Sitemap Planning", "Wireframe Design", "UI Design", "Content Writing", "Development", "SEO Setup", "Testing", "Training", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "team_info", "contact_info", "social_links"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "accent_color", "fonts", "brand_guidelines"]
+    },
+    "Webflow_Business Website": {
+        "default_pages": ["Home", "About Us", "Services", "Portfolio", "Team", "Contact", "Privacy Policy"],
+        "default_tasks": ["Discovery Call", "Sitemap Planning", "Wireframe Design", "UI Design", "Webflow Development", "SEO Setup", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "team_info", "contact_info"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "fonts"]
+    },
+    "Framer_Business Website": {
+        "default_pages": ["Home", "About Us", "Services", "Portfolio", "Contact", "Privacy Policy"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Framer Development", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "contact_info"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    "Wix_Business Website": {
+        "default_pages": ["Home", "About Us", "Services", "Gallery", "Contact", "Privacy Policy"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Wix Development", "SEO Setup", "Testing", "Launch"],
+        "requirements": ["business_name", "tagline", "about_text", "services_list", "contact_info"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    
+    # Shopify Store - E-commerce pages
+    "Shopify_Shopify Store": {
+        "default_pages": ["Home", "About Us", "Shop Page", "Collections Page", "Single Product Page", "Terms and Conditions", "Privacy Policy", "Shipping", "Refund Policy"],
+        "default_tasks": ["Discovery Call", "Store Setup", "Theme Selection", "Product Upload", "Collection Setup", "Payment Setup", "Shipping Setup", "Testing", "Training", "Launch"],
+        "requirements": ["store_name", "tagline", "about_text", "product_categories", "products_list", "shipping_zones", "payment_methods", "contact_info"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "fonts"]
+    },
+    "Shopify_E-commerce": {
+        "default_pages": ["Home", "About Us", "Shop Page", "Collections Page", "Single Product Page", "Terms and Conditions", "Privacy Policy", "Shipping", "Refund Policy"],
+        "default_tasks": ["Discovery Call", "Store Setup", "Theme Selection", "Product Upload", "Collection Setup", "Payment Setup", "Shipping Setup", "Testing", "Training", "Launch"],
+        "requirements": ["store_name", "tagline", "about_text", "product_categories", "products_list", "shipping_zones", "payment_methods"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "fonts"]
+    },
+    
+    # Web App
+    "Custom Code_Web App": {
+        "default_pages": ["Dashboard", "Login", "Register", "Profile", "Settings", "404"],
+        "default_tasks": ["Discovery Call", "Requirements Gathering", "Wireframe Design", "UI Design", "Frontend Development", "Backend Development", "API Integration", "Testing", "Deployment", "Training"],
+        "requirements": ["app_name", "description", "core_features", "user_roles", "integrations", "tech_stack"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "accent_color", "fonts"]
+    },
+    "React_Web App": {
+        "default_pages": ["Dashboard", "Login", "Register", "Profile", "Settings"],
+        "default_tasks": ["Discovery Call", "Requirements Gathering", "Wireframe Design", "UI Design", "React Development", "API Integration", "Testing", "Deployment"],
+        "requirements": ["app_name", "description", "core_features", "user_roles", "api_requirements"],
+        "branding": ["logo", "favicon", "primary_color", "secondary_color", "fonts"]
+    },
+    
+    # Portfolio
+    "Webflow_Portfolio": {
+        "default_pages": ["Home", "About", "Projects", "Contact"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Webflow Development", "Animations", "Testing", "Launch"],
+        "requirements": ["full_name", "tagline", "bio", "skills_list", "projects_list", "contact_info"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    },
+    "Framer_Portfolio": {
+        "default_pages": ["Home", "About", "Work", "Contact"],
+        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Framer Development", "Animations", "Testing", "Launch"],
+        "requirements": ["full_name", "tagline", "bio", "skills_list", "projects_list"],
+        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
+    }
+}
+
 
 @department_router.get("/website/projects")
 async def get_website_projects(
@@ -302,6 +408,22 @@ async def create_website_project(request: Request):
     config_key = f"{platform}_{website_type}"
     default_config = DEFAULT_TEMPLATES.get(config_key, {})
     
+    # If no exact match, try fallback configs
+    if not default_config:
+        # Try with any platform for this website type
+        fallback_configs = {
+            "Landing Page": {"default_pages": ["Landing Page"]},
+            "Business Website": {"default_pages": ["Home", "About Us", "Services", "Portfolio", "Contact", "Privacy Policy"]},
+            "Shopify Store": {"default_pages": ["Home", "About Us", "Shop Page", "Collections Page", "Single Product Page", "Terms and Conditions", "Privacy Policy", "Shipping", "Refund Policy"]},
+            "E-commerce": {"default_pages": ["Home", "About Us", "Shop Page", "Collections Page", "Single Product Page", "Terms and Conditions", "Privacy Policy", "Shipping", "Refund Policy"]},
+            "Web App": {"default_pages": ["Dashboard", "Login", "Register", "Profile", "Settings"]},
+            "Portfolio": {"default_pages": ["Home", "About", "Projects", "Contact"]},
+            "Blog": {"default_pages": ["Home", "Blog", "About", "Contact"]},
+            "SaaS": {"default_pages": ["Home", "Features", "Pricing", "About", "Contact", "Login", "Dashboard"]},
+            "Corporate": {"default_pages": ["Home", "About Us", "Services", "Team", "Careers", "News", "Contact"]}
+        }
+        default_config = fallback_configs.get(website_type, {"default_pages": ["Home", "About", "Contact"]})
+    
     project = {
         "project_id": project_id,
         "name": data.get("name", "New Website Project"),
@@ -338,13 +460,21 @@ async def create_website_project(request: Request):
     
     # Create default pages from template or config
     pages_to_create = data.get("pages", [])
+    import logging
+    logging.info(f"DEBUG: website_type={website_type}, platform={platform}, config_key={config_key}")
+    logging.info(f"DEBUG: default_config keys={list(default_config.keys()) if default_config else 'None'}")
+    logging.info(f"DEBUG: pages from data={pages_to_create}")
+    
     if not pages_to_create:
         if template and template.get("default_pages"):
             pages_to_create = template["default_pages"]
+            logging.info(f"DEBUG: Using template pages: {pages_to_create}")
         elif default_config.get("default_pages"):
             pages_to_create = default_config["default_pages"]
+            logging.info(f"DEBUG: Using default_config pages: {pages_to_create}")
         else:
             pages_to_create = DEFAULT_WEBSITE_PAGES
+            logging.info(f"DEBUG: Using DEFAULT_WEBSITE_PAGES: {pages_to_create}")
     
     for idx, page_name in enumerate(pages_to_create, 1):
         task_id = f"wpt_{uuid.uuid4().hex[:12]}"
@@ -1140,39 +1270,6 @@ async def get_my_tasks(request: Request):
 
 
 # ============== WEBSITE PROJECT TEMPLATES ==============
-
-# Website Types and Platforms Configuration
-WEBSITE_TYPES = ["Landing Page", "Business Website", "Shopify Store", "Web App", "E-commerce", "Portfolio"]
-WEBSITE_PLATFORMS = ["WordPress", "Shopify", "Wix", "Webflow", "Framer", "AI Builder", "Custom Code"]
-
-# Default template configurations
-DEFAULT_TEMPLATES = {
-    "WordPress_Landing Page": {
-        "default_pages": ["Home", "About", "Services", "Contact", "Thank You"],
-        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Content Writing", "Development", "Testing", "Launch"],
-        "requirements": ["business_name", "tagline", "about_text", "services_list", "contact_info", "cta_text"],
-        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
-    },
-    "WordPress_Business Website": {
-        "default_pages": ["Home", "About Us", "Services", "Portfolio", "Team", "Blog", "Contact", "Privacy Policy"],
-        "default_tasks": ["Discovery Call", "Sitemap Planning", "Wireframe Design", "UI Design", "Content Writing", "Development", "SEO Setup", "Testing", "Training", "Launch"],
-        "requirements": ["business_name", "tagline", "about_text", "services_list", "team_info", "contact_info", "social_links"],
-        "branding": ["logo", "favicon", "primary_color", "secondary_color", "accent_color", "fonts", "brand_guidelines"]
-    },
-    "Shopify_Shopify Store": {
-        "default_pages": ["Home", "Collections", "Product Page", "About", "Contact", "FAQ", "Shipping Policy", "Refund Policy"],
-        "default_tasks": ["Discovery Call", "Store Setup", "Theme Selection", "Product Upload", "Collection Setup", "Payment Setup", "Shipping Setup", "Testing", "Training", "Launch"],
-        "requirements": ["store_name", "tagline", "about_text", "product_categories", "products_list", "shipping_zones", "payment_methods", "contact_info"],
-        "branding": ["logo", "favicon", "primary_color", "secondary_color", "fonts"]
-    },
-    "Webflow_Landing Page": {
-        "default_pages": ["Home", "Features", "Pricing", "Contact", "Thank You"],
-        "default_tasks": ["Discovery Call", "Wireframe Design", "UI Design", "Webflow Development", "Animations", "Testing", "Launch"],
-        "requirements": ["business_name", "tagline", "features_list", "pricing_plans", "cta_text", "contact_info"],
-        "branding": ["logo", "primary_color", "secondary_color", "fonts"]
-    }
-}
-
 
 @department_router.get("/website/templates")
 async def get_website_templates(request: Request):

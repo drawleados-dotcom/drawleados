@@ -216,18 +216,38 @@ class ProjectTaskUpdate(BaseModel):
     priority: Optional[str] = None
     status: Optional[str] = None
 
-# ============== DEFAULT PAGES ==============
+# ============== DEFAULT PAGES BY TYPE ==============
 
-DEFAULT_PAGES = [
-    "Home Page",
-    "About Us",
-    "Services",
-    "Projects/Portfolio",
-    "Contact Us",
-    "Blog",
-    "Privacy Policy",
-    "Terms & Conditions"
-]
+# Default pages based on website type
+DEFAULT_PAGES_BY_TYPE = {
+    # Landing Page - Single page only
+    "Landing Page": ["Landing Page"],
+    
+    # Business Website - Standard multi-page
+    "Business Website": ["Home", "About Us", "Services", "Portfolio", "Team", "Blog", "Contact", "Privacy Policy"],
+    
+    # Shopify Store / E-commerce - Full store pages
+    "Shopify Store": ["Home", "About Us", "Shop Page", "Collections Page", "Single Product Page", "Terms and Conditions", "Privacy Policy", "Shipping", "Refund Policy"],
+    "E-commerce": ["Home", "About Us", "Shop Page", "Collections Page", "Single Product Page", "Terms and Conditions", "Privacy Policy", "Shipping", "Refund Policy"],
+    
+    # Web App - Application pages
+    "Web App": ["Dashboard", "Login", "Register", "Profile", "Settings"],
+    
+    # Portfolio - Showcase pages
+    "Portfolio": ["Home", "About", "Projects", "Contact"],
+    
+    # Blog - Content pages
+    "Blog": ["Home", "Blog", "About", "Contact"],
+    
+    # SaaS - Product pages
+    "SaaS": ["Home", "Features", "Pricing", "About", "Contact", "Login", "Dashboard"],
+    
+    # Corporate - Enterprise pages
+    "Corporate": ["Home", "About Us", "Services", "Team", "Careers", "News", "Contact"]
+}
+
+# Fallback default pages (for any unspecified type)
+DEFAULT_PAGES = ["Home", "About Us", "Services", "Contact", "Privacy Policy"]
 
 STATUS_OPTIONS = ["To-Do", "In Progress", "Client Review", "Client Approved", "Completed", "On Hold"]
 
@@ -285,8 +305,12 @@ async def create_project(request: Request, project_data: ProjectCreate):
     
     await db.website_projects.insert_one(project)
     
+    # Get default pages based on website type
+    website_type = project_data.website_type or "Business Website"
+    pages_to_create = DEFAULT_PAGES_BY_TYPE.get(website_type, DEFAULT_PAGES)
+    
     # Create default page tasks
-    for idx, page_name in enumerate(DEFAULT_PAGES, 1):
+    for idx, page_name in enumerate(pages_to_create, 1):
         task_id = f"wpt_{uuid.uuid4().hex[:12]}"
         task = {
             "task_id": task_id,
@@ -314,7 +338,7 @@ async def create_project(request: Request, project_data: ProjectCreate):
         await db.website_page_tasks.insert_one(task)
     
     project.pop("_id", None)
-    return {**project, "pages_created": len(DEFAULT_PAGES)}
+    return {**project, "pages_created": len(pages_to_create)}
 
 @website_projects_router.get("/projects")
 async def get_projects(
