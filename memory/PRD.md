@@ -534,3 +534,38 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Known Issues
 - MongoDB Atlas connection timeout (bypassed with local MongoDB)
+
+---
+
+## Latest Updates (April 2026 - Session 43)
+
+### Enhanced Employee Edit Modal (DONE)
+- **Profile Photo Section**: Avatar with + button for uploading profile picture
+- **4 Comprehensive Tabs**:
+  1. **Basic Details**: Full Name, Email, Phone, Date of Birth, Gender, Blood Group
+  2. **Account Details**: Account Holder Name, Bank Name, Branch, Account Number, IFSC Code, UPI ID, PAN Number, Aadhar Number
+  3. **Employment**: Employee ID, Designation, Department, Employment Type, Joining Date, Reporting Manager, Work Location
+  4. **Address & Emergency**: Street Address, City, State, Pincode, Emergency Contact (Name, Phone, Relation)
+- All fields editable (previously only showed "short details")
+
+### Calendar Sunday Configuration Popup (DONE)
+- Clicking on any Sunday opens a configuration popup
+- **3 Options**:
+  1. **Working Day** (green) - Mark Sunday as a working day
+  2. **Holiday** (purple) - Keep as regular Sunday holiday
+  3. **Team Holiday** (red) - Mark as special team holiday
+- Remarks field (optional) for adding notes
+- Visual indicators: Selected option shows checkmark
+
+### HR Admin Tab Active State (DONE)
+- Active tab now uses `!text-white` class for guaranteed white text
+- Improved contrast on purple background
+
+### Header Task Manager Button Fix (DONE)
+- Responsive design for smaller viewports (768px+)
+- Text hidden on mobile, only icon visible
+- Added `flex-shrink-0` to prevent overflow
+
+### Test Report
+- All 5 features passed testing (iteration_43.json)
+- 100% frontend success rate
