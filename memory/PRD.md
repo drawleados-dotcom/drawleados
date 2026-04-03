@@ -29,6 +29,40 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 ---
 
 ## Implemented Features
+### HR Admin Page Redesign (NEW - April 2026)
+**Purpose:** Reorganized HR Admin page with improved tab structure for better UX.
+
+**New Tab Structure (6 tabs):**
+1. **Attendance** - Date filters (Day/Range/Month/Year), ALL employees list with status (Present/Absent/Yet to Login), click for check-in/check-out popup
+2. **Employees** - Employee management with search and Add Employee
+3. **Designation & Depts** - Combined tab with two sub-tabs:
+   - Designations (role definitions with module access)
+   - Departments (organizational units)
+4. **Approvals** - Combined tab with two sub-tabs:
+   - Pending Approvals (attendance corrections, permissions, leaves)
+   - Leave Requests (all leave requests with filter)
+5. **Payroll Mgmt** - Complete payroll management with salary history and payslip generation
+6. **Calendar** - Combined tab with three sub-tabs:
+   - Calendar View (visual monthly grid with holiday management)
+   - Work Settings (office hours, working days, grace period)
+   - Indian Holidays (national holiday reference)
+
+**Removed Tabs:**
+- Dashboard (consolidated into other tabs)
+- All-Attendance (merged into Attendance)
+- Leave Requests (merged into Approvals)
+- Payslips (merged into Payroll Mgmt)
+- Settings (merged into Calendar as Work Settings)
+
+**New Components:**
+- `EnhancedAttendanceTab` - Full employee attendance view with date filters
+- `DesignationsDeptsTab` - Combined designations and departments management
+- `EnhancedApprovalsTab` - Combined approvals and leave requests
+- `EnhancedCalendarTab` - Visual calendar with work settings and Indian holidays
+
+---
+
+
 
 ### Operations Head Dashboard (NEW - April 2026)
 **Purpose:** Custom restricted view for users with ONLY 'tasks' module access.
