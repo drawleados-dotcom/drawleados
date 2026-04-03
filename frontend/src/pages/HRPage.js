@@ -11,7 +11,8 @@ import { Badge } from '../components/ui/badge';
 import { 
   User, Clock, Calendar, FileText, Award, Download, 
   Home, Building, Square, Send, Shield, Lock, Eye, EyeOff,
-  CheckCircle, XCircle, AlertCircle, ChevronRight, Key, Play
+  CheckCircle, XCircle, AlertCircle, ChevronRight, Key, Play,
+  LayoutGrid, List, X, Trophy, TrendingUp, Target, MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -56,6 +57,9 @@ export default function HRPage() {
   
   // Payslips state
   const [payslips, setPayslips] = useState([]);
+  
+  // Reviews state
+  const [reviews, setReviews] = useState([]);
   
   const [permissionRequests, setPermissionRequests] = useState([]);
   const [wfhRequests, setWfhRequests] = useState([]);
@@ -495,6 +499,8 @@ export default function HRPage() {
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            hoverBg={hoverBg}
+            isDark={isDark}
           />
         )}
 
@@ -2487,87 +2493,546 @@ function PayrollTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCol
   );
 }
 
-function ReviewsTab({ reviews, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
-  const quarters = {
-    'Q1': 'Jan - Mar',
-    'Q2': 'Apr - Jun',
-    'Q3': 'Jul - Sep',
-    'Q4': 'Oct - Dec'
+function ReviewsTab({ reviews, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, hoverBg, isDark }) {
+  // Filter mode: monthly, quarterly, yearly
+  const [filterMode, setFilterMode] = useState('monthly');
+  const [viewMode, setViewMode] = useState('card'); // card or list
+  
+  // Date filter states
+  const currentDate = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [selectedQuarter, setSelectedQuarter] = useState(Math.ceil((currentDate.getMonth() + 1) / 3)); // Q1-Q4
+  
+  // Review detail modal
+  const [selectedReview, setSelectedReview] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const years = [2024, 2025, 2026, 2027];
+  const quarters = [
+    { id: 1, name: 'Q1', months: 'Jan - Mar', monthRange: [1, 2, 3] },
+    { id: 2, name: 'Q2', months: 'Apr - Jun', monthRange: [4, 5, 6] },
+    { id: 3, name: 'Q3', months: 'Jul - Sep', monthRange: [7, 8, 9] },
+    { id: 4, name: 'Q4', months: 'Oct - Dec', monthRange: [10, 11, 12] }
+  ];
+
+  // Reviewer role colors
+  const roleColors = {
+    'CEO': { bg: 'bg-purple-500/20', text: 'text-purple-400', icon: '👑' },
+    'Operations': { bg: 'bg-blue-500/20', text: 'text-blue-400', icon: '⚙️' },
+    'HR': { bg: 'bg-green-500/20', text: 'text-green-400', icon: '👥' },
+    'Project Manager': { bg: 'bg-orange-500/20', text: 'text-orange-400', icon: '📋' },
+    'default': { bg: 'bg-gray-500/20', text: 'text-gray-400', icon: '📝' }
+  };
+
+  // Filter reviews based on mode and selected filters
+  const filteredReviews = reviews.filter(review => {
+    const reviewDate = new Date(review.created_at || review.review_date || `${review.year}-01-01`);
+    const reviewMonth = reviewDate.getMonth() + 1;
+    const reviewYear = review.year || reviewDate.getFullYear();
+
+    if (filterMode === 'monthly') {
+      // For monthly filter, check if review has a month or was created in that month
+      if (review.review_month) {
+        return review.review_month === selectedMonth && reviewYear === selectedYear;
+      }
+      return reviewMonth === selectedMonth && reviewYear === selectedYear;
+    } else if (filterMode === 'quarterly') {
+      const quarterData = quarters.find(q => q.id === selectedQuarter);
+      if (review.quarter) {
+        const reviewQuarter = parseInt(review.quarter.replace('Q', ''));
+        return reviewQuarter === selectedQuarter && reviewYear === selectedYear;
+      }
+      return quarterData?.monthRange.includes(reviewMonth) && reviewYear === selectedYear;
+    } else {
+      // Yearly
+      return reviewYear === selectedYear;
+    }
+  });
+
+  // Get reviewer role info
+  const getRoleInfo = (role) => {
+    return roleColors[role] || roleColors['default'];
+  };
+
+  // Open review detail popup
+  const handleViewDetails = (review) => {
+    setSelectedReview(review);
+    setShowDetailModal(true);
+  };
+
+  // Render star rating
+  const renderStars = (rating) => {
+    return (
+      <div className="flex items-center gap-0.5">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <span key={star} className={`text-lg ${star <= rating ? 'text-yellow-400' : 'text-[#3f3f46]'}`}>
+            ★
+          </span>
+        ))}
+        <span className={`ml-2 text-sm font-medium ${textPrimary}`}>{rating}/5</span>
+      </div>
+    );
   };
 
   return (
     <div className="space-y-6">
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardHeader>
-          <CardTitle className={textPrimary}>Performance Reviews</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {reviews.length > 0 ? (
-            <div className="space-y-4">
-              {reviews.map((review) => (
-                <div key={review.review_id} className={`p-4 ${bgSecondary} rounded-lg`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-[#6366f1]/20 flex items-center justify-center">
-                        <Award className="h-5 w-5 text-[#6366f1]" />
+      {/* Filter Mode Tabs: Monthly | Quarterly | Yearly */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className={`flex rounded-lg ${bgSecondary} p-1`}>
+          {['monthly', 'quarterly', 'yearly'].map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setFilterMode(mode)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all capitalize ${
+                filterMode === mode
+                  ? 'bg-[#6366f1] text-white'
+                  : `${textSecondary} ${hoverBg || 'hover:bg-gray-200'}`
+              }`}
+              data-testid={`review-filter-${mode}`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+
+        {/* View Mode Toggle */}
+        <div className={`flex rounded-lg ${bgSecondary} p-1`}>
+          <button
+            onClick={() => setViewMode('card')}
+            className={`px-3 py-2 rounded-md transition-all ${
+              viewMode === 'card' ? 'bg-[#10b981] text-white' : `${textSecondary} ${hoverBg || 'hover:bg-gray-200'}`
+            }`}
+            data-testid="review-view-card"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`px-3 py-2 rounded-md transition-all ${
+              viewMode === 'list' ? 'bg-[#10b981] text-white' : `${textSecondary} ${hoverBg || 'hover:bg-gray-200'}`
+            }`}
+            data-testid="review-view-list"
+          >
+            <List className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Date Filters based on Mode */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {filterMode === 'monthly' && (
+          <>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+              className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+              data-testid="review-month-filter"
+            >
+              {months.map((m, idx) => (
+                <option key={idx} value={idx + 1}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+              data-testid="review-year-filter"
+            >
+              {years.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </>
+        )}
+
+        {filterMode === 'quarterly' && (
+          <>
+            <div className={`flex rounded-lg ${bgSecondary} p-1`}>
+              {quarters.map((q) => (
+                <button
+                  key={q.id}
+                  onClick={() => setSelectedQuarter(q.id)}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    selectedQuarter === q.id
+                      ? 'bg-[#8b5cf6] text-white'
+                      : `${textSecondary} ${hoverBg || 'hover:bg-gray-200'}`
+                  }`}
+                  data-testid={`review-quarter-${q.name}`}
+                >
+                  {q.name}
+                  <span className={`text-xs ml-1 ${selectedQuarter === q.id ? 'text-white/70' : textSecondary}`}>
+                    ({q.months})
+                  </span>
+                </button>
+              ))}
+            </div>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+              data-testid="review-year-filter-quarterly"
+            >
+              {years.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </>
+        )}
+
+        {filterMode === 'yearly' && (
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+            className={`px-3 py-2 ${bgSecondary} ${textPrimary} border ${borderColor} rounded-lg`}
+            data-testid="review-year-filter-yearly"
+          >
+            {years.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        )}
+
+        <div className={`ml-auto px-3 py-2 ${bgSecondary} rounded-lg`}>
+          <span className={textSecondary}>Found: </span>
+          <span className={`font-bold ${textPrimary}`}>{filteredReviews.length}</span>
+          <span className={textSecondary}> reviews</span>
+        </div>
+      </div>
+
+      {/* Reviews Content */}
+      {filteredReviews.length > 0 ? (
+        viewMode === 'card' ? (
+          /* Card View */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredReviews.map((review) => {
+              const roleInfo = getRoleInfo(review.reviewer_role || 'default');
+              return (
+                <Card 
+                  key={review.review_id} 
+                  className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#6366f1] transition-all`}
+                  onClick={() => handleViewDetails(review)}
+                >
+                  <CardContent className="p-4">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-10 w-10 rounded-lg ${roleInfo.bg} flex items-center justify-center text-xl`}>
+                          {roleInfo.icon}
+                        </div>
+                        <div>
+                          <p className={`font-semibold ${textPrimary}`}>{review.reviewer_name}</p>
+                          <Badge className={`${roleInfo.bg} ${roleInfo.text} text-xs`}>
+                            {review.reviewer_role || 'Reviewer'}
+                          </Badge>
+                        </div>
                       </div>
-                      <div>
-                        <p className={`font-semibold ${textPrimary}`}>{review.quarter} {review.year}</p>
-                        <p className={`text-xs ${textSecondary}`}>{quarters[review.quarter]}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
                       <Badge className={`${
                         review.status === 'acknowledged' ? 'bg-green-500/20 text-green-400' :
                         review.status === 'submitted' ? 'bg-blue-500/20 text-blue-400' :
-                        'bg-gray-500/20 text-gray-400'
+                        'bg-yellow-500/20 text-yellow-400'
                       }`}>
-                        {review.status}
+                        {review.status || 'pending'}
                       </Badge>
-                      {review.overall_rating > 0 && (
-                        <div className="flex items-center gap-1 mt-1 justify-end">
+                    </div>
+
+                    {/* Period */}
+                    <div className={`mb-3 p-2 ${bgSecondary} rounded`}>
+                      <p className={`text-xs ${textSecondary}`}>Review Period</p>
+                      <p className={`font-medium ${textPrimary}`}>
+                        {review.quarter ? `${review.quarter} ${review.year}` : 
+                         review.review_month ? `${months[review.review_month - 1]} ${review.year}` :
+                         review.year}
+                      </p>
+                    </div>
+
+                    {/* Rating */}
+                    {review.overall_rating > 0 && (
+                      <div className="mb-3">
+                        {renderStars(review.overall_rating)}
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    {review.summary && (
+                      <p className={`text-sm ${textSecondary} line-clamp-2 mb-3`}>
+                        {review.summary}
+                      </p>
+                    )}
+
+                    {/* View Details Button */}
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="w-full text-[#6366f1] hover:bg-[#6366f1]/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewDetails(review);
+                      }}
+                    >
+                      View Full Review <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          /* List View */
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className={`border-b ${borderColor}`}>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Reviewer</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Role</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Period</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Rating</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Status</th>
+                      <th className={`text-left p-4 ${textSecondary} text-sm font-medium`}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredReviews.map((review) => {
+                      const roleInfo = getRoleInfo(review.reviewer_role || 'default');
+                      return (
+                        <tr 
+                          key={review.review_id} 
+                          className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/50' : 'hover:bg-gray-50'} cursor-pointer`}
+                          onClick={() => handleViewDetails(review)}
+                        >
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <div className={`h-8 w-8 rounded-lg ${roleInfo.bg} flex items-center justify-center`}>
+                                {roleInfo.icon}
+                              </div>
+                              <span className={`font-medium ${textPrimary}`}>{review.reviewer_name}</span>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <Badge className={`${roleInfo.bg} ${roleInfo.text}`}>
+                              {review.reviewer_role || 'Reviewer'}
+                            </Badge>
+                          </td>
+                          <td className={`p-4 ${textPrimary}`}>
+                            {review.quarter ? `${review.quarter} ${review.year}` : 
+                             review.review_month ? `${months[review.review_month - 1]} ${review.year}` :
+                             review.year}
+                          </td>
+                          <td className="p-4">
+                            {review.overall_rating > 0 ? (
+                              <div className="flex items-center gap-1">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <span key={star} className={`text-sm ${star <= review.overall_rating ? 'text-yellow-400' : 'text-[#3f3f46]'}`}>
+                                    ★
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className={textSecondary}>-</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            <Badge className={`${
+                              review.status === 'acknowledged' ? 'bg-green-500/20 text-green-400' :
+                              review.status === 'submitted' ? 'bg-blue-500/20 text-blue-400' :
+                              'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {review.status || 'pending'}
+                            </Badge>
+                          </td>
+                          <td className="p-4">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-[#6366f1]"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewDetails(review);
+                              }}
+                            >
+                              <Eye className="h-4 w-4 mr-1" /> View
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      ) : (
+        /* Empty State */
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="py-12 text-center">
+            <Award className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
+            <p className={`text-lg font-medium ${textPrimary} mb-2`}>No reviews found</p>
+            <p className={`text-sm ${textSecondary}`}>
+              {filterMode === 'monthly' && `No reviews for ${months[selectedMonth - 1]} ${selectedYear}`}
+              {filterMode === 'quarterly' && `No reviews for Q${selectedQuarter} ${selectedYear}`}
+              {filterMode === 'yearly' && `No reviews for ${selectedYear}`}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Review Detail Modal */}
+      {showDetailModal && selectedReview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[90vh] overflow-y-auto`}>
+            <CardHeader className="sticky top-0 z-10 bg-inherit border-b border-[#27272a]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`h-12 w-12 rounded-lg ${getRoleInfo(selectedReview.reviewer_role).bg} flex items-center justify-center text-2xl`}>
+                    {getRoleInfo(selectedReview.reviewer_role).icon}
+                  </div>
+                  <div>
+                    <CardTitle className={textPrimary}>Performance Review</CardTitle>
+                    <p className={`text-sm ${textSecondary}`}>
+                      {selectedReview.quarter ? `${selectedReview.quarter} ${selectedReview.year}` : 
+                       selectedReview.review_month ? `${months[selectedReview.review_month - 1]} ${selectedReview.year}` :
+                       selectedReview.year}
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setShowDetailModal(false)}
+                  className={`${textSecondary} hover:${textPrimary}`}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              {/* Reviewer Info */}
+              <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                <p className={`text-xs ${textSecondary} mb-2`}>Reviewed By</p>
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-full ${getRoleInfo(selectedReview.reviewer_role).bg} flex items-center justify-center`}>
+                    {selectedReview.reviewer_name?.charAt(0) || 'R'}
+                  </div>
+                  <div>
+                    <p className={`font-medium ${textPrimary}`}>{selectedReview.reviewer_name}</p>
+                    <Badge className={`${getRoleInfo(selectedReview.reviewer_role).bg} ${getRoleInfo(selectedReview.reviewer_role).text}`}>
+                      {selectedReview.reviewer_role || 'Reviewer'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Overall Rating */}
+              {selectedReview.overall_rating > 0 && (
+                <div className={`p-4 ${bgSecondary} rounded-lg text-center`}>
+                  <p className={`text-xs ${textSecondary} mb-2`}>Overall Rating</p>
+                  <div className="flex items-center justify-center gap-1 text-3xl">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <span key={star} className={star <= selectedReview.overall_rating ? 'text-yellow-400' : 'text-[#3f3f46]'}>
+                        ★
+                      </span>
+                    ))}
+                  </div>
+                  <p className={`text-lg font-bold ${textPrimary} mt-1`}>{selectedReview.overall_rating}/5</p>
+                </div>
+              )}
+
+              {/* Category Ratings */}
+              {selectedReview.ratings && (
+                <div className="space-y-3">
+                  <p className={`text-sm font-medium ${textPrimary}`}>Category Ratings</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {Object.entries(selectedReview.ratings).map(([category, rating]) => (
+                      <div key={category} className={`p-3 ${bgSecondary} rounded-lg`}>
+                        <p className={`text-xs ${textSecondary} capitalize`}>{category.replace(/_/g, ' ')}</p>
+                        <div className="flex items-center gap-1 mt-1">
                           {[1, 2, 3, 4, 5].map((star) => (
-                            <span key={star} className={star <= review.overall_rating ? 'text-yellow-400' : 'text-[#3f3f46]'}>
+                            <span key={star} className={`text-sm ${star <= rating ? 'text-yellow-400' : 'text-[#3f3f46]'}`}>
                               ★
                             </span>
                           ))}
+                          <span className={`ml-2 text-sm ${textPrimary}`}>{rating}/5</span>
                         </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {review.achievements && (
-                    <div className="mb-2">
-                      <p className={`text-xs ${textSecondary} mb-1`}>Achievements</p>
-                      <p className={`text-sm ${textPrimary}`}>{review.achievements}</p>
-                    </div>
-                  )}
-                  
-                  {review.areas_of_improvement && (
-                    <div className="mb-2">
-                      <p className={`text-xs ${textSecondary} mb-1`}>Areas of Improvement</p>
-                      <p className={`text-sm ${textPrimary}`}>{review.areas_of_improvement}</p>
-                    </div>
-                  )}
-                  
-                  <div className={`flex justify-between items-center mt-3 pt-3 border-t ${borderColor}`}>
-                    <p className={`text-xs ${textSecondary}`}>Reviewed by: {review.reviewer_name}</p>
-                    <Button variant="ghost" size="sm" className="text-[#6366f1]">
-                      View Details <ChevronRight className="ml-1 h-4 w-4" />
-                    </Button>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <Award className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
-              <p className={textSecondary}>No performance reviews yet</p>
-              <p className={`text-sm ${textSecondary}`}>Your quarterly reviews will appear here</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              )}
+
+              {/* Achievements */}
+              {selectedReview.achievements && (
+                <div>
+                  <p className={`text-sm font-medium ${textPrimary} mb-2 flex items-center gap-2`}>
+                    <Trophy className="h-4 w-4 text-yellow-400" /> Achievements
+                  </p>
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <p className={`${textPrimary}`}>{selectedReview.achievements}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Areas of Improvement */}
+              {selectedReview.areas_of_improvement && (
+                <div>
+                  <p className={`text-sm font-medium ${textPrimary} mb-2 flex items-center gap-2`}>
+                    <TrendingUp className="h-4 w-4 text-blue-400" /> Areas of Improvement
+                  </p>
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <p className={`${textPrimary}`}>{selectedReview.areas_of_improvement}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Goals */}
+              {selectedReview.goals && (
+                <div>
+                  <p className={`text-sm font-medium ${textPrimary} mb-2 flex items-center gap-2`}>
+                    <Target className="h-4 w-4 text-green-400" /> Goals for Next Period
+                  </p>
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <p className={`${textPrimary}`}>{selectedReview.goals}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Comments */}
+              {selectedReview.comments && (
+                <div>
+                  <p className={`text-sm font-medium ${textPrimary} mb-2 flex items-center gap-2`}>
+                    <MessageSquare className="h-4 w-4 text-purple-400" /> Additional Comments
+                  </p>
+                  <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                    <p className={`${textPrimary}`}>{selectedReview.comments}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Status */}
+              <div className={`flex items-center justify-between p-4 ${bgSecondary} rounded-lg`}>
+                <div>
+                  <p className={`text-xs ${textSecondary}`}>Status</p>
+                  <Badge className={`mt-1 ${
+                    selectedReview.status === 'acknowledged' ? 'bg-green-500/20 text-green-400' :
+                    selectedReview.status === 'submitted' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-yellow-500/20 text-yellow-400'
+                  }`}>
+                    {selectedReview.status || 'Pending'}
+                  </Badge>
+                </div>
+                {selectedReview.status !== 'acknowledged' && (
+                  <Button className="bg-[#10b981] hover:bg-[#059669] text-white">
+                    <CheckCircle className="h-4 w-4 mr-2" /> Acknowledge Review
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
