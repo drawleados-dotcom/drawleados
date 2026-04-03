@@ -14,7 +14,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Progress } from '../components/ui/progress';
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
-  Trash2, Edit2, X, Briefcase,
+  Trash2, Edit2, X, Briefcase, XCircle, CreditCard,
   Play, Pause, Square, Timer, Eye, Link as LinkIcon, Filter,
   ChevronRight, ArrowLeft, FileSpreadsheet, ExternalLink,
   Search, Building2, Layers, LayoutGrid, List, FileText,
@@ -105,6 +105,13 @@ export default function TasksModulePage() {
     approval_type: '', // review, approval
     approval_for: '' // user_id who needs to approve
   });
+  
+  // Pending approvals state
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [selectedApproval, setSelectedApproval] = useState(null);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [approvalRemarks, setApprovalRemarks] = useState('');
   
   // Motivational quotes (31 positive 3-word quotes)
   const motivationalQuotes = [
@@ -291,6 +298,83 @@ export default function TasksModulePage() {
     setMyTasksLoading(false);
   }, []);
 
+  // Load pending approvals from various departments
+  const loadPendingApprovals = useCallback(async () => {
+    setApprovalsLoading(true);
+    try {
+      // Get salary approvals pending CEO review
+      const salaryRes = await axios.get(`${API}/api/hr/admin/payslips?status=ceo_review`, { headers });
+      const salaryApprovals = (salaryRes.data || []).map(p => ({
+        approval_id: p.payslip_id,
+        type: 'salary',
+        title: `Salary Approval - ${p.employee_name}`,
+        description: `${new Date(0, p.month - 1).toLocaleString('default', { month: 'long' })} ${p.year} Payslip`,
+        department: 'HR',
+        amount: p.net_salary,
+        status: p.status,
+        requested_by: p.created_by_name || 'HR Admin',
+        created_at: p.created_at,
+        data: p
+      }));
+      
+      // Get task approvals
+      const taskApprovals = myTasks
+        .filter(t => t.type === 'approval' || t.needs_approval)
+        .map(t => ({
+          approval_id: t.task_id,
+          type: 'task',
+          title: t.task_name,
+          description: t.description,
+          department: t.department || 'General',
+          status: t.status,
+          requested_by: t.created_by_name || 'Unknown',
+          created_at: t.created_at,
+          data: t
+        }));
+      
+      setPendingApprovals([...salaryApprovals, ...taskApprovals]);
+    } catch (error) {
+      console.error('Error loading approvals:', error);
+      setPendingApprovals([]);
+    }
+    setApprovalsLoading(false);
+  }, [myTasks]);
+
+  // Handle approval action
+  const handleApprovalAction = async (approval, action, remarks) => {
+    try {
+      if (approval.type === 'salary') {
+        // Handle salary approval
+        const endpoint = action === 'approve' 
+          ? `${API}/api/hr/admin/payslip/${approval.approval_id}/ceo-approve`
+          : `${API}/api/hr/admin/payslip/${approval.approval_id}/reject`;
+        
+        await axios.post(endpoint, { 
+          remarks,
+          ...(action === 'approve' ? { ceo_remarks: remarks } : { rejection_reason: remarks })
+        }, { headers });
+        
+        toast.success(`Payslip ${action}d successfully`);
+      } else {
+        // Handle task approval
+        await axios.put(`${API}/api/bde/tasks/${approval.approval_id}`, {
+          status: action === 'approve' ? 'completed' : 'rejected',
+          approval_remarks: remarks
+        }, { headers });
+        
+        toast.success(`Task ${action}d successfully`);
+      }
+      
+      setShowApprovalModal(false);
+      setSelectedApproval(null);
+      setApprovalRemarks('');
+      loadPendingApprovals();
+      loadMyTasks();
+    } catch (error) {
+      toast.error(`Failed to ${action} approval`);
+    }
+  };
+
   // Create my task
   const handleCreateMyTask = async () => {
     if (!myTaskForm.task_name.trim()) {
@@ -382,7 +466,7 @@ export default function TasksModulePage() {
     all: myTasks.length,
     tasks: myTasks.filter(t => t.type !== 'meeting' && t.type !== 'approval' && !t.needs_approval).length,
     meetings: myTasks.filter(t => t.type === 'meeting').length,
-    approvals: myTasks.filter(t => t.type === 'approval' || t.needs_approval).length
+    approvals: pendingApprovals.length || myTasks.filter(t => t.type === 'approval' || t.needs_approval).length
   };
 
   // ========== WEBSITE SPECIFIC FUNCTIONS ==========
@@ -437,6 +521,13 @@ export default function TasksModulePage() {
       loadMyTasks();
     }
   }, [view, loadMyTasks]);
+
+  // Load approvals when switching to approvals tab
+  useEffect(() => {
+    if (myTasksSubTab === 'approvals') {
+      loadPendingApprovals();
+    }
+  }, [myTasksSubTab, loadPendingApprovals]);
 
   useEffect(() => {
     if (selectedDepartment) {
@@ -1027,6 +1118,54 @@ export default function TasksModulePage() {
                 </div>
               </div>
 
+              {/* Stats Cards */}
+              <div className="grid grid-cols-4 gap-4 mb-6">
+                <Card className={`${bgCard} border ${borderColor} p-4`}>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-[#6366f1]/20 flex items-center justify-center">
+                      <Briefcase className="h-5 w-5 text-[#6366f1]" />
+                    </div>
+                    <div>
+                      <p className={`text-2xl font-bold ${textPrimary}`}>{myTasksStats.all}</p>
+                      <p className={`text-sm ${textSecondary}`}>Total Tasks</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className={`${bgCard} border ${borderColor} p-4`}>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-[#f59e0b]/20 flex items-center justify-center">
+                      <Clock className="h-5 w-5 text-[#f59e0b]" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-[#f59e0b]">{myTasks.filter(t => t.status === 'pending').length}</p>
+                      <p className={`text-sm ${textSecondary}`}>Pending</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className={`${bgCard} border ${borderColor} p-4`}>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-[#3b82f6]/20 flex items-center justify-center">
+                      <Timer className="h-5 w-5 text-[#3b82f6]" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-[#3b82f6]">{myTasks.filter(t => t.status === 'in_progress').length}</p>
+                      <p className={`text-sm ${textSecondary}`}>In Progress</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className={`${bgCard} border ${borderColor} p-4`}>
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-[#10b981]/20 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-[#10b981]" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-[#10b981]">{myTasks.filter(t => t.status === 'completed').length}</p>
+                      <p className={`text-sm ${textSecondary}`}>Completed</p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
               {/* Main Tabs: All | Tasks | Meetings | Review/Approval */}
               <div className={`flex rounded-lg ${bgCard} border ${borderColor} p-1 w-fit`}>
                 {[
@@ -1139,7 +1278,7 @@ export default function TasksModulePage() {
               )}
 
               {/* Date Filters for non-tasks tabs */}
-              {myTasksSubTab !== 'tasks' && (
+              {myTasksSubTab !== 'tasks' && myTasksSubTab !== 'approvals' && (
                 <div className="flex items-center gap-2">
                   <Select value={myTasksDateFilter} onValueChange={setMyTasksDateFilter}>
                     <SelectTrigger className={`w-36 ${bgCard} ${borderColor}`}>
@@ -1175,8 +1314,119 @@ export default function TasksModulePage() {
                 </div>
               )}
 
-              {/* Tasks List */}
-              {myTasksLoading ? (
+              {/* Approvals Tab Content */}
+              {myTasksSubTab === 'approvals' && (
+                <div className="space-y-4">
+                  {approvalsLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="animate-spin h-8 w-8 border-2 border-[#6366f1] border-t-transparent rounded-full" />
+                    </div>
+                  ) : pendingApprovals.length === 0 ? (
+                    <Card className={`${bgCard} border ${borderColor}`}>
+                      <div className="p-12 text-center">
+                        <ClipboardCheck className={`h-16 w-16 mx-auto mb-4 ${textSecondary}`} />
+                        <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>No pending approvals</h3>
+                        <p className={textSecondary}>All caught up! Check back later for new approval requests.</p>
+                      </div>
+                    </Card>
+                  ) : (
+                    <div className="space-y-4">
+                      {pendingApprovals.map(approval => (
+                        <Card key={approval.approval_id} className={`${bgCard} border ${borderColor} hover:border-[#f59e0b]/50 transition-all`}>
+                          <CardContent className="p-5">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  {approval.type === 'salary' ? (
+                                    <div className="h-10 w-10 rounded-lg bg-[#10b981]/20 flex items-center justify-center">
+                                      <CreditCard className="h-5 w-5 text-[#10b981]" />
+                                    </div>
+                                  ) : (
+                                    <div className="h-10 w-10 rounded-lg bg-[#f59e0b]/20 flex items-center justify-center">
+                                      <ClipboardCheck className="h-5 w-5 text-[#f59e0b]" />
+                                    </div>
+                                  )}
+                                  <div>
+                                    <h4 className={`font-medium ${textPrimary}`}>{approval.title}</h4>
+                                    <p className={`text-sm ${textSecondary}`}>{approval.description}</p>
+                                  </div>
+                                  <Badge variant="outline" className="text-[#6366f1] border-[#6366f1] ml-auto">
+                                    {approval.department}
+                                  </Badge>
+                                </div>
+                                
+                                {/* Preview Summary */}
+                                <div className={`mt-4 p-4 rounded-lg ${bgSecondary}`}>
+                                  {approval.type === 'salary' && approval.data && (
+                                    <div className="grid grid-cols-4 gap-4 text-sm">
+                                      <div>
+                                        <p className={textSecondary}>Employee</p>
+                                        <p className={`font-medium ${textPrimary}`}>{approval.data.employee_name}</p>
+                                      </div>
+                                      <div>
+                                        <p className={textSecondary}>Period</p>
+                                        <p className={`font-medium ${textPrimary}`}>
+                                          {new Date(0, approval.data.month - 1).toLocaleString('default', { month: 'short' })} {approval.data.year}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className={textSecondary}>Net Salary</p>
+                                        <p className="font-medium text-[#10b981]">₹{approval.data.net_salary?.toLocaleString()}</p>
+                                      </div>
+                                      <div>
+                                        <p className={textSecondary}>Days Present</p>
+                                        <p className={`font-medium ${textPrimary}`}>{approval.data.attendance?.days_present || 0}</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                  {approval.type !== 'salary' && (
+                                    <div className="text-sm">
+                                      <p className={textSecondary}>Requested by: <span className={textPrimary}>{approval.requested_by}</span></p>
+                                      {approval.data?.description && (
+                                        <p className={`mt-2 ${textPrimary}`}>{approval.data.description}</p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                <div className={`flex items-center gap-4 mt-4 text-sm ${textSecondary}`}>
+                                  <span>From: {approval.requested_by}</span>
+                                  <span>•</span>
+                                  <span>{new Date(approval.created_at).toLocaleDateString()}</span>
+                                </div>
+                              </div>
+                              
+                              {/* Actions */}
+                              <div className="flex flex-col gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => { setSelectedApproval(approval); setShowApprovalModal(true); }}
+                                  className="bg-[#10b981] hover:bg-[#059669] text-white"
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                                  Review & Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => { setSelectedApproval({ ...approval, action: 'reject' }); setShowApprovalModal(true); }}
+                                  className="text-red-500 border-red-500 hover:bg-red-500/10"
+                                >
+                                  <XCircle className="h-4 w-4 mr-1" />
+                                  Reject
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tasks List - for All, Tasks, Meetings tabs */}
+              {myTasksSubTab !== 'approvals' && (myTasksLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="animate-spin h-8 w-8 border-2 border-[#6366f1] border-t-transparent rounded-full" />
                 </div>
@@ -1278,7 +1528,7 @@ export default function TasksModulePage() {
                     </Card>
                   ))}
                 </div>
-              )}
+              ))}
             </div>
           )}
 
@@ -2640,6 +2890,44 @@ export default function TasksModulePage() {
                   </div>
                 </div>
 
+                {/* Department & Status Row */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Department</Label>
+                    <Select value={myTaskForm.department || ''} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, department: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="finance">Finance</SelectItem>
+                        <SelectItem value="hr">HR</SelectItem>
+                        <SelectItem value="seo">SEO</SelectItem>
+                        <SelectItem value="social_media">Social Media</SelectItem>
+                        <SelectItem value="bde">Business Development</SelectItem>
+                        <SelectItem value="operations">Operations</SelectItem>
+                        <SelectItem value="meta">Meta</SelectItem>
+                        <SelectItem value="website">Website</SelectItem>
+                        <SelectItem value="erp">ERP</SelectItem>
+                        <SelectItem value="design">Design</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Status</Label>
+                    <Select value={myTaskForm.status} onValueChange={(v) => setMyTaskForm({ ...myTaskForm, status: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="on_hold">On Hold</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 {/* Meeting Specific Fields */}
                 {myTaskForm.type === 'meeting' && (
                   <div className={`p-4 rounded-lg ${bgSecondary} space-y-4`}>
@@ -2774,6 +3062,100 @@ export default function TasksModulePage() {
                 <Button onClick={handleCreateMyTask} className="bg-[#6366f1] hover:bg-[#4f46e5]">
                   {myTaskForm.type === 'meeting' ? 'Schedule Meeting' : myTaskForm.type === 'approval' ? 'Request Approval' : 'Create Task'}
                 </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Approval Review Modal */}
+        {showApprovalModal && selectedApproval && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg`}>
+              <CardHeader>
+                <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                  {selectedApproval.action === 'reject' ? (
+                    <XCircle className="h-5 w-5 text-red-500" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5 text-[#10b981]" />
+                  )}
+                  {selectedApproval.action === 'reject' ? 'Reject' : 'Review & Approve'}: {selectedApproval.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Approval Summary */}
+                <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge variant="outline" className="text-[#6366f1] border-[#6366f1]">{selectedApproval.department}</Badge>
+                    <Badge variant="outline">{selectedApproval.type}</Badge>
+                  </div>
+                  <p className={textSecondary}>{selectedApproval.description}</p>
+                  
+                  {selectedApproval.type === 'salary' && selectedApproval.data && (
+                    <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
+                      <div>
+                        <p className={textSecondary}>Employee</p>
+                        <p className={`font-medium ${textPrimary}`}>{selectedApproval.data.employee_name}</p>
+                      </div>
+                      <div>
+                        <p className={textSecondary}>Net Salary</p>
+                        <p className="font-medium text-[#10b981]">₹{selectedApproval.data.net_salary?.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className={textSecondary}>Days Present</p>
+                        <p className={`font-medium ${textPrimary}`}>{selectedApproval.data.attendance?.days_present || 0}</p>
+                      </div>
+                      <div>
+                        <p className={textSecondary}>Operations Review</p>
+                        <p className={`font-medium ${textPrimary}`}>{selectedApproval.data.operations_review?.remarks || 'N/A'}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Remarks Input */}
+                <div>
+                  <Label className={textPrimary}>
+                    {selectedApproval.action === 'reject' ? 'Rejection Reason' : 'Approval Remarks'}
+                  </Label>
+                  <textarea
+                    value={approvalRemarks}
+                    onChange={(e) => setApprovalRemarks(e.target.value)}
+                    placeholder={selectedApproval.action === 'reject' 
+                      ? 'Please provide a reason for rejection...' 
+                      : 'Add any remarks or comments...'}
+                    rows={3}
+                    className={`w-full mt-1 px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                </div>
+              </CardContent>
+              <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
+                <Button variant="outline" onClick={() => { setShowApprovalModal(false); setSelectedApproval(null); setApprovalRemarks(''); }}>
+                  Cancel
+                </Button>
+                {selectedApproval.action === 'reject' ? (
+                  <Button
+                    onClick={() => handleApprovalAction(selectedApproval, 'reject', approvalRemarks)}
+                    className="bg-red-500 hover:bg-red-600 text-white"
+                  >
+                    Reject
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleApprovalAction(selectedApproval, 'resend', approvalRemarks)}
+                      className="text-[#f59e0b] border-[#f59e0b]"
+                    >
+                      Resend for Review
+                    </Button>
+                    <Button
+                      onClick={() => handleApprovalAction(selectedApproval, 'approve', approvalRemarks)}
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                    >
+                      Approve
+                    </Button>
+                  </>
+                )}
               </div>
             </Card>
           </div>

@@ -661,3 +661,26 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - `POST /api/hr/admin/quotes` - Add new quote
 - `PUT /api/hr/admin/quotes/{id}` - Update quote
 - `DELETE /api/hr/admin/quotes/{id}` - Delete quote
+
+---
+
+## Latest Updates (April 2026 - Session 47)
+
+### My Tasks Page Redesigned (BDE-Style) (DONE)
+- **Stats Cards**: Total Tasks, Pending, In Progress, Completed (with colored icons)
+- **4 Tabs**: All | Tasks | Meetings | Review/Approval
+- **Task List**: Card view with priority badges, status badges, dates, and action buttons
+
+### Department Filter in Task Creation (DONE)
+- Added **Department** dropdown in Create Task modal
+- Options: Finance, HR, SEO, Social Media, Business Dev, Operations, Meta, Website, ERP, Design
+
+### Review/Approval Tab (DONE)
+- **Salary Approvals**: Shows payslips pending CEO review from HR department
+- **Preview Summary**: Employee name, period, net salary, days present
+- **Action Buttons**: "Review & Approve" (green), "Reject" (red)
+- **Approval Modal**: Full details preview, remarks input, Approve/Reject/Resend options
+
+### Approval Flow
+- Approvals from departments (HR salary, Finance, etc.) appear in Review/Approval tab
+- CEO can view summary, add remarks, approve, reject, or resend for review
