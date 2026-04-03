@@ -7,8 +7,8 @@ import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
 import { Switch } from '../ui/switch';
 import { 
-  Users, Search, Plus, Eye, Trash2, CreditCard, 
-  Send, CheckCircle, Clock, FileText, Download,
+  Users, Search, Plus, Eye, Trash2, CreditCard, Edit,
+  Send, CheckCircle, Clock, FileText, Download, RefreshCw,
   ChevronRight, User, Calendar, Settings, Timer
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -124,6 +124,42 @@ export default function PayrollManagementTab({
       toast.success('PDF downloaded!');
     } catch (error) {
       toast.error('Failed to download PDF');
+      console.error(error);
+    }
+  };
+  
+  // Delete Payslip
+  const handleDeletePayslip = async (payslipId) => {
+    try {
+      await axios.delete(`${API}/api/hr/admin/payslip/${payslipId}`, { headers });
+      toast.success('Payslip deleted successfully');
+      onRefreshPayslips();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete payslip');
+      console.error(error);
+    }
+  };
+  
+  // Edit Payslip
+  const handleEditPayslip = async (payslipId, updates) => {
+    try {
+      await axios.put(`${API}/api/hr/admin/payslip/${payslipId}/edit`, updates, { headers });
+      toast.success('Payslip updated successfully');
+      onRefreshPayslips();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update payslip');
+      console.error(error);
+    }
+  };
+  
+  // Regenerate Payslip
+  const handleRegeneratePayslip = async (payslipId) => {
+    try {
+      await axios.post(`${API}/api/hr/admin/payslip/${payslipId}/regenerate`, {}, { headers });
+      toast.success('Payslip regenerated with latest data');
+      onRefreshPayslips();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to regenerate payslip');
       console.error(error);
     }
   };
@@ -422,6 +458,9 @@ export default function PayrollManagementTab({
               onSubmitForOperations={onSubmitForOperations}
               onGeneratePayslip={onGeneratePayslip}
               onDownloadPDF={handleDownloadPDF}
+              onDeletePayslip={handleDeletePayslip}
+              onEditPayslip={handleEditPayslip}
+              onRegeneratePayslip={handleRegeneratePayslip}
               setShowReviewModal={setShowReviewModal}
               setReviewPayslip={setReviewPayslip}
               setReviewType={setReviewType}
@@ -786,6 +825,9 @@ function SalaryPayslipView({
   onSubmitForOperations,
   onGeneratePayslip,
   onDownloadPDF,
+  onDeletePayslip,
+  onEditPayslip,
+  onRegeneratePayslip,
   setShowReviewModal,
   setReviewPayslip,
   setReviewType,
@@ -801,6 +843,9 @@ function SalaryPayslipView({
 }) {
   const [previousPayslips, setPreviousPayslips] = useState([]);
   const [showPreviousPayslips, setShowPreviousPayslips] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editHrRemarks, setEditHrRemarks] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const token = localStorage.getItem('session_token');
@@ -1035,6 +1080,42 @@ function SalaryPayslipView({
 
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-3 pt-4 border-t border-[#3f3f46]">
+            {/* Edit and Delete for non-finalized payslips */}
+            {!['generated', 'acknowledged', 'pending_finance', 'paid'].includes(payslip.status) && (
+              <>
+                <Button 
+                  onClick={() => {
+                    setEditHrRemarks(payslip.hr_remarks || '');
+                    setShowEditModal(true);
+                  }}
+                  variant="outline"
+                  className={`border-[#6366f1] text-[#6366f1] hover:bg-[#6366f1]/10`}
+                  data-testid="edit-payslip-btn"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button 
+                  onClick={() => setShowDeleteConfirm(true)}
+                  variant="outline"
+                  className="border-red-500 text-red-500 hover:bg-red-500/10"
+                  data-testid="delete-payslip-btn"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+                <Button 
+                  onClick={() => onRegeneratePayslip(payslip.payslip_id)}
+                  variant="outline"
+                  className="border-[#f59e0b] text-[#f59e0b] hover:bg-[#f59e0b]/10"
+                  data-testid="regenerate-payslip-btn"
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  Regenerate
+                </Button>
+              </>
+            )}
+            
             {payslip.status === 'draft' && (
               <Button 
                 onClick={() => onSubmitForOperations(payslip.payslip_id)}
@@ -1080,15 +1161,90 @@ function SalaryPayslipView({
               </Button>
             )}
             {payslip.status === 'generated' && (
-              <Button 
-                onClick={() => onDownloadPDF(payslip)}
-                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download PDF
-              </Button>
+              <>
+                <Button 
+                  onClick={() => onDownloadPDF(payslip)}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+                <Button 
+                  onClick={() => onRegeneratePayslip(payslip.payslip_id)}
+                  variant="outline"
+                  className="border-[#f59e0b] text-[#f59e0b] hover:bg-[#f59e0b]/10"
+                  data-testid="regenerate-generated-payslip-btn"
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  Regenerate
+                </Button>
+              </>
             )}
           </div>
+          
+          {/* Edit Payslip Modal */}
+          <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+            <DialogContent className={`${bgCard} border ${borderColor} max-w-md`}>
+              <DialogHeader>
+                <DialogTitle className={textPrimary}>Edit Payslip</DialogTitle>
+                <DialogDescription className={textSecondary}>
+                  Update HR remarks for this payslip
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label className={textPrimary}>HR Remarks</Label>
+                  <textarea
+                    value={editHrRemarks}
+                    onChange={(e) => setEditHrRemarks(e.target.value)}
+                    placeholder="Enter HR remarks..."
+                    rows={4}
+                    className={`w-full mt-1 px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowEditModal(false)} className={textSecondary}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => {
+                    onEditPayslip(payslip.payslip_id, { hr_remarks: editHrRemarks });
+                    setShowEditModal(false);
+                  }}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                >
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          {/* Delete Confirmation Modal */}
+          <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+            <DialogContent className={`${bgCard} border ${borderColor} max-w-md`}>
+              <DialogHeader>
+                <DialogTitle className="text-red-400">Delete Payslip</DialogTitle>
+                <DialogDescription className={textSecondary}>
+                  Are you sure you want to delete this payslip for {months[payslipMonth - 1]} {payslipYear}? This action cannot be undone.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} className={textSecondary}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={() => {
+                    onDeletePayslip(payslip.payslip_id);
+                    setShowDeleteConfirm(false);
+                  }}
+                  className="bg-red-500 hover:bg-red-600 text-white"
+                >
+                  Delete Payslip
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
       

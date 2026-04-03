@@ -1739,6 +1739,193 @@ async def approve_payslip(payslip_id: str, request: Request, action: str = "appr
         )
         return {"message": "Payslip rejected"}
 
+@hr_router.delete("/admin/payslip/{payslip_id}")
+async def delete_payslip(payslip_id: str, request: Request):
+    """Delete a payslip (HR Admin only)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete payslips")
+    
+    payslip = await db.payslips.find_one({"payslip_id": payslip_id})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    # Only allow deletion of draft, operations_review, or ceo_review status
+    if payslip.get("status") in ["generated", "acknowledged", "pending_finance", "paid"]:
+        raise HTTPException(status_code=400, detail="Cannot delete a finalized payslip")
+    
+    await db.payslips.delete_one({"payslip_id": payslip_id})
+    return {"message": "Payslip deleted successfully"}
+
+@hr_router.put("/admin/payslip/{payslip_id}/edit")
+async def edit_payslip(payslip_id: str, request: Request, updates: dict):
+    """Edit payslip details (HR Admin only)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized to edit payslips")
+    
+    payslip = await db.payslips.find_one({"payslip_id": payslip_id})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    # Only allow editing of draft, operations_review, or ceo_review status
+    if payslip.get("status") in ["generated", "acknowledged", "pending_finance", "paid"]:
+        raise HTTPException(status_code=400, detail="Cannot edit a finalized payslip")
+    
+    # Allowed fields to edit
+    allowed_fields = ["hr_remarks", "comments", "adjustments"]
+    update_data = {k: v for k, v in updates.items() if k in allowed_fields}
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    update_data["updated_by"] = user.user_id
+    
+    await db.payslips.update_one(
+        {"payslip_id": payslip_id},
+        {"$set": update_data}
+    )
+    
+    return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
+
+@hr_router.post("/admin/payslip/{payslip_id}/regenerate")
+async def regenerate_payslip(payslip_id: str, request: Request):
+    """Regenerate payslip with latest attendance/salary data (HR Admin only)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized to regenerate payslips")
+    
+    payslip = await db.payslips.find_one({"payslip_id": payslip_id})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+    
+    # Get fresh data
+    employee_id = payslip.get("user_id")
+    month = payslip.get("month")
+    year = payslip.get("year")
+    hr_remarks = payslip.get("hr_remarks", "")
+    
+    # Get latest salary record
+    salary_record = await db.salary_history.find_one(
+        {"user_id": employee_id},
+        sort=[("effective_from", -1)]
+    )
+    base_salary = salary_record.get("amount", 0) if salary_record else 0
+    
+    # Get payroll settings
+    settings = await db.payroll_settings.find_one({}) or {
+        "pf_enabled": True,
+        "pf_percentage": 12.0,
+        "professional_tax_enabled": True,
+        "professional_tax_amount": 200.0,
+        "professional_tax_threshold": 15000.0,
+        "standard_hours_per_day": 8.0
+    }
+    
+    # Get company calendar for the month
+    calendar = await db.company_calendars.find_one({"month": month, "year": year})
+    total_working_days = calendar.get("working_days", 22) if calendar else 22
+    holidays = len(calendar.get("holidays", [])) if calendar else 0
+    
+    # Get attendance records
+    start_date = datetime(year, month, 1, tzinfo=timezone.utc)
+    if month == 12:
+        end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc)
+    
+    attendance_records = await db.attendance.find({
+        "user_id": employee_id,
+        "date": {"$gte": start_date.isoformat()[:10], "$lt": end_date.isoformat()[:10]}
+    }).to_list(31)
+    
+    days_present = len([r for r in attendance_records if r.get("status") in ["present", "wfh", "office"]])
+    
+    # Get approved leaves
+    leaves = await db.leave_requests.find({
+        "user_id": employee_id,
+        "status": "approved",
+        "$or": [
+            {"start_date": {"$gte": start_date.isoformat()[:10], "$lt": end_date.isoformat()[:10]}},
+            {"end_date": {"$gte": start_date.isoformat()[:10], "$lt": end_date.isoformat()[:10]}}
+        ]
+    }).to_list(10)
+    
+    casual_leaves = sum(1 for l in leaves if l.get("leave_type") == "casual")
+    sick_leaves = sum(1 for l in leaves if l.get("leave_type") == "sick")
+    
+    # Calculate absent/LOP
+    total_accounted = days_present + casual_leaves + sick_leaves + holidays
+    absent_days = max(0, total_working_days - total_accounted)
+    
+    # Calculate hours
+    standard_hours = settings.get("standard_hours_per_day", 8.0)
+    expected_hours = days_present * standard_hours
+    actual_hours = sum(r.get("total_hours", 0) for r in attendance_records)
+    extra_hours = max(0, actual_hours - expected_hours)
+    less_hours = max(0, expected_hours - actual_hours)
+    
+    # Salary calculations
+    per_day_salary = base_salary / total_working_days if total_working_days > 0 else 0
+    days_paid = days_present + casual_leaves + sick_leaves
+    earned_salary = round(per_day_salary * days_paid, 2)
+    
+    # Deductions
+    pf = round((base_salary * settings.get("pf_percentage", 12)) / 100, 2) if settings.get("pf_enabled") else 0
+    professional_tax = settings.get("professional_tax_amount", 200) if settings.get("professional_tax_enabled") and base_salary > settings.get("professional_tax_threshold", 15000) else 0
+    lop_deduction = round(per_day_salary * absent_days, 2)
+    total_deductions = pf + professional_tax + lop_deduction
+    net_salary = round(earned_salary - total_deductions, 2)
+    
+    # Update payslip with fresh calculations
+    update_data = {
+        "base_salary": base_salary,
+        "attendance": {
+            "total_working_days": total_working_days,
+            "days_present": days_present,
+            "casual_leaves": casual_leaves,
+            "sick_leaves": sick_leaves,
+            "absent_days": absent_days,
+            "holidays": holidays,
+            "extra_hours": extra_hours,
+            "less_hours": less_hours
+        },
+        "calculation": {
+            "per_day_salary": per_day_salary,
+            "days_paid": days_paid,
+            "earned_salary": earned_salary
+        },
+        "deductions": {
+            "pf_enabled": settings.get("pf_enabled"),
+            "pf_percentage": settings.get("pf_percentage"),
+            "pf": pf,
+            "professional_tax_enabled": settings.get("professional_tax_enabled"),
+            "professional_tax": professional_tax,
+            "lop_deduction": lop_deduction,
+            "total_deductions": total_deductions
+        },
+        "net_salary": net_salary,
+        "status": "draft",  # Reset to draft after regeneration
+        "regenerated_at": datetime.now(timezone.utc),
+        "regenerated_by": user.user_id,
+        "operations_review": None,
+        "ceo_review": None
+    }
+    
+    await db.payslips.update_one(
+        {"payslip_id": payslip_id},
+        {"$set": update_data}
+    )
+    
+    return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
+
 @hr_router.put("/payslip/{payslip_id}/acknowledge")
 async def acknowledge_payslip(payslip_id: str, request: Request):
     """Employee acknowledges payslip"""
