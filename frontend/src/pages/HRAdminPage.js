@@ -6844,24 +6844,19 @@ function EnhancedCalendarTab({
   // Sunday popup state
   // Sunday modal removed - calendar now only displays holidays
 
-  // Toggle a day as working day (for Sundays) - from modal
-  const handleToggleWorkingDay = (dateStr, isSunday, action = 'toggle') => {
-    if (!isSunday) return; // Only Sundays can be toggled
+  // Toggle a Sunday between working day and holiday (direct click toggle)
+  const handleSundayToggle = (dateStr) => {
+    if (isViewOnly) return; // View-only users cannot edit
     
     let updated;
-    if (action === 'working') {
-      // Make it a working day
-      updated = [...specialWorkingDays.filter(d => d !== dateStr), dateStr];
-    } else if (action === 'holiday') {
-      // Make it a holiday (remove from special working days)
+    if (specialWorkingDays.includes(dateStr)) {
+      // Currently working day - change to holiday
       updated = specialWorkingDays.filter(d => d !== dateStr);
+      toast.success('Changed to Sunday Holiday');
     } else {
-      // Toggle behavior (fallback)
-      if (specialWorkingDays.includes(dateStr)) {
-        updated = specialWorkingDays.filter(d => d !== dateStr);
-      } else {
-        updated = [...specialWorkingDays, dateStr];
-      }
+      // Currently holiday - change to working day
+      updated = [...specialWorkingDays, dateStr];
+      toast.success('Changed to Working Sunday');
     }
     setSpecialWorkingDays(updated);
     
@@ -6869,14 +6864,9 @@ function EnhancedCalendarTab({
       holidays: approvedHolidays, 
       special_working_days: updated 
     });
-    
-    setShowSundayModal(false);
-    setSelectedSunday(null);
-    setSundayRemarks('');
-    toast.success(updated.includes(dateStr) ? 'Marked as working day' : 'Marked as holiday');
   };
 
-  // Sunday click functionality removed - calendar is now view-only for holidays
+  // Sunday click functionality - simple toggle for working/holiday
 
   // Calculate work hours display
   const formatWorkHours = (hours) => {
@@ -6957,12 +6947,15 @@ function EnhancedCalendarTab({
                 {calendarGrid.map((day, idx) => (
                   <div
                     key={idx}
+                    onClick={() => day.date && day.isSunday && !isViewOnly && handleSundayToggle(day.date)}
                     data-testid={day.isSunday ? `sunday-cell-${day.date}` : undefined}
                     className={`p-2 min-h-[60px] rounded text-center transition-colors ${
+                      day.isSunday && !isViewOnly ? 'cursor-pointer' : ''
+                    } ${
                       !day.date ? '' :
-                      day.isSpecialWorkingDay ? 'bg-[#22c55e]/20' :
+                      day.isSpecialWorkingDay ? 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30' :
                       day.isHoliday && day.holidayName !== 'Sunday' ? 'bg-[#ef4444]/20' :
-                      day.isSunday ? 'bg-[#6366f1]/20' :
+                      day.isSunday ? 'bg-[#6366f1]/20 hover:bg-[#6366f1]/30' :
                       `${bgSecondary}`
                     } ${day.isToday ? 'ring-2 ring-[#6366f1]' : ''}`}
                   >
@@ -6987,7 +6980,7 @@ function EnhancedCalendarTab({
                 ))}
               </div>
               <div className={`mt-4 p-3 rounded ${bgSecondary} text-sm ${textSecondary}`}>
-                <strong>Note:</strong> This calendar displays all finalized holidays and leaves approved by HR Admin. Go to the Holidays tab to manage holidays.
+                <strong>Tip:</strong> Click on any Sunday to toggle between Working Day (green) and Holiday (purple).
               </div>
             </CardContent>
           </Card>
