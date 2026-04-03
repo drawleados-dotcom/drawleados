@@ -1107,6 +1107,64 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ---
 
+### HR Admin - Remote/WFH Approvals Tab (DONE - April 2026)
+**Purpose:** Added a new "Remote" tab to HR Admin > Approvals section for managing Work From Home requests.
+
+**Tab Structure:**
+- Attendance | Leave | Permission | **Remote** (New)
+
+**Features:**
+1. **Comprehensive Filters:**
+   - Status dropdown (Pending, Approved, Rejected, All)
+   - Employee dropdown filter
+   - Date Range filter (Start to End)
+   - Clear Filters button
+
+2. **WFH Request Cards display:**
+   - Employee name
+   - Status badge (Pending/Approved/Rejected with colors)
+   - Days badge (e.g., "3 Days WFH")
+   - Start date and End date
+   - Work Location (Home/Other)
+   - Contact Number
+   - Reason
+   - Work Plan
+   - Requested date
+   - Approved/Rejected by (if applicable)
+   - Action buttons (View, Approve, Reject)
+
+3. **View Details Modal:**
+   - Employee info with avatar
+   - Email
+   - Department and Designation
+   - Full request details
+   - Action buttons for pending requests
+
+4. **Approve with Remarks:**
+   - Optional remarks textarea
+   - LOP deduction checkbox
+   - Approve button
+
+5. **Reject with Reason:**
+   - Required rejection reason
+   - Reject button
+
+**API Endpoints:**
+- `POST /api/hr/wfh/request` - Create WFH request
+- `GET /api/hr/wfh/my-requests` - Get user's requests
+- `GET /api/hr/wfh/pending` - Get pending requests (admin)
+- `GET /api/hr/wfh/all` - Get all requests with filters
+- `GET /api/hr/wfh/{wfh_id}` - Get single request
+- `POST /api/hr/wfh/{wfh_id}/approve` - Approve with remarks
+- `POST /api/hr/wfh/{wfh_id}/reject` - Reject with reason
+- `DELETE /api/hr/wfh/{wfh_id}` - Cancel request
+
+**Files Modified:**
+- `/app/backend/hr_routes.py`: Added WFH request routes and models
+- `/app/frontend/src/pages/HRAdminPage.js`: Added Remote tab to EnhancedApprovalsTab component
+
+---
+
 ## Backlog / Future Tasks
 
 ### High Priority (P0)
