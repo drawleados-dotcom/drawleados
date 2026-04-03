@@ -15,7 +15,7 @@ import {
   Home, Building, Edit, Edit2, Search, UserPlus, X, Trash2,
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
-  Send, AlertTriangle, RefreshCcw, Settings, Globe
+  Send, AlertTriangle, RefreshCcw, Settings, Globe, Star, ClipboardList
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -138,6 +138,24 @@ export default function HRAdminPage() {
   
   // Payslip workflow state (extends existing payslips state)
   const [companySettings, setCompanySettings] = useState({});
+
+  // Reviews state
+  const [reviewTab, setReviewTab] = useState('monthly'); // monthly, quarterly, yearly
+  const [reviewPeriod, setReviewPeriod] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [reviewEmployees, setReviewEmployees] = useState([]);
+  const [selectedReviewEmployee, setSelectedReviewEmployee] = useState(null);
+  const [reviewSummary, setReviewSummary] = useState(null);
+  const [reviewTasks, setReviewTasks] = useState([]);
+  const [showReviewPopup, setShowReviewPopup] = useState(false);
+  const [reviewerTab, setReviewerTab] = useState('hr'); // hr, operations, ceo
+  const [existingReviews, setExistingReviews] = useState([]);
+  const [reviewForm, setReviewForm] = useState({ rating: 0, review_text: '' });
+  const [editingReview, setEditingReview] = useState(null);
+  const [showTasksPopup, setShowTasksPopup] = useState(false);
+  const [taskFilter, setTaskFilter] = useState('all'); // all, on_time, overdue
 
   const loadStats = useCallback(async () => {
     try {
@@ -398,6 +416,144 @@ export default function HRAdminPage() {
     }
   }, [token]);
 
+  // ====== REVIEW FUNCTIONS ======
+  const loadReviewEmployees = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('session_token');
+      const res = await axios.get(`${API}/api/hr/employee-reviews/employees`, { 
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setReviewEmployees(res.data);
+    } catch (error) {
+      console.error('Error loading review employees:', error);
+    }
+  }, []);
+
+  const loadReviewSummary = useCallback(async (employeeId) => {
+    try {
+      const token = localStorage.getItem('session_token');
+      const res = await axios.get(
+        `${API}/api/hr/employee-reviews/employee/${employeeId}/summary?review_type=${reviewTab}&period=${reviewPeriod}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setReviewSummary(res.data);
+    } catch (error) {
+      console.error('Error loading review summary:', error);
+      setReviewSummary(null);
+    }
+  }, [reviewTab, reviewPeriod]);
+
+  const loadReviewTasks = useCallback(async (employeeId, filter = 'all') => {
+    try {
+      const token = localStorage.getItem('session_token');
+      const res = await axios.get(
+        `${API}/api/hr/employee-reviews/employee/${employeeId}/tasks?review_type=${reviewTab}&period=${reviewPeriod}&status_filter=${filter}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setReviewTasks(res.data);
+    } catch (error) {
+      console.error('Error loading review tasks:', error);
+      setReviewTasks([]);
+    }
+  }, [reviewTab, reviewPeriod]);
+
+  const loadExistingReviews = useCallback(async (employeeId) => {
+    try {
+      const token = localStorage.getItem('session_token');
+      const res = await axios.get(
+        `${API}/api/hr/performance-reviews?employee_id=${employeeId}&review_type=${reviewTab}&period=${reviewPeriod}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setExistingReviews(res.data);
+    } catch (error) {
+      console.error('Error loading existing reviews:', error);
+      setExistingReviews([]);
+    }
+  }, [reviewTab, reviewPeriod]);
+
+  const handleOpenReviewPopup = async (employee) => {
+    setSelectedReviewEmployee(employee);
+    setShowReviewPopup(true);
+    setReviewForm({ rating: 0, review_text: '' });
+    setEditingReview(null);
+    await loadReviewSummary(employee.user_id);
+    await loadExistingReviews(employee.user_id);
+  };
+
+  const handleSubmitReview = async () => {
+    if (reviewForm.rating === 0) {
+      toast.error('Please select a rating');
+      return;
+    }
+    try {
+      if (editingReview) {
+        await axios.put(`${API}/api/hr/performance-reviews/${editingReview.review_id}`, {
+          rating: reviewForm.rating,
+          review_text: reviewForm.review_text
+        }, { headers });
+        toast.success('Review updated');
+      } else {
+        await axios.post(`${API}/api/hr/performance-reviews`, {
+          employee_id: selectedReviewEmployee.user_id,
+          review_type: reviewTab,
+          period: reviewPeriod,
+          reviewer_role: reviewerTab,
+          rating: reviewForm.rating,
+          review_text: reviewForm.review_text
+        }, { headers });
+        toast.success('Review submitted');
+      }
+      setReviewForm({ rating: 0, review_text: '' });
+      setEditingReview(null);
+      await loadExistingReviews(selectedReviewEmployee.user_id);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to submit review');
+    }
+  };
+
+  const handleEditReview = (review) => {
+    setReviewerTab(review.reviewer_role);
+    setReviewForm({ rating: review.rating, review_text: review.review_text });
+    setEditingReview(review);
+  };
+
+  const handleDeleteReview = async (reviewId) => {
+    if (!window.confirm('Are you sure you want to delete this review?')) return;
+    try {
+      await axios.delete(`${API}/api/hr/performance-reviews/${reviewId}`, { headers });
+      toast.success('Review deleted');
+      await loadExistingReviews(selectedReviewEmployee.user_id);
+    } catch (error) {
+      toast.error('Failed to delete review');
+    }
+  };
+
+  const handleViewReviewTasks = async (filter = 'all') => {
+    setTaskFilter(filter);
+    await loadReviewTasks(selectedReviewEmployee.user_id, filter);
+    setShowTasksPopup(true);
+  };
+
+  // Get period display text
+  const getPeriodDisplay = () => {
+    if (reviewTab === 'monthly') {
+      const [year, month] = reviewPeriod.split('-');
+      const date = new Date(year, parseInt(month) - 1);
+      return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    } else if (reviewTab === 'quarterly') {
+      return reviewPeriod.replace('-', ' ');
+    } else {
+      return reviewPeriod;
+    }
+  };
+
+  // Get current quarter
+  const getCurrentQuarter = () => {
+    const month = new Date().getMonth() + 1;
+    const quarter = Math.ceil(month / 3);
+    return `${new Date().getFullYear()}-Q${quarter}`;
+  };
+
   const handleCreatePayslip = async (userId, hrRemarks = '') => {
     try {
       await axios.post(`${API}/api/payroll/payslip/create`, {
@@ -505,6 +661,8 @@ export default function HRAdminPage() {
       loadDepartments();
     } else if (activeTab === 'quotes') {
       loadQuotes();
+    } else if (activeTab === 'reviews') {
+      loadReviewEmployees();
     }
   }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments, loadQuotes]);
 
@@ -783,6 +941,7 @@ export default function HRAdminPage() {
     { id: 'designations-depts', label: 'Designation & Depts', icon: Briefcase },
     { id: 'approvals', label: 'Approvals', icon: CheckCircle },
     { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard },
+    { id: 'reviews', label: 'Reviews', icon: ClipboardList },
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'quotes', label: 'Quotes', icon: FileText },
   ];
@@ -1077,6 +1236,470 @@ export default function HRAdminPage() {
                 <p className="text-2xl font-bold text-[#f59e0b]">{quotes.filter(q => !q.active).length}</p>
               </Card>
             </div>
+          </div>
+        )}
+
+        {/* Reviews Tab */}
+        {activeTab === 'reviews' && (
+          <div className="space-y-6" data-testid="reviews-tab">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className={`text-xl font-bold ${textPrimary}`}>Employee Reviews</h2>
+                <p className={textSecondary}>Performance reviews for {getPeriodDisplay()}</p>
+              </div>
+            </div>
+
+            {/* Review Type Tabs & Period Filter */}
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <div className={`p-4 flex flex-wrap items-center justify-between gap-4`}>
+                {/* Review Type Tabs */}
+                <div className="flex gap-2">
+                  {[
+                    { id: 'monthly', label: 'Monthly Review' },
+                    { id: 'quarterly', label: 'Quarterly Review' },
+                    { id: 'yearly', label: 'Yearly Review' }
+                  ].map((tab) => (
+                    <Button
+                      key={tab.id}
+                      onClick={() => {
+                        setReviewTab(tab.id);
+                        if (tab.id === 'monthly') {
+                          const now = new Date();
+                          setReviewPeriod(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+                        } else if (tab.id === 'quarterly') {
+                          setReviewPeriod(getCurrentQuarter());
+                        } else {
+                          setReviewPeriod(String(new Date().getFullYear()));
+                        }
+                      }}
+                      data-testid={`review-tab-${tab.id}`}
+                      className={`px-4 py-2 rounded-lg transition-all ${
+                        reviewTab === tab.id
+                          ? 'bg-[#6366f1] text-white'
+                          : `${bgSecondary} ${textSecondary} hover:bg-[#3f3f46]`
+                      }`}
+                    >
+                      {tab.label}
+                    </Button>
+                  ))}
+                </div>
+
+                {/* Period Filter */}
+                <div className="flex items-center gap-2">
+                  <span className={textSecondary}>Period:</span>
+                  {reviewTab === 'monthly' && (
+                    <Input
+                      type="month"
+                      value={reviewPeriod}
+                      onChange={(e) => setReviewPeriod(e.target.value)}
+                      className={`w-48 ${bgSecondary} ${borderColor}`}
+                    />
+                  )}
+                  {reviewTab === 'quarterly' && (
+                    <Select value={reviewPeriod} onValueChange={setReviewPeriod}>
+                      <SelectTrigger className={`w-48 ${bgSecondary} ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[...Array(8)].map((_, i) => {
+                          const year = new Date().getFullYear() - Math.floor(i / 4);
+                          const quarter = 4 - (i % 4);
+                          return (
+                            <SelectItem key={`${year}-Q${quarter}`} value={`${year}-Q${quarter}`}>
+                              {year} Q{quarter}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {reviewTab === 'yearly' && (
+                    <Select value={reviewPeriod} onValueChange={setReviewPeriod}>
+                      <SelectTrigger className={`w-48 ${bgSecondary} ${borderColor}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[...Array(5)].map((_, i) => {
+                          const year = new Date().getFullYear() - i;
+                          return (
+                            <SelectItem key={year} value={String(year)}>
+                              {year}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            {/* Employee List */}
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardHeader>
+                <CardTitle className={`${textPrimary} text-lg`}>Employees ({reviewEmployees.length})</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className={`divide-y ${isDark ? 'divide-[#3f3f46]' : 'divide-gray-200'}`}>
+                  {reviewEmployees.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <Users className={`h-12 w-12 mx-auto mb-4 ${textSecondary}`} />
+                      <p className={textPrimary}>No employees found</p>
+                    </div>
+                  ) : reviewEmployees.map((employee) => (
+                    <div 
+                      key={employee.user_id} 
+                      onClick={() => handleOpenReviewPopup(employee)}
+                      className={`p-4 flex items-center justify-between cursor-pointer hover:${isDark ? 'bg-[#27272a]' : 'bg-gray-50'} transition-colors`}
+                      data-testid={`review-employee-${employee.user_id}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-medium">
+                          {employee.profile_photo ? (
+                            <img src={employee.profile_photo} alt="" className="h-12 w-12 rounded-full object-cover" />
+                          ) : (
+                            employee.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                          )}
+                        </div>
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{employee.name}</p>
+                          <p className={`text-sm ${textSecondary}`}>{employee.designation || employee.department || 'Employee'}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Eye className={`h-5 w-5 ${textSecondary}`} />
+                        <span className={textSecondary}>Click to Review</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Review Popup Modal */}
+        {showReviewPopup && selectedReviewEmployee && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowReviewPopup(false)}>
+            <Card 
+              className={`${bgCard} border ${borderColor} w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className={`p-4 border-b ${borderColor} flex items-center justify-between shrink-0`}>
+                <div className="flex items-center gap-4">
+                  <div className="h-14 w-14 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white font-semibold text-lg">
+                    {selectedReviewEmployee.profile_photo ? (
+                      <img src={selectedReviewEmployee.profile_photo} alt="" className="h-14 w-14 rounded-full object-cover" />
+                    ) : (
+                      selectedReviewEmployee.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+                    )}
+                  </div>
+                  <div>
+                    <h3 className={`text-xl font-bold ${textPrimary}`}>{selectedReviewEmployee.name}</h3>
+                    <p className={textSecondary}>{selectedReviewEmployee.designation || selectedReviewEmployee.department || 'Employee'} • {getPeriodDisplay()}</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowReviewPopup(false)} className={textSecondary}>
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-4 overflow-y-auto flex-1 space-y-6">
+                {/* Summary Stats */}
+                {reviewSummary && (
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* Attendance Card */}
+                    <Card className={`${bgSecondary} border-0 p-4`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Calendar className="h-5 w-5 text-[#6366f1]" />
+                        <h4 className={`font-semibold ${textPrimary}`}>Attendance</h4>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className={textSecondary}>Present</span>
+                          <span className="text-[#10b981] font-medium">{reviewSummary.attendance?.present_days || 0} days</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={textSecondary}>Absent</span>
+                          <span className="text-red-500 font-medium">{reviewSummary.attendance?.absent_days || 0} days</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={textSecondary}>Leave</span>
+                          <span className="text-[#f59e0b] font-medium">{reviewSummary.attendance?.leave_days || 0} days</span>
+                        </div>
+                      </div>
+                    </Card>
+
+                    {/* Working Hours Card */}
+                    <Card className={`${bgSecondary} border-0 p-4`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock className="h-5 w-5 text-[#8b5cf6]" />
+                        <h4 className={`font-semibold ${textPrimary}`}>Working Hours</h4>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className={textSecondary}>Total Hours</span>
+                          <span className={`${textPrimary} font-medium`}>{reviewSummary.working_hours?.total_hours || 0}h</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={textSecondary}>Extra Hours</span>
+                          <span className="text-[#10b981] font-medium">+{reviewSummary.working_hours?.extra_hours || 0}h</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className={textSecondary}>Avg Daily</span>
+                          <span className={`${textPrimary} font-medium`}>{reviewSummary.working_hours?.average_daily || 0}h</span>
+                        </div>
+                      </div>
+                    </Card>
+
+                    {/* Delivery Timeline Card */}
+                    <Card className={`${bgSecondary} border-0 p-4`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <TrendingUp className="h-5 w-5 text-[#22c55e]" />
+                        <h4 className={`font-semibold ${textPrimary}`}>Delivery Timeline</h4>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className={textSecondary}>Total Tasks</span>
+                          <span className={`${textPrimary} font-medium`}>{reviewSummary.delivery_timeline?.total_tasks || 0}</span>
+                        </div>
+                        <div 
+                          className="flex justify-between cursor-pointer hover:bg-[#3f3f46]/30 p-1 rounded -mx-1"
+                          onClick={() => handleViewReviewTasks('on_time')}
+                        >
+                          <span className={textSecondary}>On Time</span>
+                          <span className="text-[#10b981] font-medium underline">{reviewSummary.delivery_timeline?.on_time || 0}</span>
+                        </div>
+                        <div 
+                          className="flex justify-between cursor-pointer hover:bg-[#3f3f46]/30 p-1 rounded -mx-1"
+                          onClick={() => handleViewReviewTasks('overdue')}
+                        >
+                          <span className={textSecondary}>Overdue</span>
+                          <span className="text-red-500 font-medium underline">{reviewSummary.delivery_timeline?.overdue || 0}</span>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Review Tabs: HR | Operations | CEO */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className={`font-semibold ${textPrimary}`}>Write Review</h4>
+                    <div className="flex gap-2">
+                      {['hr', 'operations', 'ceo'].map((role) => (
+                        <Button
+                          key={role}
+                          onClick={() => {
+                            setReviewerTab(role);
+                            setReviewForm({ rating: 0, review_text: '' });
+                            setEditingReview(null);
+                          }}
+                          data-testid={`reviewer-tab-${role}`}
+                          className={`px-4 py-2 capitalize ${
+                            reviewerTab === role
+                              ? role === 'hr' ? 'bg-[#ec4899] text-white' :
+                                role === 'operations' ? 'bg-[#8b5cf6] text-white' :
+                                'bg-[#f59e0b] text-white'
+                              : `${bgSecondary} ${textSecondary}`
+                          }`}
+                        >
+                          {role === 'hr' ? 'HR' : role === 'operations' ? 'Operations' : 'CEO'}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Review Form */}
+                  <Card className={`${bgSecondary} border-0 p-4`}>
+                    <div className="space-y-4">
+                      {/* Star Rating */}
+                      <div>
+                        <Label className={textPrimary}>Rating</Label>
+                        <div className="flex gap-2 mt-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                              className="focus:outline-none"
+                              data-testid={`star-rating-${star}`}
+                            >
+                              <Star 
+                                className={`h-8 w-8 transition-colors ${
+                                  star <= reviewForm.rating 
+                                    ? 'fill-[#f59e0b] text-[#f59e0b]' 
+                                    : `${textSecondary}`
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Review Text */}
+                      <div>
+                        <Label className={textPrimary}>Review Comments</Label>
+                        <textarea
+                          value={reviewForm.review_text}
+                          onChange={(e) => setReviewForm({ ...reviewForm, review_text: e.target.value })}
+                          placeholder={`Write your ${reviewerTab === 'hr' ? 'HR' : reviewerTab === 'operations' ? 'Operations' : 'CEO'} review...`}
+                          className={`w-full h-24 mt-2 p-3 rounded-lg ${bgCard} ${borderColor} border ${textPrimary} resize-none`}
+                        />
+                      </div>
+
+                      {/* Submit Button */}
+                      <div className="flex justify-end">
+                        <Button 
+                          onClick={handleSubmitReview}
+                          className={
+                            reviewerTab === 'hr' ? 'bg-[#ec4899] hover:bg-[#db2777]' :
+                            reviewerTab === 'operations' ? 'bg-[#8b5cf6] hover:bg-[#7c3aed]' :
+                            'bg-[#f59e0b] hover:bg-[#d97706]'
+                          }
+                          data-testid="submit-review-btn"
+                        >
+                          {editingReview ? 'Update Review' : 'Submit Review'}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Existing Reviews */}
+                {existingReviews.length > 0 && (
+                  <div className="space-y-4">
+                    <h4 className={`font-semibold ${textPrimary}`}>Submitted Reviews</h4>
+                    <div className="grid gap-4">
+                      {existingReviews.map((review) => (
+                        <Card 
+                          key={review.review_id} 
+                          className={`${bgSecondary} border-0 p-4`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <Badge className={
+                                review.reviewer_role === 'hr' ? 'bg-[#ec4899] text-white' :
+                                review.reviewer_role === 'operations' ? 'bg-[#8b5cf6] text-white' :
+                                'bg-[#f59e0b] text-white'
+                              }>
+                                {review.reviewer_role === 'hr' ? 'HR' : review.reviewer_role === 'operations' ? 'Operations' : 'CEO'}
+                              </Badge>
+                              <div className="flex">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <Star 
+                                    key={star}
+                                    className={`h-4 w-4 ${
+                                      star <= review.rating 
+                                        ? 'fill-[#f59e0b] text-[#f59e0b]' 
+                                        : textSecondary
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEditReview(review)}
+                                className={textSecondary}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteReview(review.review_id)}
+                                className="text-red-500"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className={`mt-3 ${textPrimary}`}>{review.review_text || 'No comments provided.'}</p>
+                          <p className={`text-xs ${textSecondary} mt-2`}>
+                            By {review.reviewer_name} • {new Date(review.created_at).toLocaleDateString()}
+                          </p>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Tasks Popup Modal */}
+        {showTasksPopup && selectedReviewEmployee && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={() => setShowTasksPopup(false)}>
+            <Card 
+              className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`p-4 border-b ${borderColor} flex items-center justify-between shrink-0`}>
+                <div>
+                  <h3 className={`font-bold ${textPrimary}`}>Tasks - {selectedReviewEmployee.name}</h3>
+                  <p className={`text-sm ${textSecondary}`}>
+                    {taskFilter === 'all' ? 'All Tasks' : taskFilter === 'on_time' ? 'On Time Tasks' : 'Overdue Tasks'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={taskFilter} onValueChange={(v) => handleViewReviewTasks(v)}>
+                    <SelectTrigger className={`w-32 ${bgSecondary} ${borderColor}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="on_time">On Time</SelectItem>
+                      <SelectItem value="overdue">Overdue</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <button onClick={() => setShowTasksPopup(false)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                {reviewTasks.length === 0 ? (
+                  <div className="text-center py-8">
+                    <FileText className={`h-12 w-12 mx-auto mb-4 ${textSecondary}`} />
+                    <p className={textPrimary}>No tasks found</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {reviewTasks.map((task, idx) => (
+                      <div 
+                        key={task.task_id || idx}
+                        className={`p-3 rounded-lg ${bgSecondary} flex items-center justify-between`}
+                      >
+                        <div className="flex-1">
+                          <p className={`font-medium ${textPrimary}`}>{task.title || task.page_name || 'Untitled Task'}</p>
+                          <p className={`text-sm ${textSecondary}`}>
+                            {task.project_name || task.description || 'No description'}
+                          </p>
+                          {task.due_date && (
+                            <p className={`text-xs ${textSecondary} mt-1`}>
+                              Due: {new Date(task.due_date).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                        <Badge className={
+                          task.delivery_status === 'on_time' 
+                            ? 'bg-[#10b981] text-white' 
+                            : 'bg-red-500 text-white'
+                        }>
+                          {task.delivery_status === 'on_time' ? 'On Time' : 'Overdue'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
         )}
 

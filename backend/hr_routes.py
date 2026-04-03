@@ -3362,3 +3362,400 @@ async def delete_quote(quote_id: str, request: Request):
     return {"message": "Quote deleted"}
 
 
+
+
+# ============== EMPLOYEE REVIEWS ==============
+
+@hr_router.get("/employee-reviews/employees")
+async def get_employees_for_review(request: Request):
+    """Get list of all employees for review"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    employees = await db.users.find(
+        {"is_active": {"$ne": False}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "designation": 1, "department": 1, "profile_photo": 1}
+    ).to_list(500)
+    
+    return employees
+
+
+@hr_router.get("/employee-reviews/employee/{employee_id}/summary")
+async def get_employee_review_summary(employee_id: str, review_type: str, period: str, request: Request):
+    """Get employee summary for review - attendance, hours, delivery timeline"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Parse period based on review_type
+    # monthly: "2026-04", quarterly: "2026-Q1", yearly: "2026"
+    year = int(period.split("-")[0])
+    
+    if review_type == "monthly":
+        month = int(period.split("-")[1])
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, month + 1, 1)
+    elif review_type == "quarterly":
+        quarter = period.split("-")[1]  # Q1, Q2, Q3, Q4
+        quarter_num = int(quarter[1])
+        start_month = (quarter_num - 1) * 3 + 1
+        start_date = datetime(year, start_month, 1)
+        end_month = start_month + 3
+        if end_month > 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, end_month, 1)
+    else:  # yearly
+        start_date = datetime(year, 1, 1)
+        end_date = datetime(year + 1, 1, 1)
+    
+    # Get attendance stats
+    attendance_records = await db.attendance.find({
+        "user_id": employee_id,
+        "date": {"$gte": start_date.strftime("%Y-%m-%d"), "$lt": end_date.strftime("%Y-%m-%d")}
+    }).to_list(400)
+    
+    present_days = len([a for a in attendance_records if a.get("status") == "present"])
+    absent_days = len([a for a in attendance_records if a.get("status") == "absent"])
+    leave_days = len([a for a in attendance_records if a.get("status") in ["casual_leave", "sick_leave", "earned_leave"]])
+    
+    # Calculate working hours
+    total_hours = 0
+    extra_hours = 0
+    less_hours = 0
+    standard_hours = 8.0
+    
+    for record in attendance_records:
+        if record.get("check_in") and record.get("check_out"):
+            try:
+                check_in = datetime.fromisoformat(record["check_in"].replace("Z", "+00:00"))
+                check_out = datetime.fromisoformat(record["check_out"].replace("Z", "+00:00"))
+                hours_worked = (check_out - check_in).total_seconds() / 3600
+                total_hours += hours_worked
+                if hours_worked > standard_hours:
+                    extra_hours += (hours_worked - standard_hours)
+                elif hours_worked < standard_hours:
+                    less_hours += (standard_hours - hours_worked)
+            except:
+                pass
+    
+    # Get tasks for delivery timeline
+    tasks = await db.project_tasks.find({
+        "assigned_to": employee_id,
+        "created_at": {"$gte": start_date, "$lt": end_date}
+    }, {"_id": 0}).to_list(500)
+    
+    # Also check website page tasks
+    website_tasks = await db.website_page_tasks.find({
+        "$or": [
+            {"wireframe_assignee": employee_id},
+            {"ui_assignee": employee_id},
+            {"content_assignee": employee_id},
+            {"dev_assignee": employee_id},
+            {"assigned_to": employee_id}
+        ],
+        "created_at": {"$gte": start_date, "$lt": end_date}
+    }, {"_id": 0}).to_list(500)
+    
+    # Calculate on-time vs overdue
+    on_time_count = 0
+    overdue_count = 0
+    now = datetime.now(timezone.utc)
+    
+    for task in tasks:
+        due_date = task.get("due_date")
+        status = task.get("status", "pending")
+        if due_date:
+            try:
+                due = datetime.fromisoformat(due_date.replace("Z", "+00:00")) if isinstance(due_date, str) else due_date
+                if status == "completed":
+                    completed_at = task.get("completed_at") or task.get("updated_at")
+                    if completed_at:
+                        completed = datetime.fromisoformat(str(completed_at).replace("Z", "+00:00")) if isinstance(completed_at, str) else completed_at
+                        if completed <= due:
+                            on_time_count += 1
+                        else:
+                            overdue_count += 1
+                    else:
+                        on_time_count += 1
+                elif due < now:
+                    overdue_count += 1
+                else:
+                    on_time_count += 1
+            except:
+                on_time_count += 1
+        else:
+            on_time_count += 1
+    
+    return {
+        "employee_id": employee_id,
+        "review_type": review_type,
+        "period": period,
+        "attendance": {
+            "present_days": present_days,
+            "absent_days": absent_days,
+            "leave_days": leave_days,
+            "total_records": len(attendance_records)
+        },
+        "working_hours": {
+            "total_hours": round(total_hours, 2),
+            "extra_hours": round(extra_hours, 2),
+            "less_hours": round(less_hours, 2),
+            "average_daily": round(total_hours / max(present_days, 1), 2)
+        },
+        "delivery_timeline": {
+            "total_tasks": len(tasks) + len(website_tasks),
+            "on_time": on_time_count,
+            "overdue": overdue_count
+        }
+    }
+
+
+@hr_router.get("/employee-reviews/employee/{employee_id}/tasks")
+async def get_employee_tasks_for_review(employee_id: str, review_type: str, period: str, status_filter: str = "all", request: Request = None):
+    """Get employee tasks with on-time/overdue status"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Parse period
+    year = int(period.split("-")[0])
+    
+    if review_type == "monthly":
+        month = int(period.split("-")[1])
+        start_date = datetime(year, month, 1)
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, month + 1, 1)
+    elif review_type == "quarterly":
+        quarter = period.split("-")[1]
+        quarter_num = int(quarter[1])
+        start_month = (quarter_num - 1) * 3 + 1
+        start_date = datetime(year, start_month, 1)
+        end_month = start_month + 3
+        if end_month > 12:
+            end_date = datetime(year + 1, 1, 1)
+        else:
+            end_date = datetime(year, end_month, 1)
+    else:
+        start_date = datetime(year, 1, 1)
+        end_date = datetime(year + 1, 1, 1)
+    
+    # Get tasks
+    tasks = await db.project_tasks.find({
+        "assigned_to": employee_id,
+        "created_at": {"$gte": start_date, "$lt": end_date}
+    }, {"_id": 0}).to_list(500)
+    
+    now = datetime.now(timezone.utc)
+    result_tasks = []
+    
+    for task in tasks:
+        due_date = task.get("due_date")
+        task_status = task.get("status", "pending")
+        delivery_status = "on_time"
+        
+        if due_date:
+            try:
+                due = datetime.fromisoformat(due_date.replace("Z", "+00:00")) if isinstance(due_date, str) else due_date
+                if task_status == "completed":
+                    completed_at = task.get("completed_at") or task.get("updated_at")
+                    if completed_at:
+                        completed = datetime.fromisoformat(str(completed_at).replace("Z", "+00:00")) if isinstance(completed_at, str) else completed_at
+                        delivery_status = "on_time" if completed <= due else "overdue"
+                elif due < now:
+                    delivery_status = "overdue"
+            except:
+                pass
+        
+        task["delivery_status"] = delivery_status
+        
+        if status_filter == "all" or status_filter == delivery_status:
+            result_tasks.append(task)
+    
+    return result_tasks
+
+
+@hr_router.get("/performance-reviews")
+async def get_performance_reviews(
+    employee_id: Optional[str] = None,
+    review_type: Optional[str] = None,
+    period: Optional[str] = None,
+    request: Request = None
+):
+    """Get reviews with filters"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    query = {}
+    if employee_id:
+        query["employee_id"] = employee_id
+    if review_type:
+        query["review_type"] = review_type
+    if period:
+        query["period"] = period
+    
+    reviews = await db.employee_reviews.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    
+    # Apply visibility rules
+    user_role = user.role
+    filtered_reviews = []
+    
+    for review in reviews:
+        reviewer_role = review.get("reviewer_role", "")
+        
+        # Employee can see all their reviews
+        if review.get("employee_id") == user.user_id:
+            filtered_reviews.append(review)
+        # HR can see Operations and CEO reviews (not their own HR reviews)
+        elif user_role in ["admin", "super_admin", "hr_manager"]:
+            if reviewer_role in ["operations", "ceo"]:
+                filtered_reviews.append(review)
+            elif reviewer_role == "hr" and review.get("reviewer_id") == user.user_id:
+                filtered_reviews.append(review)  # Can see own reviews
+        # Operations can see HR and CEO reviews
+        elif user_role == "operations_manager":
+            if reviewer_role in ["hr", "ceo"]:
+                filtered_reviews.append(review)
+            elif reviewer_role == "operations" and review.get("reviewer_id") == user.user_id:
+                filtered_reviews.append(review)
+        # CEO can see HR and Operations reviews
+        elif user_role == "ceo":
+            if reviewer_role in ["hr", "operations"]:
+                filtered_reviews.append(review)
+            elif reviewer_role == "ceo" and review.get("reviewer_id") == user.user_id:
+                filtered_reviews.append(review)
+    
+    return filtered_reviews
+
+
+@hr_router.get("/performance-reviews/my-reviews")
+async def get_my_performance_reviews(request: Request):
+    """Get performance reviews for the current user (employee view)"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    # Get reviews from last month onwards
+    last_month = datetime.now(timezone.utc) - timedelta(days=60)
+    
+    reviews = await db.employee_reviews.find({
+        "employee_id": user.user_id,
+        "created_at": {"$gte": last_month}
+    }, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    return reviews
+
+
+@hr_router.post("/performance-reviews")
+async def create_performance_review(request: Request):
+    """Create a new employee performance review"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    data = await request.json()
+    
+    # Determine reviewer role
+    reviewer_role = "hr"
+    if user.role in ["operations_manager"]:
+        reviewer_role = "operations"
+    elif user.role == "ceo":
+        reviewer_role = "ceo"
+    elif user.role in ["admin", "super_admin", "hr_manager"]:
+        reviewer_role = data.get("reviewer_role", "hr")  # Allow specifying for admins
+    
+    review_id = f"rev_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    review = {
+        "review_id": review_id,
+        "employee_id": data.get("employee_id"),
+        "reviewer_id": user.user_id,
+        "reviewer_name": user.name,
+        "reviewer_role": reviewer_role,
+        "review_type": data.get("review_type"),  # monthly, quarterly, yearly
+        "period": data.get("period"),  # 2026-04, 2026-Q1, 2026
+        "rating": data.get("rating", 0),  # 1-5 stars
+        "review_text": data.get("review_text", ""),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    # Check if review already exists for this reviewer/employee/period
+    existing = await db.employee_reviews.find_one({
+        "employee_id": data.get("employee_id"),
+        "reviewer_role": reviewer_role,
+        "review_type": data.get("review_type"),
+        "period": data.get("period")
+    })
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Review already exists for this period. Use edit instead.")
+    
+    await db.employee_reviews.insert_one(review)
+    review.pop("_id", None)
+    
+    return review
+
+
+@hr_router.put("/performance-reviews/{review_id}")
+async def update_performance_review(review_id: str, request: Request):
+    """Update an existing review"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    review = await db.employee_reviews.find_one({"review_id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    # Only the reviewer can edit their review
+    if review.get("reviewer_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to edit this review")
+    
+    data = await request.json()
+    
+    update_data = {
+        "rating": data.get("rating", review.get("rating")),
+        "review_text": data.get("review_text", review.get("review_text")),
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    await db.employee_reviews.update_one(
+        {"review_id": review_id},
+        {"$set": update_data}
+    )
+    
+    updated = await db.employee_reviews.find_one({"review_id": review_id}, {"_id": 0})
+    return updated
+
+
+@hr_router.delete("/performance-reviews/{review_id}")
+async def delete_performance_review(review_id: str, request: Request):
+    """Delete a review"""
+    from server import get_current_user
+    user = await get_current_user(request)
+    
+    review = await db.employee_reviews.find_one({"review_id": review_id})
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    
+    # Only admins or the reviewer can delete
+    if review.get("reviewer_id") != user.user_id and user.role not in ["admin", "super_admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    await db.employee_reviews.delete_one({"review_id": review_id})
+    
+    return {"message": "Review deleted"}
