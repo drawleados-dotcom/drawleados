@@ -46,6 +46,7 @@ const Sidebar = () => {
   const { isDark } = useTheme();
   const [databases, setDatabases] = useState([]);
   const [operationsExpanded, setOperationsExpanded] = useState(true);
+  const [salesExpanded, setSalesExpanded] = useState(true);
   const [metaAdsExpanded, setMetaAdsExpanded] = useState(false);
   const [websiteProjects, setWebsiteProjects] = useState([]);
   const [chatOpen, setChatOpen] = useState(false);
@@ -183,14 +184,21 @@ const Sidebar = () => {
     if (location.pathname.startsWith('/website-projects')) {
       setOperationsExpanded(true);
     }
-  }, [location.pathname]);
+    if (location.pathname === '/tasks' && !location.search.includes('my-tasks')) {
+      setOperationsExpanded(true);
+    }
+    // Expand Sales if on leads or bde-tasks
+    if (location.pathname === '/leads' || location.pathname === '/bde-tasks') {
+      setSalesExpanded(true);
+    }
+  }, [location.pathname, location.search]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  const isOperationsActive = location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works') || location.pathname.startsWith('/website-projects');
+  const isOperationsActive = location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works') || location.pathname.startsWith('/website-projects') || (location.pathname === '/tasks' && !location.search.includes('my-tasks')) || location.pathname === '/social-media' || location.pathname === '/creative-board' || location.pathname === '/meta-ads';
 
   // Base styles for nav items
   const navItemBase = `flex items-center gap-3 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300`;
@@ -292,20 +300,7 @@ const Sidebar = () => {
         {/* === STANDARD VIEW (for non-tasks-only users) === */}
         {!hasTasksModuleOnly && (
           <>
-        {/* Leads - visible if user has leads access */}
-        {hasAccess('leads') && (
-          <Link
-            to="/leads"
-            data-testid="nav-leads"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Leads' : ''}
-          >
-            <Users className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Leads'}
-          </Link>
-        )}
-
-        {/* Calendar - visible for ALL users */}
+        {/* 1. Calendar - visible for ALL users */}
         <Link
           to="/calendar"
           data-testid="nav-calendar"
@@ -316,7 +311,7 @@ const Sidebar = () => {
           {!isCollapsed && 'Calendar'}
         </Link>
 
-        {/* My Tasks - Personal task view for all users */}
+        {/* 2. My Tasks - Personal task view for all users */}
         <Link
           to="/tasks?view=my-tasks"
           data-testid="nav-my-tasks"
@@ -327,39 +322,75 @@ const Sidebar = () => {
           {!isCollapsed && 'My Tasks'}
         </Link>
 
-        {/* Business Development Tasks - Direct link for BDE users or users with bde designation */}
-        {(isBDE || canSeeDepartment('bde')) && (
-        <Link
-          to="/bde-tasks"
-          data-testid="nav-bde-tasks"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/bde-tasks' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'Business Development' : ''}
-        >
-          <Briefcase className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'Business Development'}
-        </Link>
+        {/* 3. Sales - Expandable menu with Leads and BDE Tasks */}
+        {(hasAccess('leads') || isBDE || canSeeDepartment('bde')) && (
+        <div>
+          <button
+            onClick={() => {
+              if (isCollapsed) {
+                setIsCollapsed(false);
+                setSalesExpanded(true);
+              } else {
+                setSalesExpanded(!salesExpanded);
+              }
+            }}
+            data-testid="nav-sales"
+            className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${(location.pathname === '/leads' || location.pathname === '/bde-tasks') ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Sales' : ''}
+          >
+            {!isCollapsed && (salesExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            ))}
+            <TrendingUp className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && <span className="flex-1 text-left">Sales</span>}
+          </button>
+
+          {!isCollapsed && salesExpanded && (
+            <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+              {/* Leads */}
+              {hasAccess('leads') && (
+              <Link
+                to="/leads"
+                data-testid="nav-leads"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.pathname === '/leads'
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                <span>Leads</span>
+              </Link>
+              )}
+              
+              {/* Business Development Tasks */}
+              {(isBDE || canSeeDepartment('bde') || isAdmin) && (
+              <Link
+                to="/bde-tasks"
+                data-testid="nav-bde-tasks"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.pathname === '/bde-tasks'
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <Briefcase className="h-4 w-4" />
+                <span>Business Development Tasks</span>
+              </Link>
+              )}
+            </div>
+          )}
+        </div>
         )}
 
-        {/* Tasks Module - Departments/Projects/Tasks */}
-        {hasAccess('operations') && (
-        <Link
-          to="/tasks"
-          data-testid="nav-tasks-module"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/tasks' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'Tasks' : ''}
-        >
-          <Layers className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'Tasks'}
-        </Link>
-        )}
-
-        {/* Operations with Service Types - visible if user has operations access */}
+        {/* 4. Operations - TASKS with full departments */}
         {hasAccess('operations') && (
         <div>
           <button
             onClick={() => {
               if (isCollapsed) {
-                // Expand sidebar and open operations menu
                 setIsCollapsed(false);
                 setOperationsExpanded(true);
               } else {
@@ -376,14 +407,28 @@ const Sidebar = () => {
               <ChevronRight className="h-4 w-4" />
             ))}
             <Package className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && <span className="flex-1 text-left">Operations</span>}
+            {!isCollapsed && <span className="flex-1 text-left">Operations - TASKS</span>}
           </button>
 
-          {/* Service Types - Filtered by user department */}
+          {/* Department Sub-items */}
           {!isCollapsed && operationsExpanded && (
             <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-              {/* Website Development - Direct Link */}
-              {canSeeDepartment('website') && (
+              {/* All Tasks (Departments Overview) */}
+              <Link
+                to="/tasks"
+                data-testid="nav-tasks-all"
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                  location.pathname === '/tasks' && !location.search.includes('my-tasks')
+                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <Layers className="h-4 w-4" />
+                <span>All Departments</span>
+              </Link>
+
+              {/* Website Development */}
+              {(canSeeDepartment('website') || isAdmin) && (
               <Link
                 to="/website-projects"
                 data-testid="nav-website-projects"
@@ -394,12 +439,13 @@ const Sidebar = () => {
                 }`}
               >
                 <Globe className="h-4 w-4" />
-                <span className="flex-1 text-left">Website Development</span>
+                <span>Website Development</span>
                 <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs px-1.5">{websiteProjects.length}</Badge>
               </Link>
               )}
               
-              {canSeeDepartment('seo') && (
+              {/* SEO */}
+              {(canSeeDepartment('seo') || isAdmin) && (
               <>
               <Link
                 to="/sop-works?service=seo"
@@ -409,25 +455,14 @@ const Sidebar = () => {
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                <span className="text-base">🔍</span>
-                <span>SEO</span>
-              </Link>
-
-              <Link
-                to="/seo-board"
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.pathname === '/seo-board'
-                    ? isDark ? 'bg-[#f59e0b]/20 text-[#f59e0b]' : 'bg-[#f59e0b]/10 text-[#d97706]'
-                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
                 <Search className="h-4 w-4" />
-                <span>SEO Board</span>
+                <span>SEO</span>
               </Link>
               </>
               )}
               
-              {canSeeDepartment('social') && (
+              {/* Social Media */}
+              {(canSeeDepartment('social') || isAdmin) && (
               <Link
                 to="/social-media"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
@@ -436,12 +471,13 @@ const Sidebar = () => {
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                <span className="text-base">📱</span>
+                <MessageSquare className="h-4 w-4" />
                 <span>Social Media</span>
               </Link>
               )}
               
-              {canSeeDepartment('creative') && (
+              {/* Creative Design */}
+              {(canSeeDepartment('creative') || isAdmin) && (
               <Link
                 to="/creative-board"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
@@ -450,59 +486,23 @@ const Sidebar = () => {
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                <span className="text-base">🎨</span>
+                <FolderOpen className="h-4 w-4" />
                 <span>Creative Design</span>
               </Link>
               )}
               
-              {/* Meta Ads - Expandable */}
-              {canSeeDepartment('meta') && (
-              <div>
-                <button
-                  onClick={() => setMetaAdsExpanded(!metaAdsExpanded)}
-                  className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                    location.pathname.startsWith('/meta-ads') || location.pathname === '/sop-works' && location.search.includes('service=meta_ads')
-                      ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                      : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">📊</span>
-                    <span>Meta Ads</span>
-                  </div>
-                  {metaAdsExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
-                
-                {metaAdsExpanded && (
-                  <div className="ml-4 pl-2 border-l border-[#27272a] mt-1 space-y-1">
-                    <Link
-                      to="/meta-ads"
-                      className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                        location.pathname === '/meta-ads'
-                          ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                          : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                      }`}
-                    >
-                      <span className="text-base">📈</span>
-                      <span>Meta Ads Board</span>
-                    </Link>
-                  </div>
-                )}
-              </div>
-              )}
-
-              {/* Business Development Tasks */}
-              {canSeeDepartment('bde') && (
+              {/* Meta Ads */}
+              {(canSeeDepartment('meta') || isAdmin) && (
               <Link
-                to="/bde-tasks"
+                to="/meta-ads"
                 className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.pathname === '/bde-tasks'
+                  location.pathname === '/meta-ads'
                     ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
                     : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                 }`}
               >
-                <span className="text-base">💼</span>
-                <span>Business Development</span>
+                <Megaphone className="h-4 w-4" />
+                <span>Meta Ads</span>
               </Link>
               )}
 
@@ -521,7 +521,7 @@ const Sidebar = () => {
         </div>
         )}
 
-        {/* My Profile (HR) - visible for all users */}
+        {/* 5. My Profile (HR) - visible for all users */}
         {hasAccess('hr') && (
         <Link
           to="/hr"
@@ -534,20 +534,7 @@ const Sidebar = () => {
         </Link>
         )}
 
-        {/* Leave Verification - Operations Admin/Manager only */}
-        {(isProjectManager || userRole === 'admin' || userRole === 'super_admin' || userRole === 'operations_admin') && (
-          <Link
-            to="/leave-verification"
-            data-testid="nav-leave-verification"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leave-verification' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Leave Verification' : ''}
-          >
-            <ClipboardCheck className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Leave Verification'}
-          </Link>
-        )}
-
-        {/* HR Admin - Admin/Manager only */}
+        {/* 6. HR Admin - Admin/Manager only */}
         {canManageHR && (
           <Link
             to="/hr-admin"
@@ -560,7 +547,7 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Finance - visible if user has finance access */}
+        {/* 7. Finance - visible if user has finance access */}
         {hasAccess('finance') && (
           <Link
             to="/finance"
@@ -573,8 +560,8 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Settings - visible only for admins (not BDE) */}
-        {hasAccess('settings') && !isBDE && (
+        {/* 8. Settings - visible only for admins */}
+        {hasAccess('settings') && (
           <Link
             to="/settings"
             data-testid="nav-settings"
@@ -586,16 +573,16 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Documentations - visible for business_development and admins */}
-        {(hasAccess('leads') || isBDE) && (
+        {/* 9. Documentation - visible for business_development and admins */}
+        {(hasAccess('leads') || isBDE || isAdmin) && (
           <Link
             to="/documentations"
             data-testid="nav-documentations"
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/documentations' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Documentations' : ''}
+            title={isCollapsed ? 'Documentation' : ''}
           >
             <FileSpreadsheet className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Documentations'}
+            {!isCollapsed && 'Documentation'}
           </Link>
         )}
           </>
