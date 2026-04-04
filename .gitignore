@@ -204,3 +204,7 @@ frontend/node_modules/.cache/default-development/192.pack
 *.env
 *.env.*
 frontend/node_modules/.cache/default-development/199.pack
+-e 
+# Environment files
+*.env
+*.env.*
