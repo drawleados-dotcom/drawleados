@@ -81,11 +81,15 @@ const Sidebar = () => {
     // Admin has full access
     if (userRole === 'admin') return true;
     
-    // HR access - check explicit module access
-    if (module === 'hr') return moduleAccess.includes('hr');
+    // HR access - check explicit module access (support multiple names)
+    if (module === 'hr') {
+      return moduleAccess.includes('hr') || moduleAccess.includes('my_profile');
+    }
     
-    // HR Admin - separate permission
-    if (module === 'hr_admin') return moduleAccess.includes('hr_admin');
+    // HR Admin/Manager - separate permission (support multiple names)
+    if (module === 'hr_admin') {
+      return moduleAccess.includes('hr_admin') || moduleAccess.includes('hr_manager');
+    }
     
     // Operations - check explicit access
     if (module === 'operations') return moduleAccess.includes('operations');
@@ -116,8 +120,8 @@ const Sidebar = () => {
   const isEmployee = userRole === 'employee';
   const isBDE = userRole === 'business_development' || userRole === 'bde';
   const isProjectManager = userRole === 'project_manager';
-  // HR Admin access: Super Admin, HR Manager, or users with hr_admin module access
-  const canManageHR = isAdmin || userRole === 'hr_manager' || hasAccess('hr_admin');
+  // HR Admin access: Super Admin, HR Manager, or users with hr_admin/hr_manager module access
+  const canManageHR = isAdmin || userRole === 'hr_manager' || hasAccess('hr_admin') || moduleAccess.includes('hr_manager');
   const canManageUsers = user?.can_manage_users || false;
 
   // User designation for department filtering
