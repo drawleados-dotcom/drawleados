@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { Shield, ShieldCheck, ShieldOff, Eye, EyeOff, Loader2, Copy, Check, AlertTriangle } from 'lucide-react';
+import { Shield, ShieldCheck, ShieldOff, Eye, EyeOff, Loader2, Copy, Check, AlertTriangle, Mail, Smartphone } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
@@ -25,6 +25,7 @@ export default function TwoFactorSettings() {
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgInput = isDark ? 'bg-[#09090b]' : 'bg-white';
@@ -120,6 +121,18 @@ export default function TwoFactorSettings() {
     toast.success('Secret key copied!');
   };
 
+  const sendSetupEmail = async () => {
+    setEmailSending(true);
+    try {
+      const res = await axios.post(`${API}/api/auth/2fa/send-setup-email`, {}, { headers });
+      toast.success(res.data.message || 'Setup details sent to your email!');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to send email');
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card className={`${bgCard} border ${borderColor}`}>
@@ -203,17 +216,51 @@ export default function TwoFactorSettings() {
         {/* Setup Mode - QR Code */}
         {setupMode && (
           <div className="space-y-6">
+            {/* Step-by-step instructions */}
+            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-blue-50'} border ${isDark ? 'border-[#3f3f46]' : 'border-blue-200'}`}>
+              <div className="flex items-start gap-3">
+                <Smartphone className="h-5 w-5 text-[#6366f1] mt-0.5" />
+                <div>
+                  <p className={`font-medium ${textPrimary}`}>Setup Instructions</p>
+                  <ol className={`text-sm ${textSecondary} mt-2 space-y-1 list-decimal list-inside`}>
+                    <li>Download <strong>Google Authenticator</strong> app on your phone</li>
+                    <li>Tap the <strong>+</strong> button in the app</li>
+                    <li>Select <strong>"Scan QR code"</strong> and scan below</li>
+                    <li>Enter the 6-digit code shown in the app</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+
+            {/* QR Code Display */}
             <div className="text-center">
-              <p className={`${textPrimary} font-medium mb-4`}>Scan this QR code with your authenticator app</p>
+              <p className={`${textPrimary} font-medium mb-4`}>Scan this QR code with Google Authenticator</p>
               <div className="flex justify-center">
-                <div className="p-4 bg-white rounded-lg">
+                <div className="p-4 bg-white rounded-lg shadow-lg">
                   <img src={qrCode} alt="2FA QR Code" className="w-48 h-48" />
                 </div>
               </div>
             </div>
 
+            {/* Send to Email Button */}
+            <div className="flex justify-center">
+              <Button
+                variant="outline"
+                onClick={sendSetupEmail}
+                disabled={emailSending}
+                className={`${borderColor} gap-2`}
+              >
+                {emailSending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="h-4 w-4" />
+                )}
+                {emailSending ? 'Sending...' : 'Send Setup Details to Email'}
+              </Button>
+            </div>
+
             <div className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
-              <p className={`text-sm ${textSecondary} mb-2`}>Or enter this key manually:</p>
+              <p className={`text-sm ${textSecondary} mb-2`}>Can't scan? Enter this key manually in your app:</p>
               <div className="flex items-center gap-2">
                 <code className={`flex-1 p-2 rounded font-mono text-sm ${isDark ? 'bg-[#09090b]' : 'bg-white'} ${textPrimary}`}>
                   {secretKey}
@@ -230,7 +277,7 @@ export default function TwoFactorSettings() {
             </div>
 
             <div>
-              <Label className={textPrimary}>Enter the 6-digit code from your app</Label>
+              <Label className={textPrimary}>Enter the 6-digit code from your authenticator app</Label>
               <Input
                 type="text"
                 value={verificationCode}

@@ -591,6 +591,104 @@ async def setup_2fa(request: Request, data: Enable2FARequest):
         "manual_entry_key": secret
     }
 
+@api_router.post("/auth/2fa/send-setup-email")
+async def send_2fa_setup_email(request: Request):
+    """Send 2FA setup details via email"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    pending_secret = user_doc.get("two_factor_secret_pending")
+    if not pending_secret:
+        raise HTTPException(status_code=400, detail="No 2FA setup in progress. Please start setup first.")
+    
+    # Generate QR code for email
+    totp = pyotp.TOTP(pending_secret)
+    provisioning_uri = totp.provisioning_uri(
+        name=user_doc.get("email"),
+        issuer_name="Drawlead OS"
+    )
+    
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(provisioning_uri)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Send email with setup details
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    sender_email = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+    
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; padding: 20px; background: #09090b; color: #fafafa;">
+        <div style="max-width: 600px; margin: 0 auto; background: #18181b; padding: 30px; border-radius: 12px; border: 1px solid #27272a;">
+            <h2 style="color: #6366f1; margin-bottom: 20px; text-align: center;">🔐 Two-Factor Authentication Setup</h2>
+            
+            <p style="color: #a1a1aa;">Hi {user_doc.get('name', 'there')},</p>
+            <p style="color: #a1a1aa;">You've requested to enable Two-Factor Authentication on your Drawlead OS account. Follow these steps:</p>
+            
+            <div style="background: #27272a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #fafafa; margin-bottom: 15px;">Step 1: Install Authenticator App</h3>
+                <p style="color: #a1a1aa; font-size: 14px;">Download Google Authenticator or any TOTP app:</p>
+                <ul style="color: #a1a1aa; font-size: 14px;">
+                    <li><a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" style="color: #6366f1;">Google Authenticator (Android)</a></li>
+                    <li><a href="https://apps.apple.com/app/google-authenticator/id388497605" style="color: #6366f1;">Google Authenticator (iOS)</a></li>
+                </ul>
+            </div>
+            
+            <div style="background: #27272a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #fafafa; margin-bottom: 15px;">Step 2: Scan QR Code</h3>
+                <p style="color: #a1a1aa; font-size: 14px; margin-bottom: 15px;">Open your authenticator app and scan this QR code:</p>
+                <div style="text-align: center; background: white; padding: 15px; border-radius: 8px; display: inline-block;">
+                    <img src="cid:qrcode" alt="2FA QR Code" style="width: 200px; height: 200px;" />
+                </div>
+            </div>
+            
+            <div style="background: #27272a; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <h3 style="color: #fafafa; margin-bottom: 15px;">Or Enter Manually</h3>
+                <p style="color: #a1a1aa; font-size: 14px;">If you can't scan, enter this key in your app:</p>
+                <div style="background: #09090b; padding: 15px; border-radius: 6px; text-align: center; margin-top: 10px;">
+                    <code style="color: #6366f1; font-size: 18px; letter-spacing: 3px; font-family: monospace;">{pending_secret}</code>
+                </div>
+            </div>
+            
+            <div style="background: #6366f1/10; border: 1px solid #6366f1/30; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="color: #a1a1aa; font-size: 14px; margin: 0;">
+                    <strong style="color: #6366f1;">Step 3:</strong> After adding to your app, go back to Drawlead OS Settings and enter the 6-digit code to complete setup.
+                </p>
+            </div>
+            
+            <hr style="border: none; border-top: 1px solid #27272a; margin: 20px 0;">
+            <p style="color: #52525b; font-size: 12px; text-align: center;">Drawlead OS - Internal Operating System</p>
+        </div>
+    </div>
+    """
+    
+    if resend_api_key and resend_api_key != "re_your_api_key_here":
+        try:
+            resend.api_key = resend_api_key
+            
+            # For Resend, we'll include the QR code as a data URL in the HTML directly
+            html_with_qr = html_content.replace('src="cid:qrcode"', f'src="data:image/png;base64,{qr_base64}"')
+            
+            params = {
+                "from": sender_email,
+                "to": [user_doc.get("email")],
+                "subject": "🔐 Your 2FA Setup Details - Drawlead OS",
+                "html": html_with_qr
+            }
+            email_response = await asyncio.to_thread(resend.Emails.send, params)
+            logging.info(f"2FA setup email sent to {user_doc.get('email')}, email_id: {email_response.get('id')}")
+            return {"success": True, "message": f"Setup details sent to {user_doc.get('email')}"}
+        except Exception as e:
+            logging.error(f"Failed to send 2FA setup email: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+    else:
+        logging.warning(f"RESEND_API_KEY not configured. Cannot send 2FA setup email.")
+        raise HTTPException(status_code=500, detail="Email service not configured")
+
 @api_router.post("/auth/2fa/verify-setup")
 async def verify_2fa_setup(request: Request, data: Verify2FARequest):
     """Verify 2FA code and enable 2FA for user"""
