@@ -72,8 +72,14 @@ const Sidebar = () => {
   
   // Check access permissions
   const hasAccess = (module) => {
-    // Super Admin and Admin have full access
-    if (userRole === 'super_admin' || userRole === 'admin') return true;
+    // Super Admin - RESTRICTED to specific modules only
+    if (userRole === 'super_admin') {
+      const superAdminAllowedModules = ['calendar', 'our_tasks', 'leads', 'hr', 'hr_admin', 'profile', 'documentations', 'settings'];
+      return superAdminAllowedModules.includes(module);
+    }
+    
+    // Admin has full access
+    if (userRole === 'admin') return true;
     
     // HR access - check explicit module access
     if (module === 'hr') return moduleAccess.includes('hr');
@@ -496,69 +502,83 @@ const Sidebar = () => {
         </Link>
         )}
 
-        {/* 3. Sales - Expandable menu with Leads and BDE Tasks */}
-        {(hasAccess('leads') || isBDE || canSeeDepartment('bde')) && (
-        <div>
-          <button
-            onClick={() => {
-              if (isCollapsed) {
-                setIsCollapsed(false);
-                setSalesExpanded(true);
-                setOperationsExpanded(false); // Close other dropdown
-              } else {
-                setSalesExpanded(!salesExpanded);
-                if (!salesExpanded) setOperationsExpanded(false); // Close other when opening
-              }
-            }}
-            data-testid="nav-sales"
-            className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${(location.pathname === '/leads' || location.pathname === '/bde-tasks') ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Sales' : ''}
-          >
-            {!isCollapsed && (salesExpanded ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            ))}
-            <TrendingUp className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && <span className="flex-1 text-left">Sales</span>}
-          </button>
+        {/* 3. Leads - Direct link for Super Admin, expandable for others */}
+        {hasAccess('leads') && (
+        <>
+          {/* Super Admin sees only direct Leads link, no Sales dropdown */}
+          {userRole === 'super_admin' ? (
+            <Link
+              to="/leads"
+              data-testid="nav-leads"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Leads' : ''}
+            >
+              <Users className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Leads'}
+            </Link>
+          ) : (
+            /* Others see Sales expandable menu */
+            (isBDE || canSeeDepartment('bde') || userRole === 'admin') && (
+            <div>
+              <button
+                onClick={() => {
+                  if (isCollapsed) {
+                    setIsCollapsed(false);
+                    setSalesExpanded(true);
+                    setOperationsExpanded(false);
+                  } else {
+                    setSalesExpanded(!salesExpanded);
+                    if (!salesExpanded) setOperationsExpanded(false);
+                  }
+                }}
+                data-testid="nav-sales"
+                className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${(location.pathname === '/leads' || location.pathname === '/bde-tasks') ? navItemActive : navItemInactive}`}
+                title={isCollapsed ? 'Sales' : ''}
+              >
+                {!isCollapsed && (salesExpanded ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                ))}
+                <TrendingUp className="h-5 w-5" strokeWidth={2} />
+                {!isCollapsed && <span className="flex-1 text-left">Sales</span>}
+              </button>
 
-          {!isCollapsed && salesExpanded && (
-            <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-              {/* Leads */}
-              {hasAccess('leads') && (
-              <Link
-                to="/leads"
-                data-testid="nav-leads"
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.pathname === '/leads'
-                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                <Users className="h-4 w-4" />
-                <span>Leads</span>
-              </Link>
-              )}
-              
-              {/* Business Development Tasks */}
-              {(isBDE || canSeeDepartment('bde') || isAdmin) && (
-              <Link
-                to="/bde-tasks"
-                data-testid="nav-bde-tasks"
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                  location.pathname === '/bde-tasks'
-                    ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                    : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                }`}
-              >
-                <Briefcase className="h-4 w-4" />
-                <span>Business Development Tasks</span>
-              </Link>
+              {!isCollapsed && salesExpanded && (
+                <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+                  <Link
+                    to="/leads"
+                    data-testid="nav-leads"
+                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                      location.pathname === '/leads'
+                        ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                        : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    <Users className="h-4 w-4" />
+                    <span>Leads</span>
+                  </Link>
+                  
+                  {(isBDE || canSeeDepartment('bde') || userRole === 'admin') && (
+                  <Link
+                    to="/bde-tasks"
+                    data-testid="nav-bde-tasks"
+                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                      location.pathname === '/bde-tasks'
+                        ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
+                        : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                    }`}
+                  >
+                    <Briefcase className="h-4 w-4" />
+                    <span>Business Development Tasks</span>
+                  </Link>
+                  )}
+                </div>
               )}
             </div>
+            )
           )}
-        </div>
+        </>
         )}
 
         {/* 4. Operations - TASKS with full departments */}
@@ -751,8 +771,8 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* 9. Documentation - visible for business_development and admins */}
-        {(hasAccess('leads') || isBDE || isAdmin) && (
+        {/* 9. Documentation - visible for business_development, admins, and super_admin */}
+        {(hasAccess('documentations') || hasAccess('leads') || isBDE || isAdmin) && (
           <Link
             to="/documentations"
             data-testid="nav-documentations"
