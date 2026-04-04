@@ -3595,15 +3595,20 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
       const API = process.env.REACT_APP_BACKEND_URL;
       const token = localStorage.getItem('session_token');
       
-      await axios.put(`${API}/api/users/${employee.user_id}`, 
+      console.log('Saving password for user:', employee.user_id);
+      
+      const response = await axios.put(`${API}/api/users/${employee.user_id}`, 
         { password: newPassword },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
+      console.log('Password save response:', response.data);
+      
       setShowNewPassword(true);
-      toast.success('Password saved! Share it securely with the employee.');
+      toast.success('Password saved successfully! Share it securely with the employee.');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to save password');
+      console.error('Password save error:', error.response?.data || error);
+      toast.error(error.response?.data?.detail || 'Failed to save password. Please try again.');
     } finally {
       setRegeneratingPassword(false);
     }
@@ -4101,6 +4106,7 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                           const password = generateRandomPassword();
                           setNewPassword(password);
                           setShowNewPassword(true);
+                          toast.success(`Password generated: ${password}`);
                         }}
                         className="bg-[#27272a] hover:bg-[#3f3f46] text-white"
                       >
