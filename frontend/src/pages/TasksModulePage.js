@@ -3175,7 +3175,7 @@ export default function TasksModulePage() {
         {/* Website Project Modal */}
         {showWebsiteProjectModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className={`w-full max-w-lg ${bgCard} border ${borderColor}`}>
+            <Card className={`w-full max-w-2xl ${bgCard} border ${borderColor}`}>
               <div className={`p-4 border-b ${borderColor} flex items-center justify-between`}>
                 <h3 className={`font-semibold ${textPrimary} flex items-center gap-2`}>
                   <Globe className="h-5 w-5 text-[#22c55e]" />
@@ -3183,7 +3183,61 @@ export default function TasksModulePage() {
                 </h3>
                 <button onClick={() => setShowWebsiteProjectModal(false)} className={textSecondary}><X className="h-5 w-5" /></button>
               </div>
-              <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+              <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                {/* Platform Selection - Prominent */}
+                <div>
+                  <Label className={`${textPrimary} font-medium mb-2 block`}>Select Platform *</Label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['WordPress', 'Shopify', 'Wix', 'Webflow', 'Framer', 'Custom Code', 'React/Next.js', 'Other'].map(platform => (
+                      <button
+                        key={platform}
+                        type="button"
+                        onClick={() => setWebsiteProjectForm({ ...websiteProjectForm, platform })}
+                        className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                          websiteProjectForm.platform === platform
+                            ? 'bg-[#22c55e] border-[#22c55e] text-white'
+                            : `${bgSecondary} ${borderColor} ${textSecondary} hover:border-[#22c55e]`
+                        }`}
+                      >
+                        {platform}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Template Selection */}
+                <div>
+                  <Label className={`${textPrimary} font-medium mb-2 block`}>Quick Start Template</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { name: 'Blank Project', icon: '📄', desc: 'Start from scratch' },
+                      { name: 'Business Website', icon: '🏢', desc: 'Company website template' },
+                      { name: 'E-commerce Store', icon: '🛒', desc: 'Online store setup' },
+                      { name: 'Portfolio', icon: '🎨', desc: 'Showcase work' },
+                      { name: 'Landing Page', icon: '🚀', desc: 'Marketing page' },
+                      { name: 'Blog/News', icon: '📰', desc: 'Content publishing' },
+                    ].map(template => (
+                      <button
+                        key={template.name}
+                        type="button"
+                        onClick={() => setWebsiteProjectForm({ ...websiteProjectForm, website_type: template.name })}
+                        className={`p-3 rounded-lg border text-left transition-all ${
+                          websiteProjectForm.website_type === template.name
+                            ? 'bg-[#6366f1]/20 border-[#6366f1] text-[#fafafa]'
+                            : `${bgSecondary} ${borderColor} hover:border-[#6366f1]`
+                        }`}
+                      >
+                        <span className="text-xl">{template.icon}</span>
+                        <p className={`text-sm font-medium ${textPrimary} mt-1`}>{template.name}</p>
+                        <p className={`text-xs ${textSecondary}`}>{template.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <hr className={borderColor} />
+
+                {/* Project Details */}
                 <div>
                   <Label className={textPrimary}>Project Name *</Label>
                   <Input value={websiteProjectForm.name} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, name: e.target.value })} placeholder="e.g., Acme Corp Website" className={`${bgSecondary} ${borderColor}`} />
@@ -3200,20 +3254,6 @@ export default function TasksModulePage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className={textPrimary}>Website Type</Label>
-                    <Select value={websiteProjectForm.website_type} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, website_type: v })}>
-                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Business Website">Business Website</SelectItem>
-                        <SelectItem value="E-commerce">E-commerce</SelectItem>
-                        <SelectItem value="Portfolio">Portfolio</SelectItem>
-                        <SelectItem value="Landing Page">Landing Page</SelectItem>
-                        <SelectItem value="Blog">Blog</SelectItem>
-                        <SelectItem value="Web App">Web App</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
                     <Label className={textPrimary}>Status</Label>
                     <Select value={websiteProjectForm.status} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, status: v })}>
                       <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
@@ -3221,6 +3261,17 @@ export default function TasksModulePage() {
                         <SelectItem value="active">Active</SelectItem>
                         <SelectItem value="on-hold">On Hold</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Priority</Label>
+                    <Select value={websiteProjectForm.priority || 'medium'} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, priority: v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="high">🔴 High</SelectItem>
+                        <SelectItem value="medium">🟡 Medium</SelectItem>
+                        <SelectItem value="low">🟢 Low</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -3235,15 +3286,27 @@ export default function TasksModulePage() {
                     <Input type="date" value={websiteProjectForm.deadline} onChange={(e) => setWebsiteProjectForm({ ...websiteProjectForm, deadline: e.target.value })} className={`${bgSecondary} ${borderColor}`} />
                   </div>
                 </div>
-                <div>
-                  <Label className={textPrimary}>Developer</Label>
-                  <Select value={websiteProjectForm.developer || 'none'} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, developer: v === 'none' ? '' : v })}>
-                    <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue placeholder="Select developer" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className={textPrimary}>Developer</Label>
+                    <Select value={websiteProjectForm.developer || 'none'} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, developer: v === 'none' ? '' : v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue placeholder="Select developer" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Designer</Label>
+                    <Select value={websiteProjectForm.designer || 'none'} onValueChange={(v) => setWebsiteProjectForm({ ...websiteProjectForm, designer: v === 'none' ? '' : v })}>
+                      <SelectTrigger className={`${bgSecondary} ${borderColor}`}><SelectValue placeholder="Select designer" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {users.map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div>
                   <Label className={textPrimary}>Domain URL</Label>
@@ -3260,9 +3323,15 @@ export default function TasksModulePage() {
                   </div>
                 </div>
               </div>
-              <div className={`p-4 border-t ${borderColor} flex justify-end gap-2`}>
-                <Button variant="outline" onClick={() => setShowWebsiteProjectModal(false)}>Cancel</Button>
-                <Button onClick={handleCreateWebsiteProject} className="bg-[#22c55e] hover:bg-[#16a34a]">Create Project</Button>
+              <div className={`p-4 border-t ${borderColor} flex justify-between items-center`}>
+                <div className={`text-sm ${textSecondary}`}>
+                  Platform: <span className="text-[#22c55e] font-medium">{websiteProjectForm.platform}</span> | 
+                  Template: <span className="text-[#6366f1] font-medium">{websiteProjectForm.website_type}</span>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setShowWebsiteProjectModal(false)}>Cancel</Button>
+                  <Button onClick={handleCreateWebsiteProject} className="bg-[#22c55e] hover:bg-[#16a34a]">Create Project</Button>
+                </div>
               </div>
             </Card>
           </div>
