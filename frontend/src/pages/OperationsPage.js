@@ -51,6 +51,8 @@ export default function OperationsPage() {
   const [users, setUsers] = useState([]);
   const [viewMode, setViewMode] = useState('table'); // 'table', 'kanban', 'byProject'
   const [expandedProjects, setExpandedProjects] = useState({});
+  const [departments, setDepartments] = useState([]);
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
   
   // Context Menu
   const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0, database: null });
@@ -154,6 +156,16 @@ export default function OperationsPage() {
     }
   }, [token]);
 
+  // Load departments
+  const loadDepartments = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/designations/departments/list`, { headers });
+      setDepartments(res.data);
+    } catch (error) {
+      console.error('Error loading departments:', error);
+    }
+  }, [token]);
+
   // Load documents for a project
   const loadProjectDocs = useCallback(async (projectId) => {
     try {
@@ -175,7 +187,8 @@ export default function OperationsPage() {
     loadDatabases();
     loadTemplates();
     loadUsers();
-  }, [loadDatabases, loadTemplates, loadUsers]);
+    loadDepartments();
+  }, [loadDatabases, loadTemplates, loadUsers, loadDepartments]);
 
   useEffect(() => {
     if (selectedDb) {
@@ -594,6 +607,37 @@ export default function OperationsPage() {
   return (
     <Layout>
       <div className="h-full flex flex-col bg-[#09090b]" data-testid="operations-page">
+        {/* Department Cards */}
+        <div className="px-6 py-4 bg-[#0c0a09] border-b border-[#27272a]">
+          <h2 className="text-lg font-semibold text-[#fafafa] mb-3">Departments</h2>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => setSelectedDepartment(null)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                !selectedDepartment
+                  ? 'bg-[#6366f1] text-white'
+                  : 'bg-[#18181b] text-[#a1a1aa] hover:bg-[#27272a] border border-[#27272a]'
+              }`}
+            >
+              All Departments
+            </button>
+            {departments.map(dept => (
+              <button
+                key={dept.department_id || dept.name}
+                onClick={() => setSelectedDepartment(dept.name)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                  selectedDepartment === dept.name
+                    ? 'bg-[#6366f1] text-white'
+                    : 'bg-[#18181b] text-[#a1a1aa] hover:bg-[#27272a] border border-[#27272a]'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dept.color || '#6366f1' }}></span>
+                {dept.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Header with Tabs */}
         <div className="bg-[#0c0a09] border-b border-[#27272a] px-6 py-3">
           <div className="flex items-center justify-between">
