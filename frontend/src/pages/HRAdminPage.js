@@ -3846,33 +3846,51 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                   </div>
                   <div>
                     <Label className={textPrimary}>Designation</Label>
-                    <Select value={formData.designation} onValueChange={(v) => handleChange('designation', v)}>
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue placeholder="Select designation" />
-                      </SelectTrigger>
-                      <SelectContent className={`${bgCard} border ${borderColor}`}>
-                        {designations.map((d) => (
-                          <SelectItem key={d.designation_id || d.name} value={d.name}>
-                            {d.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {designations.length > 0 ? (
+                      <Select value={formData.designation} onValueChange={(v) => handleChange('designation', v)}>
+                        <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                          <SelectValue placeholder="Select designation">{formData.designation || 'Select designation'}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className={`${bgCard} border ${borderColor}`}>
+                          {designations.map((d) => (
+                            <SelectItem key={d.designation_id || d.name} value={d.name}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={formData.designation}
+                        onChange={(e) => handleChange('designation', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        placeholder="Enter designation"
+                      />
+                    )}
                   </div>
                   <div>
                     <Label className={textPrimary}>Department</Label>
-                    <Select value={formData.department} onValueChange={(v) => handleChange('department', v)}>
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent className={`${bgCard} border ${borderColor}`}>
-                        {departments.map((d) => (
-                          <SelectItem key={d.department_id || d.name} value={d.name}>
-                            {d.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {departments.length > 0 ? (
+                      <Select value={formData.department} onValueChange={(v) => handleChange('department', v)}>
+                        <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                          <SelectValue placeholder="Select department">{formData.department || 'Select department'}</SelectValue>
+                        </SelectTrigger>
+                        <SelectContent className={`${bgCard} border ${borderColor}`}>
+                          {departments.map((d) => (
+                            <SelectItem key={d.department_id || d.name} value={d.name}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={formData.department}
+                        onChange={(e) => handleChange('department', e.target.value)}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        placeholder="Enter department"
+                      />
+                    )}
                   </div>
                   <div>
                     <Label className={textPrimary}>Employment Type</Label>
