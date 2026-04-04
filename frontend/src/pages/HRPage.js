@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import TwoFactorSettings from '../components/TwoFactorSettings';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -3102,6 +3103,9 @@ function SecurityTab({ bgCard, bgSecondary, textPrimary, textSecondary, borderCo
 
   return (
     <div className="space-y-6">
+      {/* Two-Factor Authentication */}
+      <TwoFactorSettings />
+
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
           <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
