@@ -1015,7 +1015,12 @@ async def reset_password(data: ResetPasswordRequest):
     if not otp_record:
         raise HTTPException(status_code=401, detail="Invalid OTP")
     
-    if otp_record["expires_at"] < datetime.now(timezone.utc):
+    # Handle timezone-aware comparison
+    expires_at = otp_record["expires_at"]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if expires_at < datetime.now(timezone.utc):
         await db.password_otps.delete_one({"_id": otp_record["_id"]})
         raise HTTPException(status_code=401, detail="OTP has expired. Please request a new one")
     
