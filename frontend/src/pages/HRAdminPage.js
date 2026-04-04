@@ -16,7 +16,7 @@ import {
   Home, Building, Edit, Edit2, Search, UserPlus, X, Trash2,
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
-  Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList
+  Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -3479,9 +3479,13 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
   const [activeTab, setActiveTab] = useState('basic');
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(employee.profile?.profile_picture || employee.picture || '');
   const [uploading, setUploading] = useState(false);
+  const [regeneratingPassword, setRegeneratingPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
   
   // Compute hoverBg from isDark
   const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
+  const bgInput = isDark ? 'bg-[#18181b]' : 'bg-white';
   
   const [formData, setFormData] = useState({
     // Basic Details
@@ -3544,6 +3548,49 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
     reader.readAsDataURL(file);
   };
 
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+    let password = '';
+    // Ensure at least one of each required type
+    password += 'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.floor(Math.random() * 24)]; // Uppercase
+    password += 'abcdefghjkmnpqrstuvwxyz'[Math.floor(Math.random() * 23)]; // Lowercase
+    password += '23456789'[Math.floor(Math.random() * 8)]; // Number
+    password += '!@#$%'[Math.floor(Math.random() * 5)]; // Special
+    // Fill remaining with random chars
+    for (let i = 0; i < 8; i++) {
+      password += chars[Math.floor(Math.random() * chars.length)];
+    }
+    // Shuffle the password
+    return password.split('').sort(() => Math.random() - 0.5).join('');
+  };
+
+  const handleRegeneratePassword = async () => {
+    setRegeneratingPassword(true);
+    try {
+      const password = generateRandomPassword();
+      const API = process.env.REACT_APP_BACKEND_URL;
+      const token = localStorage.getItem('session_token');
+      
+      await axios.put(`${API}/api/users/${employee.user_id}`, 
+        { password },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setNewPassword(password);
+      setShowNewPassword(true);
+      toast.success('New password generated! Make sure to share it with the employee.');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to regenerate password');
+    } finally {
+      setRegeneratingPassword(false);
+    }
+  };
+
+  const copyPassword = () => {
+    navigator.clipboard.writeText(newPassword);
+    toast.success('Password copied to clipboard!');
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onSave(formData);
@@ -3554,6 +3601,7 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
     { id: 'account', label: 'Account Details', icon: CreditCard },
     { id: 'employment', label: 'Employment', icon: Briefcase },
     { id: 'address', label: 'Address & Emergency', icon: Home },
+    { id: 'security', label: 'Security', icon: Shield },
   ];
 
   return (
@@ -3909,6 +3957,106 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                         className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                       />
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Security Tab */}
+            {activeTab === 'security' && (
+              <div className="space-y-6">
+                {/* Email Change Section */}
+                <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                  <h3 className={`font-medium ${textPrimary} mb-4 flex items-center gap-2`}>
+                    <Mail className="h-5 w-5 text-[#6366f1]" />
+                    Change Email Address
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className={textSecondary}>Email Address</Label>
+                      <Input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => handleChange('email', e.target.value)}
+                        className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                        placeholder="employee@company.com"
+                      />
+                      <p className={`text-xs ${textSecondary} mt-1`}>
+                        Changing email will update the login credentials
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password Regeneration Section */}
+                <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                  <h3 className={`font-medium ${textPrimary} mb-4 flex items-center gap-2`}>
+                    <Key className="h-5 w-5 text-[#f59e0b]" />
+                    Password Management
+                  </h3>
+                  <div className="space-y-4">
+                    <p className={`text-sm ${textSecondary}`}>
+                      Generate a new secure password for this employee. The new password will be displayed once - make sure to copy and share it securely.
+                    </p>
+                    
+                    <Button
+                      type="button"
+                      onClick={handleRegeneratePassword}
+                      disabled={regeneratingPassword}
+                      className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                    >
+                      {regeneratingPassword ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Regenerate Password
+                        </>
+                      )}
+                    </Button>
+
+                    {/* Show New Password */}
+                    {showNewPassword && newPassword && (
+                      <div className={`p-4 rounded-lg bg-[#422006] border border-[#f59e0b]/30`}>
+                        <p className="text-[#fcd34d] text-sm font-medium mb-2">
+                          New Password Generated:
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className={`flex-1 p-2 rounded bg-[#18181b] text-[#fafafa] font-mono text-lg tracking-wider`}>
+                            {newPassword}
+                          </code>
+                          <Button
+                            type="button"
+                            onClick={copyPassword}
+                            size="sm"
+                            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-[#a1a1aa] text-xs mt-2">
+                          Share this password securely with the employee. It won't be shown again.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Account Status Section */}
+                <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                  <h3 className={`font-medium ${textPrimary} mb-4 flex items-center gap-2`}>
+                    <Shield className="h-5 w-5 text-[#22c55e]" />
+                    Account Status
+                  </h3>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={textPrimary}>Employee Account</p>
+                      <p className={`text-sm ${textSecondary}`}>User ID: {employee.user_id}</p>
+                    </div>
+                    <Badge className="bg-[#22c55e]/20 text-[#22c55e]">Active</Badge>
                   </div>
                 </div>
               </div>

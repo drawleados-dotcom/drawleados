@@ -33,9 +33,16 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     try {
       const response = await axios.post(`${API}/api/auth/forgot-password`, { email });
-      setEmailHint(response.data.email_hint);
-      toast.success('OTP sent to your email! Check inbox and spam folder.');
-      setStep(2);
+      
+      // Check if email_hint exists (user exists in database)
+      if (response.data.email_hint) {
+        setEmailHint(response.data.email_hint);
+        toast.success('OTP sent to your email! Check inbox and spam folder.');
+        setStep(2);
+      } else {
+        // User doesn't exist - show error but don't reveal this for security
+        toast.error('If this email is registered, you will receive an OTP. Please check your inbox.');
+      }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to send OTP');
     } finally {
