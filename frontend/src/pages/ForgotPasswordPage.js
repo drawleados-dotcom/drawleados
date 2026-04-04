@@ -21,6 +21,8 @@ export default function ForgotPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [emailHint, setEmailHint] = useState('');
+  const [showOtpOnScreen, setShowOtpOnScreen] = useState(false);
+  const [displayedOtp, setDisplayedOtp] = useState('');
 
   // Step 1: Request OTP
   const handleRequestOTP = async (e) => {
@@ -34,7 +36,17 @@ export default function ForgotPasswordPage() {
     try {
       const response = await axios.post(`${API}/api/auth/forgot-password`, { email });
       setEmailHint(response.data.email_hint);
-      toast.success('OTP sent to your email!');
+      
+      // Check if OTP is returned directly (email failed)
+      if (response.data.otp) {
+        setShowOtpOnScreen(true);
+        setDisplayedOtp(response.data.otp);
+        toast.info(response.data.note || 'OTP shown on screen');
+      } else {
+        setShowOtpOnScreen(false);
+        setDisplayedOtp('');
+        toast.success('OTP sent to your email!');
+      }
       setStep(2);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to send OTP');
@@ -94,7 +106,17 @@ export default function ForgotPasswordPage() {
     try {
       const response = await axios.post(`${API}/api/auth/forgot-password`, { email });
       setEmailHint(response.data.email_hint);
-      toast.success('New OTP sent!');
+      
+      // Check if OTP is returned directly (email failed)
+      if (response.data.otp) {
+        setShowOtpOnScreen(true);
+        setDisplayedOtp(response.data.otp);
+        toast.info(response.data.note || 'OTP shown on screen');
+      } else {
+        setShowOtpOnScreen(false);
+        setDisplayedOtp('');
+        toast.success('New OTP sent!');
+      }
       setOtp('');
     } catch (error) {
       toast.error('Failed to resend OTP');
@@ -180,6 +202,23 @@ export default function ForgotPasswordPage() {
           {/* Step 2: OTP Verification */}
           {step === 2 && (
             <div className="space-y-6">
+              {/* Show OTP on screen if email failed */}
+              {showOtpOnScreen && displayedOtp && (
+                <div className="p-4 rounded-lg bg-[#422006] border border-[#f59e0b]/30">
+                  <p className="text-[#fcd34d] text-sm font-medium mb-2">
+                    ⚠️ Email delivery issue - Use this OTP:
+                  </p>
+                  <div className="bg-[#18181b] p-3 rounded-lg text-center">
+                    <span className="text-3xl font-mono tracking-[0.3em] text-[#fafafa]">
+                      {displayedOtp}
+                    </span>
+                  </div>
+                  <p className="text-[#a1a1aa] text-xs mt-2">
+                    Copy this OTP and enter it below
+                  </p>
+                </div>
+              )}
+
               <div>
                 <Label className="text-[#fafafa] text-sm font-medium mb-2 block">
                   Enter 6-digit OTP
