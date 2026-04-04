@@ -119,15 +119,16 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
         
         # If module_access was updated, update all employees with this designation
         if data.module_access is not None:
-            old_designation = designation
+            # Use existing designation to find employees with this title
+            designation_title = existing.get("title")
             # Update users who have this designation
             await db.users.update_many(
-                {"designation": old_designation.get("title")},
+                {"designation": designation_title},
                 {"$set": {"module_access": data.module_access}}
             )
             # Also update employee profiles
             await db.employee_profiles.update_many(
-                {"designation": old_designation.get("title")},
+                {"designation": designation_title},
                 {"$set": {"module_access": data.module_access}}
             )
         
