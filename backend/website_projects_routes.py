@@ -1334,7 +1334,253 @@ async def get_team_members(request: Request):
     # Get users who can work on projects
     users = await db.users.find(
         {"role": {"$in": ["admin", "super_admin", "project_manager", "employee"]}},
-        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "department": 1, "designation": 1}
     ).to_list(50)
     
     return users
+
+# ============== STAGE TASKS & APPROVAL WORKFLOW ==============
+
+@website_projects_router.get("/projects/{project_id}/stage-tasks")
+async def get_stage_tasks(project_id: str, request: Request):
+    """Get all tasks organized by stage for the tracker board"""
+    user = await get_current_user(request)
+    
+    # Get stage tasks from dedicated collection
+    stage_tasks = await db.website_stage_tasks.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).to_list(500)
+    
+    # Organize by stage
+    tasks_by_stage = {
+        "content": [],
+        "wireframe": [],
+        "ui": [],
+        "dev": [],
+        "test": [],
+        "delivery": [],
+        "approval": []
+    }
+    
+    for task in stage_tasks:
+        stage = task.get("current_stage", "content")
+        if stage in tasks_by_stage:
+            tasks_by_stage[stage].append(task)
+    
+    return tasks_by_stage
+
+@website_projects_router.post("/projects/{project_id}/convert-pages-to-tasks")
+async def convert_pages_to_tasks(project_id: str, request: Request):
+    """Convert all pages to stage tasks for tracking"""
+    user = await get_current_user(request)
+    
+    # Check if project exists
+    project = await db.website_projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get all pages for this project (from website_page_tasks collection)
+    pages = await db.website_page_tasks.find({"project_id": project_id}).to_list(100)
+    
+    tasks_created = 0
+    stages = ["content", "wireframe", "ui", "dev", "test"]
+    now = datetime.now(timezone.utc)
+    
+    for page in pages:
+        for stage in stages:
+            task_id = f"st_{uuid.uuid4().hex[:12]}"
+            
+            # Check if task already exists for this page+stage
+            existing = await db.website_stage_tasks.find_one({
+                "page_id": page["task_id"],
+                "stage": stage
+            })
+            
+            if not existing:
+                task = {
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "page_id": page["task_id"],
+                    "page_name": page.get("page_name"),
+                    "stage": stage,
+                    "current_stage": stage,
+                    "assignee": page.get(f"{stage}_assignee"),
+                    "due_date": page.get(f"{stage}_due"),
+                    "status": "pending",
+                    "url": page.get(f"{stage}_url"),
+                    "created_at": now.isoformat(),
+                    "created_by": user["user_id"],
+                    "comments": [],
+                    "history": []
+                }
+                await db.website_stage_tasks.insert_one(task)
+                tasks_created += 1
+    
+    return {"tasks_created": tasks_created}
+
+@website_projects_router.put("/stage-tasks/{task_id}/submit")
+async def submit_task_for_approval(task_id: str, request: Request, data: dict = Body(...)):
+    """Submit a task for approval"""
+    user = await get_current_user(request)
+    stage = data.get("stage")
+    now = datetime.now(timezone.utc)
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Update task status to submitted
+    await db.website_stage_tasks.update_one(
+        {"task_id": task_id},
+        {
+            "$set": {
+                "status": "submitted",
+                "submitted_at": now.isoformat(),
+                "submitted_by": user["user_id"]
+            },
+            "$push": {
+                "history": {
+                    "action": "submitted",
+                    "stage": stage,
+                    "by": user["name"],
+                    "at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {"success": True, "message": "Task submitted for approval"}
+
+@website_projects_router.put("/stage-tasks/{task_id}/approve")
+async def approve_task(task_id: str, request: Request, data: dict = Body(...)):
+    """Approve a task and move to next stage"""
+    user = await get_current_user(request)
+    stage = data.get("stage")
+    now = datetime.now(timezone.utc)
+    
+    # Check if user can approve
+    if user["role"] not in ["super_admin", "admin", "project_manager"]:
+        if not any(term in (user.get("designation") or "").lower() for term in ["operation", "manager"]):
+            raise HTTPException(status_code=403, detail="Not authorized to approve")
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Define stage order
+    stage_order = ["content", "wireframe", "ui", "dev", "test", "delivery"]
+    current_idx = stage_order.index(stage) if stage in stage_order else 0
+    next_stage = stage_order[current_idx + 1] if current_idx < len(stage_order) - 1 else "completed"
+    
+    # Update task
+    await db.website_stage_tasks.update_one(
+        {"task_id": task_id},
+        {
+            "$set": {
+                "status": "approved" if next_stage == "completed" else "pending",
+                "current_stage": next_stage,
+                "approved_at": now.isoformat(),
+                "approved_by": user["user_id"]
+            },
+            "$push": {
+                "history": {
+                    "action": "approved",
+                    "stage": stage,
+                    "next_stage": next_stage,
+                    "by": user["name"],
+                    "at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    # Update the page status
+    page_id = task.get("page_id")
+    if page_id:
+        await db.website_pages.update_one(
+            {"task_id": page_id},
+            {"$set": {f"{stage}_status": "Completed"}}
+        )
+    
+    return {"success": True, "message": f"Task approved! Moved to {next_stage}"}
+
+@website_projects_router.put("/stage-tasks/{task_id}/corrections")
+async def request_corrections(task_id: str, request: Request, data: dict = Body(...)):
+    """Request corrections on a task"""
+    user = await get_current_user(request)
+    stage = data.get("stage")
+    remarks = data.get("remarks", "")
+    now = datetime.now(timezone.utc)
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Update task status
+    await db.website_stage_tasks.update_one(
+        {"task_id": task_id},
+        {
+            "$set": {
+                "status": "corrections",
+                "corrections_requested_at": now.isoformat()
+            },
+            "$push": {
+                "comments": {
+                    "comment_id": f"cmt_{uuid.uuid4().hex[:8]}",
+                    "content": remarks,
+                    "type": "correction",
+                    "author": user["name"],
+                    "author_id": user["user_id"],
+                    "created_at": now.isoformat()
+                },
+                "history": {
+                    "action": "corrections_requested",
+                    "stage": stage,
+                    "remarks": remarks,
+                    "by": user["name"],
+                    "at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {"success": True, "message": "Corrections requested"}
+
+@website_projects_router.get("/tasks/{task_id}/comments")
+async def get_task_comments(task_id: str, request: Request):
+    """Get comments for a task"""
+    user = await get_current_user(request)
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        return []
+    
+    return task.get("comments", [])
+
+@website_projects_router.post("/tasks/{task_id}/comments")
+async def add_task_comment(task_id: str, request: Request, data: dict = Body(...)):
+    """Add a comment to a task"""
+    user = await get_current_user(request)
+    content = data.get("content", "")
+    comment_type = data.get("type", "comment")
+    now = datetime.now(timezone.utc)
+    
+    if not content.strip():
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
+    
+    comment = {
+        "comment_id": f"cmt_{uuid.uuid4().hex[:8]}",
+        "content": content,
+        "type": comment_type,
+        "author": user["name"],
+        "author_id": user["user_id"],
+        "created_at": now.isoformat()
+    }
+    
+    await db.website_stage_tasks.update_one(
+        {"task_id": task_id},
+        {"$push": {"comments": comment}}
+    )
+    
+    return comment
