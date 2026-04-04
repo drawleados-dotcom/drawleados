@@ -16,7 +16,7 @@ import {
   Home, Building, Edit, Edit2, Search, UserPlus, X, Trash2,
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
-  Send, AlertTriangle, RefreshCcw, Settings, Globe, Star, ClipboardList
+  Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -193,6 +193,11 @@ export default function HRAdminPage() {
   const [editingReview, setEditingReview] = useState(null);
   const [showTasksPopup, setShowTasksPopup] = useState(false);
   const [taskFilter, setTaskFilter] = useState('all'); // all, on_time, overdue
+  
+  // Real-time refresh state
+  const [lastRefresh, setLastRefresh] = useState(new Date());
+  const [isAutoRefresh, setIsAutoRefresh] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadStats = useCallback(async () => {
     try {
@@ -733,6 +738,59 @@ export default function HRAdminPage() {
     }
   }, [wfhFilter, loadWfhRequests, activeTab]);
 
+  // Auto-refresh for real-time attendance tracking (every 10 seconds)
+  useEffect(() => {
+    if (!isAutoRefresh) return;
+    
+    const refreshInterval = setInterval(async () => {
+      if (activeTab === 'attendance') {
+        setIsRefreshing(true);
+        try {
+          await Promise.all([
+            loadAllAttendance(),
+            loadEmployees(),
+            loadStats()
+          ]);
+          setLastRefresh(new Date());
+        } catch (error) {
+          console.error('Auto-refresh error:', error);
+        }
+        setIsRefreshing(false);
+      } else if (activeTab === 'employees') {
+        setIsRefreshing(true);
+        await loadEmployees();
+        setLastRefresh(new Date());
+        setIsRefreshing(false);
+      } else if (activeTab === 'approvals') {
+        setIsRefreshing(true);
+        await loadPendingApprovals();
+        setLastRefresh(new Date());
+        setIsRefreshing(false);
+      }
+    }, 10000); // Refresh every 10 seconds
+    
+    return () => clearInterval(refreshInterval);
+  }, [activeTab, isAutoRefresh, loadAllAttendance, loadEmployees, loadStats, loadPendingApprovals]);
+
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (activeTab === 'attendance') {
+        await Promise.all([loadAllAttendance(), loadEmployees(), loadStats()]);
+      } else if (activeTab === 'employees') {
+        await loadEmployees();
+      } else if (activeTab === 'approvals') {
+        await Promise.all([loadPendingApprovals(), loadLeaveRequests(), loadWfhRequests()]);
+      }
+      setLastRefresh(new Date());
+      toast.success('Data refreshed!');
+    } catch (error) {
+      toast.error('Refresh failed');
+    }
+    setIsRefreshing(false);
+  };
+
   const handleApprove = async (leaveId) => {
     try {
       await axios.put(`${API}/api/hr/leave/${leaveId}/approve`, {}, { headers });
@@ -1081,15 +1139,60 @@ export default function HRAdminPage() {
               <Badge className="mt-2 bg-[#ec4899]/20 text-[#ec4899]">View Only Mode (Reviews: Write Access)</Badge>
             )}
           </div>
-          {activeTab === 'employees' && canEdit && (
-            <Button 
-              onClick={() => setShowAddModal(true)}
-              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-            >
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add Employee
-            </Button>
-          )}
+          
+          {/* Real-time Controls */}
+          <div className="flex items-center gap-4">
+            {/* Live Indicator */}
+            {(activeTab === 'attendance' || activeTab === 'employees' || activeTab === 'approvals') && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  {isAutoRefresh && (
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    </span>
+                  )}
+                  <span className={`text-xs ${isAutoRefresh ? 'text-green-500' : textSecondary}`}>
+                    {isAutoRefresh ? 'LIVE' : 'Paused'}
+                  </span>
+                </div>
+                
+                <div className={`text-xs ${textSecondary}`}>
+                  Updated: {lastRefresh.toLocaleTimeString()}
+                </div>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
+                  className={`${borderColor} ${textSecondary} hover:bg-[#6366f1] hover:text-white`}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAutoRefresh(!isAutoRefresh)}
+                  className={`${borderColor} ${isAutoRefresh ? 'bg-green-500/20 text-green-500 border-green-500' : textSecondary}`}
+                >
+                  {isAutoRefresh ? 'Pause' : 'Resume'} Auto
+                </Button>
+              </div>
+            )}
+            
+            {activeTab === 'employees' && canEdit && (
+              <Button 
+                onClick={() => setShowAddModal(true)}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add Employee
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -4913,7 +5016,7 @@ function EnhancedAttendanceTab({
             )}
             
             <Button onClick={onRefresh} variant="outline" size="sm" className={borderColor}>
-              <RefreshCcw className="h-4 w-4 mr-2" />
+              <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
           </div>
@@ -6988,7 +7091,7 @@ function EnhancedCalendarTab({
               max="2030"
             />
             <Button onClick={onRefresh} variant="outline" className={borderColor}>
-              <RefreshCcw className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4" />
             </Button>
             <div className={`text-sm ${textSecondary} flex items-center gap-4`}>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ef4444]/30"></span> Holiday</span>
