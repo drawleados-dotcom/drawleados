@@ -103,6 +103,7 @@ export default function HRAdminPage() {
   
   // Employees state
   const [employees, setEmployees] = useState([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -205,6 +206,7 @@ export default function HRAdminPage() {
   }, [token]);
 
   const loadEmployees = useCallback(async () => {
+    setEmployeesLoading(true);
     try {
       const res = await axios.get(`${API}/api/hr/admin/employees`, { 
         headers: { Authorization: `Bearer ${token}` }
@@ -212,6 +214,8 @@ export default function HRAdminPage() {
       setEmployees(res.data);
     } catch (error) {
       console.error('Error loading employees:', error);
+    } finally {
+      setEmployeesLoading(false);
     }
   }, [token]);
 
@@ -1140,6 +1144,7 @@ export default function HRAdminPage() {
         {activeTab === 'employees' && (
           <EmployeesTab
             employees={filteredEmployees}
+            loading={employeesLoading}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             onEdit={(emp) => { setSelectedEmployee(emp); setShowEditModal(true); }}
@@ -1902,6 +1907,7 @@ export default function HRAdminPage() {
             employee={selectedEmployee}
             onClose={() => setShowEditModal(false)}
             onSave={handleSaveProfile}
+            isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -2781,13 +2787,60 @@ function DashboardTab({ stats, attendanceOverview, bgCard, bgSecondary, textPrim
 }
 
 // ============== EMPLOYEES TAB ==============
-function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete, canEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit, onDelete, canEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   // Calculate employee stats - active employees only
   const activeEmployees = employees.filter(e => e.status !== 'inactive');
   const officeEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location !== 'home');
   const remoteEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location === 'home');
   
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  
+  // Show loading skeleton
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        {/* Loading Summary Stats */}
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-4">
+                <div className="animate-pulse">
+                  <div className={`h-4 ${bgSecondary} rounded w-24 mb-2`}></div>
+                  <div className={`h-8 ${bgSecondary} rounded w-16 mb-1`}></div>
+                  <div className={`h-3 ${bgSecondary} rounded w-20`}></div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        
+        {/* Loading Table */}
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardHeader className="pb-2">
+            <div className="animate-pulse">
+              <div className={`h-6 ${bgSecondary} rounded w-40`}></div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="animate-pulse flex items-center gap-4">
+                  <div className={`h-10 w-10 ${bgSecondary} rounded-full`}></div>
+                  <div className="flex-1 space-y-2">
+                    <div className={`h-4 ${bgSecondary} rounded w-32`}></div>
+                    <div className={`h-3 ${bgSecondary} rounded w-48`}></div>
+                  </div>
+                  <div className={`h-6 ${bgSecondary} rounded w-20`}></div>
+                  <div className={`h-6 ${bgSecondary} rounded w-16`}></div>
+                  <div className={`h-8 ${bgSecondary} rounded w-20`}></div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-6">
@@ -2993,11 +3046,14 @@ function EmployeesTab({ employees, searchQuery, setSearchQuery, onEdit, onDelete
 }
 
 // ============== LEAVE REQUESTS TAB ==============
-function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, onViewTasks, onSendForVerification, onFinalApprove, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function LeaveRequestsTab({ requests, filter, setFilter, onApprove, onReject, onViewTasks, onSendForVerification, onFinalApprove, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark }) {
   const [selectedLeave, setSelectedLeave] = useState(null);
   const [leaveTasks, setLeaveTasks] = useState(null);
   const [showTasksModal, setShowTasksModal] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  
+  // Compute hoverBg from isDark
+  const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
 
   const handleViewTasksClick = async (leaveId) => {
     setLoadingTasks(true);
@@ -3313,10 +3369,13 @@ function AttendanceTab({ overview, formatTime, bgCard, bgSecondary, textPrimary,
 }
 
 // ============== EDIT EMPLOYEE MODAL ==============
-function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark }) {
   const [activeTab, setActiveTab] = useState('basic');
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(employee.profile?.profile_picture || employee.picture || '');
   const [uploading, setUploading] = useState(false);
+  
+  // Compute hoverBg from isDark
+  const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
   
   const [formData, setFormData] = useState({
     // Basic Details

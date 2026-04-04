@@ -2865,42 +2865,53 @@ async def get_all_leave_requests(request: Request, status: Optional[str] = None)
 
 @hr_router.get("/admin/employees")
 async def get_all_employee_details(request: Request):
-    """Get all employees with full details (Admin and HR Manager)"""
+    """Get all employees with full details (Admin and HR Manager) - Optimized"""
     from server import get_current_user
     user = await get_current_user(request)
     
     if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
+    # Get all employees
     employees = await db.users.find(
         {},
         {"_id": 0, "password_hash": 0}
     ).to_list(500)
     
-    # Enrich with profiles and attendance
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    if not employees:
+        return []
     
+    # Get all user IDs
+    user_ids = [emp["user_id"] for emp in employees]
+    
+    # Batch fetch all profiles
+    profiles = await db.employee_profiles.find(
+        {"user_id": {"$in": user_ids}},
+        {"_id": 0}
+    ).to_list(500)
+    profiles_map = {p["user_id"]: p for p in profiles}
+    
+    # Batch fetch today's attendance for all users
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    attendances = await db.attendance.find({
+        "user_id": {"$in": user_ids},
+        "date": {"$gte": today, "$lt": today + timedelta(days=1)}
+    }, {"_id": 0}).to_list(500)
+    attendance_map = {a["user_id"]: a for a in attendances}
+    
+    # Batch count pending leaves using aggregation
+    pending_leaves_cursor = db.leave_requests.aggregate([
+        {"$match": {"user_id": {"$in": user_ids}, "status": "pending"}},
+        {"$group": {"_id": "$user_id", "count": {"$sum": 1}}}
+    ])
+    pending_leaves_list = await pending_leaves_cursor.to_list(500)
+    pending_leaves_map = {p["_id"]: p["count"] for p in pending_leaves_list}
+    
+    # Enrich employees with fetched data
     for emp in employees:
-        # Get profile
-        profile = await db.employee_profiles.find_one(
-            {"user_id": emp["user_id"]},
-            {"_id": 0}
-        )
-        emp["profile"] = profile or {}
-        
-        # Get today's attendance
-        attendance = await db.attendance.find_one({
-            "user_id": emp["user_id"],
-            "date": {"$gte": today, "$lt": today + timedelta(days=1)}
-        }, {"_id": 0})
-        emp["today_attendance"] = attendance
-        
-        # Get pending leaves count
-        pending_leaves = await db.leave_requests.count_documents({
-            "user_id": emp["user_id"],
-            "status": "pending"
-        })
-        emp["pending_leaves"] = pending_leaves
+        emp["profile"] = profiles_map.get(emp["user_id"], {})
+        emp["today_attendance"] = attendance_map.get(emp["user_id"])
+        emp["pending_leaves"] = pending_leaves_map.get(emp["user_id"], 0)
     
     return employees
 
