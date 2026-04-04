@@ -5015,18 +5015,42 @@ function EnhancedAttendanceTab({
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [employeeRecords, setEmployeeRecords] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [dayRecords, setDayRecords] = useState([]);
 
   const API = process.env.REACT_APP_BACKEND_URL;
+
+  // Fetch attendance for specific date
+  const fetchDayAttendance = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/attendance/all`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { date: selectedDate }
+      });
+      setDayRecords(res.data.records || []);
+    } catch (err) {
+      console.error('Failed to fetch day attendance:', err);
+    }
+  }, [token, selectedDate, API]);
+
+  // Fetch on date change
+  useEffect(() => {
+    if (dateFilter === 'day') {
+      fetchDayAttendance();
+    }
+  }, [dateFilter, selectedDate, fetchDayAttendance]);
+
+  // Use dayRecords for day view, records for other views
+  const activeRecords = dateFilter === 'day' ? dayRecords : records;
 
   // Get all employees with their attendance status for the selected date
   const getEmployeesWithStatus = () => {
     const today = selectedDate;
     const employeesWithStatus = employees.map(emp => {
       // Find attendance record for this employee on selected date
-      const record = records.find(r => 
-        r.user_id === emp.user_id && 
-        r.date?.split('T')[0] === today
-      );
+      const record = activeRecords.find(r => {
+        const recordDate = r.date?.split('T')[0];
+        return r.user_id === emp.user_id && recordDate === today;
+      });
       
       let status = 'yet_to_login';
       let checkIn = null;
@@ -5034,23 +5058,33 @@ function EnhancedAttendanceTab({
       let workedHours = null;
       
       if (record) {
-        checkIn = record.clock_in_time;
-        checkOut = record.clock_out_time;
+        // Check both field names (clock_in and clock_in_time)
+        checkIn = record.clock_in || record.clock_in_time;
+        checkOut = record.clock_out || record.clock_out_time;
+        
+        // Format time if it's a datetime string
+        if (checkIn && typeof checkIn === 'string' && checkIn.includes('T')) {
+          checkIn = new Date(checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        }
+        if (checkOut && typeof checkOut === 'string' && checkOut.includes('T')) {
+          checkOut = new Date(checkOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        }
+        
         if (checkOut) {
           status = 'present';
-          // Calculate worked hours
-          if (checkIn && checkOut) {
-            const inTime = new Date(`2000-01-01T${checkIn}`);
-            const outTime = new Date(`2000-01-01T${checkOut}`);
-            workedHours = ((outTime - inTime) / (1000 * 60 * 60)).toFixed(1);
-          }
+          workedHours = record.total_hours?.toFixed(1) || record.worked_hours?.toFixed(1);
         } else if (checkIn) {
           status = 'working';
+        }
+        
+        // Check for WFH
+        if (record.work_location === 'home' || record.work_mode === 'wfh') {
+          status = checkOut ? 'present' : 'working';
         }
       }
       
       // Check leave/absent records
-      const isAbsent = records.some(r => 
+      const isAbsent = activeRecords.some(r => 
         r.user_id === emp.user_id && 
         r.date?.split('T')[0] === today && 
         r.leave_type
@@ -5062,7 +5096,8 @@ function EnhancedAttendanceTab({
         status,
         checkIn,
         checkOut,
-        workedHours
+        workedHours,
+        workLocation: record?.work_location || record?.work_mode || 'office'
       };
     });
     
@@ -5096,9 +5131,9 @@ function EnhancedAttendanceTab({
   const yetToLoginCount = employeesWithStatus.filter(e => e.status === 'yet_to_login').length;
   
   // Calculate WFH count from records
-  const wfhCount = records.filter(r => 
+  const wfhCount = activeRecords.filter(r => 
     r.date?.split('T')[0] === selectedDate && 
-    r.work_location === 'home'
+    (r.work_location === 'home' || r.work_mode === 'wfh')
   ).length;
 
   const getStatusBadge = (status) => {
@@ -5191,7 +5226,17 @@ function EnhancedAttendanceTab({
               />
             )}
             
-            <Button onClick={onRefresh} variant="outline" size="sm" className={borderColor}>
+            <Button 
+              onClick={() => {
+                if (dateFilter === 'day') {
+                  fetchDayAttendance();
+                }
+                onRefresh();
+              }} 
+              variant="outline" 
+              size="sm" 
+              className={borderColor}
+            >
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
