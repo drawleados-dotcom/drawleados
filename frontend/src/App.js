@@ -269,6 +269,7 @@ function App() {
           <AppRouter />
           <Toaster
             position="top-right"
+            closeButton={true}
             toastOptions={{
               style: {
                 background: 'var(--toast-bg, #18181b)',

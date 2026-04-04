@@ -988,7 +988,10 @@ export default function HRAdminPage() {
       console.log('Creating employee:', employeeData);
       const res = await axios.post(`${API}/api/hr/admin/create-employee`, employeeData, { headers });
       console.log('Create response:', res.data);
-      toast.success(`Employee ${employeeData.full_name} created successfully! Credentials: ${employeeData.email} / ${employeeData.password}`);
+      toast.success(`Employee ${employeeData.full_name} created successfully!`, {
+        description: 'Login credentials have been set.',
+        duration: 4000,
+      });
       setShowAddModal(false);
       loadEmployees();
       loadStats();
