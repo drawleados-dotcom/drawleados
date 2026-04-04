@@ -475,8 +475,11 @@ async def register(user_data: UserCreate):
 
 @api_router.post("/auth/login")
 async def login(credentials: UserLogin):
-    # Find user
-    user_doc = await db.users.find_one({"email": credentials.email}, {"_id": 0})
+    # Find user (case-insensitive email lookup)
+    user_doc = await db.users.find_one(
+        {"email": {"$regex": f"^{credentials.email}$", "$options": "i"}},
+        {"_id": 0}
+    )
     
     logging.info(f"Login attempt for: {credentials.email}")
     logging.info(f"User found: {user_doc is not None}")
@@ -661,7 +664,7 @@ async def get_2fa_status(request: Request):
 @api_router.post("/auth/2fa/verify")
 async def verify_2fa_login(email: str, code: str):
     """Verify 2FA code during login"""
-    user_doc = await db.users.find_one({"email": email})
+    user_doc = await db.users.find_one({"email": {"$regex": f"^{email}$", "$options": "i"}})
     
     if not user_doc:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -923,21 +926,24 @@ async def forgot_password(data: ForgotPasswordRequest):
     """Request OTP for password reset - PUBLIC endpoint (no auth required)"""
     import random
     
-    # Check if email exists
-    user = await db.users.find_one({"email": data.email})
+    # Check if email exists (case-insensitive)
+    user = await db.users.find_one({"email": {"$regex": f"^{data.email}$", "$options": "i"}})
     if not user:
         # Don't reveal if email exists or not for security
         return {"message": "If this email is registered, you will receive an OTP"}
+    
+    # Use the email from database (normalized case)
+    user_email = user.get("email", data.email)
     
     # Generate 6-digit OTP
     otp = str(random.randint(100000, 999999))
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
     
     # Store OTP in database
-    await db.password_otps.delete_many({"email": data.email})  # Clear old OTPs
+    await db.password_otps.delete_many({"email": user_email})  # Clear old OTPs
     await db.password_otps.insert_one({
         "user_id": user["user_id"],
-        "email": data.email,
+        "email": user_email,
         "otp": otp,
         "expires_at": expires_at,
         "type": "forgot_password",
@@ -970,21 +976,21 @@ async def forgot_password(data: ForgotPasswordRequest):
             resend.api_key = resend_api_key
             params = {
                 "from": sender_email,
-                "to": [data.email],
+                "to": [user_email],
                 "subject": "Password Reset OTP - Drawlead OS",
                 "html": html_content
             }
             email_response = await asyncio.to_thread(resend.Emails.send, params)
-            logging.info(f"Password reset OTP sent to {data.email}, email_id: {email_response.get('id')}")
+            logging.info(f"Password reset OTP sent to {user_email}, email_id: {email_response.get('id')}")
         except Exception as e:
             logging.error(f"Failed to send reset OTP email: {e}")
-            logging.info(f"[TEST] Password reset OTP for {data.email}: {otp}")
+            logging.info(f"[TEST] Password reset OTP for {user_email}: {otp}")
     else:
         # No API key - log OTP for testing
-        logging.warning(f"RESEND_API_KEY not configured. OTP for {data.email}: {otp}")
-        logging.info(f"[TEST MODE] Password reset OTP for {data.email}: {otp}")
+        logging.warning(f"RESEND_API_KEY not configured. OTP for {user_email}: {otp}")
+        logging.info(f"[TEST MODE] Password reset OTP for {user_email}: {otp}")
     
-    return {"message": "If this email is registered, you will receive an OTP", "email_hint": data.email[:3] + "***" + data.email[data.email.index("@"):]}
+    return {"message": "If this email is registered, you will receive an OTP", "email_hint": user_email[:3] + "***" + user_email[user_email.index("@"):]}
 
 @api_router.post("/auth/reset-password")
 async def reset_password(data: ResetPasswordRequest):
@@ -1006,14 +1012,18 @@ async def reset_password(data: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail="Password must contain at least one special character")
     
     # Find and validate OTP
+    # Find OTP record (case-insensitive email)
     otp_record = await db.password_otps.find_one({
-        "email": data.email,
+        "email": {"$regex": f"^{data.email}$", "$options": "i"},
         "otp": data.otp,
         "type": "forgot_password"
     })
     
     if not otp_record:
         raise HTTPException(status_code=401, detail="Invalid OTP")
+    
+    # Get the actual email from OTP record
+    user_email = otp_record.get("email")
     
     # Handle timezone-aware comparison
     expires_at = otp_record["expires_at"]
@@ -1024,18 +1034,18 @@ async def reset_password(data: ResetPasswordRequest):
         await db.password_otps.delete_one({"_id": otp_record["_id"]})
         raise HTTPException(status_code=401, detail="OTP has expired. Please request a new one")
     
-    # Update password
+    # Update password (use the email from OTP record for consistency)
     new_hash = bcrypt.hashpw(data.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     await db.users.update_one(
-        {"email": data.email},
+        {"email": user_email},
         {"$set": {"password_hash": new_hash}}
     )
     
     # Delete used OTP
-    await db.password_otps.delete_many({"email": data.email})
+    await db.password_otps.delete_many({"email": user_email})
     
     # Invalidate all existing sessions for this user
-    user = await db.users.find_one({"email": data.email})
+    user = await db.users.find_one({"email": user_email})
     if user:
         await db.user_sessions.delete_many({"user_id": user["user_id"]})
     
