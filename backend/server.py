@@ -17,6 +17,8 @@ import io
 import pyotp
 import qrcode
 import base64
+import asyncio
+import resend
 from io import BytesIO
 
 # Import finance and operations routes
@@ -943,33 +945,44 @@ async def forgot_password(data: ForgotPasswordRequest):
     })
     
     # Send OTP via email
-    try:
-        from emergentintegrations.llm.resend import send_email
-        await send_email(
-            to_email=data.email,
-            subject="Password Reset OTP - Drawlead OS",
-            html_content=f"""
-            <div style="font-family: Arial, sans-serif; padding: 20px; background: #09090b; color: #fafafa;">
-                <div style="max-width: 500px; margin: 0 auto; background: #18181b; padding: 30px; border-radius: 12px; border: 1px solid #27272a;">
-                    <h2 style="color: #6366f1; margin-bottom: 20px;">Password Reset Request</h2>
-                    <p style="color: #a1a1aa;">Hi {user.get('name', 'there')},</p>
-                    <p style="color: #a1a1aa;">You requested to reset your password. Use the OTP below:</p>
-                    <div style="background: #27272a; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
-                        <h1 style="font-size: 36px; color: #6366f1; letter-spacing: 8px; margin: 0; font-family: monospace;">{otp}</h1>
-                    </div>
-                    <p style="color: #71717a; font-size: 14px;">This OTP is valid for 10 minutes.</p>
-                    <p style="color: #71717a; font-size: 14px;">If you didn't request this, please ignore this email.</p>
-                    <hr style="border: none; border-top: 1px solid #27272a; margin: 20px 0;">
-                    <p style="color: #52525b; font-size: 12px; text-align: center;">Drawlead OS - Internal Operating System</p>
-                </div>
+    resend_api_key = os.environ.get("RESEND_API_KEY", "")
+    sender_email = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+    
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; padding: 20px; background: #09090b; color: #fafafa;">
+        <div style="max-width: 500px; margin: 0 auto; background: #18181b; padding: 30px; border-radius: 12px; border: 1px solid #27272a;">
+            <h2 style="color: #6366f1; margin-bottom: 20px;">Password Reset Request</h2>
+            <p style="color: #a1a1aa;">Hi {user.get('name', 'there')},</p>
+            <p style="color: #a1a1aa;">You requested to reset your password. Use the OTP below:</p>
+            <div style="background: #27272a; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                <h1 style="font-size: 36px; color: #6366f1; letter-spacing: 8px; margin: 0; font-family: monospace;">{otp}</h1>
             </div>
-            """
-        )
-        logging.info(f"Password reset OTP sent to {data.email}")
-    except Exception as e:
-        logging.error(f"Failed to send reset OTP email: {e}")
-        # Log OTP for testing
-        logging.info(f"[TEST] Password reset OTP for {data.email}: {otp}")
+            <p style="color: #71717a; font-size: 14px;">This OTP is valid for 10 minutes.</p>
+            <p style="color: #71717a; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+            <hr style="border: none; border-top: 1px solid #27272a; margin: 20px 0;">
+            <p style="color: #52525b; font-size: 12px; text-align: center;">Drawlead OS - Internal Operating System</p>
+        </div>
+    </div>
+    """
+    
+    if resend_api_key and resend_api_key != "re_your_api_key_here":
+        try:
+            resend.api_key = resend_api_key
+            params = {
+                "from": sender_email,
+                "to": [data.email],
+                "subject": "Password Reset OTP - Drawlead OS",
+                "html": html_content
+            }
+            email_response = await asyncio.to_thread(resend.Emails.send, params)
+            logging.info(f"Password reset OTP sent to {data.email}, email_id: {email_response.get('id')}")
+        except Exception as e:
+            logging.error(f"Failed to send reset OTP email: {e}")
+            logging.info(f"[TEST] Password reset OTP for {data.email}: {otp}")
+    else:
+        # No API key - log OTP for testing
+        logging.warning(f"RESEND_API_KEY not configured. OTP for {data.email}: {otp}")
+        logging.info(f"[TEST MODE] Password reset OTP for {data.email}: {otp}")
     
     return {"message": "If this email is registered, you will receive an OTP", "email_hint": data.email[:3] + "***" + data.email[data.email.index("@"):]}
 
