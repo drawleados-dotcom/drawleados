@@ -907,6 +907,122 @@ async def get_user_permissions(user_id: str, current_user: User = Depends(get_cu
 
 # ============== PASSWORD CHANGE WITH OTP ==============
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+    confirm_password: str
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """Request OTP for password reset - PUBLIC endpoint (no auth required)"""
+    import random
+    
+    # Check if email exists
+    user = await db.users.find_one({"email": data.email})
+    if not user:
+        # Don't reveal if email exists or not for security
+        return {"message": "If this email is registered, you will receive an OTP"}
+    
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    
+    # Store OTP in database
+    await db.password_otps.delete_many({"email": data.email})  # Clear old OTPs
+    await db.password_otps.insert_one({
+        "user_id": user["user_id"],
+        "email": data.email,
+        "otp": otp,
+        "expires_at": expires_at,
+        "type": "forgot_password",
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # Send OTP via email
+    try:
+        from emergentintegrations.llm.resend import send_email
+        await send_email(
+            to_email=data.email,
+            subject="Password Reset OTP - Drawlead OS",
+            html_content=f"""
+            <div style="font-family: Arial, sans-serif; padding: 20px; background: #09090b; color: #fafafa;">
+                <div style="max-width: 500px; margin: 0 auto; background: #18181b; padding: 30px; border-radius: 12px; border: 1px solid #27272a;">
+                    <h2 style="color: #6366f1; margin-bottom: 20px;">Password Reset Request</h2>
+                    <p style="color: #a1a1aa;">Hi {user.get('name', 'there')},</p>
+                    <p style="color: #a1a1aa;">You requested to reset your password. Use the OTP below:</p>
+                    <div style="background: #27272a; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                        <h1 style="font-size: 36px; color: #6366f1; letter-spacing: 8px; margin: 0; font-family: monospace;">{otp}</h1>
+                    </div>
+                    <p style="color: #71717a; font-size: 14px;">This OTP is valid for 10 minutes.</p>
+                    <p style="color: #71717a; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+                    <hr style="border: none; border-top: 1px solid #27272a; margin: 20px 0;">
+                    <p style="color: #52525b; font-size: 12px; text-align: center;">Drawlead OS - Internal Operating System</p>
+                </div>
+            </div>
+            """
+        )
+        logging.info(f"Password reset OTP sent to {data.email}")
+    except Exception as e:
+        logging.error(f"Failed to send reset OTP email: {e}")
+        # Log OTP for testing
+        logging.info(f"[TEST] Password reset OTP for {data.email}: {otp}")
+    
+    return {"message": "If this email is registered, you will receive an OTP", "email_hint": data.email[:3] + "***" + data.email[data.email.index("@"):]}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """Verify OTP and reset password - PUBLIC endpoint (no auth required)"""
+    
+    if data.new_password != data.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    
+    # Password strength validation
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    if not any(c.isupper() for c in data.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter")
+    if not any(c.islower() for c in data.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter")
+    if not any(c.isdigit() for c in data.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one number")
+    if not any(c in "!@#$%^&*(),.?\":{}|<>" for c in data.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one special character")
+    
+    # Find and validate OTP
+    otp_record = await db.password_otps.find_one({
+        "email": data.email,
+        "otp": data.otp,
+        "type": "forgot_password"
+    })
+    
+    if not otp_record:
+        raise HTTPException(status_code=401, detail="Invalid OTP")
+    
+    if otp_record["expires_at"] < datetime.now(timezone.utc):
+        await db.password_otps.delete_one({"_id": otp_record["_id"]})
+        raise HTTPException(status_code=401, detail="OTP has expired. Please request a new one")
+    
+    # Update password
+    new_hash = bcrypt.hashpw(data.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    await db.users.update_one(
+        {"email": data.email},
+        {"$set": {"password_hash": new_hash}}
+    )
+    
+    # Delete used OTP
+    await db.password_otps.delete_many({"email": data.email})
+    
+    # Invalidate all existing sessions for this user
+    user = await db.users.find_one({"email": data.email})
+    if user:
+        await db.user_sessions.delete_many({"user_id": user["user_id"]})
+    
+    return {"message": "Password reset successfully. Please login with your new password."}
+
 @api_router.post("/auth/request-otp")
 async def request_password_otp(request: Request, current_user: User = Depends(get_current_user)):
     """Request OTP to change password - sends to registered email"""
