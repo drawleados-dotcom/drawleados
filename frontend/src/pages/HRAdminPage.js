@@ -3853,8 +3853,8 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                         </SelectTrigger>
                         <SelectContent className={`${bgCard} border ${borderColor}`}>
                           {designations.map((d) => (
-                            <SelectItem key={d.designation_id || d.name} value={d.name}>
-                              {d.name}
+                            <SelectItem key={d.designation_id || d.title || d.name} value={d.title || d.name}>
+                              {d.title || d.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -3877,8 +3877,8 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                         </SelectTrigger>
                         <SelectContent className={`${bgCard} border ${borderColor}`}>
                           {departments.map((d) => (
-                            <SelectItem key={d.department_id || d.name} value={d.name}>
-                              {d.name}
+                            <SelectItem key={d.department_id || d.title || d.name} value={d.title || d.name}>
+                              {d.title || d.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
