@@ -75,14 +75,26 @@ const Sidebar = () => {
     // Super Admin and Admin have full access
     if (userRole === 'super_admin' || userRole === 'admin') return true;
     
-    // ALL employees get HR access (for their own attendance/leave/profile)
-    if (module === 'hr') return true;
+    // HR access - check explicit module access
+    if (module === 'hr') return moduleAccess.includes('hr');
     
-    // ALL employees get Operations access (filtered by department)
-    if (module === 'operations') return true;
+    // HR Admin - separate permission
+    if (module === 'hr_admin') return moduleAccess.includes('hr_admin');
     
-    // ALL employees get Profile access
+    // Operations - check explicit access
+    if (module === 'operations') return moduleAccess.includes('operations');
+    
+    // Profile - ALL employees get Profile access
     if (module === 'profile') return true;
+    
+    // Calendar - check explicit access
+    if (module === 'calendar') return moduleAccess.includes('calendar');
+    
+    // My Tasks - check explicit access
+    if (module === 'my_tasks') return moduleAccess.includes('my_tasks');
+    
+    // Our Tasks - check explicit access
+    if (module === 'our_tasks') return moduleAccess.includes('our_tasks');
     
     // Tasks module - check explicit access
     if (module === 'tasks') return moduleAccess.includes('tasks');
@@ -445,7 +457,8 @@ const Sidebar = () => {
         {/* === STANDARD VIEW (for non-tasks-only users and non-project-managers) === */}
         {!hasTasksModuleOnly && !isProjectManager && (
           <>
-        {/* 1. Calendar - visible for ALL users */}
+        {/* 1. Calendar - only if user has calendar access */}
+        {hasAccess('calendar') && (
         <Link
           to="/calendar"
           data-testid="nav-calendar"
@@ -455,8 +468,10 @@ const Sidebar = () => {
           <Calendar className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'Calendar'}
         </Link>
+        )}
 
-        {/* 2. My Tasks - Personal task view for all users */}
+        {/* 2. My Tasks - only if user has my_tasks or tasks access */}
+        {hasAccess('my_tasks') && (
         <Link
           to="/tasks?view=my-tasks"
           data-testid="nav-my-tasks"
@@ -466,8 +481,10 @@ const Sidebar = () => {
           <User className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'My Tasks'}
         </Link>
+        )}
 
-        {/* Our Tasks - Team-wide task management accessible to all */}
+        {/* Our Tasks - only if user has our_tasks access */}
+        {hasAccess('our_tasks') && (
         <Link
           to="/our-tasks"
           data-testid="nav-our-tasks"
@@ -477,6 +494,7 @@ const Sidebar = () => {
           <ClipboardList className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'Our Tasks'}
         </Link>
+        )}
 
         {/* 3. Sales - Expandable menu with Leads and BDE Tasks */}
         {(hasAccess('leads') || isBDE || canSeeDepartment('bde')) && (
