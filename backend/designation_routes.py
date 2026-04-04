@@ -117,12 +117,26 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
             {"$set": update_data}
         )
         
+        # If module_access was updated, update all employees with this designation
+        if data.module_access is not None:
+            old_designation = designation
+            # Update users who have this designation
+            await db.users.update_many(
+                {"designation": old_designation.get("title")},
+                {"$set": {"module_access": data.module_access}}
+            )
+            # Also update employee profiles
+            await db.employee_profiles.update_many(
+                {"designation": old_designation.get("title")},
+                {"$set": {"module_access": data.module_access}}
+            )
+        
         updated = await db.designations.find_one(
             {"designation_id": designation_id}, 
             {"_id": 0}
         )
         
-        return {"message": "Designation updated successfully", "designation": updated}
+        return {"message": "Designation updated successfully", "designation": updated, "employees_updated": True if data.module_access else False}
     except HTTPException:
         raise
     except Exception as e:
