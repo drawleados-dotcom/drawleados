@@ -1080,33 +1080,15 @@ async def forgot_password(data: ForgotPasswordRequest):
             }
             email_response = await asyncio.to_thread(resend.Emails.send, params)
             logging.info(f"Password reset OTP sent to {user_email}, email_id: {email_response.get('id')}")
-            return {
-                "message": "OTP sent to your email. Please check your inbox and spam folder.",
-                "email_hint": user_email[:3] + "***" + user_email[user_email.index("@"):],
-                "email_sent": True
-            }
         except Exception as e:
             logging.error(f"Failed to send reset OTP email: {e}")
-            logging.info(f"[TEST] Password reset OTP for {user_email}: {otp}")
-            # Return OTP directly if email fails
-            return {
-                "message": "Email delivery failed. Use the OTP shown below.",
-                "email_hint": user_email[:3] + "***" + user_email[user_email.index("@"):],
-                "email_sent": False,
-                "otp": otp,
-                "note": "Email service unavailable. Please use this OTP to reset your password."
-            }
+            logging.info(f"[SERVER LOG] Password reset OTP for {user_email}: {otp}")
     else:
-        # No API key - return OTP directly
+        # No API key - log for server admin only
         logging.warning(f"RESEND_API_KEY not configured. OTP for {user_email}: {otp}")
-        logging.info(f"[TEST MODE] Password reset OTP for {user_email}: {otp}")
-        return {
-            "message": "Email service not configured. Use the OTP shown below.",
-            "email_hint": user_email[:3] + "***" + user_email[user_email.index("@"):],
-            "email_sent": False,
-            "otp": otp,
-            "note": "Email service not configured. Please use this OTP to reset your password."
-        }
+        logging.info(f"[SERVER LOG] Password reset OTP for {user_email}: {otp}")
+    
+    return {"message": "If this email is registered, you will receive an OTP", "email_hint": user_email[:3] + "***" + user_email[user_email.index("@"):]}
 
 @api_router.post("/auth/reset-password")
 async def reset_password(data: ResetPasswordRequest):
