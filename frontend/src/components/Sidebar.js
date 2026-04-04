@@ -72,10 +72,9 @@ const Sidebar = () => {
   
   // Check access permissions
   const hasAccess = (module) => {
-    // Super Admin - RESTRICTED to specific modules only
+    // Super Admin - Full access to all modules
     if (userRole === 'super_admin') {
-      const superAdminAllowedModules = ['calendar', 'our_tasks', 'leads', 'hr', 'hr_admin', 'profile', 'documentations', 'settings'];
-      return superAdminAllowedModules.includes(module);
+      return true; // Super admin has access to everything
     }
     
     // Admin has full access
