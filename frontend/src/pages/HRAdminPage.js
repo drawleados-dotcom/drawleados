@@ -82,12 +82,26 @@ export default function HRAdminPage() {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
   
-  // Check if user can edit (super_admin and admin can edit, hr_manager is view-only except for reviews)
-  const canEdit = user?.role === 'super_admin' || user?.role === 'admin';
-  const isHRManager = user?.role === 'hr_manager';
+  // Get user's module access
+  const moduleAccess = user?.module_access || [];
   
-  // HR Manager can write reviews
-  const canWriteReviews = canEdit || isHRManager;
+  // Check if user has HR Manager (limited) or HR Admin (full) access
+  const isHRAdmin = user?.role === 'super_admin' || user?.role === 'admin' || moduleAccess.includes('hr_admin');
+  const isHRManager = moduleAccess.includes('hr_manager') && !isHRAdmin;
+  
+  // Permission checks based on role
+  // HR Admin: Full access to everything
+  // HR Manager: Limited access - mostly view only
+  const canEdit = isHRAdmin; // Only HR Admin can edit employees, etc.
+  const canViewEmployees = isHRAdmin || isHRManager; // Both can view
+  const canEditEmployees = isHRAdmin; // Only HR Admin can edit/add/delete employees
+  const canViewApprovals = isHRAdmin || isHRManager; // Both can view
+  const canEditApprovals = isHRAdmin; // Only HR Admin can approve/reject
+  const canViewReviews = isHRAdmin || isHRManager; // Both can view
+  const canEditReviews = isHRAdmin || isHRManager; // HR Manager CAN edit reviews
+  const canViewCalendar = isHRAdmin || isHRManager; // Both can view
+  const canEditCalendar = isHRAdmin; // Only HR Admin can edit calendar
+  const canViewAttendance = isHRAdmin || isHRManager; // Both can view
   
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -1186,7 +1200,7 @@ export default function HRAdminPage() {
               </div>
             )}
             
-            {activeTab === 'employees' && canEdit && (
+            {activeTab === 'employees' && canEditEmployees && (
               <Button 
                 onClick={() => setShowAddModal(true)}
                 className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
@@ -1255,7 +1269,7 @@ export default function HRAdminPage() {
             setSearchQuery={setSearchQuery}
             onEdit={(emp) => { setSelectedEmployee(emp); setShowEditModal(true); }}
             onDelete={handleDeleteEmployee}
-            canEdit={canEdit}
+            canEdit={canEditEmployees}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -1310,7 +1324,7 @@ export default function HRAdminPage() {
             onViewTasks={handleViewTasks}
             onSendForVerification={handleSendForVerification}
             onFinalApprove={handleFinalApprove}
-            canEdit={canEdit}
+            canEdit={canEditApprovals}
             formatDate={formatDate}
             formatTime={formatTime}
             bgCard={bgCard}
@@ -1374,7 +1388,7 @@ export default function HRAdminPage() {
             onUpdateSettings={handleUpdateHRSettings}
             onRefresh={loadCalendar}
             loadHRSettings={loadHRSettings}
-            canEdit={canEdit}
+            canEdit={canEditCalendar}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}

@@ -736,16 +736,16 @@ const Sidebar = () => {
         </Link>
         )}
 
-        {/* 6. HR Admin - Admin/Manager only */}
+        {/* 6. HR Admin/Manager - Admin/Manager only */}
         {canManageHR && (
           <Link
             to="/hr-admin"
             data-testid="nav-hr-admin"
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'HR Admin' : ''}
+            title={isCollapsed ? (moduleAccess.includes('hr_manager') && !moduleAccess.includes('hr_admin') ? 'HR Manager' : 'HR Admin') : ''}
           >
             <Shield className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'HR Admin'}
+            {!isCollapsed && (moduleAccess.includes('hr_manager') && !moduleAccess.includes('hr_admin') ? 'HR Manager' : 'HR Admin')}
           </Link>
         )}
 
