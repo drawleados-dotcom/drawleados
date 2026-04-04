@@ -35,6 +35,7 @@ import LeaveVerificationPage from './pages/LeaveVerificationPage';
 import TasksModulePage from './pages/TasksModulePage';
 import MyTasksPage from './pages/MyTasksPage';
 import MyDocumentsPage from './pages/MyDocumentsPage';
+import DLOperationsPage from './pages/DLOperationsPage';
 import './App.css';
 
 function AppRouter() {
@@ -167,6 +168,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <WebsiteProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dl-operations"
+        element={
+          <ProtectedRoute>
+            <DLOperationsPage />
           </ProtectedRoute>
         }
       />

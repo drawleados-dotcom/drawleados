@@ -584,6 +584,22 @@ const Sidebar = () => {
         </>
         )}
 
+        {/* 3.5 DL Operations - Website Development Only */}
+        {(hasAccess('operations') || userRole === 'super_admin' || isAdmin || isProjectManager) && (
+          <Link
+            to="/dl-operations"
+            data-testid="nav-dl-operations"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/dl-operations' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'DL Operations' : ''}
+          >
+            <Globe className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'DL Operations'}
+            {!isCollapsed && websiteProjects.length > 0 && (
+              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs ml-auto">{websiteProjects.length}</Badge>
+            )}
+          </Link>
+        )}
+
         {/* 4. Operations - TASKS with full departments */}
         {hasAccess('operations') && (
         <div>
