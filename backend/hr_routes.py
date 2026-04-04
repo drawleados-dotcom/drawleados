@@ -2921,13 +2921,26 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin"]:
+    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Get user info
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if module_access needs to be updated (when designation changes)
+    update_module_access = profile_data.pop("update_module_access", False)
+    new_module_access = profile_data.pop("new_module_access", [])
+    designation_id = profile_data.pop("designation_id", None)
+    
+    if update_module_access and new_module_access:
+        # Update user's module_access based on new designation
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"module_access": new_module_access, "designation": profile_data.get("designation", "")}}
+        )
+        logging.info(f"Updated module_access for user {user_id} to {new_module_access}")
     
     # Update or create profile
     profile_data["user_id"] = user_id

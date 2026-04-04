@@ -3524,6 +3524,7 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
     // Employment Details
     employee_id: employee.profile?.employee_id || '',
     designation: employee.profile?.designation || employee.role || '',
+    designation_id: '', // Will be set when user selects a designation from dropdown
     department: employee.profile?.department || '',
     employment_type: employee.profile?.employment_type || 'full-time',
     joining_date: employee.profile?.joining_date ? employee.profile.joining_date.split('T')[0] : '',
@@ -3539,6 +3540,9 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
     city: employee.profile?.city || '',
     state: employee.profile?.state || '',
     pincode: employee.profile?.pincode || '',
+    // Module access - will be updated when designation changes
+    update_module_access: false,
+    new_module_access: [],
   });
 
   const handleChange = (field, value) => {
@@ -3847,7 +3851,19 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                   <div>
                     <Label className={textPrimary}>Designation</Label>
                     {designations.length > 0 ? (
-                      <Select value={formData.designation} onValueChange={(v) => handleChange('designation', v)}>
+                      <Select 
+                        value={formData.designation} 
+                        onValueChange={(v) => {
+                          // Find the selected designation to get its module_access
+                          const selectedDes = designations.find(d => (d.title || d.name) === v);
+                          handleChange('designation', v);
+                          if (selectedDes) {
+                            handleChange('designation_id', selectedDes.designation_id);
+                            handleChange('update_module_access', true);
+                            handleChange('new_module_access', selectedDes.module_access || []);
+                          }
+                        }}
+                      >
                         <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
                           <SelectValue placeholder="Select designation">{formData.designation || 'Select designation'}</SelectValue>
                         </SelectTrigger>
@@ -3866,6 +3882,11 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                         className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                         placeholder="Enter designation"
                       />
+                    )}
+                    {formData.update_module_access && formData.new_module_access.length > 0 && (
+                      <p className="text-xs text-[#22c55e] mt-1">
+                        ✓ Module access will be updated: {formData.new_module_access.join(', ')}
+                      </p>
                     )}
                   </div>
                   <div>
