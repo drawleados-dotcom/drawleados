@@ -3565,22 +3565,25 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
   };
 
   const handleRegeneratePassword = async () => {
+    if (!newPassword) {
+      toast.error('Please enter or generate a password first');
+      return;
+    }
+    
     setRegeneratingPassword(true);
     try {
-      const password = generateRandomPassword();
       const API = process.env.REACT_APP_BACKEND_URL;
       const token = localStorage.getItem('session_token');
       
       await axios.put(`${API}/api/users/${employee.user_id}`, 
-        { password },
+        { password: newPassword },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      setNewPassword(password);
       setShowNewPassword(true);
-      toast.success('New password generated! Make sure to share it with the employee.');
+      toast.success('Password saved! Share it securely with the employee.');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to regenerate password');
+      toast.error(error.response?.data?.detail || 'Failed to save password');
     } finally {
       setRegeneratingPassword(false);
     }
@@ -3988,60 +3991,77 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                   </div>
                 </div>
 
-                {/* Password Regeneration Section */}
+                {/* Password Management Section */}
                 <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
                   <h3 className={`font-medium ${textPrimary} mb-4 flex items-center gap-2`}>
                     <Key className="h-5 w-5 text-[#f59e0b]" />
                     Password Management
                   </h3>
                   <div className="space-y-4">
-                    <p className={`text-sm ${textSecondary}`}>
-                      Generate a new secure password for this employee. The new password will be displayed once - make sure to copy and share it securely.
-                    </p>
-                    
-                    <Button
-                      type="button"
-                      onClick={handleRegeneratePassword}
-                      disabled={regeneratingPassword}
-                      className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
-                    >
-                      {regeneratingPassword ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Regenerate Password
-                        </>
-                      )}
-                    </Button>
-
-                    {/* Show New Password */}
-                    {showNewPassword && newPassword && (
-                      <div className={`p-4 rounded-lg bg-[#422006] border border-[#f59e0b]/30`}>
-                        <p className="text-[#fcd34d] text-sm font-medium mb-2">
-                          New Password Generated:
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <code className={`flex-1 p-2 rounded bg-[#18181b] text-[#fafafa] font-mono text-lg tracking-wider`}>
-                            {newPassword}
-                          </code>
-                          <Button
-                            type="button"
-                            onClick={copyPassword}
-                            size="sm"
-                            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <p className="text-[#a1a1aa] text-xs mt-2">
-                          Share this password securely with the employee. It won't be shown again.
-                        </p>
+                    {/* Manual Password Input */}
+                    <div>
+                      <Label className={textSecondary}>Set New Password Manually</Label>
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          type="text"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className={`${bgInput} border ${borderColor} ${textPrimary} font-mono`}
+                          placeholder="Enter new password"
+                        />
+                        <Button
+                          type="button"
+                          onClick={copyPassword}
+                          disabled={!newPassword}
+                          size="sm"
+                          className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
                       </div>
-                    )}
+                      <p className={`text-xs ${textSecondary} mt-1`}>
+                        Enter a custom password or use auto-generate below
+                      </p>
+                    </div>
+
+                    {/* Auto Generate Button */}
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const password = generateRandomPassword();
+                          setNewPassword(password);
+                          setShowNewPassword(true);
+                        }}
+                        className="bg-[#27272a] hover:bg-[#3f3f46] text-white"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Auto Generate
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleRegeneratePassword}
+                        disabled={regeneratingPassword || !newPassword}
+                        className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                      >
+                        {regeneratingPassword ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="h-4 w-4 mr-2" />
+                            Save Password
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    {/* Password Requirements Hint */}
+                    <div className={`text-xs ${textSecondary} p-2 rounded bg-[#27272a]/50`}>
+                      Password should contain: 8+ characters, uppercase, lowercase, number, special character
+                    </div>
                   </div>
                 </div>
 
@@ -4049,14 +4069,19 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
                 <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
                   <h3 className={`font-medium ${textPrimary} mb-4 flex items-center gap-2`}>
                     <Shield className="h-5 w-5 text-[#22c55e]" />
-                    Account Status
+                    Account Information
                   </h3>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className={textPrimary}>Employee Account</p>
-                      <p className={`text-sm ${textSecondary}`}>User ID: {employee.user_id}</p>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={textPrimary}>Employee Account</p>
+                        <p className={`text-sm ${textSecondary}`}>Employee ID / User ID: <span className="font-mono text-[#6366f1]">{employee.user_id}</span></p>
+                      </div>
+                      <Badge className="bg-[#22c55e]/20 text-[#22c55e]">Active</Badge>
                     </div>
-                    <Badge className="bg-[#22c55e]/20 text-[#22c55e]">Active</Badge>
+                    <div className={`text-xs ${textSecondary}`}>
+                      This ID is used for both employee records and login authentication
+                    </div>
                   </div>
                 </div>
               </div>
