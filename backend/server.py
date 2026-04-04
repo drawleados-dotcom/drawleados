@@ -14,6 +14,10 @@ import httpx
 import bcrypt
 import csv
 import io
+import pyotp
+import qrcode
+import base64
+from io import BytesIO
 
 # Import finance and operations routes
 import sys
@@ -490,6 +494,14 @@ async def login(credentials: UserLogin):
     if not password_valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+    # Check if 2FA is enabled
+    if user_doc.get("two_factor_enabled"):
+        return {
+            "requires_2fa": True,
+            "email": credentials.email,
+            "message": "Please enter your 2FA code"
+        }
+    
     # Create session
     session_token = f"session_{uuid.uuid4().hex}"
     session_doc = {
@@ -503,6 +515,10 @@ async def login(credentials: UserLogin):
     
     del user_doc["password_hash"]
     
+    # Remove 2FA secrets from response
+    user_doc.pop("two_factor_secret", None)
+    user_doc.pop("two_factor_secret_pending", None)
+    
     # Add designation and department from employee_profiles if not set
     if not user_doc.get("designation") or not user_doc.get("department"):
         profile = await db.employee_profiles.find_one({"user_id": user_doc["user_id"]}, {"_id": 0})
@@ -511,6 +527,166 @@ async def login(credentials: UserLogin):
             user_doc["department"] = profile.get("department", "")
     
     return {"user": user_doc, "session_token": session_token}
+
+# ============== TWO-FACTOR AUTHENTICATION (2FA) ==============
+
+class Enable2FARequest(BaseModel):
+    password: str
+
+class Verify2FARequest(BaseModel):
+    code: str
+
+class Disable2FARequest(BaseModel):
+    password: str
+    code: str
+
+@api_router.post("/auth/2fa/setup")
+async def setup_2fa(request: Request, data: Enable2FARequest):
+    """Generate 2FA secret and QR code for user"""
+    user = await get_current_user(request)
+    
+    # Verify password
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not verify_password(data.password, user_doc.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    
+    # Check if 2FA is already enabled
+    if user_doc.get("two_factor_enabled"):
+        raise HTTPException(status_code=400, detail="2FA is already enabled")
+    
+    # Generate secret
+    secret = pyotp.random_base32()
+    
+    # Generate TOTP URI for QR code
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(
+        name=user_doc.get("email"),
+        issuer_name="Drawlead OS"
+    )
+    
+    # Generate QR code as base64 image
+    qr = qrcode.QRCode(version=1, box_size=10, border=5)
+    qr.add_data(provisioning_uri)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Store secret temporarily (will be confirmed when user verifies)
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"two_factor_secret_pending": secret}}
+    )
+    
+    return {
+        "secret": secret,
+        "qr_code": f"data:image/png;base64,{qr_base64}",
+        "manual_entry_key": secret
+    }
+
+@api_router.post("/auth/2fa/verify-setup")
+async def verify_2fa_setup(request: Request, data: Verify2FARequest):
+    """Verify 2FA code and enable 2FA for user"""
+    user = await get_current_user(request)
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    pending_secret = user_doc.get("two_factor_secret_pending")
+    
+    if not pending_secret:
+        raise HTTPException(status_code=400, detail="No 2FA setup in progress")
+    
+    # Verify the code
+    totp = pyotp.TOTP(pending_secret)
+    if not totp.verify(data.code, valid_window=1):
+        raise HTTPException(status_code=401, detail="Invalid verification code")
+    
+    # Enable 2FA
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {
+            "$set": {
+                "two_factor_enabled": True,
+                "two_factor_secret": pending_secret
+            },
+            "$unset": {"two_factor_secret_pending": ""}
+        }
+    )
+    
+    return {"success": True, "message": "Two-factor authentication enabled successfully"}
+
+@api_router.post("/auth/2fa/disable")
+async def disable_2fa(request: Request, data: Disable2FARequest):
+    """Disable 2FA for user"""
+    user = await get_current_user(request)
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not user_doc.get("two_factor_enabled"):
+        raise HTTPException(status_code=400, detail="2FA is not enabled")
+    
+    # Verify password
+    if not verify_password(data.password, user_doc.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    
+    # Verify 2FA code
+    totp = pyotp.TOTP(user_doc.get("two_factor_secret"))
+    if not totp.verify(data.code, valid_window=1):
+        raise HTTPException(status_code=401, detail="Invalid 2FA code")
+    
+    # Disable 2FA
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {
+            "$set": {"two_factor_enabled": False},
+            "$unset": {"two_factor_secret": "", "two_factor_secret_pending": ""}
+        }
+    )
+    
+    return {"success": True, "message": "Two-factor authentication disabled"}
+
+@api_router.get("/auth/2fa/status")
+async def get_2fa_status(request: Request):
+    """Get 2FA status for current user"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    return {
+        "enabled": user_doc.get("two_factor_enabled", False)
+    }
+
+@api_router.post("/auth/2fa/verify")
+async def verify_2fa_login(email: str, code: str):
+    """Verify 2FA code during login"""
+    user_doc = await db.users.find_one({"email": email})
+    
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    if not user_doc.get("two_factor_enabled"):
+        raise HTTPException(status_code=400, detail="2FA is not enabled for this user")
+    
+    # Verify code
+    totp = pyotp.TOTP(user_doc.get("two_factor_secret"))
+    if not totp.verify(code, valid_window=1):
+        raise HTTPException(status_code=401, detail="Invalid 2FA code")
+    
+    # Create session (same as login)
+    session_token = f"session_{uuid.uuid4().hex}"
+    session_doc = {
+        "user_id": user_doc["user_id"],
+        "session_token": session_token,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.user_sessions.insert_one(session_doc)
+    
+    # Return user data without password
+    user_response = {k: v for k, v in user_doc.items() if k not in ["password_hash", "two_factor_secret", "two_factor_secret_pending", "_id"]}
+    
+    return {"user": user_response, "session_token": session_token}
 
 @api_router.post("/auth/google-session")
 async def google_session(session_id: str, response: Response):

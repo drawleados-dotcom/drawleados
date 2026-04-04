@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Shield, Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import PasswordStrength, { isPasswordStrong } from '../components/PasswordStrength';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -52,8 +53,8 @@ const AdminSignupPage = () => {
 
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+    } else if (!isPasswordStrong(formData.password)) {
+      newErrors.password = 'Password does not meet all requirements';
     }
 
     if (formData.password !== formData.confirmPassword) {
@@ -200,6 +201,7 @@ const AdminSignupPage = () => {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+                <PasswordStrength password={formData.password} />
                 {errors.password && <p className="text-red-500 text-xs">{errors.password}</p>}
               </div>
 

@@ -62,6 +62,11 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const setAuth = (userData, token) => {
+    localStorage.setItem('session_token', token);
+    setUser(userData);
+  };
+
   const value = {
     user,
     loading,
@@ -69,6 +74,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     checkAuth,
+    setAuth,
     isAdmin: ['admin', 'super_admin'].includes(user?.role),
     isSuperAdmin: user?.role === 'super_admin',
     isProjectManager: ['project_manager', 'admin', 'super_admin'].includes(user?.role),

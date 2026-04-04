@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import TwoFactorSettings from '../components/TwoFactorSettings';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -314,42 +315,50 @@ export default function ProfilePage() {
         )}
 
         {activeTab === 'security' && (
-          <Card className={`${bgCard} border ${borderColor}`}>
-            <CardHeader>
-              <CardTitle className={textPrimary}>Security Settings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className={`p-6 ${bgSecondary} rounded-lg`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-full bg-[#6366f1]/20 flex items-center justify-center">
-                      <Key className="h-6 w-6 text-[#6366f1]" />
+          <div className="space-y-6">
+            {/* Two-Factor Authentication */}
+            <TwoFactorSettings />
+            
+            {/* Change Password */}
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardHeader>
+                <CardTitle className={textPrimary}>Change Password</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`p-6 ${bgSecondary} rounded-lg`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-[#6366f1]/20 flex items-center justify-center">
+                        <Key className="h-6 w-6 text-[#6366f1]" />
+                      </div>
+                      <div>
+                        <h3 className={`font-semibold ${textPrimary}`}>Change Password</h3>
+                        <p className={`text-sm ${textSecondary}`}>Update your password via email OTP verification</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className={`font-semibold ${textPrimary}`}>Change Password</h3>
-                      <p className={`text-sm ${textSecondary}`}>Update your password via email OTP verification</p>
-                    </div>
+                    <Button
+                      onClick={() => setShowPasswordModal(true)}
+                      className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    >
+                      <Lock className="h-4 w-4 mr-2" />
+                      Change Password
+                    </Button>
                   </div>
-                  <Button
-                    onClick={() => setShowPasswordModal(true)}
-                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                  >
-                    <Lock className="h-4 w-4 mr-2" />
-                    Change Password
-                  </Button>
                 </div>
-              </div>
 
-              <div className={`mt-4 p-4 border ${borderColor} rounded-lg`}>
-                <h4 className={`font-medium ${textPrimary} mb-2`}>Password Requirements:</h4>
-                <ul className={`text-sm ${textSecondary} space-y-1`}>
-                  <li>• Minimum 6 characters</li>
-                  <li>• OTP will be sent to your registered email</li>
-                  <li>• OTP is valid for 10 minutes</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
+                <div className={`mt-4 p-4 border ${borderColor} rounded-lg`}>
+                  <h4 className={`font-medium ${textPrimary} mb-2`}>Password Requirements:</h4>
+                  <ul className={`text-sm ${textSecondary} space-y-1`}>
+                    <li>• Minimum 8 characters</li>
+                    <li>• At least one uppercase letter (A-Z)</li>
+                    <li>• At least one lowercase letter (a-z)</li>
+                    <li>• At least one number (0-9)</li>
+                    <li>• At least one special character (!@#$%^&*)</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Password Change Modal */}
