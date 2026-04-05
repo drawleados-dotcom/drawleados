@@ -11,7 +11,8 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Globe, Plus, Search, Eye, ArrowRight, FolderKanban, 
   Calendar, FileText, LayoutGrid, ListTodo, Filter, X, Check, User, Building2,
-  Palette, Type, Link2, Users, Settings, Play, Square, Pencil, Trash2, ExternalLink, Clock
+  Palette, Type, Link2, Users, Settings, Play, Square, Pencil, Trash2, ExternalLink, Clock,
+  Video, CheckSquare, ClipboardList, UserCircle, ArrowUpDown
 } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -154,6 +155,31 @@ export default function DLOperationsPage() {
   // Project Wise filters
   const [projectStatusFilter, setProjectStatusFilter] = useState('all'); // all, ongoing, delivered, new
   const [projectTypeFilter, setProjectTypeFilter] = useState('all'); // all, ecommerce, business, landing
+  
+  // Master Board Tab (new tabbed structure)
+  const [masterBoardTab, setMasterBoardTab] = useState('tasks'); // tasks, trackboard, pages, team, adtasks, meetings
+  
+  // Additional Tasks state
+  const [additionalTasks, setAdditionalTasks] = useState([]);
+  const [showAdTaskModal, setShowAdTaskModal] = useState(false);
+  const [newAdTask, setNewAdTask] = useState({
+    title: '', description: '', project_id: '', assignee: '', assignee_id: '',
+    due_date: '', priority: 'medium', status: 'To-Do', category: '', tags: []
+  });
+  const [adTaskTimers, setAdTaskTimers] = useState({});
+  
+  // Meetings state
+  const [meetings, setMeetings] = useState([]);
+  const [showMeetingModal, setShowMeetingModal] = useState(false);
+  const [newMeeting, setNewMeeting] = useState({
+    title: '', description: '', date: '', start_time: '', end_time: '',
+    meeting_type: 'video', meeting_link: '', location: '', attendees: [],
+    project_id: '', agenda: '', reminder: 15
+  });
+  
+  // Sort state
+  const [sortOrder, setSortOrder] = useState('asc'); // asc, desc
+  const [sortField, setSortField] = useState('due_date'); // due_date, priority
   
   // Create Project Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -397,10 +423,36 @@ export default function DLOperationsPage() {
     }
   }, [token]);
   
+  // Load additional tasks
+  const loadAdditionalTasks = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/additional-tasks/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAdditionalTasks(res.data || []);
+    } catch (error) {
+      console.error('Error loading additional tasks:', error);
+    }
+  }, [token]);
+  
+  // Load meetings
+  const loadMeetings = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/meetings/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setMeetings(res.data || []);
+    } catch (error) {
+      console.error('Error loading meetings:', error);
+    }
+  }, [token]);
+  
   useEffect(() => {
     loadProjects();
     loadTeamMembers();
-  }, [loadProjects, loadTeamMembers]);
+    loadAdditionalTasks();
+    loadMeetings();
+  }, [loadProjects, loadTeamMembers, loadAdditionalTasks, loadMeetings]);
   
   // Open create project modal
   const handleNewProject = () => {
@@ -546,6 +598,135 @@ export default function DLOperationsPage() {
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // ADDITIONAL TASKS FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════
+  
+  const handleCreateAdTask = async () => {
+    if (!newAdTask.title.trim()) {
+      toast.error('Please enter a task title');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/additional-tasks/`, newAdTask, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Task created!');
+      setShowAdTaskModal(false);
+      setNewAdTask({ title: '', description: '', project_id: '', assignee: '', assignee_id: '', due_date: '', priority: 'medium', status: 'To-Do', category: '', tags: [] });
+      loadAdditionalTasks();
+    } catch (error) {
+      toast.error('Failed to create task');
+    }
+  };
+  
+  const handleUpdateAdTaskStatus = async (taskId, status) => {
+    try {
+      await axios.put(`${API}/api/additional-tasks/${taskId}/status`, { status }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      loadAdditionalTasks();
+    } catch (error) {
+      toast.error('Failed to update status');
+    }
+  };
+  
+  const handleDeleteAdTask = async (taskId) => {
+    try {
+      await axios.delete(`${API}/api/additional-tasks/${taskId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Task deleted');
+      loadAdditionalTasks();
+    } catch (error) {
+      toast.error('Failed to delete task');
+    }
+  };
+  
+  const handleStartAdTaskTimer = (taskId) => {
+    handleUpdateAdTaskStatus(taskId, 'In Progress');
+    setAdTaskTimers(prev => ({ ...prev, [taskId]: { startTime: Date.now() } }));
+  };
+  
+  const handleStopAdTaskTimer = async (taskId) => {
+    const timerInfo = adTaskTimers[taskId];
+    if (timerInfo) {
+      const elapsedSeconds = Math.floor((Date.now() - timerInfo.startTime) / 1000);
+      try {
+        await axios.put(`${API}/api/additional-tasks/${taskId}/add-time`, { seconds: elapsedSeconds }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setAdTaskTimers(prev => { const n = {...prev}; delete n[taskId]; return n; });
+        loadAdditionalTasks();
+      } catch (error) {
+        toast.error('Failed to save time');
+      }
+    }
+  };
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // MEETINGS FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════
+  
+  const handleCreateMeeting = async () => {
+    if (!newMeeting.title.trim() || !newMeeting.date || !newMeeting.start_time) {
+      toast.error('Please fill in title, date, and start time');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/meetings/`, newMeeting, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Meeting scheduled!');
+      setShowMeetingModal(false);
+      setNewMeeting({ title: '', description: '', date: '', start_time: '', end_time: '', meeting_type: 'video', meeting_link: '', location: '', attendees: [], project_id: '', agenda: '', reminder: 15 });
+      loadMeetings();
+    } catch (error) {
+      toast.error('Failed to create meeting');
+    }
+  };
+  
+  const handleUpdateMeetingStatus = async (meetingId, status) => {
+    try {
+      await axios.put(`${API}/api/meetings/${meetingId}/status`, { status }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      loadMeetings();
+    } catch (error) {
+      toast.error('Failed to update meeting');
+    }
+  };
+  
+  const handleDeleteMeeting = async (meetingId) => {
+    try {
+      await axios.delete(`${API}/api/meetings/${meetingId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Meeting deleted');
+      loadMeetings();
+    } catch (error) {
+      toast.error('Failed to delete meeting');
+    }
+  };
+  
+  // Sort helper
+  const sortItems = (items, field, order) => {
+    return [...items].sort((a, b) => {
+      let valA = a[field] || '';
+      let valB = b[field] || '';
+      if (field === 'due_date' || field === 'date') {
+        valA = valA ? new Date(valA).getTime() : 0;
+        valB = valB ? new Date(valB).getTime() : 0;
+      }
+      if (field === 'priority') {
+        const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
+        valA = priorityOrder[valA?.toLowerCase()] || 0;
+        valB = priorityOrder[valB?.toLowerCase()] || 0;
+      }
+      return order === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+    });
   };
   
   // Handle stage transition
@@ -753,35 +934,85 @@ export default function DLOperationsPage() {
         </div>
         
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* PART 2: STAGE TASK BOARD - Fixed Header + Scrollable Content */}
+        {/* PART 2: MASTER BOARD - Fixed Header + Tabbed Content */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <div className={`flex-1 flex flex-col min-h-0 ${bgCard}`}>
-          {/* FIXED Header with filters */}
+          {/* MASTER BOARD TABS */}
           <div className={`shrink-0 p-4 border-b ${borderColor} ${bgCard}`}>
             <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-              <div className="flex items-center gap-3">
-                <h2 className={`text-lg font-semibold ${textPrimary}`}>Stage Task Board</h2>
-                
-                {/* Task Wise / Project Wise Toggle */}
-                <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
-                  <Button 
-                    size="sm" 
-                    variant={taskViewMode === 'task' ? 'default' : 'ghost'}
-                    onClick={() => setTaskViewMode('task')}
-                    className={`h-7 text-xs ${taskViewMode === 'task' ? 'bg-[#6366f1]' : ''}`}
+              <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
+                {[
+                  { id: 'tasks', label: 'Tasks', icon: ListTodo },
+                  { id: 'trackboard', label: 'Trackboard', icon: ClipboardList },
+                  { id: 'pages', label: 'Pages', icon: FileText },
+                  { id: 'team', label: 'Team', icon: Users },
+                  { id: 'adtasks', label: 'Ad.Tasks', icon: CheckSquare },
+                  { id: 'meetings', label: 'Meeting', icon: Video }
+                ].map(tab => (
+                  <Button
+                    key={tab.id}
+                    size="sm"
+                    variant={masterBoardTab === tab.id ? 'default' : 'ghost'}
+                    onClick={() => setMasterBoardTab(tab.id)}
+                    className={`h-9 gap-2 shrink-0 ${masterBoardTab === tab.id ? 'bg-[#6366f1]' : ''}`}
                   >
-                    Task Wise
+                    <tab.icon className="h-4 w-4" />
+                    {tab.label}
                   </Button>
-                  <Button 
-                    size="sm" 
-                    variant={taskViewMode === 'project' ? 'default' : 'ghost'}
-                    onClick={() => setTaskViewMode('project')}
-                    className={`h-7 text-xs ${taskViewMode === 'project' ? 'bg-[#6366f1]' : ''}`}
-                  >
-                    Project Wise
-                  </Button>
-                </div>
+                ))}
               </div>
+              
+              {/* Sort Toggle (visible for lists) */}
+              {['tasks', 'adtasks', 'meetings'].includes(masterBoardTab) && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  className="h-8 gap-2"
+                >
+                  <ArrowUpDown className="h-4 w-4" />
+                  {sortOrder === 'asc' ? 'Oldest First' : 'Newest First'}
+                </Button>
+              )}
+              
+              {/* Add Buttons per Tab */}
+              {masterBoardTab === 'adtasks' && (
+                <Button size="sm" onClick={() => setShowAdTaskModal(true)} className="bg-[#6366f1] h-8">
+                  <Plus className="h-4 w-4 mr-1" /> Add Task
+                </Button>
+              )}
+              {masterBoardTab === 'meetings' && (
+                <Button size="sm" onClick={() => setShowMeetingModal(true)} className="bg-[#6366f1] h-8">
+                  <Plus className="h-4 w-4 mr-1" /> Schedule Meeting
+                </Button>
+              )}
+            </div>
+            
+            {/* SUB-FILTERS FOR TASKS TAB */}
+            {masterBoardTab === 'tasks' && (
+              <>
+                <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    {/* Task Wise / Project Wise Toggle */}
+                    <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
+                      <Button 
+                        size="sm" 
+                        variant={taskViewMode === 'task' ? 'default' : 'ghost'}
+                        onClick={() => setTaskViewMode('task')}
+                        className={`h-7 text-xs ${taskViewMode === 'task' ? 'bg-[#6366f1]' : ''}`}
+                      >
+                        Task Wise
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant={taskViewMode === 'project' ? 'default' : 'ghost'}
+                        onClick={() => setTaskViewMode('project')}
+                        className={`h-7 text-xs ${taskViewMode === 'project' ? 'bg-[#6366f1]' : ''}`}
+                      >
+                        Project Wise
+                      </Button>
+                    </div>
+                  </div>
               
               {/* FILTERS - Different for Task Wise vs Project Wise */}
               <div className="flex items-center gap-3 flex-wrap">
@@ -965,11 +1196,16 @@ export default function DLOperationsPage() {
                 </div>
               </div>
             )}
+              </>
+            )}
           </div>
           
           {/* SCROLLABLE Content Area */}
           <div className="flex-1 overflow-auto p-4">
-            {taskViewMode === 'project' ? (
+            {/* TASKS TAB */}
+            {masterBoardTab === 'tasks' && (
+              <>
+                {taskViewMode === 'project' ? (
               /* Project Wise View - Simple List of Projects */
               <div className="space-y-3">
                 {(() => {
@@ -1226,6 +1462,199 @@ export default function DLOperationsPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            )}
+              </>
+            )}
+            
+            {/* TRACKBOARD TAB - Overview of time tracking */}
+            {masterBoardTab === 'trackboard' && (
+              <div className="space-y-4">
+                <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
+                  <div className={`p-4 ${bgSecondary}`}>
+                    <h3 className={`font-semibold ${textPrimary}`}>Time Tracking Overview</h3>
+                  </div>
+                  <div className="p-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                        <p className={`text-xs ${textSecondary}`}>Total Time Today</p>
+                        <p className={`text-2xl font-bold ${textPrimary}`}>{formatTime(allTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0))}</p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                        <p className={`text-xs ${textSecondary}`}>Active Timers</p>
+                        <p className={`text-2xl font-bold text-emerald-500`}>{Object.keys(runningTimers).length}</p>
+                      </div>
+                      <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                        <p className={`text-xs ${textSecondary}`}>Tasks Completed</p>
+                        <p className={`text-2xl font-bold text-blue-500`}>{allTasks.filter(t => t.delivery_status === 'Completed').length}</p>
+                      </div>
+                    </div>
+                    <p className={`text-sm ${textSecondary}`}>Detailed time tracking analytics coming soon...</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* PAGES TAB - Page-level tasks */}
+            {masterBoardTab === 'pages' && (
+              <div className="space-y-3">
+                {allTasks.length === 0 ? (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No pages found</p>
+                  </div>
+                ) : (
+                  sortItems(allTasks, sortField, sortOrder).map(task => (
+                    <div 
+                      key={task.task_id}
+                      className={`p-4 rounded-xl border ${borderColor} ${bgSecondary} hover:border-[#6366f1]/50 transition-all cursor-pointer`}
+                      onClick={() => navigate(`/project/${task.project_id}`)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-[#6366f1]" />
+                          <div>
+                            <p className={`font-medium ${textPrimary}`}>{task.page_name || task.name}</p>
+                            <p className={`text-xs ${textSecondary}`}>{task.project_name}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">{task.due_date || 'No date'}</Badge>
+                          <Button size="sm" variant="ghost"><Eye className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            
+            {/* TEAM TAB - Team overview */}
+            {masterBoardTab === 'team' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {teamMembers.map(member => {
+                    const memberTasks = allTasks.filter(t => 
+                      t.content_assignee === member.name || 
+                      t.wireframe_assignee === member.name ||
+                      t.ui_assignee === member.name ||
+                      t.dev_assignee === member.name
+                    );
+                    return (
+                      <div key={member.user_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="w-10 h-10 rounded-full bg-[#6366f1]/20 flex items-center justify-center">
+                            <UserCircle className="h-5 w-5 text-[#6366f1]" />
+                          </div>
+                          <div>
+                            <p className={`font-medium ${textPrimary}`}>{member.name}</p>
+                            <p className={`text-xs ${textSecondary}`}>{member.role || 'Team Member'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs">
+                          <span className={textSecondary}>Tasks: <strong className={textPrimary}>{memberTasks.length}</strong></span>
+                          <span className={textSecondary}>Active: <strong className="text-emerald-500">{memberTasks.filter(t => t.content_status === 'In Progress' || t.dev_status === 'In Progress').length}</strong></span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {teamMembers.length === 0 && (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No team members found</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* AD.TASKS TAB - Additional tasks */}
+            {masterBoardTab === 'adtasks' && (
+              <div className="space-y-3">
+                {additionalTasks.length === 0 ? (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <CheckSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No additional tasks</p>
+                    <Button className="mt-4 bg-[#6366f1]" onClick={() => setShowAdTaskModal(true)}>
+                      <Plus className="h-4 w-4 mr-2" /> Create Task
+                    </Button>
+                  </div>
+                ) : (
+                  sortItems(additionalTasks, 'due_date', sortOrder).map(task => (
+                    <div key={task.task_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-10 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                          <div>
+                            <p className={`font-medium ${textPrimary}`}>{task.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="outline" className="text-xs">{task.status}</Badge>
+                              {task.due_date && <span className={`text-xs ${textSecondary}`}>Due: {task.due_date}</span>}
+                              {task.assignee && <span className={`text-xs ${textSecondary}`}>• {task.assignee}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs ${textSecondary}`}>{formatTime(task.time_spent || 0)}</span>
+                          {adTaskTimers[task.task_id] ? (
+                            <Button size="sm" variant="outline" className="h-8 border-red-500/50 text-red-500" onClick={() => handleStopAdTaskTimer(task.task_id)}>
+                              <Square className="h-3 w-3 mr-1 fill-red-500" /> Stop
+                            </Button>
+                          ) : (
+                            <Button size="sm" className="h-8 bg-emerald-500 hover:bg-emerald-600" onClick={() => handleStartAdTaskTimer(task.task_id)}>
+                              <Play className="h-3 w-3 mr-1" /> Start
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => handleUpdateAdTaskStatus(task.task_id, 'Completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDeleteAdTask(task.task_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            
+            {/* MEETINGS TAB */}
+            {masterBoardTab === 'meetings' && (
+              <div className="space-y-3">
+                {meetings.length === 0 ? (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <Video className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No meetings scheduled</p>
+                    <Button className="mt-4 bg-[#6366f1]" onClick={() => setShowMeetingModal(true)}>
+                      <Plus className="h-4 w-4 mr-2" /> Schedule Meeting
+                    </Button>
+                  </div>
+                ) : (
+                  sortItems(meetings, 'date', sortOrder).map(meeting => (
+                    <div key={meeting.meeting_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${meeting.meeting_type === 'video' ? 'bg-blue-500/20' : meeting.meeting_type === 'audio' ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
+                            <Video className={`h-5 w-5 ${meeting.meeting_type === 'video' ? 'text-blue-500' : meeting.meeting_type === 'audio' ? 'text-green-500' : 'text-purple-500'}`} />
+                          </div>
+                          <div>
+                            <p className={`font-medium ${textPrimary}`}>{meeting.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`text-xs ${textSecondary}`}>{meeting.date} • {meeting.start_time} - {meeting.end_time}</span>
+                              <Badge variant="outline" className="text-xs">{meeting.status}</Badge>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {meeting.meeting_link && (
+                            <Button size="sm" variant="outline" className="h-8" onClick={() => window.open(meeting.meeting_link, '_blank')}>
+                              <ExternalLink className="h-4 w-4 mr-1" /> Join
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => handleUpdateMeetingStatus(meeting.meeting_id, 'completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => handleDeleteMeeting(meeting.meeting_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
@@ -1971,6 +2400,178 @@ export default function DLOperationsPage() {
                   </Button>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Additional Task Modal */}
+      {showAdTaskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`${bgCard} rounded-xl w-full max-w-md border ${borderColor} p-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-lg font-bold ${textPrimary}`}>Create Additional Task</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowAdTaskModal(false)} className="h-8 w-8 p-0">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <Input
+                placeholder="Task title *"
+                value={newAdTask.title}
+                onChange={(e) => setNewAdTask({ ...newAdTask, title: e.target.value })}
+                className={`${bgSecondary} border-none`}
+              />
+              <Textarea
+                placeholder="Description"
+                value={newAdTask.description}
+                onChange={(e) => setNewAdTask({ ...newAdTask, description: e.target.value })}
+                className={`${bgSecondary} border-none`}
+                rows={3}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  type="date"
+                  value={newAdTask.due_date}
+                  onChange={(e) => setNewAdTask({ ...newAdTask, due_date: e.target.value })}
+                  className={`${bgSecondary} border-none`}
+                />
+                <Select value={newAdTask.priority} onValueChange={(v) => setNewAdTask({ ...newAdTask, priority: v })}>
+                  <SelectTrigger className={`${bgSecondary} border-none`}>
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Select value={newAdTask.assignee_id || 'none'} onValueChange={(v) => {
+                if (v === 'none') {
+                  setNewAdTask({ ...newAdTask, assignee_id: '', assignee: '' });
+                } else {
+                  const member = teamMembers.find(m => m.user_id === v);
+                  setNewAdTask({ ...newAdTask, assignee_id: v, assignee: member?.name || '' });
+                }
+              }}>
+                <SelectTrigger className={`${bgSecondary} border-none`}>
+                  <SelectValue placeholder="Assign to" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {teamMembers.map(m => (
+                    <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={newAdTask.project_id || 'none'} onValueChange={(v) => setNewAdTask({ ...newAdTask, project_id: v === 'none' ? '' : v })}>
+                <SelectTrigger className={`${bgSecondary} border-none`}>
+                  <SelectValue placeholder="Link to project (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Project</SelectItem>
+                  {roleFilteredProjects.map(p => (
+                    <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <Button variant="outline" onClick={() => setShowAdTaskModal(false)}>Cancel</Button>
+              <Button onClick={handleCreateAdTask} className="bg-[#6366f1]">Create Task</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Meeting Modal */}
+      {showMeetingModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`${bgCard} rounded-xl w-full max-w-md border ${borderColor} p-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-lg font-bold ${textPrimary}`}>Schedule Meeting</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowMeetingModal(false)} className="h-8 w-8 p-0">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <Input
+                placeholder="Meeting title *"
+                value={newMeeting.title}
+                onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })}
+                className={`${bgSecondary} border-none`}
+              />
+              <Textarea
+                placeholder="Agenda / Description"
+                value={newMeeting.agenda}
+                onChange={(e) => setNewMeeting({ ...newMeeting, agenda: e.target.value })}
+                className={`${bgSecondary} border-none`}
+                rows={2}
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Date *</label>
+                  <Input
+                    type="date"
+                    value={newMeeting.date}
+                    onChange={(e) => setNewMeeting({ ...newMeeting, date: e.target.value })}
+                    className={`${bgSecondary} border-none`}
+                  />
+                </div>
+                <Select value={newMeeting.meeting_type} onValueChange={(v) => setNewMeeting({ ...newMeeting, meeting_type: v })}>
+                  <SelectTrigger className={`${bgSecondary} border-none mt-5`}>
+                    <SelectValue placeholder="Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="video">Video Call</SelectItem>
+                    <SelectItem value="audio">Audio Call</SelectItem>
+                    <SelectItem value="in-person">In Person</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Start Time *</label>
+                  <Input
+                    type="time"
+                    value={newMeeting.start_time}
+                    onChange={(e) => setNewMeeting({ ...newMeeting, start_time: e.target.value })}
+                    className={`${bgSecondary} border-none`}
+                  />
+                </div>
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>End Time</label>
+                  <Input
+                    type="time"
+                    value={newMeeting.end_time}
+                    onChange={(e) => setNewMeeting({ ...newMeeting, end_time: e.target.value })}
+                    className={`${bgSecondary} border-none`}
+                  />
+                </div>
+              </div>
+              <Input
+                placeholder="Meeting link (Google Meet, Zoom, etc.)"
+                value={newMeeting.meeting_link}
+                onChange={(e) => setNewMeeting({ ...newMeeting, meeting_link: e.target.value })}
+                className={`${bgSecondary} border-none`}
+              />
+              <Select value={newMeeting.project_id || 'none'} onValueChange={(v) => setNewMeeting({ ...newMeeting, project_id: v === 'none' ? '' : v })}>
+                <SelectTrigger className={`${bgSecondary} border-none`}>
+                  <SelectValue placeholder="Link to project (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Project</SelectItem>
+                  {roleFilteredProjects.map(p => (
+                    <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <Button variant="outline" onClick={() => setShowMeetingModal(false)}>Cancel</Button>
+              <Button onClick={handleCreateMeeting} className="bg-[#6366f1]">Schedule Meeting</Button>
             </div>
           </div>
         </div>

@@ -75,6 +75,8 @@ init_documentation_db(db)
 init_seo_board_db(db)
 init_calendar_db(db)
 set_approvals_db(db)
+init_additional_tasks_db(db)
+init_meetings_db(db)
 
 # Create the main app
 app = FastAPI()
