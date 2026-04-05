@@ -840,213 +840,335 @@ function TrackerBoard({
     return status === 'in_progress' || status === 'paused';
   };
   
-  // Get all unique pages across all stages
-  const getAllPages = () => {
-    const pagesMap = new Map();
-    
-    // First collect from stageTasks
-    Object.values(stageTasks).forEach(tasks => {
-      tasks.forEach(task => {
-        if (task.page_id && !pagesMap.has(task.page_id)) {
-          pagesMap.set(task.page_id, {
-            page_id: task.page_id,
-            page_name: task.page_name
-          });
-        }
-      });
-    });
-    
-    // Also collect from pages prop
-    pages.forEach(page => {
-      if (!pagesMap.has(page.task_id)) {
-        pagesMap.set(page.task_id, {
-          page_id: page.task_id,
-          page_name: page.page_name
-        });
-      }
-    });
-    
-    return Array.from(pagesMap.values());
-  };
-  
-  // Get task for a specific page and stage
-  const getTaskForPageStage = (pageId, stageId) => {
-    const tasks = stageTasks[stageId] || [];
-    return tasks.find(t => t.page_id === pageId) || null;
-  };
-  
-  // Get overall status for a page
-  const getPageOverallStatus = (pageId) => {
-    let completedStages = 0;
-    let totalStages = stages.length;
-    
-    stages.forEach(stage => {
-      const task = getTaskForPageStage(pageId, stage.id);
-      if (task?.status === 'approved' && (task?.ops_approved === true || !task?.pm_approved)) {
-        completedStages++;
-      }
-    });
-    
-    if (completedStages === totalStages) return 'completed';
-    if (completedStages > 0) return 'in_progress';
-    return 'to_do';
-  };
-  
-  const allPages = getAllPages();
-  // Show only main stages - combine some for compact view
-  const displayStages = [
-    stages.find(s => s.id === 'content'),
-    stages.find(s => s.id === 'wireframe'),
-    stages.find(s => s.id === 'ui'),
-    stages.find(s => s.id === 'responsive'),
-    stages.find(s => s.id === 'development'),
-    stages.find(s => s.id === 'testing')
-  ].filter(Boolean);
+  // Initialize selected stage
+  const currentStage = selectedStage || stages[0]?.id;
+  const currentStageTasks = getTasksForStage(currentStage);
+  const currentStageInfo = stages.find(s => s.id === currentStage);
+  const CurrentStageIcon = currentStageInfo?.icon || FileText;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Filters Row */}
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
-          <Input
-            placeholder="Search..."
-            className={`pl-7 w-40 h-8 text-xs ${bgSecondary} border-none`}
-          />
-        </div>
-        <Button size="sm" className="h-8 bg-[#6366f1] hover:bg-[#5558e3] gap-1 text-xs">
-          <Plus className="h-3 w-3" /> Add
-        </Button>
+      {/* Clickable Stage Tabs */}
+      <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
+        {stages.map((stage, idx) => {
+          const stats = getStageStats(stage.id);
+          const Icon = stage.icon;
+          const isComplete = stats.approved === stats.total && stats.total > 0;
+          const isSelected = currentStage === stage.id;
+          
+          return (
+            <div key={stage.id} className="flex items-center">
+              <button
+                onClick={() => setSelectedStage(stage.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${
+                  isSelected 
+                    ? 'bg-[#6366f1] text-white shadow-lg scale-105' 
+                    : isComplete 
+                      ? 'bg-green-500/20 hover:bg-green-500/30' 
+                      : `${bgSecondary} hover:bg-[#6366f1]/20`
+                }`}
+                data-testid={`stage-btn-${stage.id}`}
+              >
+                <div className={`w-7 h-7 rounded-lg ${
+                  isSelected ? 'bg-white/20' : isComplete ? 'bg-green-500' : stage.color
+                } flex items-center justify-center`}>
+                  {isComplete && !isSelected ? (
+                    <Check className="h-4 w-4 text-white" />
+                  ) : (
+                    <Icon className={`h-4 w-4 text-white`} />
+                  )}
+                </div>
+                <div className="text-left">
+                  <span className={`text-sm font-semibold ${isSelected ? 'text-white' : isComplete ? 'text-green-400' : textPrimary}`}>
+                    {stage.label}
+                  </span>
+                  <span className={`text-xs ml-2 ${isSelected ? 'text-white/70' : textSecondary}`}>
+                    ({stats.approved}/{stats.total})
+                  </span>
+                </div>
+              </button>
+              {idx < stages.length - 1 && (
+                <ArrowRight className={`h-4 w-4 mx-1 ${isComplete ? 'text-green-400' : textSecondary}`} />
+              )}
+            </div>
+          );
+        })}
       </div>
       
-      {/* Compact Multi-Stage Table */}
-      <div className={`flex-1 rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-        {allPages.length === 0 ? (
-          <div className={`text-center py-12 ${textSecondary}`}>
-            <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="font-medium">No pages yet</p>
+      {/* Filters Row */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+          <SelectTrigger className={`w-40 h-8 ${bgSecondary} border-none`}>
+            <User className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="All Assignees" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Assignees</SelectItem>
+            {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        
+        <Input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className={`w-40 h-8 ${bgSecondary} border-none`}
+        />
+        
+        {(dateFilter || assigneeFilter !== 'all') && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => { setDateFilter(''); setAssigneeFilter('all'); }}
+            className="text-red-400 h-8"
+          >
+            <X className="h-4 w-4 mr-1" /> Clear
+          </Button>
+        )}
+      </div>
+      
+      {/* Selected Stage Header */}
+      <div className={`p-4 rounded-xl mb-4 ${currentStageInfo?.color || 'bg-[#6366f1]'} flex items-center gap-4`}>
+        <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+          <CurrentStageIcon className="h-6 w-6 text-white" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-xl font-bold text-white">{currentStageInfo?.label || 'Stage'}</h3>
+          <p className="text-sm text-white/70">
+            {getStageStats(currentStage).approved} of {getStageStats(currentStage).total} approved
+            {getStageStats(currentStage).waiting_pm > 0 && (
+              <span className="ml-2">• {getStageStats(currentStage).waiting_pm} waiting PM</span>
+            )}
+            {getStageStats(currentStage).waiting_ops > 0 && (
+              <span className="ml-2">• {getStageStats(currentStage).waiting_ops} waiting Ops</span>
+            )}
+          </p>
+        </div>
+      </div>
+      
+      {/* Task Table View - Like Our Tasks */}
+      <div className={`flex-1 overflow-auto rounded-xl border ${borderColor} ${bgCard}`}>
+        {currentStageTasks.length === 0 ? (
+          <div className={`text-center py-16 ${textSecondary}`}>
+            <FileText className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <p className="text-lg font-medium">No tasks in this stage</p>
+            <p className="text-sm">Tasks will appear here once pages are converted</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
-              {/* Table Header */}
-              <thead className={`${bgSecondary} sticky top-0 z-10`}>
-                <tr className={`text-[10px] font-semibold uppercase tracking-wider ${textSecondary}`}>
-                  <th className="px-2 py-2 w-8 text-center">#</th>
-                  <th className="px-2 py-2 w-28 text-left">Page</th>
-                  {displayStages.map(stage => (
-                    <th key={stage.id} className="px-1 py-2 text-center" style={{ width: '13%' }}>
-                      <div className="flex items-center justify-center gap-1">
-                        <div className={`w-4 h-4 rounded ${stage.color} flex items-center justify-center`}>
-                          <stage.icon className="h-2.5 w-2.5 text-white" />
-                        </div>
-                        <span className="hidden xl:inline">{stage.label}</span>
-                        <span className="xl:hidden">{stage.label.slice(0, 3)}</span>
+          <table className="w-full">
+            {/* Table Header */}
+            <thead className={`${bgSecondary} sticky top-0`}>
+              <tr className={`text-left text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>
+                <th className="px-4 py-3">Task</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Assigned</th>
+                <th className="px-4 py-3">Due Date</th>
+                <th className="px-4 py-3">Link</th>
+                <th className="px-4 py-3">Time</th>
+                <th className="px-4 py-3">Timer</th>
+                <th className="px-4 py-3">Actions</th>
+              </tr>
+            </thead>
+            
+            {/* Table Body */}
+            <tbody className="divide-y" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
+              {currentStageTasks.map(task => {
+                const statusInfo = getStatusStyle(task.displayStatus);
+                const isLocked = task.displayStatus === 'locked';
+                const hasNewWorkflowFlags = task.pm_approved !== undefined || task.ops_approved !== undefined;
+                const isFullyApproved = task.displayStatus === 'approved' && 
+                  (hasNewWorkflowFlags ? (task.pm_approved && task.ops_approved) : true);
+                const isPendingPM = task.displayStatus === 'waiting_pm' || 
+                  (task.displayStatus === 'waiting_approval' && hasNewWorkflowFlags && !task.pm_approved);
+                const isPendingOps = hasNewWorkflowFlags && task.pm_approved && !task.ops_approved;
+                const canShowStart = (task.displayStatus === 'pending' || task.displayStatus === 'corrections') && !isLocked;
+                const canShowPause = task.displayStatus === 'in_progress' && !isLocked;
+                const canShowFinish = (task.displayStatus === 'in_progress' || task.displayStatus === 'paused') && !isLocked;
+                const timeSpent = task.time_spent || 0;
+                const timeDisplay = timeSpent >= 60 
+                  ? `${Math.floor(timeSpent / 60)}h ${timeSpent % 60}m`
+                  : `${timeSpent}m`;
+                
+                return (
+                  <tr 
+                    key={task.task_id}
+                    className={`${isLocked ? 'opacity-50' : ''} ${isFullyApproved ? 'bg-green-500/5' : ''} hover:${bgSecondary} transition-colors`}
+                    data-testid={`task-row-${task.task_id}`}
+                  >
+                    {/* Task Name + Category */}
+                    <td className="px-4 py-4">
+                      <div>
+                        <p className={`font-semibold ${textPrimary}`}>{task.page_name}</p>
+                        <Badge className={`mt-1 text-xs ${currentStageInfo?.color || 'bg-[#6366f1]'} text-white`}>
+                          {currentStageInfo?.label || 'stage'}
+                        </Badge>
                       </div>
-                    </th>
-                  ))}
-                  <th className="px-2 py-2 w-16 text-center">Status</th>
-                  <th className="px-2 py-2 w-10 text-center">Act</th>
-                </tr>
-              </thead>
-              
-              {/* Table Body */}
-              <tbody className="divide-y" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
-                {allPages.map((page, idx) => {
-                  const overallStatus = getPageOverallStatus(page.page_id);
-                  
-                  return (
-                    <tr 
-                      key={page.page_id}
-                      className={`hover:${bgSecondary} transition-colors`}
-                      data-testid={`page-row-${page.page_id}`}
-                    >
-                      {/* Row Number */}
-                      <td className={`px-2 py-2 text-center ${textSecondary} text-xs`}>{idx + 1}</td>
-                      
-                      {/* Page Name */}
-                      <td className="px-2 py-2">
-                        <span className={`text-xs font-medium ${textPrimary} truncate block`} title={page.page_name}>
-                          {page.page_name}
-                        </span>
-                      </td>
-                      
-                      {/* Stage Columns - Compact */}
-                      {displayStages.map(stage => {
-                        const task = getTaskForPageStage(page.page_id, stage.id);
-                        const isLocked = !isPreviousStageFullyApproved(page.page_id, stage.id);
-                        const status = task?.status || 'pending';
-                        const displayStatus = isLocked ? 'locked' : status;
+                    </td>
+                    
+                    {/* Status */}
+                    <td className="px-4 py-4">
+                      <Badge className={`${statusInfo.color} text-xs`}>
+                        {task.pm_approved && !task.ops_approved ? 'PM ✓' : statusInfo.label}
+                      </Badge>
+                      {isPendingOps && (
+                        <Badge className="ml-1 bg-amber-500/20 text-amber-400 text-xs">Ops ⏳</Badge>
+                      )}
+                    </td>
+                    
+                    {/* Assigned */}
+                    <td className="px-4 py-4">
+                      <div>
+                        {task.assignee ? (
+                          <>
+                            <Badge className="bg-purple-500/20 text-purple-400 text-xs">{task.assignee}</Badge>
+                            <p className={`text-xs ${textSecondary} mt-1`}>
+                              {task.created_at ? new Date(task.created_at).toLocaleDateString() : '-'}
+                            </p>
+                          </>
+                        ) : (
+                          <span className={`text-xs ${textSecondary}`}>Unassigned</span>
+                        )}
+                      </div>
+                    </td>
+                    
+                    {/* Due Date */}
+                    <td className="px-4 py-4">
+                      <span className={`text-sm ${textPrimary}`}>
+                        {task.due_date || '-'}
+                      </span>
+                    </td>
+                    
+                    {/* Link */}
+                    <td className="px-4 py-4">
+                      {task.link ? (
+                        <a 
+                          href={task.link} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-[#6366f1] hover:underline text-sm flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View
+                        </a>
+                      ) : (
+                        <span className={textSecondary}>-</span>
+                      )}
+                    </td>
+                    
+                    {/* Time */}
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-purple-400" />
+                        <span className={`text-sm ${textPrimary}`}>{timeDisplay}</span>
+                      </div>
+                    </td>
+                    
+                    {/* Timer Button */}
+                    <td className="px-4 py-4">
+                      {isLocked ? (
+                        <div className="flex items-center gap-1 text-xs text-gray-500">
+                          <Lock className="h-3 w-3" /> Locked
+                        </div>
+                      ) : isFullyApproved ? (
+                        <Badge className="bg-green-500/20 text-green-400">Done</Badge>
+                      ) : canShowStart ? (
+                        <Button 
+                          size="sm"
+                          className="h-8 bg-green-500 hover:bg-green-600 gap-1"
+                          onClick={() => onTimerAction(task.task_id, 'start')}
+                        >
+                          <Play className="h-3 w-3" /> Start
+                        </Button>
+                      ) : canShowPause ? (
+                        <div className="flex gap-1">
+                          <Button 
+                            size="sm"
+                            className="h-8 bg-yellow-500 hover:bg-yellow-600 gap-1"
+                            onClick={() => onTimerAction(task.task_id, 'pause')}
+                          >
+                            <Pause className="h-3 w-3" /> Pause
+                          </Button>
+                        </div>
+                      ) : task.displayStatus === 'paused' ? (
+                        <Button 
+                          size="sm"
+                          className="h-8 bg-blue-500 hover:bg-blue-600 gap-1"
+                          onClick={() => onTimerAction(task.task_id, 'start')}
+                        >
+                          <Play className="h-3 w-3" /> Resume
+                        </Button>
+                      ) : isPendingPM || isPendingOps ? (
+                        <Badge className="bg-orange-500/20 text-orange-400">Pending</Badge>
+                      ) : (
+                        <span className={textSecondary}>-</span>
+                      )}
+                    </td>
+                    
+                    {/* Actions */}
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        {/* Finish Button */}
+                        {canShowFinish && (
+                          <Button 
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 hover:bg-green-500/20"
+                            onClick={() => setFinishModal({ open: true, task, stage: currentStage })}
+                            title="Finish & Submit"
+                          >
+                            <CheckCircle className="h-4 w-4 text-green-400" />
+                          </Button>
+                        )}
                         
-                        return (
-                          <td key={stage.id} className="px-1 py-2 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              {/* Status Badge - Compact */}
-                              <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${
-                                displayStatus === 'approved' ? 'bg-green-500/20 text-green-400' :
-                                displayStatus === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
-                                displayStatus === 'waiting_pm' || displayStatus === 'waiting_ops' ? 'bg-orange-500/20 text-orange-400' :
-                                displayStatus === 'locked' ? 'bg-gray-500/20 text-gray-500' :
-                                displayStatus === 'paused' ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-gray-500/10 text-gray-400'
-                              }`}>
-                                {displayStatus === 'approved' ? '✓' :
-                                 displayStatus === 'in_progress' ? '⏵' :
-                                 displayStatus === 'paused' ? '⏸' :
-                                 displayStatus === 'waiting_pm' ? 'PM' :
-                                 displayStatus === 'waiting_ops' ? 'Ops' :
-                                 displayStatus === 'locked' ? '🔒' :
-                                 '○'}
-                              </span>
-                              
-                              {/* Link */}
-                              {task?.link ? (
-                                <a 
-                                  href={task.link} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="text-[9px] text-[#6366f1] hover:underline"
-                                >
-                                  View
-                                </a>
-                              ) : !isLocked && (task?.status === 'in_progress' || task?.status === 'paused') ? (
-                                <button 
-                                  onClick={() => setFinishModal({ open: true, task, stage: stage.id })}
-                                  className="text-[9px] text-[#6366f1] hover:underline"
-                                >
-                                  +URL
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
-                        );
-                      })}
-                      
-                      {/* Overall Status - Compact */}
-                      <td className="px-2 py-2 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-medium ${
-                          overallStatus === 'completed' ? 'bg-green-500/20 text-green-400' :
-                          overallStatus === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-gray-500/10 text-gray-400'
-                        }`}>
-                          {overallStatus === 'completed' ? 'Done' :
-                           overallStatus === 'in_progress' ? 'WIP' :
-                           'New'}
-                        </span>
-                      </td>
-                      
-                      {/* Actions - Compact */}
-                      <td className="px-2 py-2 text-center">
-                        <button className="p-1 hover:bg-red-500/20 rounded" title="Delete">
-                          <Trash2 className="h-3 w-3 text-red-400" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        {/* Move to Next Stage */}
+                        {isFullyApproved && canApprove && (
+                          <Button 
+                            size="sm"
+                            className="h-8 bg-[#6366f1] hover:bg-[#5558e3] gap-1"
+                            onClick={() => onMoveNext(task.task_id, currentStage)}
+                          >
+                            <ArrowRight className="h-3 w-3" /> Move
+                          </Button>
+                        )}
+                        
+                        {/* View Link Icon */}
+                        {task.link && (
+                          <a 
+                            href={task.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`h-8 w-8 rounded-md flex items-center justify-center hover:bg-[#6366f1]/20`}
+                            title="View Work"
+                          >
+                            <Eye className="h-4 w-4 text-[#6366f1]" />
+                          </a>
+                        )}
+                        
+                        {/* Edit */}
+                        <Button 
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 hover:bg-blue-500/20"
+                          title="Edit"
+                        >
+                          <Edit2 className="h-4 w-4 text-blue-400" />
+                        </Button>
+                        
+                        {/* Delete */}
+                        <Button 
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 hover:bg-red-500/20"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-4 w-4 text-red-400" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
       
