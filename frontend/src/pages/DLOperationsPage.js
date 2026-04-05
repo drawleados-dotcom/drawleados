@@ -45,8 +45,10 @@ export default function DLOperationsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [workflowStage, setWorkflowStage] = useState('all');
   const [developerFilter, setDeveloperFilter] = useState('all');
+  const [clientFilter, setClientFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all'); // all, this_month, this_year
   const [teamMembers, setTeamMembers] = useState([]);
-  const [viewMode, setViewMode] = useState('projects');
+  const [mainTab, setMainTab] = useState('tracker'); // tracker | projects
   const [showFilters, setShowFilters] = useState(false);
   
   // Create Project Modal State
@@ -70,6 +72,16 @@ export default function DLOperationsPage() {
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
+  
+  // Computed stats
+  const totalProjects = projects.length;
+  const uniqueClients = [...new Set(projects.map(p => p.client_name).filter(Boolean))].length;
+  const uniqueDevelopers = [...new Set(projects.map(p => p.developer).filter(Boolean))].length;
+  const totalPages = projects.reduce((sum, p) => sum + (p.total_pages || 0), 0);
+  
+  // Get unique values for filters
+  const clientNames = [...new Set(projects.map(p => p.client_name).filter(Boolean))];
+  const developerNames = [...new Set(projects.map(p => p.developer).filter(Boolean))];
   
   // Load projects
   const loadProjects = useCallback(async () => {
@@ -101,16 +113,6 @@ export default function DLOperationsPage() {
     loadProjects();
     loadTeamMembers();
   }, [loadProjects, loadTeamMembers]);
-  
-  // Filter projects
-  const filteredProjects = projects.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDeveloper = developerFilter === 'all' || p.developer === developerFilter;
-    const projectStage = p.workflow_stage || 'creation';
-    const matchesStage = workflowStage === 'all' || projectStage === workflowStage;
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-    return matchesSearch && matchesDeveloper && matchesStage && matchesStatus;
-  });
   
   // Open create project modal
   const handleNewProject = () => {
@@ -204,20 +206,30 @@ export default function DLOperationsPage() {
     );
   }
   
+  // Filter projects
+  const filteredProjects = projects.filter(project => {
+    const matchesSearch = !searchTerm || 
+      project.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      project.client_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStage = workflowStage === 'all' || (project.workflow_stage || 'creation') === workflowStage;
+    const matchesDeveloper = developerFilter === 'all' || project.developer === developerFilter;
+    const matchesClient = clientFilter === 'all' || project.client_name === clientFilter;
+    const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
+    return matchesSearch && matchesStage && matchesDeveloper && matchesClient && matchesStatus;
+  });
+  
   return (
     <Layout>
       <div className="flex flex-col h-full pb-16 md:pb-0" data-testid="dl-operations-page">
-        {/* Header */}
+        {/* Header with Stats */}
         <div className={`p-4 md:p-6 border-b ${borderColor} ${isDark ? 'bg-[#0c0a09]' : 'bg-white'}`}>
-          <div className="flex items-center justify-between mb-4">
+          {/* Title Row */}
+          <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center">
                 <Globe className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>Web Dev</h1>
-              </div>
-              <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{projects.length} Projects</Badge>
+              <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>Website Developments</h1>
             </div>
             <Button 
               onClick={handleNewProject}
@@ -229,262 +241,318 @@ export default function DLOperationsPage() {
             </Button>
           </div>
           
-          {/* Workflow Stages Bar */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
-            <Button
-              size="sm"
-              variant={workflowStage === 'all' ? 'default' : 'outline'}
-              onClick={() => setWorkflowStage('all')}
-              className={`h-8 shrink-0 ${workflowStage === 'all' ? 'bg-[#6366f1]' : ''}`}
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            {/* No of Projects */}
+            <div className={`p-4 rounded-xl ${bgSecondary}`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>No of Projects</p>
+              <p className={`text-2xl font-bold ${textPrimary}`}>{totalProjects}</p>
+            </div>
+            
+            {/* Clients */}
+            <div className={`p-4 rounded-xl ${bgSecondary}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Clients</p>
+                  <p className={`text-2xl font-bold ${textPrimary}`}>{uniqueClients}</p>
+                </div>
+                <Building2 className="h-5 w-5 text-[#6366f1]" />
+              </div>
+            </div>
+            
+            {/* Developers */}
+            <div className={`p-4 rounded-xl ${bgSecondary}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Developers</p>
+                  <p className={`text-2xl font-bold ${textPrimary}`}>{uniqueDevelopers}</p>
+                </div>
+                <User className="h-5 w-5 text-[#6366f1]" />
+              </div>
+            </div>
+            
+            {/* Total Pages */}
+            <div className={`p-4 rounded-xl ${bgSecondary}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Pages</p>
+                  <p className={`text-2xl font-bold ${textPrimary}`}>{totalPages}</p>
+                </div>
+                <FileText className="h-5 w-5 text-[#6366f1]" />
+              </div>
+            </div>
+            
+            {/* Date Filter */}
+            <div className={`p-3 rounded-xl ${bgSecondary}`}>
+              <p className={`text-xs ${textSecondary} mb-2`}>Filter by Date</p>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
+                <SelectTrigger className={`h-8 ${bgCard} border-none text-xs`}>
+                  <SelectValue placeholder="All Time" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="this_month">This Month</SelectItem>
+                  <SelectItem value="this_year">This Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          {/* Main Tabs: Tracker Board | Projects */}
+          <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
+            <Button 
+              size="sm" 
+              variant={mainTab === 'tracker' ? 'default' : 'ghost'}
+              onClick={() => setMainTab('tracker')}
+              className={`gap-2 ${mainTab === 'tracker' ? 'bg-[#6366f1]' : ''}`}
             >
-              All ({projects.length})
+              <FolderKanban className="h-4 w-4" /> Tracker Board
             </Button>
-            {WORKFLOW_STAGES.map(stage => {
-              const stageCount = projects.filter(p => (p.workflow_stage || 'creation') === stage.id).length;
-              return (
+            <Button 
+              size="sm" 
+              variant={mainTab === 'projects' ? 'default' : 'ghost'}
+              onClick={() => setMainTab('projects')}
+              className={`gap-2 ${mainTab === 'projects' ? 'bg-[#6366f1]' : ''}`}
+            >
+              <LayoutGrid className="h-4 w-4" /> Projects
+            </Button>
+          </div>
+        </div>
+        
+        {/* Tracker Board Tab */}
+        {mainTab === 'tracker' && (
+          <div className="flex-1 overflow-auto">
+            {/* Stage Sub-tabs */}
+            <div className={`p-4 border-b ${borderColor} ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
                 <Button
-                  key={stage.id}
                   size="sm"
-                  variant={workflowStage === stage.id ? 'default' : 'outline'}
-                  onClick={() => setWorkflowStage(stage.id)}
-                  className={`h-8 gap-2 shrink-0 ${workflowStage === stage.id ? 'bg-[#6366f1]' : ''}`}
+                  variant={workflowStage === 'all' ? 'default' : 'outline'}
+                  onClick={() => setWorkflowStage('all')}
+                  className={`h-8 shrink-0 ${workflowStage === 'all' ? 'bg-[#6366f1]' : ''}`}
                 >
-                  <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                  {stage.label}
-                  {stageCount > 0 && <span className="text-xs opacity-70">({stageCount})</span>}
+                  All ({projects.length})
                 </Button>
-              );
-            })}
-          </div>
-        </div>
-        
-        {/* Filters */}
-        <div className={`p-4 border-b ${borderColor} ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Search */}
-            <div className="relative flex-1 min-w-[200px] max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input 
-                placeholder="Search projects..." 
-                value={searchTerm} 
-                onChange={(e) => setSearchTerm(e.target.value)} 
-                className={`pl-10 ${bgSecondary} border-none`} 
-              />
-            </div>
-            
-            {/* View Mode Toggle */}
-            <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
-              <Button 
-                size="sm" 
-                variant={viewMode === 'projects' ? 'default' : 'ghost'}
-                onClick={() => setViewMode('projects')}
-                className={viewMode === 'projects' ? 'bg-[#6366f1]' : ''}
-              >
-                <LayoutGrid className="h-4 w-4 mr-1" /> Projects
-              </Button>
-              <Button 
-                size="sm" 
-                variant={viewMode === 'stages' ? 'default' : 'ghost'}
-                onClick={() => setViewMode('stages')}
-                className={viewMode === 'stages' ? 'bg-[#6366f1]' : ''}
-              >
-                <ListTodo className="h-4 w-4 mr-1" /> By Stage
-              </Button>
-            </div>
-            
-            {/* Developer Filter */}
-            <Select value={developerFilter} onValueChange={setDeveloperFilter}>
-              <SelectTrigger className={`w-48 ${bgSecondary} border-none`}>
-                <SelectValue placeholder="All Developers" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Developers</SelectItem>
-                {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            
-            {/* Status Filter */}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className={`w-36 ${bgSecondary} border-none`}>
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="on-hold">On Hold</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            {/* Clear Filters */}
-            {(searchTerm || developerFilter !== 'all' || statusFilter !== 'all' || workflowStage !== 'all') && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => {
-                  setSearchTerm('');
-                  setDeveloperFilter('all');
-                  setStatusFilter('all');
-                  setWorkflowStage('all');
-                }}
-                className="text-red-400"
-              >
-                <X className="h-4 w-4 mr-1" /> Clear
-              </Button>
-            )}
-          </div>
-        </div>
-        
-        {/* Content */}
-        <div className="flex-1 overflow-auto p-4 md:p-6">
-          {filteredProjects.length === 0 ? (
-            <div className={`text-center py-16 ${textSecondary}`}>
-              <FolderKanban className="h-16 w-16 mx-auto mb-4 opacity-30" />
-              <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>No projects found</h3>
-              <p className="mb-4">Create your first website project to get started</p>
-              <Button onClick={handleNewProject} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-                <Plus className="h-4 w-4 mr-2" /> Create Project
-              </Button>
-            </div>
-          ) : viewMode === 'projects' ? (
-            /* Projects Grid View */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredProjects.map(project => {
-                const currentStage = project.workflow_stage || 'creation';
-                const stageInfo = WORKFLOW_STAGES.find(s => s.id === currentStage);
-                const nextStage = getNextStage(currentStage);
-                const nextStageInfo = nextStage ? WORKFLOW_STAGES.find(s => s.id === nextStage) : null;
-                
-                return (
-                  <div 
-                    key={project.project_id} 
-                    className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden hover:shadow-lg transition-all group`}
-                  >
-                    {/* Card Header */}
-                    <div 
-                      className="p-4 cursor-pointer"
-                      onClick={() => openProject(project.project_id)}
+                {WORKFLOW_STAGES.map(stage => {
+                  const stageCount = projects.filter(p => (p.workflow_stage || 'creation') === stage.id).length;
+                  return (
+                    <Button
+                      key={stage.id}
+                      size="sm"
+                      variant={workflowStage === stage.id ? 'default' : 'outline'}
+                      onClick={() => setWorkflowStage(stage.id)}
+                      className={`h-8 gap-2 shrink-0 ${workflowStage === stage.id ? 'bg-[#6366f1]' : ''}`}
                     >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="w-10 h-10 rounded-lg bg-[#6366f1]/10 flex items-center justify-center shrink-0">
-                            <Globe className="h-5 w-5 text-[#6366f1]" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`font-semibold ${textPrimary} truncate`}>{project.name}</p>
-                            <p className={`text-xs ${textSecondary} truncate`}>{project.platform} • {project.website_type}</p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Workflow Stage */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className={`w-2 h-2 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
-                        <span className={`text-sm font-medium ${textPrimary}`}>{stageInfo?.label || 'Unknown'}</span>
-                        <Badge className={`ml-auto text-xs ${
-                          project.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                          project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
-                          {project.status || 'active'}
-                        </Badge>
-                      </div>
-                      
-                      {/* Progress */}
-                      <div className="mb-3">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-xs ${textSecondary}`}>Progress</span>
-                          <span className={`text-xs font-semibold ${textPrimary}`}>{project.overall_percent || 0}%</span>
-                        </div>
-                        <Progress value={project.overall_percent || 0} className="h-2" />
-                      </div>
-                      
-                      {/* Stats */}
-                      <div className="flex items-center justify-between text-xs">
-                        <div className={`flex items-center gap-1 ${textSecondary}`}>
-                          <FileText className="h-3 w-3" />
-                          <span>{project.total_pages || 0} pages</span>
-                        </div>
-                        {project.deadline && (
-                          <div className={`flex items-center gap-1 ${new Date(project.deadline) < new Date() ? 'text-red-400' : textSecondary}`}>
-                            <Calendar className="h-3 w-3" />
-                            <span>{project.deadline}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Card Footer */}
-                    <div className={`px-4 py-3 border-t ${borderColor} flex items-center gap-2`}>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openProject(project.project_id)}
-                        className="flex-1 h-8"
-                      >
-                        <Eye className="h-3 w-3 mr-1" /> View
-                      </Button>
-                      {nextStageInfo && (
-                        <Button
-                          size="sm"
-                          onClick={(e) => { e.stopPropagation(); handleStageTransition(project.project_id, nextStage); }}
-                          className="flex-1 h-8 bg-[#6366f1] hover:bg-[#5855eb]"
-                        >
-                          <ArrowRight className="h-3 w-3 mr-1" /> {nextStageInfo.label}
-                        </Button>
-                      )}
-                      {!nextStageInfo && (
-                        <Badge className="flex-1 justify-center bg-emerald-500/20 text-emerald-400">Completed</Badge>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                      <div className={`w-2 h-2 rounded-full ${stage.color}`} />
+                      {stage.label}
+                      {stageCount > 0 && <span className="text-xs opacity-70">({stageCount})</span>}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
-          ) : (
-            /* By Stage View */
-            <div className="space-y-6">
-              {WORKFLOW_STAGES.map(stage => {
-                const stageProjects = filteredProjects.filter(p => (p.workflow_stage || 'creation') === stage.id);
-                if (stageProjects.length === 0) return null;
+            
+            {/* Projects Table in Tracker View */}
+            <div className="p-4">
+              <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
+                <table className="w-full">
+                  <thead className={bgSecondary}>
+                    <tr className={`text-xs ${textSecondary} uppercase`}>
+                      <th className="px-4 py-3 text-left font-semibold">Project</th>
+                      <th className="px-4 py-3 text-left font-semibold">Client</th>
+                      <th className="px-4 py-3 text-left font-semibold">Developer</th>
+                      <th className="px-4 py-3 text-center font-semibold">Pages</th>
+                      <th className="px-4 py-3 text-center font-semibold">Progress</th>
+                      <th className="px-4 py-3 text-center font-semibold">Stage</th>
+                      <th className="px-4 py-3 text-center font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProjects.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center">
+                          <div className={textSecondary}>
+                            <Globe className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                            <p className="text-sm">No projects found</p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredProjects.map(project => {
+                        const stage = WORKFLOW_STAGES.find(s => s.id === (project.workflow_stage || 'creation'));
+                        const nextStage = getNextStage(project.workflow_stage || 'creation');
+                        return (
+                          <tr key={project.project_id} className={`border-t ${borderColor} hover:${bgSecondary} transition-colors cursor-pointer`} onClick={() => openProject(project.project_id)}>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <Globe className="h-5 w-5 text-[#6366f1]" />
+                                <div>
+                                  <p className={`font-medium ${textPrimary}`}>{project.name}</p>
+                                  <p className={`text-xs ${textSecondary}`}>{project.platform} • {project.website_type}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className={`px-4 py-3 ${textPrimary}`}>{project.client_name || '-'}</td>
+                            <td className={`px-4 py-3 ${textPrimary}`}>{project.developer || 'Unassigned'}</td>
+                            <td className={`px-4 py-3 text-center ${textPrimary}`}>{project.total_pages || 0}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <Progress value={project.overall_percent || 0} className="w-16 h-2" />
+                                <span className={`text-xs ${textSecondary}`}>{project.overall_percent || 0}%</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Badge className={`${stage?.color}/20 ${stage?.color?.replace('bg-', 'text-')}`}>
+                                {stage?.label || 'Creation'}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-2">
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); openProject(project.project_id); }}>
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                {nextStage && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0 hover:bg-green-500/20"
+                                    onClick={(e) => { e.stopPropagation(); handleMoveToStage(project.project_id, nextStage); }}
+                                    title={`Move to ${WORKFLOW_STAGES.find(s => s.id === nextStage)?.label}`}
+                                  >
+                                    <ArrowRight className="h-4 w-4 text-green-500" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Projects Tab */}
+        {mainTab === 'projects' && (
+          <div className="flex-1 overflow-auto">
+            {/* Filter Bar */}
+            <div className={`p-4 border-b ${borderColor} ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Search */}
+                <div className="relative flex-1 min-w-[200px] max-w-md">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input 
+                    placeholder="Search projects..." 
+                    value={searchTerm} 
+                    onChange={(e) => setSearchTerm(e.target.value)} 
+                    className={`pl-10 ${bgSecondary} border-none`} 
+                  />
+                </div>
                 
-                return (
-                  <div key={stage.id} className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-                    <div className={`p-4 ${bgSecondary} flex items-center gap-3`}>
-                      <div className={`w-3 h-3 rounded-full ${stage.color}`} />
-                      <h3 className={`font-semibold ${textPrimary}`}>{stage.label}</h3>
-                      <Badge className="bg-white/10">{stageProjects.length}</Badge>
-                    </div>
-                    <div className="divide-y divide-gray-800">
-                      {stageProjects.map(project => (
-                        <div 
-                          key={project.project_id}
-                          className="p-4 flex items-center justify-between hover:bg-[#27272a]/30 cursor-pointer"
-                          onClick={() => openProject(project.project_id)}
-                        >
+                {/* Client Filter */}
+                <Select value={clientFilter} onValueChange={setClientFilter}>
+                  <SelectTrigger className={`w-44 ${bgSecondary} border-none`}>
+                    <SelectValue placeholder="All Clients" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Clients</SelectItem>
+                    {clientNames.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                
+                {/* Developer Filter */}
+                <Select value={developerFilter} onValueChange={setDeveloperFilter}>
+                  <SelectTrigger className={`w-44 ${bgSecondary} border-none`}>
+                    <SelectValue placeholder="All Developers" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Developers</SelectItem>
+                    {developerNames.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                
+                {/* Status Filter */}
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className={`w-36 ${bgSecondary} border-none`}>
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="paused">Paused</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            {/* Projects Grid/List */}
+            <div className="p-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {filteredProjects.length === 0 ? (
+                  <div className={`col-span-full p-12 text-center ${textSecondary}`}>
+                    <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No projects found</p>
+                  </div>
+                ) : (
+                  filteredProjects.map(project => {
+                    const stage = WORKFLOW_STAGES.find(s => s.id === (project.workflow_stage || 'creation'));
+                    return (
+                      <div 
+                        key={project.project_id}
+                        className={`${bgCard} rounded-xl border ${borderColor} p-4 hover:border-[#6366f1]/50 transition-all cursor-pointer`}
+                        onClick={() => openProject(project.project_id)}
+                      >
+                        <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-3">
-                            <Globe className="h-5 w-5 text-[#6366f1]" />
+                            <div className="w-10 h-10 rounded-lg bg-[#6366f1]/20 flex items-center justify-center">
+                              <Globe className="h-5 w-5 text-[#6366f1]" />
+                            </div>
                             <div>
-                              <p className={`font-medium ${textPrimary}`}>{project.name}</p>
-                              <p className={`text-xs ${textSecondary}`}>{project.platform} • {project.developer || 'Unassigned'}</p>
+                              <p className={`font-semibold ${textPrimary}`}>{project.name}</p>
+                              <p className={`text-xs ${textSecondary}`}>{project.client_name || 'No Client'}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <Progress value={project.overall_percent || 0} className="w-24 h-2" />
-                            <span className={`text-sm ${textPrimary}`}>{project.overall_percent || 0}%</span>
-                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-                              <Eye className="h-4 w-4" />
-                            </Button>
+                          <Badge className={`${stage?.color}/20 ${stage?.color?.replace('bg-', 'text-')} text-xs`}>
+                            {stage?.label || 'Creation'}
+                          </Badge>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                          <div className={`p-2 rounded-lg ${bgSecondary} text-center`}>
+                            <p className={`text-xs ${textSecondary}`}>Platform</p>
+                            <p className={`text-sm font-medium ${textPrimary}`}>{project.platform || '-'}</p>
+                          </div>
+                          <div className={`p-2 rounded-lg ${bgSecondary} text-center`}>
+                            <p className={`text-xs ${textSecondary}`}>Pages</p>
+                            <p className={`text-sm font-medium ${textPrimary}`}>{project.total_pages || 0}</p>
+                          </div>
+                          <div className={`p-2 rounded-lg ${bgSecondary} text-center`}>
+                            <p className={`text-xs ${textSecondary}`}>Developer</p>
+                            <p className={`text-sm font-medium ${textPrimary} truncate`}>{project.developer || '-'}</p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 flex-1">
+                            <Progress value={project.overall_percent || 0} className="flex-1 h-2" />
+                            <span className={`text-sm ${textPrimary}`}>{project.overall_percent || 0}%</span>
+                          </div>
+                          <Button size="sm" variant="ghost" className="ml-2">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       
       {/* Create Project Modal */}
