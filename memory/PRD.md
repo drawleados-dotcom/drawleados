@@ -1350,6 +1350,67 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ---
 
+## Latest Updates (April 2026 - Session 57)
+
+### Tracker Board 2-Level Approval Workflow (DONE)
+**Purpose:** Implemented a comprehensive workflow with Start/Pause/Finish timer, 2-level approval chain (PM → Operations), and stage progression.
+
+**Workflow Implemented:**
+
+1. **Timer-Based Task Work:**
+   - **Start Button**: Changes task status to `in_progress`, records start time
+   - **Pause Button**: Changes status to `paused`, calculates time spent
+   - **Finish Button**: Opens Finish Modal popup
+
+2. **Finish Modal:**
+   - Link input field (required) for work URL (Figma, Google Docs, etc.)
+   - Shows "This will be submitted for Project Manager approval"
+   - Displays Approval Flow: PM Approval → Ops Approval
+   - Submit button sends task for PM approval
+
+3. **2-Level Approval Chain:**
+   - **Step 1 - PM Approval**: Task status becomes `waiting_pm`
+   - **Step 2 - Operations Approval**: After PM approves, status becomes `waiting_ops`
+   - **Step 3 - Fully Approved**: After Ops approves, status becomes `approved`
+
+4. **Corrections/Rejection Flow:**
+   - Corrections request resets approval flags (`pm_approved=false`, `ops_approved=false`)
+   - Sets status to `corrections` with remarks
+   - User sees remarks on task card and can Start/Pause/Finish again
+
+5. **Move to Next Stage:**
+   - After full approval (both PM and Ops), PM sees "Move to Next Stage" button
+   - Clicking it creates a new task in the next workflow stage
+   - Stages: content → wireframe → ui → responsive → dev → test → delivery
+
+6. **Approvals Page Enhancements:**
+   - **PM/Ops Toggle**: Switch between PM Approvals and Ops Approvals queues
+   - **Stage Tabs**: When Website department is active, shows stage tabs (Content, Wireframe, UI, etc.) with counts
+   - **Date Filter**: Clear button instead of "Today" quick-set
+
+**Backend Endpoints Added:**
+- `POST /api/website-projects/stage-tasks/{task_id}/timer` - Start/Pause timer
+- `PUT /api/website-projects/stage-tasks/{task_id}/submit` - Submit for PM approval
+- `PUT /api/website-projects/stage-tasks/{task_id}/pm-approve` - PM approves
+- `PUT /api/website-projects/stage-tasks/{task_id}/ops-approve` - Operations approves
+- `POST /api/website-projects/stage-tasks/{task_id}/move-next` - Move to next stage
+
+**Backwards Compatibility:**
+- Legacy tasks (without `pm_approved`/`ops_approved` flags) are treated as fully approved
+- Existing `status=approved` tasks without new flags don't block workflow
+
+**Files Modified:**
+- `/app/frontend/src/pages/ProjectDetailPage.js`: TrackerBoard with Start/Pause/Finish, Finish Modal
+- `/app/frontend/src/pages/ApprovalsPage.js`: PM/Ops toggle, stage tabs
+- `/app/backend/website_projects_routes.py`: Timer, approval, move-next endpoints
+- `/app/backend/approvals_routes.py`: approval_level filter for PM/Ops
+
+**Test Report:** `/app/test_reports/iteration_57.json`
+- Backend: 100% (11/11 tests passed)
+- Frontend: 100% (all UI flows working)
+
+---
+
 ## Latest Updates (April 2026 - Session 56)
 
 ### Centralized Approvals System (DONE)
