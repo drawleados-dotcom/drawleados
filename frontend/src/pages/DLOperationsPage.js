@@ -799,15 +799,146 @@ export default function DLOperationsPage() {
           </div>
           
           {/* Task List for Selected Stage */}
-          <div className="p-4">
-            {taskViewMode === 'task' ? (
-              /* Task Wise View */
+          <div className="p-4 overflow-x-auto">
+            {taskViewMode === 'project' ? (
+              /* Project Wise View - Table of Projects */
+              <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
+                <table className="w-full">
+                  <thead className={bgSecondary}>
+                    <tr className={`text-xs ${textSecondary} uppercase`}>
+                      <th className="px-4 py-3 text-left font-semibold">Project Name</th>
+                      <th className="px-3 py-3 text-center font-semibold">Total Pages</th>
+                      <th className="px-3 py-3 text-center font-semibold">Creation</th>
+                      <th className="px-3 py-3 text-center font-semibold">Current</th>
+                      <th className="px-3 py-3 text-center font-semibold">Delivered</th>
+                      <th className="px-3 py-3 text-center font-semibold">Deadline</th>
+                      <th className="px-3 py-3 text-center font-semibold">Onboarding</th>
+                      <th className="px-3 py-3 text-center font-semibold">Status</th>
+                      <th className="px-3 py-3 text-center font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      // Filter projects based on date and stage filters
+                      const filteredProjs = roleFilteredProjects.filter(p => {
+                        // Date filter on deadline or onboarding
+                        const dateToCheck = p.deadline || p.onboarding_date;
+                        const passesDate = filterByDate(dateToCheck, taskDateType, taskDate, taskDateStart, taskDateEnd, taskMonth, taskYear);
+                        
+                        // Stage filter - if a stage is selected, only show projects that have tasks in that stage
+                        if (selectedTaskStage !== 'all') {
+                          const projectTasks = allTasks.filter(t => t.project_id === p.project_id);
+                          const hasTasksInStage = projectTasks.some(task => {
+                            const stageStatus = (task[`${selectedTaskStage}_status`] || 'To-Do').toLowerCase();
+                            if (stageStatus === 'completed' || stageStatus === 'approved') return false;
+                            
+                            // Check if task is at this stage
+                            if (selectedTaskStage === 'content') return true;
+                            const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+                            const stageIdx = stageOrder.indexOf(selectedTaskStage);
+                            for (let i = 0; i < stageIdx; i++) {
+                              const prevStatus = (task[`${stageOrder[i]}_status`] || 'To-Do').toLowerCase();
+                              if (prevStatus !== 'completed' && prevStatus !== 'approved') return false;
+                            }
+                            return true;
+                          });
+                          if (!hasTasksInStage) return false;
+                        }
+                        
+                        return passesDate;
+                      });
+                      
+                      if (filteredProjs.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={9} className="px-6 py-12 text-center">
+                              <div className={textSecondary}>
+                                <FolderKanban className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                                <p className="text-sm">No projects found for the selected filters</p>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+                      
+                      return filteredProjs.map(project => {
+                        // Calculate page counts per stage
+                        const projectTasks = allTasks.filter(t => t.project_id === project.project_id);
+                        const totalPages = projectTasks.length || project.total_pages || 0;
+                        
+                        // Creation = tasks at content stage (not started)
+                        const creationCount = projectTasks.filter(t => {
+                          const contentStatus = (t.content_status || 'To-Do').toLowerCase();
+                          return contentStatus !== 'completed' && contentStatus !== 'approved';
+                        }).length;
+                        
+                        // Delivered = all stages completed
+                        const deliveredCount = projectTasks.filter(t => {
+                          const stages = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+                          return stages.every(s => {
+                            const status = (t[`${s}_status`] || 'To-Do').toLowerCase();
+                            return status === 'completed' || status === 'approved';
+                          });
+                        }).length;
+                        
+                        // Current = in progress (not creation, not delivered)
+                        const currentCount = totalPages - creationCount - deliveredCount;
+                        
+                        const workflowStage = WORKFLOW_STAGES.find(s => s.id === (project.workflow_stage || 'creation'));
+                        
+                        return (
+                          <tr key={project.project_id} className={`border-t ${borderColor} hover:${bgSecondary} transition-colors`}>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <Globe className="h-5 w-5 text-[#6366f1]" />
+                                <div>
+                                  <p className={`font-medium ${textPrimary}`}>{project.name}</p>
+                                  <p className={`text-xs ${textSecondary}`}>{project.client_name || '-'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className={`px-3 py-3 text-center font-semibold ${textPrimary}`}>{totalPages}</td>
+                            <td className="px-3 py-3 text-center">
+                              <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/30">{creationCount}</Badge>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/30">{currentCount}</Badge>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30">{deliveredCount}</Badge>
+                            </td>
+                            <td className={`px-3 py-3 text-center text-sm ${textSecondary}`}>{project.deadline || '-'}</td>
+                            <td className={`px-3 py-3 text-center text-sm ${textSecondary}`}>{project.onboarding_date || '-'}</td>
+                            <td className="px-3 py-3 text-center">
+                              <Badge className={`${workflowStage?.color}/20`} style={{ color: workflowStage?.color?.includes('yellow') ? '#eab308' : workflowStage?.color?.includes('blue') ? '#3b82f6' : workflowStage?.color?.includes('green') ? '#22c55e' : '#6366f1' }}>
+                                {workflowStage?.label || 'Creation'}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-8"
+                                onClick={() => navigate(`/project/${project.project_id}`)}
+                              >
+                                <Eye className="h-4 w-4 mr-1" /> View
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              /* Task Wise View - Task Cards like Tracker Board */
               <div className="space-y-3">
                 {getTasksForStage(selectedTaskStage).length === 0 ? (
                   <div className={`text-center py-12 ${textSecondary}`}>
                     <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No tasks for today</p>
-                    <p className="text-sm">Change the date filter or check other stages</p>
+                    <p>No tasks for the selected filters</p>
+                    <p className="text-sm">Change the date filter or stage to see more tasks</p>
                   </div>
                 ) : (
                   getTasksForStage(selectedTaskStage).map(task => {
@@ -828,27 +959,36 @@ export default function DLOperationsPage() {
                     const assignee = task[assigneeField];
                     const stageInfo = TASK_STAGES.find(s => s.id === displayStage);
                     
+                    // Get stage status for display
+                    const stageStatus = task[`${displayStage}_status`] || 'To-Do';
+                    
                     return (
                       <div 
                         key={task.task_id}
                         className={`p-4 rounded-xl border ${borderColor} ${bgSecondary} hover:border-[#6366f1]/50 transition-all`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-wrap gap-3">
                           <div className="flex items-center gap-3">
-                            <div className={`w-2 h-10 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
+                            <div className={`w-2 h-12 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
                             <div>
-                              <p className={`font-medium ${textPrimary}`}>{task.project_name || 'Unknown Project'}</p>
+                              <div className="flex items-center gap-2">
+                                <p className={`font-medium ${textPrimary}`}>{task.project_name || 'Unknown Project'}</p>
+                                {selectedTaskStage === 'all' && (
+                                  <Badge className={`${stageInfo?.color}/20 text-xs`} style={{ color: stageInfo?.color?.includes('blue') ? '#3b82f6' : stageInfo?.color?.includes('purple') ? '#a855f7' : stageInfo?.color?.includes('pink') ? '#ec4899' : stageInfo?.color?.includes('green') ? '#22c55e' : stageInfo?.color?.includes('teal') ? '#14b8a6' : stageInfo?.color?.includes('cyan') ? '#06b6d4' : '#10b981' }}>
+                                    {stageInfo?.label}
+                                  </Badge>
+                                )}
+                              </div>
                               <p className={`text-sm ${textSecondary}`}>{task.page_name || task.name}</p>
                             </div>
-                            {/* Show current stage badge when viewing All Tasks */}
-                            {selectedTaskStage === 'all' && (
-                              <Badge className={`${stageInfo?.color}/20 text-xs ml-2`} style={{ color: stageInfo?.color?.includes('blue') ? '#3b82f6' : stageInfo?.color?.includes('purple') ? '#a855f7' : stageInfo?.color?.includes('pink') ? '#ec4899' : stageInfo?.color?.includes('green') ? '#22c55e' : stageInfo?.color?.includes('teal') ? '#14b8a6' : stageInfo?.color?.includes('cyan') ? '#06b6d4' : '#10b981' }}>
-                                {stageInfo?.label}
-                              </Badge>
-                            )}
                           </div>
                           
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-4 flex-wrap">
+                            {/* Status Badge */}
+                            <Badge variant="outline" className={`text-xs ${stageStatus === 'To-Do' ? 'bg-gray-500/10 text-gray-400' : stageStatus === 'In Progress' ? 'bg-blue-500/10 text-blue-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                              {stageStatus}
+                            </Badge>
+                            
                             {/* Assignee */}
                             <div className="flex items-center gap-2">
                               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${assignee ? 'bg-[#6366f1] text-white' : bgCard + ' ' + textSecondary}`}>
@@ -866,16 +1006,16 @@ export default function DLOperationsPage() {
                             )}
                             
                             {/* Actions */}
-                            {canAct && (
-                              <div className="flex items-center gap-2">
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  onClick={() => navigate(`/project/${task.project_id}`)}
-                                  className="h-8"
-                                >
-                                  <Eye className="h-4 w-4 mr-1" /> View
-                                </Button>
+                            <div className="flex items-center gap-2">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => navigate(`/project/${task.project_id}`)}
+                                className="h-8"
+                              >
+                                <Eye className="h-4 w-4 mr-1" /> View
+                              </Button>
+                              {canAct && (
                                 <Button 
                                   size="sm"
                                   className="h-8 bg-[#6366f1] hover:bg-[#4f46e5]"
@@ -895,131 +1035,14 @@ export default function DLOperationsPage() {
                                 >
                                   <Check className="h-4 w-4 mr-1" /> Complete
                                 </Button>
-                              </div>
-                            )}
-                            {!canAct && (
-                              <Badge variant="secondary">View Only</Badge>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
                     );
                   })
                 )}
-              </div>
-            ) : (
-              /* Project Wise View */
-              <div className="space-y-4">
-                {(() => {
-                  // Group tasks by project
-                  const tasksByProject = {};
-                  getTasksForStage(selectedTaskStage).forEach(task => {
-                    const projectId = task.project_id;
-                    if (!tasksByProject[projectId]) {
-                      tasksByProject[projectId] = {
-                        project_id: projectId,
-                        project_name: task.project_name,
-                        tasks: []
-                      };
-                    }
-                    tasksByProject[projectId].tasks.push(task);
-                  });
-                  
-                  const projectGroups = Object.values(tasksByProject);
-                  
-                  if (projectGroups.length === 0) {
-                    return (
-                      <div className={`text-center py-12 ${textSecondary}`}>
-                        <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No tasks for today</p>
-                        <p className="text-sm">Change the date filter to see more tasks</p>
-                      </div>
-                    );
-                  }
-                  
-                  return projectGroups.map(group => (
-                    <div key={group.project_id} className={`rounded-xl border ${borderColor} overflow-hidden`}>
-                      {/* Project Header */}
-                      <div 
-                        className={`p-4 ${bgSecondary} flex items-center justify-between cursor-pointer hover:opacity-90`}
-                        onClick={() => navigate(`/project/${group.project_id}`)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Globe className="h-5 w-5 text-[#6366f1]" />
-                          <span className={`font-semibold ${textPrimary}`}>{group.project_name}</span>
-                          <Badge variant="secondary">{group.tasks.length} pages</Badge>
-                        </div>
-                        <ArrowRight className="h-5 w-5 text-[#6366f1]" />
-                      </div>
-                      
-                      {/* Tasks List */}
-                      <div className="divide-y divide-gray-800">
-                        {group.tasks.map(task => {
-                          // Determine current stage of the task
-                          const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
-                          let currentStage = 'content';
-                          for (const stage of stageOrder) {
-                            const status = (task[`${stage}_status`] || 'To-Do').toLowerCase();
-                            if (status !== 'completed' && status !== 'approved') {
-                              currentStage = stage;
-                              break;
-                            }
-                          }
-                          
-                          const displayStage = selectedTaskStage === 'all' ? currentStage : selectedTaskStage;
-                          const canAct = canActOnTask(task, displayStage);
-                          const assigneeField = STAGE_ASSIGNEE_MAP[displayStage];
-                          const assignee = task[assigneeField];
-                          const stageInfo = TASK_STAGES.find(s => s.id === displayStage);
-                          
-                          return (
-                            <div key={task.task_id} className={`p-3 ${bgCard} flex items-center justify-between`}>
-                              <div className="flex items-center gap-3">
-                                <FileText className={`h-4 w-4 ${textSecondary}`} />
-                                <span className={textPrimary}>{task.page_name || task.name}</span>
-                                {selectedTaskStage === 'all' && (
-                                  <Badge className={`${stageInfo?.color}/20 text-xs`} style={{ color: stageInfo?.color?.includes('blue') ? '#3b82f6' : stageInfo?.color?.includes('purple') ? '#a855f7' : '#22c55e' }}>
-                                    {stageInfo?.label}
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className={`text-sm ${textSecondary}`}>{assignee || 'Unassigned'}</span>
-                                {task.due_date && (
-                                  <span className={`text-xs ${textSecondary}`}>{task.due_date}</span>
-                                )}
-                                {canAct ? (
-                                  <Button 
-                                    size="sm"
-                                    className="h-7 text-xs bg-[#6366f1] hover:bg-[#4f46e5]"
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      try {
-                                        await axios.put(
-                                          `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
-                                          { stage: displayStage, status: 'completed' },
-                                          { headers: { Authorization: `Bearer ${token}` } }
-                                        );
-                                        toast.success(`${stageInfo?.label} completed!`);
-                                        loadProjects();
-                                      } catch (error) {
-                                        toast.error('Failed to update');
-                                      }
-                                    }}
-                                  >
-                                    <Check className="h-3 w-3 mr-1" /> Done
-                                  </Button>
-                                ) : (
-                                  <Badge variant="outline" className="text-xs">View Only</Badge>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ));
-                })()}
               </div>
             )}
           </div>
