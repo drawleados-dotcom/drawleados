@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import ProjectBoardModal from '../components/website/ProjectBoardModal';
 import axios from 'axios';
 import { toast } from 'sonner';
 
@@ -44,11 +43,6 @@ export default function DLOperationsPage() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewMode, setViewMode] = useState('projects');
   const [showFilters, setShowFilters] = useState(false);
-  
-  // Project Board Modal
-  const [selectedProjectId, setSelectedProjectId] = useState(null);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [isBoardModalOpen, setIsBoardModalOpen] = useState(false);
   
   const token = localStorage.getItem('session_token');
   
@@ -105,20 +99,9 @@ export default function DLOperationsPage() {
     navigate('/website-projects?action=new');
   };
   
-  // Open project in board modal
+  // Open project detail page (navigate instead of modal)
   const openProject = (projectId) => {
-    const project = projects.find(p => p.project_id === projectId);
-    setSelectedProjectId(projectId);
-    setSelectedProject(project);
-    setIsBoardModalOpen(true);
-  };
-  
-  // Close board modal
-  const closeBoardModal = () => {
-    setIsBoardModalOpen(false);
-    setSelectedProjectId(null);
-    setSelectedProject(null);
-    loadProjects(); // Refresh after closing
+    navigate(`/project/${projectId}`);
   };
   
   // Handle stage transition
@@ -438,18 +421,6 @@ export default function DLOperationsPage() {
           )}
         </div>
       </div>
-      
-      {/* Project Board Modal */}
-      <ProjectBoardModal
-        isOpen={isBoardModalOpen}
-        onClose={closeBoardModal}
-        projectId={selectedProjectId}
-        project={selectedProject}
-        teamMembers={teamMembers}
-        onProjectUpdate={loadProjects}
-        isDark={isDark}
-        user={user}
-      />
     </Layout>
   );
 }
