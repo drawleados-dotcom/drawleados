@@ -26,8 +26,8 @@ const WORKFLOW_STAGES = [
   { id: 'content', label: 'Content', icon: FileText, color: 'bg-blue-500', textColor: 'text-blue-400', order: 1 },
   { id: 'wireframe', label: 'Wireframe', icon: PenTool, color: 'bg-purple-500', textColor: 'text-purple-400', order: 2 },
   { id: 'ui', label: 'UI Design', icon: Palette, color: 'bg-pink-500', textColor: 'text-pink-400', order: 3 },
-  { id: 'responsive', label: 'Responsive', icon: Layers, color: 'bg-indigo-500', textColor: 'text-indigo-400', order: 4 },
-  { id: 'dev', label: 'Development', icon: Code, color: 'bg-green-500', textColor: 'text-green-400', order: 5 },
+  { id: 'dev', label: 'Development', icon: Code, color: 'bg-green-500', textColor: 'text-green-400', order: 4 },
+  { id: 'responsive', label: 'Responsive', icon: Layers, color: 'bg-indigo-500', textColor: 'text-indigo-400', order: 5 },
   { id: 'test', label: 'Testing', icon: TestTube, color: 'bg-cyan-500', textColor: 'text-cyan-400', order: 6 },
   { id: 'delivery', label: 'Delivery', icon: Truck, color: 'bg-emerald-500', textColor: 'text-emerald-400', order: 7 }
 ];
@@ -659,8 +659,8 @@ function PagesTab({
     { id: 'content', label: 'Content', color: 'bg-blue-500', textColor: 'text-blue-400' },
     { id: 'wireframe', label: 'Wireframe', color: 'bg-purple-500', textColor: 'text-purple-400' },
     { id: 'ui', label: 'UI Design', color: 'bg-pink-500', textColor: 'text-pink-400' },
-    { id: 'responsive', label: 'Responsive', color: 'bg-indigo-500', textColor: 'text-indigo-400' },
     { id: 'dev', label: 'Development', color: 'bg-green-500', textColor: 'text-green-400' },
+    { id: 'responsive', label: 'Responsive', color: 'bg-indigo-500', textColor: 'text-indigo-400' },
     { id: 'test', label: 'Testing', color: 'bg-cyan-500', textColor: 'text-cyan-400' },
     { id: 'delivery', label: 'Delivery', color: 'bg-emerald-500', textColor: 'text-emerald-400' }
   ];
@@ -1105,8 +1105,8 @@ function PagesTab({
                 <AssigneeSelect stage="content" label="Content" color="bg-blue-500" />
                 <AssigneeSelect stage="wireframe" label="Wireframe" color="bg-purple-500" />
                 <AssigneeSelect stage="ui" label="UI Design" color="bg-pink-500" />
-                <AssigneeSelect stage="responsive" label="Responsive" color="bg-indigo-500" />
                 <AssigneeSelect stage="dev" label="Development" color="bg-green-500" />
+                <AssigneeSelect stage="responsive" label="Responsive" color="bg-indigo-500" />
                 <AssigneeSelect stage="test" label="Testing" color="bg-cyan-500" />
                 <AssigneeSelect stage="delivery" label="Delivery" color="bg-emerald-500" />
               </div>
@@ -1172,8 +1172,8 @@ function PagesTab({
                 <AssigneeSelect stage="content" label="Content" color="bg-blue-500" />
                 <AssigneeSelect stage="wireframe" label="Wireframe" color="bg-purple-500" />
                 <AssigneeSelect stage="ui" label="UI Design" color="bg-pink-500" />
-                <AssigneeSelect stage="responsive" label="Responsive" color="bg-indigo-500" />
                 <AssigneeSelect stage="dev" label="Development" color="bg-green-500" />
+                <AssigneeSelect stage="responsive" label="Responsive" color="bg-indigo-500" />
                 <AssigneeSelect stage="test" label="Testing" color="bg-cyan-500" />
                 <AssigneeSelect stage="delivery" label="Delivery" color="bg-emerald-500" />
               </div>

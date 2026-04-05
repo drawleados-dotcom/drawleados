@@ -37,8 +37,8 @@ const WEBSITE_STAGES = [
   { id: 'content', label: 'Content' },
   { id: 'wireframe', label: 'Wireframe' },
   { id: 'ui', label: 'UI Design' },
-  { id: 'responsive', label: 'Responsive' },
   { id: 'dev', label: 'Development' },
+  { id: 'responsive', label: 'Responsive' },
   { id: 'test', label: 'Testing' },
   { id: 'delivery', label: 'Delivery' }
 ];

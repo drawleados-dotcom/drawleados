@@ -1410,7 +1410,7 @@ async def convert_pages_to_tasks(project_id: str, request: Request):
     pages = await db.website_page_tasks.find({"project_id": project_id}).to_list(100)
     
     tasks_created = 0
-    stages = ["content", "wireframe", "ui", "dev", "test"]
+    stages = ["content", "wireframe", "ui", "dev", "responsive", "test", "delivery"]
     now = datetime.now(timezone.utc)
     
     for page in pages:
@@ -1812,7 +1812,7 @@ async def move_to_next_stage(task_id: str, request: Request, data: dict = Body(.
         raise HTTPException(status_code=400, detail="Task must be fully approved before moving")
     
     # Define stage order (must match frontend WORKFLOW_STAGES)
-    stage_order = ["content", "wireframe", "ui", "responsive", "dev", "test", "delivery"]
+    stage_order = ["content", "wireframe", "ui", "dev", "responsive", "test", "delivery"]
     
     try:
         current_idx = stage_order.index(current_stage)
