@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Globe, Plus, Search, Eye, ArrowRight, FolderKanban, 
   Calendar, FileText, LayoutGrid, ListTodo, Filter, X, Check, User, Building2,
-  Palette, Type, Link2, Users, Settings
+  Palette, Type, Link2, Users, Settings, Play, Square, Pencil, Trash2, ExternalLink, Clock
 } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -148,6 +148,7 @@ export default function DLOperationsPage() {
   const [taskProjectFilter, setTaskProjectFilter] = useState('all'); // all or specific project_id
   const [selectedTaskStage, setSelectedTaskStage] = useState('all'); // Default to all tasks
   const [taskViewMode, setTaskViewMode] = useState('task'); // task | project
+  const [runningTimers, setRunningTimers] = useState({}); // { task_id: { stage, startTime } }
   
   // Create Project Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -479,6 +480,67 @@ export default function DLOperationsPage() {
   // Open project detail page (navigate instead of modal)
   const openProject = (projectId) => {
     navigate(`/project/${projectId}`);
+  };
+  
+  // Start timer for a task stage
+  const handleStartTimer = async (taskId, stage) => {
+    try {
+      // Update status to In Progress
+      await axios.put(
+        `${API}/api/website-projects/pages/${taskId}/stage-status`,
+        { stage: stage, status: 'In Progress' },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Start timer locally
+      setRunningTimers(prev => ({
+        ...prev,
+        [taskId]: { stage, startTime: Date.now() }
+      }));
+      
+      toast.success(`Timer started for ${stage}`);
+      loadProjects();
+    } catch (error) {
+      toast.error('Failed to start timer');
+    }
+  };
+  
+  // Stop timer for a task stage
+  const handleStopTimer = async (taskId, stage) => {
+    try {
+      const timerInfo = runningTimers[taskId];
+      if (timerInfo) {
+        const elapsedSeconds = Math.floor((Date.now() - timerInfo.startTime) / 1000);
+        
+        // Update time spent on backend
+        await axios.put(
+          `${API}/api/website-projects/pages/${taskId}/add-time`,
+          { stage: stage, seconds: elapsedSeconds },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+      
+      // Remove from running timers
+      setRunningTimers(prev => {
+        const newTimers = { ...prev };
+        delete newTimers[taskId];
+        return newTimers;
+      });
+      
+      toast.success(`Timer stopped`);
+      loadProjects();
+    } catch (error) {
+      toast.error('Failed to stop timer');
+    }
+  };
+  
+  // Format time display (seconds to HH:MM:SS)
+  const formatTime = (seconds) => {
+    if (!seconds) return '00:00:00';
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
   
   // Handle stage transition
@@ -851,117 +913,196 @@ export default function DLOperationsPage() {
                 )}
               </div>
             ) : (
-              /* Task Wise View - Task Cards like Tracker Board */
-              <div className="space-y-3">
-                {getTasksForStage(selectedTaskStage).length === 0 ? (
-                  <div className={`text-center py-12 ${textSecondary}`}>
-                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No tasks for the selected filters</p>
-                    <p className="text-sm">Change the date filter or stage to see more tasks</p>
-                  </div>
-                ) : (
-                  getTasksForStage(selectedTaskStage).map(task => {
-                    // Determine current stage of the task
-                    const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
-                    let currentStage = 'content';
-                    for (const stage of stageOrder) {
-                      const status = (task[`${stage}_status`] || 'To-Do').toLowerCase();
-                      if (status !== 'completed' && status !== 'approved') {
-                        currentStage = stage;
-                        break;
-                      }
-                    }
-                    
-                    const displayStage = selectedTaskStage === 'all' ? currentStage : selectedTaskStage;
-                    const canAct = canActOnTask(task, displayStage);
-                    const assigneeField = STAGE_ASSIGNEE_MAP[displayStage];
-                    const assignee = task[assigneeField];
-                    const stageInfo = TASK_STAGES.find(s => s.id === displayStage);
-                    
-                    // Get stage status for display
-                    const stageStatus = task[`${displayStage}_status`] || 'To-Do';
-                    
-                    return (
-                      <div 
-                        key={task.task_id}
-                        className={`p-4 rounded-xl border ${borderColor} ${bgSecondary} hover:border-[#6366f1]/50 transition-all`}
-                      >
-                        <div className="flex items-center justify-between flex-wrap gap-3">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-2 h-12 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className={`font-medium ${textPrimary}`}>{task.project_name || 'Unknown Project'}</p>
-                                {selectedTaskStage === 'all' && (
-                                  <Badge className={`${stageInfo?.color}/20 text-xs`} style={{ color: stageInfo?.color?.includes('blue') ? '#3b82f6' : stageInfo?.color?.includes('purple') ? '#a855f7' : stageInfo?.color?.includes('pink') ? '#ec4899' : stageInfo?.color?.includes('green') ? '#22c55e' : stageInfo?.color?.includes('teal') ? '#14b8a6' : stageInfo?.color?.includes('cyan') ? '#06b6d4' : '#10b981' }}>
-                                    {stageInfo?.label}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className={`text-sm ${textSecondary}`}>{task.page_name || task.name}</p>
-                            </div>
+              /* Task Wise View - Tracker Table Format */
+              <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
+                <table className="w-full">
+                  <thead className={bgSecondary}>
+                    <tr className={`text-xs ${textSecondary} uppercase`}>
+                      <th className="px-4 py-3 text-left font-semibold">Task</th>
+                      <th className="px-3 py-3 text-center font-semibold">Status</th>
+                      <th className="px-3 py-3 text-left font-semibold">Assigned</th>
+                      <th className="px-3 py-3 text-center font-semibold">Due Date</th>
+                      <th className="px-3 py-3 text-center font-semibold">Link</th>
+                      <th className="px-3 py-3 text-center font-semibold">Time</th>
+                      <th className="px-3 py-3 text-center font-semibold">Timer</th>
+                      <th className="px-3 py-3 text-center font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {getTasksForStage(selectedTaskStage).length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-6 py-12 text-center">
+                          <div className={textSecondary}>
+                            <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                            <p className="text-sm">No tasks for the selected filters</p>
                           </div>
-                          
-                          <div className="flex items-center gap-4 flex-wrap">
-                            {/* Status Badge */}
-                            <Badge variant="outline" className={`text-xs ${stageStatus === 'To-Do' ? 'bg-gray-500/10 text-gray-400' : stageStatus === 'In Progress' ? 'bg-blue-500/10 text-blue-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
-                              {stageStatus}
-                            </Badge>
-                            
-                            {/* Assignee */}
-                            <div className="flex items-center gap-2">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${assignee ? 'bg-[#6366f1] text-white' : bgCard + ' ' + textSecondary}`}>
-                                {assignee ? assignee.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : <User className="h-4 w-4" />}
+                        </td>
+                      </tr>
+                    ) : (
+                      getTasksForStage(selectedTaskStage).map(task => {
+                        // Determine current stage of the task
+                        const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+                        let currentStage = 'content';
+                        for (const stage of stageOrder) {
+                          const status = (task[`${stage}_status`] || 'To-Do').toLowerCase();
+                          if (status !== 'completed' && status !== 'approved') {
+                            currentStage = stage;
+                            break;
+                          }
+                        }
+                        
+                        const displayStage = selectedTaskStage === 'all' ? currentStage : selectedTaskStage;
+                        const canAct = canActOnTask(task, displayStage);
+                        const assigneeField = STAGE_ASSIGNEE_MAP[displayStage];
+                        const assignee = task[assigneeField];
+                        const stageInfo = TASK_STAGES.find(s => s.id === displayStage);
+                        const stageStatus = task[`${displayStage}_status`] || 'Not Started';
+                        const timeSpent = task[`${displayStage}_time_spent`] || 0;
+                        const isTimerRunning = runningTimers[task.task_id]?.stage === displayStage;
+                        
+                        return (
+                          <tr key={task.task_id} className={`border-t ${borderColor} hover:${bgSecondary} transition-colors`}>
+                            {/* Task Name + Stage */}
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-1 h-10 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
+                                <div>
+                                  <p className={`font-medium ${textPrimary}`}>{task.page_name || task.name}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className={`text-xs ${textSecondary}`}>{task.project_name}</span>
+                                    {selectedTaskStage === 'all' && (
+                                      <Badge className={`${stageInfo?.color}/20 text-xs`} style={{ color: stageInfo?.color?.includes('blue') ? '#3b82f6' : stageInfo?.color?.includes('purple') ? '#a855f7' : stageInfo?.color?.includes('pink') ? '#ec4899' : stageInfo?.color?.includes('green') ? '#22c55e' : '#14b8a6' }}>
+                                        {stageInfo?.label}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                              <span className={`text-sm ${textSecondary}`}>{assignee || 'Unassigned'}</span>
-                            </div>
+                            </td>
+                            
+                            {/* Status */}
+                            <td className="px-3 py-3 text-center">
+                              <Badge variant="outline" className={`text-xs ${
+                                stageStatus === 'Not Started' || stageStatus === 'To-Do' ? 'bg-gray-500/10 text-gray-400 border-gray-500/30' : 
+                                stageStatus === 'In Progress' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 
+                                stageStatus === 'Completed' || stageStatus === 'Approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                                'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+                              }`}>
+                                {stageStatus}
+                              </Badge>
+                            </td>
+                            
+                            {/* Assigned */}
+                            <td className="px-3 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${assignee ? 'bg-[#6366f1] text-white' : bgSecondary + ' ' + textSecondary}`}>
+                                  {assignee ? assignee.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : <User className="h-3 w-3" />}
+                                </div>
+                                <span className={`text-sm ${textSecondary}`}>{assignee || '-'}</span>
+                              </div>
+                            </td>
                             
                             {/* Due Date */}
-                            {task.due_date && (
-                              <div className="flex items-center gap-1 text-sm">
-                                <Calendar className="h-4 w-4 text-[#6366f1]" />
-                                <span className={textSecondary}>{task.due_date}</span>
+                            <td className={`px-3 py-3 text-center text-sm ${textSecondary}`}>
+                              {task.due_date || '-'}
+                            </td>
+                            
+                            {/* Link */}
+                            <td className="px-3 py-3 text-center">
+                              {task.reference_link ? (
+                                <a href={task.reference_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline">
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              ) : (
+                                <span className={textSecondary}>-</span>
+                              )}
+                            </td>
+                            
+                            {/* Time Spent */}
+                            <td className={`px-3 py-3 text-center text-sm ${textPrimary}`}>
+                              <div className="flex items-center justify-center gap-1">
+                                <Clock className="h-3 w-3 text-[#6366f1]" />
+                                {formatTime(timeSpent)}
                               </div>
-                            )}
+                            </td>
+                            
+                            {/* Timer Start/Stop */}
+                            <td className="px-3 py-3 text-center">
+                              {canAct ? (
+                                isTimerRunning ? (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    className="h-8 border-red-500/50 text-red-500 hover:bg-red-500/10"
+                                    onClick={() => handleStopTimer(task.task_id, displayStage)}
+                                  >
+                                    <Square className="h-3 w-3 mr-1 fill-red-500" /> Stop
+                                  </Button>
+                                ) : (
+                                  <Button 
+                                    size="sm" 
+                                    className="h-8 bg-emerald-500 hover:bg-emerald-600"
+                                    onClick={() => handleStartTimer(task.task_id, displayStage)}
+                                  >
+                                    <Play className="h-3 w-3 mr-1 fill-white" /> Start
+                                  </Button>
+                                )
+                              ) : (
+                                <span className={`text-xs ${textSecondary}`}>-</span>
+                              )}
+                            </td>
                             
                             {/* Actions */}
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => navigate(`/project/${task.project_id}`)}
-                                className="h-8"
-                              >
-                                <Eye className="h-4 w-4 mr-1" /> View
-                              </Button>
-                              {canAct && (
+                            <td className="px-3 py-3">
+                              <div className="flex items-center justify-center gap-1">
                                 <Button 
-                                  size="sm"
-                                  className="h-8 bg-[#6366f1] hover:bg-[#4f46e5]"
-                                  onClick={async () => {
-                                    try {
-                                      await axios.put(
-                                        `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
-                                        { stage: displayStage, status: 'completed' },
-                                        { headers: { Authorization: `Bearer ${token}` } }
-                                      );
-                                      toast.success(`${stageInfo?.label} completed!`);
-                                      loadProjects();
-                                    } catch (error) {
-                                      toast.error('Failed to update status');
-                                    }
-                                  }}
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => navigate(`/project/${task.project_id}`)}
                                 >
-                                  <Check className="h-4 w-4 mr-1" /> Complete
+                                  <Eye className="h-4 w-4" />
                                 </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
+                                {canAct && (
+                                  <>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      className="h-8 w-8 p-0"
+                                      onClick={() => navigate(`/project/${task.project_id}?tab=pages&edit=${task.task_id}`)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button 
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0 text-emerald-500 hover:bg-emerald-500/10"
+                                      onClick={async () => {
+                                        try {
+                                          await axios.put(
+                                            `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
+                                            { stage: displayStage, status: 'Completed' },
+                                            { headers: { Authorization: `Bearer ${token}` } }
+                                          );
+                                          toast.success(`${stageInfo?.label} completed!`);
+                                          loadProjects();
+                                        } catch (error) {
+                                          toast.error('Failed to update status');
+                                        }
+                                      }}
+                                    >
+                                      <Check className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

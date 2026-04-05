@@ -767,6 +767,46 @@ async def update_page_stage_status(request: Request, task_id: str, data: dict = 
     return {"success": True, "message": f"{stage.title()} marked as {status}", "task": updated}
 
 
+@website_projects_router.put("/pages/{task_id}/add-time")
+async def add_time_to_task(request: Request, task_id: str, data: dict = Body(...)):
+    """Add time spent to a specific stage of a task"""
+    user = await get_current_user(request)
+    
+    task = await db.website_page_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    stage = data.get("stage")
+    seconds = data.get("seconds", 0)
+    
+    # Map stage to the correct time field name
+    stage_time_map = {
+        "content": "content_time_spent",
+        "wireframe": "wireframe_time_spent",
+        "ui": "ui_time_spent",
+        "development": "dev_time_spent",
+        "dev": "dev_time_spent",
+        "responsive": "responsive_time_spent",
+        "testing": "test_time_spent",
+        "test": "test_time_spent",
+        "delivery": "delivery_time_spent"
+    }
+    
+    field_name = stage_time_map.get(stage)
+    if not field_name:
+        raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
+    
+    # Add to existing time
+    current_time = task.get(field_name, 0) or 0
+    new_time = current_time + seconds
+    
+    await db.website_page_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": {field_name: new_time, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    return {"success": True, "message": f"Added {seconds}s to {stage}", "total_time": new_time}
+
 
 @website_projects_router.delete("/pages/{task_id}")
 async def delete_page_task(request: Request, task_id: str):
@@ -832,6 +872,7 @@ async def get_all_tasks(request: Request):
                 "page_name": 1,
                 "name": "$page_name",
                 "due_date": 1,
+                "reference_link": 1,
                 # Assignees
                 "content_assignee": 1,
                 "wireframe_assignee": 1,
@@ -849,6 +890,14 @@ async def get_all_tasks(request: Request):
                 "test_status": 1,
                 "delivery_status": 1,
                 "overall_status": 1,
+                # Time spent per stage
+                "content_time_spent": 1,
+                "wireframe_time_spent": 1,
+                "ui_time_spent": 1,
+                "dev_time_spent": 1,
+                "responsive_time_spent": 1,
+                "test_time_spent": 1,
+                "delivery_time_spent": 1,
                 "created_at": 1
             }
         },
