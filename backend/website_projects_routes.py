@@ -66,6 +66,11 @@ class ProjectCreate(BaseModel):
     communication_url: Optional[str] = None
     # Lead Link
     client_id: Optional[str] = None  # Link to lead
+    # Requirements (dynamic based on type)
+    requirements: Optional[Dict[str, Any]] = None
+    # Branding
+    branding: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
@@ -114,6 +119,10 @@ class ProjectUpdate(BaseModel):
     client_drive_url: Optional[str] = None
     documents_url: Optional[str] = None
     communication_url: Optional[str] = None
+    # Requirements and Branding
+    requirements: Optional[Dict[str, Any]] = None
+    branding: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
 
 class PageTaskCreate(BaseModel):
     page_name: str  # Home Page, About Us, etc.
@@ -348,6 +357,10 @@ async def create_project(request: Request, project_data: ProjectCreate):
         # Product
         "product_details": project_data.product_details,
         "onboarding_form": project_data.onboarding_form,
+        # Requirements and Branding
+        "requirements": project_data.requirements or {},
+        "branding": project_data.branding or {},
+        "notes": project_data.notes,
         "status": "active",
         "created_by": user["user_id"],
         "created_at": now,

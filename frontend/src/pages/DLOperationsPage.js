@@ -114,12 +114,24 @@ export default function DLOperationsPage() {
     client_name: '',
     client_email: '',
     client_phone: '',
+    client_location: '',
     domain_url: '',
     deadline: '',
     onboarding_date: '',
     notes: '',
     developer: '',
+    designer: '',
+    content_writer: '',
     project_manager: '',
+    // Credentials
+    domain_username: '',
+    domain_password: '',
+    wp_username: '',
+    wp_password: '',
+    // Links
+    client_drive_url: '',
+    documents_url: '',
+    communication_url: '',
     // Requirements (dynamic based on type)
     requirements: {},
     // Branding
@@ -198,12 +210,22 @@ export default function DLOperationsPage() {
       client_name: '',
       client_email: '',
       client_phone: '',
+      client_location: '',
       domain_url: '',
       deadline: '',
       onboarding_date: '',
       notes: '',
       developer: '',
+      designer: '',
+      content_writer: '',
       project_manager: '',
+      domain_username: '',
+      domain_password: '',
+      wp_username: '',
+      wp_password: '',
+      client_drive_url: '',
+      documents_url: '',
+      communication_url: '',
       requirements: {},
       branding: {
         logo_url: '',
@@ -505,7 +527,7 @@ export default function DLOperationsPage() {
                                     size="sm" 
                                     variant="ghost" 
                                     className="h-8 w-8 p-0 hover:bg-green-500/20"
-                                    onClick={(e) => { e.stopPropagation(); handleMoveToStage(project.project_id, nextStage); }}
+                                    onClick={(e) => { e.stopPropagation(); handleStageTransition(project.project_id, nextStage); }}
                                     title={`Move to ${WORKFLOW_STAGES.find(s => s.id === nextStage)?.label}`}
                                   >
                                     <ArrowRight className="h-4 w-4 text-green-500" />
@@ -659,16 +681,22 @@ export default function DLOperationsPage() {
             {/* Step Indicator */}
             <div className="px-6 pt-4">
               <div className="flex items-center justify-center gap-2 mb-4">
-                {[1, 2, 3].map(step => (
+                {[1, 2, 3, 4].map(step => (
                   <div key={step} className="flex items-center">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
                       createStep >= step ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`
                     }`}>
                       {createStep > step ? <Check className="h-4 w-4" /> : step}
                     </div>
-                    {step < 3 && <div className={`w-12 h-0.5 mx-2 ${createStep > step ? 'bg-[#6366f1]' : bgSecondary}`} />}
+                    {step < 4 && <div className={`w-8 h-0.5 mx-1 ${createStep > step ? 'bg-[#6366f1]' : bgSecondary}`} />}
                   </div>
                 ))}
+              </div>
+              <div className="flex justify-center gap-6 text-xs mb-2">
+                <span className={createStep >= 1 ? 'text-[#6366f1]' : textSecondary}>Type</span>
+                <span className={createStep >= 2 ? 'text-[#6366f1]' : textSecondary}>Requirements</span>
+                <span className={createStep >= 3 ? 'text-[#6366f1]' : textSecondary}>Branding</span>
+                <span className={createStep >= 4 ? 'text-[#6366f1]' : textSecondary}>Details</span>
               </div>
             </div>
             
@@ -740,94 +768,478 @@ export default function DLOperationsPage() {
                 </div>
               )}
               
-              {/* Step 2: Project Details */}
+              {/* Step 2: Dynamic Requirements */}
               {createStep === 2 && (
-                <div className="space-y-4">
-                  <div>
-                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Project Name *</label>
-                    <Input
-                      value={newProject.name}
-                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                      placeholder="e.g., Acme Corp Website"
-                      className={`${bgSecondary} border-none`}
-                    />
-                  </div>
+                <div className="space-y-6">
+                  <p className={`text-sm ${textSecondary}`}>{newProject.platform} • {newProject.website_type}</p>
                   
-                  <div>
-                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Client Name</label>
-                    <Input
-                      value={newProject.client_name}
-                      onChange={(e) => setNewProject({ ...newProject, client_name: e.target.value })}
-                      placeholder="e.g., Acme Corporation"
-                      className={`${bgSecondary} border-none`}
-                    />
-                  </div>
+                  {REQUIREMENTS_CONFIG[newProject.website_type]?.sections.map((section, idx) => (
+                    <div key={idx} className={`p-4 rounded-lg border ${borderColor}`}>
+                      <h3 className={`font-semibold ${textPrimary} mb-4`}>{section.title}</h3>
+                      <div className="grid grid-cols-1 gap-4">
+                        {section.fields.map(field => (
+                          <div key={field}>
+                            <label className={`text-sm ${textSecondary} block mb-1`}>{FIELD_LABELS[field] || field}</label>
+                            {['about_text', 'services_list', 'testimonials', 'collections_list', 'core_features', 'bio', 'experience', 'return_policy'].includes(field) ? (
+                              <Textarea
+                                value={newProject.requirements?.[field] || ''}
+                                onChange={(e) => setNewProject({ 
+                                  ...newProject, 
+                                  requirements: { ...newProject.requirements, [field]: e.target.value } 
+                                })}
+                                placeholder={`Enter ${FIELD_LABELS[field] || field}...`}
+                                className={`${bgSecondary} border-none`}
+                                rows={3}
+                              />
+                            ) : (
+                              <Input
+                                value={newProject.requirements?.[field] || ''}
+                                onChange={(e) => setNewProject({ 
+                                  ...newProject, 
+                                  requirements: { ...newProject.requirements, [field]: e.target.value } 
+                                })}
+                                placeholder={`Enter ${FIELD_LABELS[field] || field}...`}
+                                className={`${bgSecondary} border-none`}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                   
-                  <div>
-                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Domain URL</label>
-                    <Input
-                      value={newProject.domain_url}
-                      onChange={(e) => setNewProject({ ...newProject, domain_url: e.target.value })}
-                      placeholder="e.g., www.acme.com"
-                      className={`${bgSecondary} border-none`}
-                    />
-                  </div>
+                  <p className={`text-xs ${textSecondary} italic`}>
+                    You can skip optional fields and fill them later from the project details.
+                  </p>
+                </div>
+              )}
+              
+              {/* Step 3: Branding Information */}
+              {createStep === 3 && (
+                <div className="space-y-6">
+                  <p className={`text-sm ${textSecondary}`}>{newProject.platform} • {newProject.website_type}</p>
                   
-                  <div>
-                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Deadline</label>
-                    <Input
-                      type="date"
-                      value={newProject.deadline}
-                      onChange={(e) => setNewProject({ ...newProject, deadline: e.target.value })}
-                      className={`${bgSecondary} border-none`}
-                    />
+                  {/* Logo & Favicon */}
+                  <div className={`p-4 rounded-lg border ${borderColor}`}>
+                    <h3 className={`font-semibold ${textPrimary} mb-4`}>Logo & Assets</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Logo URL</label>
+                        <Input
+                          value={newProject.branding?.logo_url || ''}
+                          onChange={(e) => setNewProject({ 
+                            ...newProject, 
+                            branding: { ...newProject.branding, logo_url: e.target.value } 
+                          })}
+                          placeholder="https://drive.google.com/..."
+                          className={`${bgSecondary} border-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Favicon URL</label>
+                        <Input
+                          value={newProject.branding?.favicon_url || ''}
+                          onChange={(e) => setNewProject({ 
+                            ...newProject, 
+                            branding: { ...newProject.branding, favicon_url: e.target.value } 
+                          })}
+                          placeholder="https://drive.google.com/..."
+                          className={`${bgSecondary} border-none`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Colors */}
+                  <div className={`p-4 rounded-lg border ${borderColor}`}>
+                    <h3 className={`font-semibold ${textPrimary} mb-4`}>Color Palette</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Primary Color</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={newProject.branding?.primary_color || '#6366f1'}
+                            onChange={(e) => setNewProject({ 
+                              ...newProject, 
+                              branding: { ...newProject.branding, primary_color: e.target.value } 
+                            })}
+                            className="w-10 h-10 rounded cursor-pointer border-0"
+                          />
+                          <Input
+                            value={newProject.branding?.primary_color || '#6366f1'}
+                            onChange={(e) => setNewProject({ 
+                              ...newProject, 
+                              branding: { ...newProject.branding, primary_color: e.target.value } 
+                            })}
+                            placeholder="#6366f1"
+                            className={`flex-1 ${bgSecondary} border-none`}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Secondary Color</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={newProject.branding?.secondary_color || '#22c55e'}
+                            onChange={(e) => setNewProject({ 
+                              ...newProject, 
+                              branding: { ...newProject.branding, secondary_color: e.target.value } 
+                            })}
+                            className="w-10 h-10 rounded cursor-pointer border-0"
+                          />
+                          <Input
+                            value={newProject.branding?.secondary_color || '#22c55e'}
+                            onChange={(e) => setNewProject({ 
+                              ...newProject, 
+                              branding: { ...newProject.branding, secondary_color: e.target.value } 
+                            })}
+                            placeholder="#22c55e"
+                            className={`flex-1 ${bgSecondary} border-none`}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Accent Color</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="color"
+                            value={newProject.branding?.accent_color || '#f59e0b'}
+                            onChange={(e) => setNewProject({ 
+                              ...newProject, 
+                              branding: { ...newProject.branding, accent_color: e.target.value } 
+                            })}
+                            className="w-10 h-10 rounded cursor-pointer border-0"
+                          />
+                          <Input
+                            value={newProject.branding?.accent_color || '#f59e0b'}
+                            onChange={(e) => setNewProject({ 
+                              ...newProject, 
+                              branding: { ...newProject.branding, accent_color: e.target.value } 
+                            })}
+                            placeholder="#f59e0b"
+                            className={`flex-1 ${bgSecondary} border-none`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fonts & Guidelines */}
+                  <div className={`p-4 rounded-lg border ${borderColor}`}>
+                    <h3 className={`font-semibold ${textPrimary} mb-4`}>Typography & Guidelines</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Primary Font</label>
+                        <Input
+                          value={newProject.branding?.primary_font || ''}
+                          onChange={(e) => setNewProject({ 
+                            ...newProject, 
+                            branding: { ...newProject.branding, primary_font: e.target.value } 
+                          })}
+                          placeholder="Inter, Roboto, etc."
+                          className={`${bgSecondary} border-none`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Secondary Font</label>
+                        <Input
+                          value={newProject.branding?.secondary_font || ''}
+                          onChange={(e) => setNewProject({ 
+                            ...newProject, 
+                            branding: { ...newProject.branding, secondary_font: e.target.value } 
+                          })}
+                          placeholder="Playfair Display, etc."
+                          className={`${bgSecondary} border-none`}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Brand Guidelines URL</label>
+                        <Input
+                          value={newProject.branding?.guidelines_url || ''}
+                          onChange={(e) => setNewProject({ 
+                            ...newProject, 
+                            branding: { ...newProject.branding, guidelines_url: e.target.value } 
+                          })}
+                          placeholder="Link to brand guidelines document"
+                          className={`${bgSecondary} border-none`}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
               
-              {/* Step 3: Review & Create */}
-              {createStep === 3 && (
+              {/* Step 4: Project Details with Tabs */}
+              {createStep === 4 && (
                 <div className="space-y-4">
-                  <div className={`p-6 rounded-xl ${bgSecondary}`}>
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 rounded-xl bg-[#6366f1] flex items-center justify-center">
-                        <Globe className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <h3 className={`text-lg font-bold ${textPrimary}`}>{newProject.name || 'Untitled Project'}</h3>
-                        <p className={`text-sm ${textSecondary}`}>{newProject.platform} • {newProject.website_type}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      <div className={`p-3 rounded-lg ${bgCard}`}>
-                        <p className={`text-xs ${textSecondary}`}>Client</p>
-                        <p className={`font-medium ${textPrimary}`}>{newProject.client_name || 'Not specified'}</p>
-                      </div>
-                      <div className={`p-3 rounded-lg ${bgCard}`}>
-                        <p className={`text-xs ${textSecondary}`}>Domain</p>
-                        <p className={`font-medium ${textPrimary}`}>{newProject.domain_url || 'Not specified'}</p>
-                      </div>
-                      <div className={`p-3 rounded-lg ${bgCard}`}>
-                        <p className={`text-xs ${textSecondary}`}>Deadline</p>
-                        <p className={`font-medium ${textPrimary}`}>{newProject.deadline || 'Not set'}</p>
-                      </div>
-                      <div className={`p-3 rounded-lg ${bgCard}`}>
-                        <p className={`text-xs ${textSecondary}`}>Status</p>
-                        <p className={`font-medium ${textPrimary}`}>Project Creation</p>
-                      </div>
-                    </div>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-sm ${textSecondary}`}>{newProject.platform} • {newProject.website_type}</p>
+                    <Button variant="link" size="sm" className="text-[#6366f1]" onClick={() => setCreateStep(1)}>
+                      Change Type
+                    </Button>
                   </div>
                   
-                  <div>
-                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Notes (Optional)</label>
-                    <Textarea
-                      value={newProject.notes}
-                      onChange={(e) => setNewProject({ ...newProject, notes: e.target.value })}
-                      placeholder="Any additional notes about this project..."
-                      className={`${bgSecondary} border-none min-h-[80px]`}
-                    />
-                  </div>
+                  <Tabs value={detailsTab} onValueChange={setDetailsTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-5 mb-4">
+                      <TabsTrigger value="basic">Basic</TabsTrigger>
+                      <TabsTrigger value="client">Client</TabsTrigger>
+                      <TabsTrigger value="credentials">Credentials</TabsTrigger>
+                      <TabsTrigger value="team">Team</TabsTrigger>
+                      <TabsTrigger value="links">Links</TabsTrigger>
+                    </TabsList>
+
+                    {/* Basic Tab */}
+                    <TabsContent value="basic" className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Project Name *</label>
+                          <Input
+                            value={newProject.name}
+                            onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                            placeholder="Client/Project Name"
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Domain URL</label>
+                          <Input
+                            value={newProject.domain_url}
+                            onChange={(e) => setNewProject({ ...newProject, domain_url: e.target.value })}
+                            placeholder="www.example.com"
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Onboarding Date</label>
+                          <Input
+                            type="date"
+                            value={newProject.onboarding_date}
+                            onChange={(e) => setNewProject({ ...newProject, onboarding_date: e.target.value })}
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Deadline</label>
+                          <Input
+                            type="date"
+                            value={newProject.deadline}
+                            onChange={(e) => setNewProject({ ...newProject, deadline: e.target.value })}
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={`text-sm ${textSecondary} block mb-1`}>Notes</label>
+                        <Textarea
+                          value={newProject.notes}
+                          onChange={(e) => setNewProject({ ...newProject, notes: e.target.value })}
+                          placeholder="Any additional notes..."
+                          className={`${bgSecondary} border-none`}
+                          rows={3}
+                        />
+                      </div>
+                    </TabsContent>
+
+                    {/* Client Tab */}
+                    <TabsContent value="client" className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Client Name</label>
+                          <Input
+                            value={newProject.client_name}
+                            onChange={(e) => setNewProject({ ...newProject, client_name: e.target.value })}
+                            placeholder="Client/Company Name"
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Location</label>
+                          <Input
+                            value={newProject.client_location || ''}
+                            onChange={(e) => setNewProject({ ...newProject, client_location: e.target.value })}
+                            placeholder="City, Country"
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Email</label>
+                          <Input
+                            type="email"
+                            value={newProject.client_email}
+                            onChange={(e) => setNewProject({ ...newProject, client_email: e.target.value })}
+                            placeholder="client@email.com"
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Phone</label>
+                          <Input
+                            value={newProject.client_phone}
+                            onChange={(e) => setNewProject({ ...newProject, client_phone: e.target.value })}
+                            placeholder="+1 234 567 8900"
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    {/* Credentials Tab */}
+                    <TabsContent value="credentials" className="space-y-4">
+                      <div className={`p-4 rounded-lg border ${borderColor}`}>
+                        <h4 className={`font-medium ${textPrimary} mb-3`}>Domain & Hosting</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className={`text-sm ${textSecondary} block mb-1`}>Username</label>
+                            <Input
+                              value={newProject.domain_username || ''}
+                              onChange={(e) => setNewProject({ ...newProject, domain_username: e.target.value })}
+                              placeholder="Domain login"
+                              className={`${bgSecondary} border-none`}
+                            />
+                          </div>
+                          <div>
+                            <label className={`text-sm ${textSecondary} block mb-1`}>Password</label>
+                            <Input
+                              type="password"
+                              value={newProject.domain_password || ''}
+                              onChange={(e) => setNewProject({ ...newProject, domain_password: e.target.value })}
+                              placeholder="••••••••"
+                              className={`${bgSecondary} border-none`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className={`p-4 rounded-lg border ${borderColor}`}>
+                        <h4 className={`font-medium ${textPrimary} mb-3`}>WordPress (if applicable)</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className={`text-sm ${textSecondary} block mb-1`}>WP Username</label>
+                            <Input
+                              value={newProject.wp_username || ''}
+                              onChange={(e) => setNewProject({ ...newProject, wp_username: e.target.value })}
+                              placeholder="WordPress admin"
+                              className={`${bgSecondary} border-none`}
+                            />
+                          </div>
+                          <div>
+                            <label className={`text-sm ${textSecondary} block mb-1`}>WP Password</label>
+                            <Input
+                              type="password"
+                              value={newProject.wp_password || ''}
+                              onChange={(e) => setNewProject({ ...newProject, wp_password: e.target.value })}
+                              placeholder="••••••••"
+                              className={`${bgSecondary} border-none`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    {/* Team Tab */}
+                    <TabsContent value="team" className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Developer</label>
+                          <Select
+                            value={newProject.developer || ''}
+                            onValueChange={(v) => setNewProject({ ...newProject, developer: v })}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border-none`}>
+                              <SelectValue placeholder="Select developer" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teamMembers.map(m => (
+                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Project Manager</label>
+                          <Select
+                            value={newProject.project_manager || ''}
+                            onValueChange={(v) => setNewProject({ ...newProject, project_manager: v })}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border-none`}>
+                              <SelectValue placeholder="Select PM" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teamMembers.map(m => (
+                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Designer</label>
+                          <Select
+                            value={newProject.designer || ''}
+                            onValueChange={(v) => setNewProject({ ...newProject, designer: v })}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border-none`}>
+                              <SelectValue placeholder="Select designer" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teamMembers.map(m => (
+                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Content Writer</label>
+                          <Select
+                            value={newProject.content_writer || ''}
+                            onValueChange={(v) => setNewProject({ ...newProject, content_writer: v })}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border-none`}>
+                              <SelectValue placeholder="Select writer" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {teamMembers.map(m => (
+                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </TabsContent>
+
+                    {/* Links Tab */}
+                    <TabsContent value="links" className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4">
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Google Drive URL</label>
+                          <Input
+                            value={newProject.client_drive_url || ''}
+                            onChange={(e) => setNewProject({ ...newProject, client_drive_url: e.target.value })}
+                            placeholder="https://drive.google.com/..."
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Documents URL</label>
+                          <Input
+                            value={newProject.documents_url || ''}
+                            onChange={(e) => setNewProject({ ...newProject, documents_url: e.target.value })}
+                            placeholder="https://docs.google.com/..."
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-sm ${textSecondary} block mb-1`}>Communication Channel</label>
+                          <Input
+                            value={newProject.communication_url || ''}
+                            onChange={(e) => setNewProject({ ...newProject, communication_url: e.target.value })}
+                            placeholder="Slack, Discord, WhatsApp group link..."
+                            className={`${bgSecondary} border-none`}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </div>
               )}
             </div>
@@ -841,23 +1253,37 @@ export default function DLOperationsPage() {
                 {createStep > 1 ? 'Back' : 'Cancel'}
               </Button>
               
-              {createStep < 3 ? (
-                <Button 
-                  onClick={() => setCreateStep(createStep + 1)}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5]"
-                  disabled={createStep === 1 && (!newProject.website_type || !newProject.platform)}
-                >
-                  Next
-                </Button>
-              ) : (
-                <Button 
-                  onClick={handleCreateProject}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5]"
-                  disabled={!newProject.name.trim()}
-                >
-                  Create Project
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {/* Skip button for steps 2 and 3 */}
+                {(createStep === 2 || createStep === 3) && (
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setCreateStep(4)}
+                  >
+                    Skip to Details
+                  </Button>
+                )}
+                
+                {createStep < 4 ? (
+                  <Button 
+                    onClick={() => setCreateStep(createStep + 1)}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                    disabled={createStep === 1 && (!newProject.website_type || !newProject.platform)}
+                  >
+                    {createStep === 1 && 'Next: Requirements'}
+                    {createStep === 2 && 'Next: Branding'}
+                    {createStep === 3 && 'Next: Details'}
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={handleCreateProject}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                    disabled={!newProject.name.trim()}
+                  >
+                    Create Project
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
