@@ -175,6 +175,38 @@ export default function ProjectDetailPage() {
     }
   };
 
+  // Add new page
+  const handleAddPage = async (pageName) => {
+    try {
+      await axios.post(
+        `${API}/api/website-projects/projects/${projectId}/pages`,
+        { page_name: pageName },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Page added successfully');
+      loadProject();
+      loadStageTasks();
+    } catch (error) {
+      toast.error('Failed to add page');
+    }
+  };
+
+  // Delete page
+  const handleDeletePage = async (taskId) => {
+    if (!window.confirm('Are you sure you want to delete this page?')) return;
+    try {
+      await axios.delete(
+        `${API}/api/website-projects/pages/${taskId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Page deleted');
+      loadProject();
+      loadStageTasks();
+    } catch (error) {
+      toast.error('Failed to delete page');
+    }
+  };
+
   // Submit task for approval
   // Submit task for approval with link and approver assignment
   const handleSubmitForApproval = async (taskId, stage, link = '', assignee_type = 'operations') => {
@@ -388,9 +420,12 @@ export default function ProjectDetailPage() {
           <TabsContent value="pages" className="flex-1 overflow-auto p-6">
             <PagesTab
               pages={pages}
+              stageTasks={stageTasks}
               teamMembers={teamMembers}
               onUpdatePage={handleUpdatePage}
               onConvertToTasks={handleConvertToTasks}
+              onAddPage={handleAddPage}
+              onDeletePage={handleDeletePage}
               isDark={isDark}
               bgCard={bgCard}
               bgSecondary={bgSecondary}
@@ -595,103 +630,313 @@ function ProjectDetailsBar({ project, pages, stageTasks, isDark, bgCard, bgSecon
   );
 }
 
-// ==================== PAGES TAB ====================
-function PagesTab({ pages, teamMembers, onUpdatePage, onConvertToTasks, isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary }) {
-  const stages = ['content', 'wireframe', 'ui', 'dev', 'test'];
+// ==================== PAGES TAB - Multi-Stage Horizontal Layout ====================
+function PagesTab({ 
+  pages, stageTasks, teamMembers, onUpdatePage, onConvertToTasks, onAddPage, onDeletePage,
+  isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary 
+}) {
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingPage, setEditingPage] = useState(null);
+  const [newPageName, setNewPageName] = useState('');
+  
+  // Stage definitions for horizontal columns
+  const stageColumns = [
+    { id: 'content', label: 'Content', color: 'bg-blue-500', textColor: 'text-blue-400' },
+    { id: 'wireframe', label: 'Wireframe', color: 'bg-purple-500', textColor: 'text-purple-400' },
+    { id: 'ui', label: 'UI Design', color: 'bg-pink-500', textColor: 'text-pink-400' },
+    { id: 'responsive', label: 'Responsive', color: 'bg-indigo-500', textColor: 'text-indigo-400' },
+    { id: 'dev', label: 'Development', color: 'bg-green-500', textColor: 'text-green-400' },
+    { id: 'test', label: 'Testing', color: 'bg-cyan-500', textColor: 'text-cyan-400' },
+    { id: 'delivery', label: 'Delivery', color: 'bg-emerald-500', textColor: 'text-emerald-400' }
+  ];
+  
+  // Get status for a specific page at a specific stage
+  const getPageStageStatus = (pageId, stageId) => {
+    const tasks = stageTasks[stageId] || [];
+    const task = tasks.find(t => t.page_id === pageId || t.task_id?.includes(pageId));
+    if (!task) return { status: 'pending', pm: false, ops: false };
+    return {
+      status: task.status || 'pending',
+      pm: task.pm_approved || false,
+      ops: task.ops_approved || false,
+      link: task.link
+    };
+  };
+  
+  // Get status badge styling
+  const getStatusBadge = (statusInfo) => {
+    const { status, pm, ops } = statusInfo;
+    
+    if (status === 'approved' && ops) {
+      return { bg: 'bg-green-500', text: 'text-white', label: '✓', title: 'Approved' };
+    }
+    if (pm && !ops) {
+      return { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'PM✓', title: 'Waiting Ops' };
+    }
+    if (status === 'waiting_pm' || status === 'waiting_approval') {
+      return { bg: 'bg-orange-500/20', text: 'text-orange-400', label: '⏳', title: 'Waiting PM' };
+    }
+    if (status === 'in_progress') {
+      return { bg: 'bg-blue-500/20', text: 'text-blue-400', label: '▶', title: 'In Progress' };
+    }
+    if (status === 'paused') {
+      return { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: '⏸', title: 'Paused' };
+    }
+    if (status === 'corrections') {
+      return { bg: 'bg-red-500/20', text: 'text-red-400', label: '↻', title: 'Corrections' };
+    }
+    // pending / not started
+    return { bg: 'bg-gray-500/20', text: 'text-gray-400', label: '○', title: 'Not Started' };
+  };
+  
+  // Calculate overall progress for a page
+  const getOverallProgress = (pageId) => {
+    let approved = 0;
+    stageColumns.forEach(stage => {
+      const statusInfo = getPageStageStatus(pageId, stage.id);
+      if (statusInfo.status === 'approved' && statusInfo.ops) approved++;
+    });
+    return { approved, total: stageColumns.length };
+  };
+  
+  const handleAddPage = () => {
+    if (newPageName.trim()) {
+      onAddPage(newPageName.trim());
+      setNewPageName('');
+      setShowAddModal(false);
+    }
+  };
+  
+  const handleEditPage = () => {
+    if (editingPage && newPageName.trim()) {
+      onUpdatePage(editingPage.task_id, 'page_name', newPageName.trim());
+      setEditingPage(null);
+      setNewPageName('');
+    }
+  };
   
   return (
     <div className="space-y-4">
-      {/* Header with Convert Button */}
-      <div className="flex items-center justify-between">
+      {/* Header with Add Page and Convert Buttons */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h3 className={`text-lg font-semibold ${textPrimary}`}>Project Pages</h3>
-          <p className={`text-sm ${textSecondary}`}>Assign team members and dates for each stage</p>
+          <p className={`text-sm ${textSecondary}`}>Track stage progress for each page across the workflow</p>
         </div>
-        <Button onClick={onConvertToTasks} className="bg-[#6366f1] hover:bg-[#4f46e5] gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Convert to Tasks
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => setShowAddModal(true)} 
+            className="bg-[#6366f1] hover:bg-[#4f46e5] gap-2"
+            data-testid="add-page-btn"
+          >
+            <Plus className="h-4 w-4" /> Add Page
+          </Button>
+          <Button 
+            onClick={onConvertToTasks} 
+            variant="outline"
+            className={`gap-2 ${bgSecondary} border-none`}
+          >
+            <RefreshCw className="h-4 w-4" /> Convert to Tasks
+          </Button>
+        </div>
       </div>
       
-      {/* Pages Table */}
+      {/* Multi-Stage Horizontal Table */}
       <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className={bgSecondary}>
-              <tr className={`text-xs ${textSecondary} uppercase`}>
-                <th className="px-4 py-3 text-left font-semibold sticky left-0 z-10" style={{ backgroundColor: isDark ? '#27272a' : '#f3f4f6' }}>
-                  Page Name
+        <table className="w-full table-fixed">
+          <thead className={bgSecondary}>
+            <tr className={`text-xs ${textSecondary} uppercase`}>
+              <th className="w-12 px-2 py-3 text-center font-semibold">#</th>
+              <th className="w-36 px-3 py-3 text-left font-semibold">Page Name</th>
+              {stageColumns.map(stage => (
+                <th key={stage.id} className="px-1 py-3 text-center font-semibold">
+                  <div className="flex flex-col items-center gap-1">
+                    <div className={`w-2 h-2 rounded-full ${stage.color}`}></div>
+                    <span className="text-[10px] leading-tight">{stage.label}</span>
+                  </div>
                 </th>
-                {stages.map(stage => (
-                  <th key={stage} className="px-3 py-3 text-center font-semibold" colSpan={2}>
-                    {stage.charAt(0).toUpperCase() + stage.slice(1)}
-                  </th>
-                ))}
-                <th className="px-4 py-3 text-center font-semibold">Status</th>
-              </tr>
-              <tr className={`text-xs ${textSecondary}`}>
-                <th className="sticky left-0 z-10" style={{ backgroundColor: isDark ? '#27272a' : '#f3f4f6' }}></th>
-                {stages.map(stage => (
-                  <React.Fragment key={`sub-${stage}`}>
-                    <th className="px-2 py-2 text-center">Assignee</th>
-                    <th className="px-2 py-2 text-center">Date</th>
-                  </React.Fragment>
-                ))}
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {pages.map((page) => (
-                <tr key={page.task_id} className={`border-t ${borderColor} hover:${bgSecondary}`}>
-                  <td className={`px-4 py-3 sticky left-0 z-10 ${bgCard}`}>
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-[#6366f1]" />
-                      <span className={`font-medium ${textPrimary}`}>{page.page_name}</span>
-                    </div>
-                  </td>
-                  {stages.map(stage => (
-                    <React.Fragment key={`${page.task_id}-${stage}`}>
-                      <td className="px-2 py-2">
-                        <Select
-                          value={page[`${stage}_assignee`] || 'unassigned'}
-                          onValueChange={(val) => onUpdatePage(page.task_id, `${stage}_assignee`, val === 'unassigned' ? '' : val)}
-                        >
-                          <SelectTrigger className={`h-8 text-xs ${bgSecondary} border-none w-28`}>
-                            <SelectValue placeholder="Assign" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                            {teamMembers.map(m => (
-                              <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="px-2 py-2">
-                        <Input
-                          type="date"
-                          value={page[`${stage}_due`] || ''}
-                          onChange={(e) => onUpdatePage(page.task_id, `${stage}_due`, e.target.value)}
-                          className={`h-8 text-xs ${bgSecondary} border-none w-32`}
-                        />
-                      </td>
-                    </React.Fragment>
-                  ))}
-                  <td className="px-4 py-3 text-center">
-                    <Badge className={`text-xs ${
-                      page.overall_status === 'Completed' ? 'bg-green-500/20 text-green-400' :
-                      page.overall_status === 'In Progress' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {page.overall_status || 'To-Do'}
-                    </Badge>
-                  </td>
-                </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
+              <th className="w-20 px-2 py-3 text-center font-semibold">Progress</th>
+              <th className="w-20 px-2 py-3 text-center font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pages.length === 0 ? (
+              <tr>
+                <td colSpan={stageColumns.length + 4} className="px-6 py-12 text-center">
+                  <div className={`${textSecondary}`}>
+                    <Layers className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No pages added yet</p>
+                    <p className="text-xs mt-1">Click "Add Page" to create your first page</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              pages.map((page, idx) => {
+                const progress = getOverallProgress(page.task_id);
+                return (
+                  <tr key={page.task_id} className={`border-t ${borderColor} hover:${bgSecondary} transition-colors`}>
+                    {/* S.No */}
+                    <td className={`px-2 py-3 text-center ${textSecondary} text-sm`}>
+                      {idx + 1}
+                    </td>
+                    
+                    {/* Page Name */}
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-[#6366f1] flex-shrink-0" />
+                        <span className={`font-medium ${textPrimary} text-sm truncate`} title={page.page_name}>
+                          {page.page_name}
+                        </span>
+                      </div>
+                    </td>
+                    
+                    {/* Stage Status Cells */}
+                    {stageColumns.map(stage => {
+                      const statusInfo = getPageStageStatus(page.task_id, stage.id);
+                      const badge = getStatusBadge(statusInfo);
+                      return (
+                        <td key={`${page.task_id}-${stage.id}`} className="px-1 py-3 text-center">
+                          <div 
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${badge.bg} cursor-default`}
+                            title={badge.title}
+                          >
+                            <span className={`text-xs font-bold ${badge.text}`}>{badge.label}</span>
+                          </div>
+                        </td>
+                      );
+                    })}
+                    
+                    {/* Progress */}
+                    <td className="px-2 py-3 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-full max-w-[60px] h-1.5 bg-gray-600/30 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-green-500 rounded-full transition-all"
+                            style={{ width: `${(progress.approved / progress.total) * 100}%` }}
+                          />
+                        </div>
+                        <span className={`text-xs ${textSecondary}`}>
+                          {progress.approved}/{progress.total}
+                        </span>
+                      </div>
+                    </td>
+                    
+                    {/* Actions */}
+                    <td className="px-2 py-3">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button 
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 hover:bg-blue-500/20"
+                          onClick={() => { setEditingPage(page); setNewPageName(page.page_name); }}
+                          title="Edit"
+                          data-testid={`edit-page-${page.task_id}`}
+                        >
+                          <Edit2 className="h-3.5 w-3.5 text-blue-400" />
+                        </Button>
+                        <Button 
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 hover:bg-red-500/20"
+                          onClick={() => onDeletePage(page.task_id)}
+                          title="Delete"
+                          data-testid={`delete-page-${page.task_id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
+      
+      {/* Legend */}
+      <div className={`flex flex-wrap items-center gap-4 text-xs ${textSecondary} px-2`}>
+        <span className="font-medium">Legend:</span>
+        <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-gray-500/20 flex items-center justify-center text-gray-400">○</span> Not Started</div>
+        <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-blue-500/20 flex items-center justify-center text-blue-400">▶</span> In Progress</div>
+        <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-orange-500/20 flex items-center justify-center text-orange-400">⏳</span> Waiting PM</div>
+        <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-amber-500/20 flex items-center justify-center text-amber-400">PM✓</span> Waiting Ops</div>
+        <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-green-500 flex items-center justify-center text-white">✓</span> Approved</div>
+        <div className="flex items-center gap-1.5"><span className="w-5 h-5 rounded bg-red-500/20 flex items-center justify-center text-red-400">↻</span> Corrections</div>
+      </div>
+      
+      {/* Add Page Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="add-page-modal">
+          <div className={`${bgCard} rounded-xl p-6 w-full max-w-md border ${borderColor}`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[#6366f1] flex items-center justify-center">
+                <Plus className="h-5 w-5 text-white" />
+              </div>
+              <h3 className={`text-lg font-semibold ${textPrimary}`}>Add New Page</h3>
+            </div>
+            <Input
+              value={newPageName}
+              onChange={(e) => setNewPageName(e.target.value)}
+              placeholder="Enter page name (e.g., Home, About Us, Contact)"
+              className={`${bgSecondary} border-none mb-4`}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddPage()}
+              autoFocus
+              data-testid="new-page-name-input"
+            />
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => { setShowAddModal(false); setNewPageName(''); }}>
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]" 
+                onClick={handleAddPage}
+                disabled={!newPageName.trim()}
+                data-testid="confirm-add-page-btn"
+              >
+                Add Page
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Page Modal */}
+      {editingPage && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="edit-page-modal">
+          <div className={`${bgCard} rounded-xl p-6 w-full max-w-md border ${borderColor}`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
+                <Edit2 className="h-5 w-5 text-white" />
+              </div>
+              <h3 className={`text-lg font-semibold ${textPrimary}`}>Edit Page</h3>
+            </div>
+            <Input
+              value={newPageName}
+              onChange={(e) => setNewPageName(e.target.value)}
+              placeholder="Enter page name"
+              className={`${bgSecondary} border-none mb-4`}
+              onKeyDown={(e) => e.key === 'Enter' && handleEditPage()}
+              autoFocus
+              data-testid="edit-page-name-input"
+            />
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => { setEditingPage(null); setNewPageName(''); }}>
+                Cancel
+              </Button>
+              <Button 
+                className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]" 
+                onClick={handleEditPage}
+                disabled={!newPageName.trim()}
+                data-testid="confirm-edit-page-btn"
+              >
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
