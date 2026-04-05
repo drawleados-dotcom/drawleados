@@ -596,9 +596,9 @@ export default function DLOperationsPage() {
   
   return (
     <Layout>
-      <div className="flex flex-col h-full pb-16 md:pb-0 overflow-auto" data-testid="dl-operations-page">
-        {/* Title Row */}
-        <div className={`p-4 md:p-6 border-b ${borderColor} ${isDark ? 'bg-[#0c0a09]' : 'bg-white'}`}>
+      <div className="flex flex-col h-full pb-16 md:pb-0" data-testid="dl-operations-page">
+        {/* Title Row - Fixed at top */}
+        <div className={`shrink-0 p-4 md:p-6 border-b ${borderColor} ${isDark ? 'bg-[#0c0a09]' : 'bg-white'}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center">
@@ -623,9 +623,9 @@ export default function DLOperationsPage() {
         </div>
         
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* PART 1: PROJECT OVERVIEW SECTION */}
+        {/* PART 1: PROJECT OVERVIEW SECTION - Collapsible */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className={`p-4 md:p-6 border-b ${borderColor} ${bgCard}`}>
+        <div className={`shrink-0 p-4 md:p-6 border-b ${borderColor} ${bgCard}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className={`text-lg font-semibold ${textPrimary}`}>Project Overview</h2>
             
@@ -753,11 +753,11 @@ export default function DLOperationsPage() {
         </div>
         
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* PART 2: STAGE TASK BOARD */}
+        {/* PART 2: STAGE TASK BOARD - Fixed Header + Scrollable Content */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className={`flex-1 flex flex-col ${bgCard} overflow-hidden`}>
-          {/* STICKY Header with filters */}
-          <div className={`sticky top-0 z-10 p-4 border-b ${borderColor} ${bgCard}`}>
+        <div className={`flex-1 flex flex-col min-h-0 ${bgCard}`}>
+          {/* FIXED Header with filters */}
+          <div className={`shrink-0 p-4 border-b ${borderColor} ${bgCard}`}>
             <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
               <div className="flex items-center gap-3">
                 <h2 className={`text-lg font-semibold ${textPrimary}`}>Stage Task Board</h2>
