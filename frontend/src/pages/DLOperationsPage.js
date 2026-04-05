@@ -5,11 +5,13 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Globe, Plus, Search, Eye, ArrowRight, FolderKanban, 
-  Calendar, FileText, LayoutGrid, ListTodo, Filter, X, Check, User, Building2
+  Calendar, FileText, LayoutGrid, ListTodo, Filter, X, Check, User, Building2,
+  Palette, Type, Link2, Users, Settings
 } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -27,6 +29,50 @@ const PLATFORM_OPTIONS = {
   'Business Website': ['WordPress', 'Wix', 'Webflow', 'Framer', 'AI Builder', 'Custom Code'],
   'Ecommerce': ['Shopify', 'Wix', 'WooCommerce'],
   'Web App': ['AI Builder', 'Custom Code']
+};
+
+// Dynamic requirements based on website type
+const REQUIREMENTS_CONFIG = {
+  'Landing Page': {
+    sections: [
+      { title: 'Content', fields: ['business_name', 'tagline', 'about_text', 'cta_text'] },
+      { title: 'Contact', fields: ['contact_info', 'social_links'] }
+    ]
+  },
+  'Business Website': {
+    sections: [
+      { title: 'Business Info', fields: ['business_name', 'tagline', 'about_text'] },
+      { title: 'Content', fields: ['services_list', 'team_info', 'testimonials'] },
+      { title: 'Contact', fields: ['contact_info', 'social_links'] }
+    ]
+  },
+  'Ecommerce': {
+    sections: [
+      { title: 'Store Info', fields: ['store_name', 'product_categories', 'products_count'] },
+      { title: 'Collections', fields: ['collections_list', 'variants_info'] },
+      { title: 'Policies', fields: ['shipping_zones', 'payment_methods', 'return_policy'] }
+    ]
+  },
+  'Web App': {
+    sections: [
+      { title: 'App Info', fields: ['app_name', 'description', 'core_features'] },
+      { title: 'Technical', fields: ['user_roles', 'integrations', 'tech_stack'] },
+      { title: 'Auth & API', fields: ['auth_method', 'api_requirements'] }
+    ]
+  }
+};
+
+// Field labels
+const FIELD_LABELS = {
+  business_name: 'Business Name', tagline: 'Tagline', about_text: 'About Text',
+  services_list: 'Services (one per line)', cta_text: 'Call to Action Text', contact_info: 'Contact Information',
+  team_info: 'Team Information', testimonials: 'Testimonials', social_links: 'Social Media Links',
+  store_name: 'Store Name', product_categories: 'Product Categories', products_count: 'Approx. Products Count',
+  collections_list: 'Collections List', variants_info: 'Product Variants Info', shipping_zones: 'Shipping Zones',
+  payment_methods: 'Payment Methods', return_policy: 'Return/Refund Policy', app_name: 'Application Name',
+  description: 'Description', core_features: 'Core Features', user_roles: 'User Roles',
+  integrations: 'Required Integrations', tech_stack: 'Tech Stack', api_requirements: 'API Requirements',
+  auth_method: 'Authentication Method'
 };
 
 // Workflow Stage Definitions
@@ -66,10 +112,29 @@ export default function DLOperationsPage() {
     website_type: '',
     platform: '',
     client_name: '',
+    client_email: '',
+    client_phone: '',
     domain_url: '',
     deadline: '',
-    notes: ''
+    onboarding_date: '',
+    notes: '',
+    developer: '',
+    project_manager: '',
+    // Requirements (dynamic based on type)
+    requirements: {},
+    // Branding
+    branding: {
+      logo_url: '',
+      favicon_url: '',
+      primary_color: '#6366f1',
+      secondary_color: '#22c55e',
+      accent_color: '#f59e0b',
+      primary_font: '',
+      secondary_font: '',
+      guidelines_url: ''
+    }
   });
+  const [detailsTab, setDetailsTab] = useState('basic');
   
   const token = localStorage.getItem('session_token');
   
@@ -125,14 +190,31 @@ export default function DLOperationsPage() {
   const handleNewProject = () => {
     setShowCreateModal(true);
     setCreateStep(1);
+    setDetailsTab('basic');
     setNewProject({
       name: '',
       website_type: '',
       platform: '',
       client_name: '',
+      client_email: '',
+      client_phone: '',
       domain_url: '',
       deadline: '',
-      notes: ''
+      onboarding_date: '',
+      notes: '',
+      developer: '',
+      project_manager: '',
+      requirements: {},
+      branding: {
+        logo_url: '',
+        favicon_url: '',
+        primary_color: '#6366f1',
+        secondary_color: '#22c55e',
+        accent_color: '#f59e0b',
+        primary_font: '',
+        secondary_font: '',
+        guidelines_url: ''
+      }
     });
   };
   
