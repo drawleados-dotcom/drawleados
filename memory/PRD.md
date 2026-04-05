@@ -1347,3 +1347,64 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 ### Low Priority (P2)
 - **Refactor Large Components**: `WebsiteProjectsPage.js` (~3600 lines), `HRAdminPage.js` (~7000+ lines), `TasksModulePage.js` (~3600 lines) need component breakdown
 - **Chat Backend Refactor**: Migrate the in-memory chat backend to use MongoDB for persistence
+
+---
+
+## Latest Updates (April 2026 - Session 56)
+
+### Centralized Approvals System (DONE)
+**Purpose:** Implemented a comprehensive centralized approval workflow for the Website Development module, allowing users to submit work for approval and managers to review/approve from a single dashboard.
+
+**Features Implemented:**
+
+1. **Link Approval Modal with Approver Selection:**
+   - Opens when clicking "Add [Stage] Link" button in Tracker Board
+   - Link input field for pasting work URL (Figma, Google Docs, etc.)
+   - **3 Approver Options:**
+     - Operations Team (default) - "For routine task approvals"
+     - Project Manager - "For project-specific decisions"
+     - CEO - "For critical business decisions"
+   - Submit for Approval button (disabled until link entered)
+   - Radio button selection with visual feedback
+
+2. **Approvals Page (`/approvals`):**
+   - Header with total pending count badge
+   - Date filter (defaults to today, with "Today" quick button)
+   - Search bar for finding approvals
+   - **Department Tabs (8 tabs):** All, Website, Social Media, Meta Ads, SEO, Finance, HR, Business Dev, ERP
+   - Each tab shows count of pending approvals
+
+3. **Approval Cards:**
+   - Department icon and color-coded badge
+   - Title: "[Page Name] - [Stage]"
+   - Project name and stage
+   - Submitted by (user name)
+   - Timestamp
+   - **Assignee Type Badge:** CEO (red), PM (purple), Operations (blue)
+   - View Link button (opens submitted URL)
+   - **Action Buttons:** Approve (green), Corrections (orange)
+
+4. **Corrections Modal:**
+   - Shows "Send back to: [submitter name]"
+   - Textarea for correction remarks
+   - Cancel and Send Corrections buttons
+
+5. **Backend Updates:**
+   - `PUT /api/website-projects/stage-tasks/{task_id}/submit` now accepts `assignee_type` parameter
+   - `GET /api/approvals/pending` aggregates both centralized approvals and website_stage_tasks
+   - Fixed authentication in `approvals_routes.py` to properly read session tokens
+
+**Sequential Workflow Preserved:**
+- Stages remain locked until previous stage is approved
+- Content → Wireframe → UI Design → Responsive → Development → Testing → Delivery
+
+**Files Modified:**
+- `/app/frontend/src/pages/ProjectDetailPage.js`: Added `LinkApprovalModal` component with approver selection
+- `/app/frontend/src/pages/ApprovalsPage.js`: Updated to display assignee_type badges
+- `/app/backend/approvals_routes.py`: Fixed auth, added assignee_type to response
+- `/app/backend/website_projects_routes.py`: Added assignee_type to submit endpoint
+
+**Test Report:**
+- All 13 backend tests passed (iteration_56.json)
+- All frontend flows verified
+- 100% success rate
