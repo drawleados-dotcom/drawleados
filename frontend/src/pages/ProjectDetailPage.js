@@ -38,7 +38,7 @@ export default function ProjectDetailPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
   
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('pages');
   const [project, setProject] = useState(null);
   const [pages, setPages] = useState([]);
   const [stageTasks, setStageTasks] = useState({});
@@ -244,40 +244,86 @@ export default function ProjectDetailPage() {
     );
   }
 
+  // Calculate stage progress
+  const getStageProgress = (stageId) => {
+    const tasks = stageTasks[stageId] || [];
+    const completed = tasks.filter(t => t.status === 'approved' || t.status === 'completed').length;
+    return { completed, total: pages.length };
+  };
+
   return (
     <Layout>
-      <div className={`flex flex-col h-full ${bgTertiary}`} data-testid="project-detail-page">
-        {/* Header */}
+      <div className={`flex flex-col h-full overflow-auto ${bgTertiary}`} data-testid="project-detail-page">
+        {/* Top Header */}
         <div className={`px-6 py-4 border-b ${borderColor} ${bgCard}`}>
-          <div className="flex items-center gap-4">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => navigate('/dl-operations')}
-              className={textSecondary}
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          {/* Row 1: Back + Project Name + Status + Edit */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => navigate('/dl-operations')}
+                className={textSecondary}
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" /> Back
+              </Button>
+              <h1 className={`text-2xl font-bold ${textPrimary}`}>{project.name}</h1>
+              <Badge className={`px-3 py-1 text-sm ${
+                project.status === 'active' ? 'bg-green-500 text-white' :
+                project.status === 'completed' ? 'bg-blue-500 text-white' :
+                'bg-gray-500 text-white'
+              }`}>
+                {project.status?.toUpperCase() || 'ACTIVE'}
+              </Badge>
+            </div>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Edit2 className="h-4 w-4" /> Edit
             </Button>
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center">
-              <Globe className="h-6 w-6 text-white" />
+          </div>
+          
+          {/* Row 2: Quick Links + Deadline + Progress */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <Button variant="outline" size="sm" className={`gap-2 ${bgSecondary} border-none`}>
+              <FileText className="h-4 w-4" /> Docs
+            </Button>
+            <Button variant="outline" size="sm" className={`gap-2 ${bgSecondary} border-none`}>
+              <ExternalLink className="h-4 w-4" /> Drive
+            </Button>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${bgSecondary}`}>
+              <Clock className={`h-4 w-4 ${project.deadline ? 'text-orange-400' : 'text-red-400'}`} />
+              <span className={`text-sm ${project.deadline ? 'text-orange-400' : 'text-red-400'}`}>
+                {project.deadline || 'No Deadline'}
+              </span>
             </div>
-            <div className="flex-1">
-              <h1 className={`text-xl font-bold ${textPrimary}`}>{project.name}</h1>
-              <p className={`text-sm ${textSecondary}`}>
-                {project.platform} • {project.website_type} • {pages.length} Pages
-              </p>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${bgSecondary}`}>
+              <div className="w-20 h-2 bg-gray-600 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#6366f1] rounded-full" 
+                  style={{ width: `${(project.overall_percent || 0)}%` }}
+                />
+              </div>
+              <span className={`text-sm ${textPrimary}`}>{project.overall_percent || 0}/100</span>
             </div>
-            <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{project.workflow_stage || 'Creation'}</Badge>
           </div>
         </div>
 
-        {/* Tabs */}
+        {/* Collapsible Project Details */}
+        <ProjectDetailsBar 
+          project={project}
+          pages={pages}
+          stageTasks={stageTasks}
+          isDark={isDark}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+        />
+
+        {/* Tabs - Only Pages, Tracker Board, Team (no Overview) */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
           <div className={`px-6 pt-4 ${bgCard} border-b ${borderColor}`}>
             <TabsList className={`${bgSecondary} p-1 rounded-lg`}>
-              <TabsTrigger value="overview" className="gap-2">
-                <Settings className="h-4 w-4" /> Overview
-              </TabsTrigger>
               <TabsTrigger value="pages" className="gap-2">
                 <Layers className="h-4 w-4" /> Pages
               </TabsTrigger>
@@ -289,19 +335,6 @@ export default function ProjectDetailPage() {
               </TabsTrigger>
             </TabsList>
           </div>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="flex-1 overflow-auto p-6">
-            <OverviewTab 
-              project={project} 
-              isDark={isDark}
-              bgCard={bgCard}
-              bgSecondary={bgSecondary}
-              borderColor={borderColor}
-              textPrimary={textPrimary}
-              textSecondary={textSecondary}
-            />
-          </TabsContent>
 
           {/* Pages Tab */}
           <TabsContent value="pages" className="flex-1 overflow-auto p-6">
@@ -429,141 +462,85 @@ export default function ProjectDetailPage() {
   );
 }
 
-// ==================== OVERVIEW TAB ====================
-function OverviewTab({ project, isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary }) {
-  const [expandedSections, setExpandedSections] = useState({ basic: true });
+// ==================== PROJECT DETAILS BAR (Collapsible) ====================
+function ProjectDetailsBar({ project, pages, stageTasks, isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary }) {
+  const [isExpanded, setIsExpanded] = useState(true);
   
-  const toggleSection = (key) => {
-    setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+  // Calculate stage progress
+  const getStageProgress = (stageId) => {
+    const tasks = stageTasks[stageId] || [];
+    const completed = tasks.filter(t => t.status === 'approved' || t.status === 'completed').length;
+    return { completed, total: pages.length };
   };
   
-  const sections = [
-    { 
-      key: 'basic', 
-      title: 'Basic Information', 
-      icon: Settings,
-      fields: [
-        { label: 'Project Name', value: project?.name },
-        { label: 'Client Name', value: project?.client_name },
-        { label: 'Platform', value: project?.platform },
-        { label: 'Website Type', value: project?.website_type },
-        { label: 'Status', value: project?.status },
-        { label: 'Workflow Stage', value: project?.workflow_stage }
-      ]
-    },
-    { 
-      key: 'dates', 
-      title: 'Timeline', 
-      icon: Calendar,
-      fields: [
-        { label: 'Onboarding Date', value: project?.onboarding_date },
-        { label: 'Deadline', value: project?.deadline }
-      ]
-    },
-    { 
-      key: 'client', 
-      title: 'Client Information', 
-      icon: User,
-      fields: [
-        { label: 'Location', value: project?.client_location },
-        { label: 'Email', value: project?.client_email },
-        { label: 'Phone', value: project?.client_phone }
-      ]
-    },
-    { 
-      key: 'domain', 
-      title: 'Domain & Hosting', 
-      icon: Globe,
-      fields: [
-        { label: 'Domain URL', value: project?.domain_url, isLink: true },
-        { label: 'Username', value: project?.domain_username, isPassword: true },
-        { label: 'Password', value: project?.domain_password, isPassword: true },
-        { label: '2FA', value: project?.domain_2fa, isPassword: true }
-      ]
-    },
-    { 
-      key: 'wordpress', 
-      title: 'WordPress Credentials', 
-      icon: Code,
-      fields: [
-        { label: 'Username', value: project?.wp_username },
-        { label: 'Password', value: project?.wp_password, isPassword: true },
-        { label: 'Backup', value: project?.wp_backup }
-      ]
-    },
-    { 
-      key: 'branding', 
-      title: 'Branding', 
-      icon: Palette,
-      fields: [
-        { label: 'Primary Color', value: project?.branding?.primary_color, isColor: true },
-        { label: 'Secondary Color', value: project?.branding?.secondary_color, isColor: true },
-        { label: 'Accent Color', value: project?.branding?.accent_color, isColor: true },
-        { label: 'Font', value: project?.branding?.font }
-      ]
-    },
-    { 
-      key: 'links', 
-      title: 'Project Links', 
-      icon: Link2,
-      fields: [
-        { label: 'Client Drive', value: project?.client_drive_url, isLink: true },
-        { label: 'Documents', value: project?.documents_url, isLink: true },
-        { label: 'Communication', value: project?.communication_url, isLink: true }
-      ]
-    }
+  const detailCards = [
+    { icon: Globe, label: 'Domain', value: project?.domain_url ? 'Set' : 'Not set' },
+    { icon: User, label: 'Developer', value: project?.developer || 'Not set' },
+    { icon: Settings, label: 'Platform', value: project?.platform || 'Website' },
+    { icon: Code, label: 'Type', value: project?.website_type || 'Business Website' },
+    { icon: Users, label: 'Client', value: project?.client_name || 'Not set' },
+    { icon: Globe, label: 'Location', value: project?.client_location || 'Not set' }
+  ];
+  
+  const stageCards = [
+    { id: 'wireframe', label: 'Wireframe', color: 'text-purple-400' },
+    { id: 'ui', label: 'UI Design', color: 'text-blue-400' },
+    { id: 'content', label: 'Content', color: 'text-orange-400' },
+    { id: 'dev', label: 'Development', color: 'text-green-400' }
   ];
 
   return (
-    <div className="space-y-4 max-w-4xl">
-      {sections.map(section => (
-        <div key={section.key} className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-          <button
-            onClick={() => toggleSection(section.key)}
-            className={`w-full flex items-center justify-between p-4 ${bgSecondary} hover:bg-opacity-80 transition-colors`}
-          >
-            <div className="flex items-center gap-3">
-              <section.icon className="h-5 w-5 text-[#6366f1]" />
-              <span className={`font-semibold ${textPrimary}`}>{section.title}</span>
-            </div>
-            {expandedSections[section.key] ? (
-              <ChevronDown className={`h-5 w-5 ${textSecondary}`} />
-            ) : (
-              <ChevronRight className={`h-5 w-5 ${textSecondary}`} />
-            )}
-          </button>
-          
-          {expandedSections[section.key] && (
-            <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4">
-              {section.fields.map((field, idx) => (
-                <div key={idx}>
-                  <p className={`text-xs ${textSecondary} mb-1`}>{field.label}</p>
-                  {field.isColor && field.value ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded border" style={{ backgroundColor: field.value }} />
-                      <span className={`text-sm ${textPrimary}`}>{field.value}</span>
-                    </div>
-                  ) : field.isLink && field.value ? (
-                    <a 
-                      href={field.value} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-sm text-[#6366f1] hover:underline flex items-center gap-1"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      Open Link
-                    </a>
-                  ) : field.isPassword && field.value ? (
-                    <span className={`text-sm ${textPrimary}`}>••••••••</span>
-                  ) : (
-                    <span className={`text-sm ${textPrimary}`}>{field.value || '-'}</span>
-                  )}
+    <div className={`border-b ${borderColor}`}>
+      {/* Toggle Button */}
+      <button 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className={`w-full px-6 py-3 flex items-center justify-between ${bgCard} hover:bg-opacity-80 transition-colors`}
+      >
+        <span className={`text-sm font-medium ${textPrimary}`}>
+          {isExpanded ? 'Hide Project Details' : 'Show Project Details'}
+        </span>
+        {isExpanded ? (
+          <ChevronDown className={`h-4 w-4 ${textSecondary}`} />
+        ) : (
+          <ChevronRight className={`h-4 w-4 ${textSecondary}`} />
+        )}
+      </button>
+      
+      {/* Expanded Content */}
+      {isExpanded && (
+        <div className={`px-6 pb-4 ${bgCard}`}>
+          {/* Detail Cards Row */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+            {detailCards.map((card, idx) => {
+              const Icon = card.icon;
+              return (
+                <div key={idx} className={`p-3 rounded-xl ${bgSecondary}`}>
+                  <div className={`flex items-center gap-2 mb-1 ${textSecondary}`}>
+                    <Icon className="h-4 w-4" />
+                    <span className="text-xs">{card.label}</span>
+                  </div>
+                  <p className={`text-sm font-medium ${textPrimary}`}>{card.value}</p>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
+          
+          {/* Stage Progress Cards Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {stageCards.map(stage => {
+              const progress = getStageProgress(stage.id);
+              return (
+                <div key={stage.id} className={`p-4 rounded-xl ${bgSecondary} text-center`}>
+                  <p className={`text-sm ${textSecondary} mb-1`}>{stage.label}</p>
+                  <p className={`text-xl font-bold ${stage.color}`}>
+                    {progress.completed}/{progress.total}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
