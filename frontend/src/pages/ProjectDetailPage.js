@@ -893,212 +893,160 @@ function TrackerBoard({
   };
   
   const allPages = getAllPages();
-  const displayStages = stages.filter(s => s.id !== 'delivery'); // Show main workflow stages
+  // Show only main stages - combine some for compact view
+  const displayStages = [
+    stages.find(s => s.id === 'content'),
+    stages.find(s => s.id === 'wireframe'),
+    stages.find(s => s.id === 'ui'),
+    stages.find(s => s.id === 'responsive'),
+    stages.find(s => s.id === 'development'),
+    stages.find(s => s.id === 'testing')
+  ].filter(Boolean);
 
   return (
     <div className="flex flex-col h-full">
       {/* Filters Row */}
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Search pages..."
-              className={`pl-10 w-60 h-9 ${bgSecondary} border-none`}
-            />
-          </div>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
+          <Input
+            placeholder="Search..."
+            className={`pl-7 w-40 h-8 text-xs ${bgSecondary} border-none`}
+          />
         </div>
-        <Button className="bg-[#6366f1] hover:bg-[#5558e3] gap-2">
-          <Plus className="h-4 w-4" /> Add Page
+        <Button size="sm" className="h-8 bg-[#6366f1] hover:bg-[#5558e3] gap-1 text-xs">
+          <Plus className="h-3 w-3" /> Add
         </Button>
       </div>
       
-      {/* Multi-Stage Table */}
-      <div className={`flex-1 overflow-auto rounded-xl border ${borderColor} ${bgCard}`}>
+      {/* Compact Multi-Stage Table */}
+      <div className={`flex-1 rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
         {allPages.length === 0 ? (
-          <div className={`text-center py-16 ${textSecondary}`}>
-            <FileText className="h-16 w-16 mx-auto mb-4 opacity-30" />
-            <p className="text-lg font-medium">No pages yet</p>
-            <p className="text-sm">Add pages to start tracking stages</p>
+          <div className={`text-center py-12 ${textSecondary}`}>
+            <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">No pages yet</p>
           </div>
         ) : (
-          <table className="w-full">
-            {/* Table Header */}
-            <thead className={`${bgSecondary} sticky top-0 z-10`}>
-              <tr className={`text-left text-xs font-semibold uppercase tracking-wider ${textSecondary}`}>
-                <th className="px-3 py-3 w-10">#</th>
-                <th className="px-3 py-3 min-w-[150px]">Page Name</th>
-                {displayStages.map(stage => (
-                  <th key={stage.id} className="px-3 py-3 min-w-[180px]">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-5 h-5 rounded ${stage.color} flex items-center justify-center`}>
-                        <stage.icon className="h-3 w-3 text-white" />
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed">
+              {/* Table Header */}
+              <thead className={`${bgSecondary} sticky top-0 z-10`}>
+                <tr className={`text-[10px] font-semibold uppercase tracking-wider ${textSecondary}`}>
+                  <th className="px-2 py-2 w-8 text-center">#</th>
+                  <th className="px-2 py-2 w-28 text-left">Page</th>
+                  {displayStages.map(stage => (
+                    <th key={stage.id} className="px-1 py-2 text-center" style={{ width: '13%' }}>
+                      <div className="flex items-center justify-center gap-1">
+                        <div className={`w-4 h-4 rounded ${stage.color} flex items-center justify-center`}>
+                          <stage.icon className="h-2.5 w-2.5 text-white" />
+                        </div>
+                        <span className="hidden xl:inline">{stage.label}</span>
+                        <span className="xl:hidden">{stage.label.slice(0, 3)}</span>
                       </div>
-                      <div>
-                        <div>{stage.label}</div>
-                        <div className="text-[10px] font-normal opacity-70">Status / Assignee / Due</div>
-                      </div>
-                    </div>
-                  </th>
-                ))}
-                <th className="px-3 py-3 min-w-[120px]">
-                  <div>Overall</div>
-                  <div className="text-[10px] font-normal opacity-70">Status / URL</div>
-                </th>
-                <th className="px-3 py-3 w-20 text-center">Actions</th>
-              </tr>
-            </thead>
-            
-            {/* Table Body */}
-            <tbody className="divide-y" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
-              {allPages.map((page, idx) => {
-                const overallStatus = getPageOverallStatus(page.page_id);
-                
-                return (
-                  <tr 
-                    key={page.page_id}
-                    className={`hover:${bgSecondary} transition-colors`}
-                    data-testid={`page-row-${page.page_id}`}
-                  >
-                    {/* Row Number */}
-                    <td className={`px-3 py-4 ${textSecondary} text-sm`}>{idx + 1}</td>
-                    
-                    {/* Page Name */}
-                    <td className="px-3 py-4">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-[#6366f1]" />
-                        <span className={`font-semibold ${textPrimary}`}>{page.page_name}</span>
-                      </div>
-                    </td>
-                    
-                    {/* Stage Columns */}
-                    {displayStages.map(stage => {
-                      const task = getTaskForPageStage(page.page_id, stage.id);
-                      const isLocked = !isPreviousStageFullyApproved(page.page_id, stage.id);
-                      const status = task?.status || 'pending';
-                      const displayStatus = isLocked ? 'locked' : status;
+                    </th>
+                  ))}
+                  <th className="px-2 py-2 w-16 text-center">Status</th>
+                  <th className="px-2 py-2 w-10 text-center">Act</th>
+                </tr>
+              </thead>
+              
+              {/* Table Body */}
+              <tbody className="divide-y" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
+                {allPages.map((page, idx) => {
+                  const overallStatus = getPageOverallStatus(page.page_id);
+                  
+                  return (
+                    <tr 
+                      key={page.page_id}
+                      className={`hover:${bgSecondary} transition-colors`}
+                      data-testid={`page-row-${page.page_id}`}
+                    >
+                      {/* Row Number */}
+                      <td className={`px-2 py-2 text-center ${textSecondary} text-xs`}>{idx + 1}</td>
                       
-                      return (
-                        <td key={stage.id} className="px-3 py-4">
-                          <div className="space-y-2">
-                            {/* Status Dropdown */}
-                            <Select 
-                              value={displayStatus} 
-                              disabled={isLocked}
-                              onValueChange={(val) => {
-                                if (val === 'start' && task) {
-                                  onTimerAction(task.task_id, 'start');
-                                }
-                              }}
-                            >
-                              <SelectTrigger className={`h-7 text-xs ${
-                                displayStatus === 'approved' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
-                                displayStatus === 'in_progress' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
-                                displayStatus === 'waiting_pm' || displayStatus === 'waiting_ops' ? 'bg-orange-500/20 text-orange-400 border-orange-500/30' :
-                                displayStatus === 'locked' ? 'bg-gray-500/20 text-gray-500 border-gray-500/30' :
-                                `${bgSecondary} ${textSecondary}`
+                      {/* Page Name */}
+                      <td className="px-2 py-2">
+                        <span className={`text-xs font-medium ${textPrimary} truncate block`} title={page.page_name}>
+                          {page.page_name}
+                        </span>
+                      </td>
+                      
+                      {/* Stage Columns - Compact */}
+                      {displayStages.map(stage => {
+                        const task = getTaskForPageStage(page.page_id, stage.id);
+                        const isLocked = !isPreviousStageFullyApproved(page.page_id, stage.id);
+                        const status = task?.status || 'pending';
+                        const displayStatus = isLocked ? 'locked' : status;
+                        
+                        return (
+                          <td key={stage.id} className="px-1 py-2 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              {/* Status Badge - Compact */}
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-medium ${
+                                displayStatus === 'approved' ? 'bg-green-500/20 text-green-400' :
+                                displayStatus === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                                displayStatus === 'waiting_pm' || displayStatus === 'waiting_ops' ? 'bg-orange-500/20 text-orange-400' :
+                                displayStatus === 'locked' ? 'bg-gray-500/20 text-gray-500' :
+                                displayStatus === 'paused' ? 'bg-yellow-500/20 text-yellow-400' :
+                                'bg-gray-500/10 text-gray-400'
                               }`}>
-                                <SelectValue>
-                                  {displayStatus === 'approved' ? 'Done' :
-                                   displayStatus === 'in_progress' ? 'Working' :
-                                   displayStatus === 'paused' ? 'Paused' :
-                                   displayStatus === 'waiting_pm' ? 'PM Review' :
-                                   displayStatus === 'waiting_ops' ? 'Ops Review' :
-                                   displayStatus === 'corrections' ? 'Corrections' :
-                                   displayStatus === 'locked' ? 'Locked' :
-                                   'To-Do'}
-                                </SelectValue>
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pending">To-Do</SelectItem>
-                                <SelectItem value="start">Start</SelectItem>
-                                <SelectItem value="in_progress">Working</SelectItem>
-                                <SelectItem value="paused">Paused</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            
-                            {/* Assignee & Date Row */}
-                            <div className="flex items-center gap-1">
-                              <div className={`flex items-center gap-1 text-xs ${textSecondary}`}>
-                                <User className="h-3 w-3" />
-                                <span className="truncate max-w-[60px]">{task?.assignee || '-'}</span>
-                              </div>
-                              <Input
-                                type="date"
-                                defaultValue={task?.due_date || ''}
-                                className={`h-6 text-xs px-1 w-24 ${bgSecondary} border-none`}
-                                disabled={isLocked}
-                              />
+                                {displayStatus === 'approved' ? '✓' :
+                                 displayStatus === 'in_progress' ? '⏵' :
+                                 displayStatus === 'paused' ? '⏸' :
+                                 displayStatus === 'waiting_pm' ? 'PM' :
+                                 displayStatus === 'waiting_ops' ? 'Ops' :
+                                 displayStatus === 'locked' ? '🔒' :
+                                 '○'}
+                              </span>
+                              
+                              {/* Link */}
+                              {task?.link ? (
+                                <a 
+                                  href={task.link} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-[9px] text-[#6366f1] hover:underline"
+                                >
+                                  View
+                                </a>
+                              ) : !isLocked && (task?.status === 'in_progress' || task?.status === 'paused') ? (
+                                <button 
+                                  onClick={() => setFinishModal({ open: true, task, stage: stage.id })}
+                                  className="text-[9px] text-[#6366f1] hover:underline"
+                                >
+                                  +URL
+                                </button>
+                              ) : null}
                             </div>
-                            
-                            {/* Add URL Link */}
-                            {task?.link ? (
-                              <a 
-                                href={task.link} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-xs text-[#6366f1] hover:underline flex items-center gap-1"
-                              >
-                                <ExternalLink className="h-3 w-3" /> View
-                              </a>
-                            ) : !isLocked && (task?.status === 'in_progress' || task?.status === 'paused') ? (
-                              <button 
-                                onClick={() => setFinishModal({ open: true, task, stage: stage.id })}
-                                className="text-xs text-[#6366f1] hover:underline"
-                              >
-                                + Add URL
-                              </button>
-                            ) : (
-                              <span className={`text-xs ${textSecondary}`}>+ Add URL</span>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                    
-                    {/* Overall Status */}
-                    <td className="px-3 py-4">
-                      <div className="space-y-2">
-                        <Select value={overallStatus}>
-                          <SelectTrigger className={`h-7 text-xs ${
-                            overallStatus === 'completed' ? 'bg-green-500/20 text-green-400 border-green-500/30' :
-                            overallStatus === 'in_progress' ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
-                            `${bgSecondary} ${textSecondary}`
-                          }`}>
-                            <SelectValue>
-                              {overallStatus === 'completed' ? 'Completed' :
-                               overallStatus === 'in_progress' ? 'In Progress' :
-                               'To-Do'}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="to_do">To-Do</SelectItem>
-                            <SelectItem value="in_progress">In Progress</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <span className={`text-xs ${textSecondary}`}>+ Add URL</span>
-                      </div>
-                    </td>
-                    
-                    {/* Actions */}
-                    <td className="px-3 py-4">
-                      <div className="flex items-center justify-center">
-                        <Button 
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0 hover:bg-red-500/20"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4 text-red-400" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                          </td>
+                        );
+                      })}
+                      
+                      {/* Overall Status - Compact */}
+                      <td className="px-2 py-2 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-medium ${
+                          overallStatus === 'completed' ? 'bg-green-500/20 text-green-400' :
+                          overallStatus === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                          'bg-gray-500/10 text-gray-400'
+                        }`}>
+                          {overallStatus === 'completed' ? 'Done' :
+                           overallStatus === 'in_progress' ? 'WIP' :
+                           'New'}
+                        </span>
+                      </td>
+                      
+                      {/* Actions - Compact */}
+                      <td className="px-2 py-2 text-center">
+                        <button className="p-1 hover:bg-red-500/20 rounded" title="Delete">
+                          <Trash2 className="h-3 w-3 text-red-400" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
       
