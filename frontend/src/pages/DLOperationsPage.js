@@ -100,6 +100,7 @@ const STAGE_ASSIGNEE_MAP = {
 
 // Task Stages (for task-level tracking - excludes creation/discovery/delivered)
 const TASK_STAGES = [
+  { id: 'all', label: 'All Tasks', color: 'bg-[#6366f1]' },
   { id: 'content', label: 'Content', color: 'bg-blue-500' },
   { id: 'wireframe', label: 'Wireframe', color: 'bg-purple-500' },
   { id: 'ui', label: 'UI Design', color: 'bg-pink-500' },
@@ -145,7 +146,7 @@ export default function DLOperationsPage() {
   const [taskDateEnd, setTaskDateEnd] = useState('');
   const [taskMonth, setTaskMonth] = useState(getCurrentMonth());
   const [taskYear, setTaskYear] = useState(new Date().getFullYear().toString());
-  const [selectedTaskStage, setSelectedTaskStage] = useState('content'); // Currently selected stage
+  const [selectedTaskStage, setSelectedTaskStage] = useState('all'); // Default to all tasks
   const [taskViewMode, setTaskViewMode] = useState('task'); // task | project
   
   // Create Project Modal State
@@ -289,9 +290,28 @@ export default function DLOperationsPage() {
   
   // Tasks filtered by stage and date for Part 2
   const getTasksForStage = (stageId) => {
-    // For content stage, show all tasks that haven't completed content yet
-    // For other stages, show tasks where previous stages are completed but this stage isn't
-    const stageTasks = allTasks.filter(task => {
+    // Apply date filter first to all tasks
+    const dateFilteredTasks = allTasks.filter(task => {
+      const dateToCheck = task.due_date;
+      return filterByDate(dateToCheck, taskDateType, taskDate, taskDateStart, taskDateEnd, taskMonth, taskYear);
+    });
+    
+    // For "all" tab - show ALL incomplete tasks (any stage not fully completed)
+    if (stageId === 'all') {
+      return dateFilteredTasks.filter(task => {
+        // Check if task is fully completed (all stages done)
+        const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+        const isFullyComplete = stageOrder.every(stage => {
+          const status = (task[`${stage}_status`] || 'To-Do').toLowerCase();
+          return status === 'completed' || status === 'approved';
+        });
+        // Show if NOT fully complete (has pending work)
+        return !isFullyComplete;
+      });
+    }
+    
+    // For specific stages - show tasks that are at this stage
+    const stageTasks = dateFilteredTasks.filter(task => {
       const stageStatus = (task[`${stageId}_status`] || 'To-Do').toLowerCase();
       
       // If this stage is completed, don't show it
@@ -317,13 +337,7 @@ export default function DLOperationsPage() {
       return true;
     });
     
-    // Apply date filter
-    const dateFiltered = stageTasks.filter(task => {
-      const dateToCheck = task.due_date;
-      return filterByDate(dateToCheck, taskDateType, taskDate, taskDateStart, taskDateEnd, taskMonth, taskYear);
-    });
-    
-    return dateFiltered;
+    return stageTasks;
   };
   
   // Get stage task counts
@@ -792,14 +806,27 @@ export default function DLOperationsPage() {
                 {getTasksForStage(selectedTaskStage).length === 0 ? (
                   <div className={`text-center py-12 ${textSecondary}`}>
                     <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No tasks in {TASK_STAGES.find(s => s.id === selectedTaskStage)?.label} stage</p>
-                    <p className="text-sm">Tasks will appear here when pages reach this stage</p>
+                    <p>No tasks for today</p>
+                    <p className="text-sm">Change the date filter or check other stages</p>
                   </div>
                 ) : (
                   getTasksForStage(selectedTaskStage).map(task => {
-                    const canAct = canActOnTask(task, selectedTaskStage);
-                    const assigneeField = STAGE_ASSIGNEE_MAP[selectedTaskStage];
+                    // Determine current stage of the task
+                    const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+                    let currentStage = 'content';
+                    for (const stage of stageOrder) {
+                      const status = (task[`${stage}_status`] || 'To-Do').toLowerCase();
+                      if (status !== 'completed' && status !== 'approved') {
+                        currentStage = stage;
+                        break;
+                      }
+                    }
+                    
+                    const displayStage = selectedTaskStage === 'all' ? currentStage : selectedTaskStage;
+                    const canAct = canActOnTask(task, displayStage);
+                    const assigneeField = STAGE_ASSIGNEE_MAP[displayStage];
                     const assignee = task[assigneeField];
+                    const stageInfo = TASK_STAGES.find(s => s.id === displayStage);
                     
                     return (
                       <div 
@@ -808,11 +835,17 @@ export default function DLOperationsPage() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className={`w-2 h-10 rounded-full ${TASK_STAGES.find(s => s.id === selectedTaskStage)?.color || 'bg-gray-500'}`} />
+                            <div className={`w-2 h-10 rounded-full ${stageInfo?.color || 'bg-gray-500'}`} />
                             <div>
                               <p className={`font-medium ${textPrimary}`}>{task.project_name || 'Unknown Project'}</p>
                               <p className={`text-sm ${textSecondary}`}>{task.page_name || task.name}</p>
                             </div>
+                            {/* Show current stage badge when viewing All Tasks */}
+                            {selectedTaskStage === 'all' && (
+                              <Badge className={`${stageInfo?.color}/20 text-xs ml-2`} style={{ color: stageInfo?.color?.includes('blue') ? '#3b82f6' : stageInfo?.color?.includes('purple') ? '#a855f7' : stageInfo?.color?.includes('pink') ? '#ec4899' : stageInfo?.color?.includes('green') ? '#22c55e' : stageInfo?.color?.includes('teal') ? '#14b8a6' : stageInfo?.color?.includes('cyan') ? '#06b6d4' : '#10b981' }}>
+                                {stageInfo?.label}
+                              </Badge>
+                            )}
                           </div>
                           
                           <div className="flex items-center gap-4">
@@ -850,10 +883,10 @@ export default function DLOperationsPage() {
                                     try {
                                       await axios.put(
                                         `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
-                                        { stage: selectedTaskStage, status: 'completed' },
+                                        { stage: displayStage, status: 'completed' },
                                         { headers: { Authorization: `Bearer ${token}` } }
                                       );
-                                      toast.success(`${TASK_STAGES.find(s => s.id === selectedTaskStage)?.label} completed!`);
+                                      toast.success(`${stageInfo?.label} completed!`);
                                       loadProjects();
                                     } catch (error) {
                                       toast.error('Failed to update status');
@@ -898,7 +931,8 @@ export default function DLOperationsPage() {
                     return (
                       <div className={`text-center py-12 ${textSecondary}`}>
                         <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                        <p>No projects with tasks in {TASK_STAGES.find(s => s.id === selectedTaskStage)?.label} stage</p>
+                        <p>No tasks for today</p>
+                        <p className="text-sm">Change the date filter to see more tasks</p>
                       </div>
                     );
                   }
@@ -921,15 +955,33 @@ export default function DLOperationsPage() {
                       {/* Tasks List */}
                       <div className="divide-y divide-gray-800">
                         {group.tasks.map(task => {
-                          const canAct = canActOnTask(task, selectedTaskStage);
-                          const assigneeField = STAGE_ASSIGNEE_MAP[selectedTaskStage];
+                          // Determine current stage of the task
+                          const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+                          let currentStage = 'content';
+                          for (const stage of stageOrder) {
+                            const status = (task[`${stage}_status`] || 'To-Do').toLowerCase();
+                            if (status !== 'completed' && status !== 'approved') {
+                              currentStage = stage;
+                              break;
+                            }
+                          }
+                          
+                          const displayStage = selectedTaskStage === 'all' ? currentStage : selectedTaskStage;
+                          const canAct = canActOnTask(task, displayStage);
+                          const assigneeField = STAGE_ASSIGNEE_MAP[displayStage];
                           const assignee = task[assigneeField];
+                          const stageInfo = TASK_STAGES.find(s => s.id === displayStage);
                           
                           return (
                             <div key={task.task_id} className={`p-3 ${bgCard} flex items-center justify-between`}>
                               <div className="flex items-center gap-3">
                                 <FileText className={`h-4 w-4 ${textSecondary}`} />
                                 <span className={textPrimary}>{task.page_name || task.name}</span>
+                                {selectedTaskStage === 'all' && (
+                                  <Badge className={`${stageInfo?.color}/20 text-xs`} style={{ color: stageInfo?.color?.includes('blue') ? '#3b82f6' : stageInfo?.color?.includes('purple') ? '#a855f7' : '#22c55e' }}>
+                                    {stageInfo?.label}
+                                  </Badge>
+                                )}
                               </div>
                               <div className="flex items-center gap-3">
                                 <span className={`text-sm ${textSecondary}`}>{assignee || 'Unassigned'}</span>
@@ -945,10 +997,10 @@ export default function DLOperationsPage() {
                                       try {
                                         await axios.put(
                                           `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
-                                          { stage: selectedTaskStage, status: 'completed' },
+                                          { stage: displayStage, status: 'completed' },
                                           { headers: { Authorization: `Bearer ${token}` } }
                                         );
-                                        toast.success('Stage completed!');
+                                        toast.success(`${stageInfo?.label} completed!`);
                                         loadProjects();
                                       } catch (error) {
                                         toast.error('Failed to update');
