@@ -22,6 +22,7 @@ import {
   Megaphone,
   ClipboardList,
   ClipboardCheck,
+  CheckCircle2,
   Globe,
   FolderOpen,
   PanelLeftClose,
@@ -589,7 +590,7 @@ const Sidebar = () => {
           <Link
             to="/dl-operations"
             data-testid="nav-dl-operations"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/dl-operations' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/dl-operations' || location.pathname.startsWith('/project/') ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'DL Operations' : ''}
           >
             <Globe className="h-5 w-5" strokeWidth={2} />
@@ -597,6 +598,19 @@ const Sidebar = () => {
             {!isCollapsed && websiteProjects.length > 0 && (
               <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs ml-auto">{websiteProjects.length}</Badge>
             )}
+          </Link>
+        )}
+
+        {/* 3.6 Approvals - Centralized approval page */}
+        {(userRole === 'super_admin' || isAdmin || isProjectManager || hasAccess('approvals')) && (
+          <Link
+            to="/approvals"
+            data-testid="nav-approvals"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/approvals' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Approvals' : ''}
+          >
+            <CheckCircle2 className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'Approvals'}
           </Link>
         )}
 

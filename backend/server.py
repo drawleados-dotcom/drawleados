@@ -45,6 +45,7 @@ from our_tasks_routes import our_tasks_router
 from google_calendar_routes import calendar_router, init_calendar_db
 from payroll_routes import payroll_router
 from department_routes import department_router
+from approvals_routes import approvals_router, set_db as set_approvals_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -71,6 +72,7 @@ init_leads_v2_db(db)
 init_documentation_db(db)
 init_seo_board_db(db)
 init_calendar_db(db)
+set_approvals_db(db)
 
 # Create the main app
 app = FastAPI()
@@ -2445,6 +2447,7 @@ api_router.include_router(our_tasks_router)
 api_router.include_router(calendar_router)
 api_router.include_router(payroll_router)
 api_router.include_router(department_router)
+api_router.include_router(approvals_router)
 
 # Include router in main app
 app.include_router(api_router)

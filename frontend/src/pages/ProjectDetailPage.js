@@ -977,30 +977,24 @@ function TrackerBoard({
         </div>
       </div>
       
-      {/* Add Link Modal */}
+      {/* Add Link Modal with Assignee Selection */}
       {linkModal.open && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className={`${bgCard} rounded-xl p-6 w-full max-w-md border ${borderColor}`}>
-            <h3 className={`text-lg font-semibold ${textPrimary} mb-2`}>
-              Add {linkModal.stage ? stages.find(s => s.id === linkModal.stage)?.label : ''} Link
-            </h3>
-            <p className={`text-sm ${textSecondary} mb-4`}>Page: {linkModal.task?.page_name}</p>
-            <Input 
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="Paste your link here..."
-              className={`${bgSecondary} border-none mb-4`}
-            />
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => { setLinkModal({ open: false, task: null, stage: null }); setLinkUrl(''); }}>
-                Cancel
-              </Button>
-              <Button className="flex-1 bg-[#6366f1] hover:bg-[#5558e3]" onClick={handleAddLink}>
-                Submit for Approval
-              </Button>
-            </div>
-          </div>
-        </div>
+        <LinkApprovalModal
+          isOpen={linkModal.open}
+          task={linkModal.task}
+          stage={linkModal.stage}
+          stages={stages}
+          linkUrl={linkUrl}
+          setLinkUrl={setLinkUrl}
+          onClose={() => { setLinkModal({ open: false, task: null, stage: null }); setLinkUrl(''); }}
+          onSubmit={handleAddLink}
+          isDark={isDark}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+        />
       )}
       
       {/* Corrections Modal */}

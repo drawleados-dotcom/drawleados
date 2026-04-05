@@ -37,6 +37,7 @@ import MyTasksPage from './pages/MyTasksPage';
 import MyDocumentsPage from './pages/MyDocumentsPage';
 import DLOperationsPage from './pages/DLOperationsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
+import ApprovalsPage from './pages/ApprovalsPage';
 import './App.css';
 
 function AppRouter() {
@@ -185,6 +186,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ProjectDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approvals"
+        element={
+          <ProtectedRoute>
+            <ApprovalsPage />
           </ProtectedRoute>
         }
       />
