@@ -668,6 +668,25 @@ async def update_page_task(request: Request, task_id: str, update_data: PageTask
         {"$set": update_dict}
     )
     
+    # Sync assignees to stage tasks if any assignee field was updated
+    stage_mapping = {
+        "content_assignee": "content",
+        "wireframe_assignee": "wireframe", 
+        "ui_assignee": "ui",
+        "dev_assignee": "dev",
+        "responsive_assignee": "responsive",
+        "test_assignee": "test",
+        "delivery_assignee": "delivery"
+    }
+    
+    for field, stage in stage_mapping.items():
+        if field in update_dict:
+            # Update the corresponding stage task's assignee
+            await db.website_stage_tasks.update_many(
+                {"page_id": task_id, "stage": stage},
+                {"$set": {"assignee": update_dict[field]}}
+            )
+    
     updated = await db.website_page_tasks.find_one({"task_id": task_id}, {"_id": 0})
     return updated
 
