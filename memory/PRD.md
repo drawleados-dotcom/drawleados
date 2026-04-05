@@ -39,14 +39,18 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
    - Each stage column has colored dot indicator in header
    - Table is responsive and fits screen without horizontal scrolling
 
-2. **Add Page Functionality:**
+2. **Add Page Functionality (Enhanced):**
    - "+ Add Page" button in header
-   - Opens modal with input field and placeholder text
-   - Creates page via POST `/api/website-projects/projects/{project_id}/pages`
+   - Opens modal with:
+     - Page Name input field
+     - Stage Assignees section with 7 dropdown selectors (Content, Wireframe, UI Design, Responsive, Development, Testing, Delivery)
+   - Creates page with all assignees via POST `/api/website-projects/projects/{project_id}/pages`
 
-3. **Edit Page Functionality:**
+3. **Edit Page Functionality (Enhanced):**
    - Edit (pencil) button on each row
-   - Opens modal with pre-filled page name
+   - Opens modal with pre-filled:
+     - Page name
+     - All 7 stage assignees (if previously set)
    - Updates page via PUT `/api/website-projects/pages/{task_id}`
 
 4. **Delete Page Functionality:**
@@ -70,12 +74,53 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
    - Displays all status types with their icons below the table
 
 **Files Modified:**
-- `/app/frontend/src/pages/ProjectDetailPage.js` - PagesTab component completely rewritten
+- `/app/frontend/src/pages/ProjectDetailPage.js` - PagesTab component with AssigneeSelect helper
+- `/app/backend/website_projects_routes.py` - PageTaskCreate model with assignee fields
 
-**Testing Status:** ✅ All features verified by testing agent (iteration_58.json)
+**Testing Status:** ✅ All features verified by testing agent (iteration_59.json)
 
 ---
 
+### Task Summary Modal (NEW - April 5, 2026)
+**Purpose:** Provides detailed timeline and progress view when clicking Edit on Tracker Board tasks.
+
+**Features Implemented:**
+1. **Header Section:**
+   - Page name with stage badge
+   - Current assignee
+   - Close button
+
+2. **Timeline Tab:**
+   - Work Started timestamp
+   - Paused timestamp (if applicable)
+   - Time Spent duration
+   - Submitted to PM timestamp
+   - PM Approved timestamp with approval duration
+   - Operations Approved timestamp with approval duration
+   - Delivered timestamp
+
+3. **All Stages Tab:**
+   - Shows progress across all 7 workflow stages
+   - Each stage shows:
+     - Icon and label
+     - Assignee name
+     - Status badge (Approved, Pending, In Progress, Not Started)
+     - Time spent
+
+4. **Details Tab:**
+   - Status badge
+   - Assignee
+   - Due Date
+   - Time Spent
+   - Work Link (if submitted)
+   - Remarks
+
+**Files Modified:**
+- `/app/frontend/src/pages/ProjectDetailPage.js` - Added TaskSummaryModal component
+
+**Testing Status:** ✅ All features verified by testing agent (iteration_59.json)
+
+---
 
 
 ### Monthly Leave Quota System (NEW - April 2026)
