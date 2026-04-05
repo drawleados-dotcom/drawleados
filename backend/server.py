@@ -46,6 +46,8 @@ from google_calendar_routes import calendar_router, init_calendar_db
 from payroll_routes import payroll_router
 from department_routes import department_router
 from approvals_routes import approvals_router, set_db as set_approvals_db
+from additional_tasks_routes import additional_tasks_router, init_additional_tasks_db
+from meetings_routes import meetings_router, init_meetings_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2448,6 +2450,8 @@ api_router.include_router(calendar_router)
 api_router.include_router(payroll_router)
 api_router.include_router(department_router)
 api_router.include_router(approvals_router)
+api_router.include_router(additional_tasks_router)
+api_router.include_router(meetings_router)
 
 # Include router in main app
 app.include_router(api_router)

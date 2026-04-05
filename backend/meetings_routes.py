@@ -1,0 +1,206 @@
+"""
+Meetings Routes - For scheduling and managing meetings
+"""
+from fastapi import APIRouter, HTTPException, Request, Body
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime, timezone
+import uuid
+
+meetings_router = APIRouter(prefix="/api/meetings", tags=["Meetings"])
+
+# Database reference will be set from server.py
+db = None
+get_current_user = None
+
+def init_meetings_db(database, auth_func):
+    global db, get_current_user
+    db = database
+    get_current_user = auth_func
+
+
+class MeetingCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    date: str  # YYYY-MM-DD
+    start_time: str  # HH:MM
+    end_time: str  # HH:MM
+    meeting_type: str = "video"  # video, audio, in-person
+    meeting_link: Optional[str] = None  # Google Meet, Zoom, etc.
+    location: Optional[str] = None  # For in-person meetings
+    attendees: Optional[List[dict]] = []  # [{name, email, user_id}]
+    project_id: Optional[str] = None  # Link to project
+    agenda: Optional[str] = None
+    notes: Optional[str] = None
+    reminder: Optional[int] = 15  # minutes before
+
+
+class MeetingUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    date: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    meeting_type: Optional[str] = None
+    meeting_link: Optional[str] = None
+    location: Optional[str] = None
+    attendees: Optional[List[dict]] = None
+    project_id: Optional[str] = None
+    agenda: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None  # scheduled, ongoing, completed, cancelled
+    reminder: Optional[int] = None
+
+
+@meetings_router.get("/")
+async def get_all_meetings(request: Request):
+    """Get all meetings"""
+    user = await get_current_user(request)
+    
+    meetings = await db.meetings.find(
+        {},
+        {"_id": 0}
+    ).sort([("date", -1), ("start_time", -1)]).to_list(length=500)
+    
+    return meetings
+
+
+@meetings_router.get("/upcoming")
+async def get_upcoming_meetings(request: Request):
+    """Get upcoming meetings"""
+    user = await get_current_user(request)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    meetings = await db.meetings.find(
+        {
+            "date": {"$gte": today},
+            "status": {"$ne": "cancelled"}
+        },
+        {"_id": 0}
+    ).sort([("date", 1), ("start_time", 1)]).to_list(length=100)
+    
+    return meetings
+
+
+@meetings_router.get("/my-meetings")
+async def get_my_meetings(request: Request):
+    """Get meetings where user is organizer or attendee"""
+    user = await get_current_user(request)
+    
+    meetings = await db.meetings.find(
+        {"$or": [
+            {"created_by": user["user_id"]},
+            {"attendees.user_id": user["user_id"]}
+        ]},
+        {"_id": 0}
+    ).sort([("date", -1), ("start_time", -1)]).to_list(length=200)
+    
+    return meetings
+
+
+@meetings_router.post("/")
+async def create_meeting(request: Request, meeting_data: MeetingCreate):
+    """Create a new meeting"""
+    user = await get_current_user(request)
+    
+    meeting_id = f"meet_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    meeting = {
+        "meeting_id": meeting_id,
+        "title": meeting_data.title,
+        "description": meeting_data.description,
+        "date": meeting_data.date,
+        "start_time": meeting_data.start_time,
+        "end_time": meeting_data.end_time,
+        "meeting_type": meeting_data.meeting_type,
+        "meeting_link": meeting_data.meeting_link,
+        "location": meeting_data.location,
+        "attendees": meeting_data.attendees or [],
+        "project_id": meeting_data.project_id,
+        "agenda": meeting_data.agenda,
+        "notes": meeting_data.notes,
+        "reminder": meeting_data.reminder,
+        "status": "scheduled",
+        "google_event_id": None,  # For future Google Calendar sync
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name", "Unknown"),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.meetings.insert_one(meeting)
+    
+    # Return without _id
+    meeting.pop("_id", None)
+    return {"success": True, "meeting": meeting}
+
+
+@meetings_router.put("/{meeting_id}")
+async def update_meeting(request: Request, meeting_id: str, meeting_data: MeetingUpdate):
+    """Update a meeting"""
+    user = await get_current_user(request)
+    
+    meeting = await db.meetings.find_one({"meeting_id": meeting_id})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    update_data = {k: v for k, v in meeting_data.dict().items() if v is not None}
+    update_data["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.meetings.update_one(
+        {"meeting_id": meeting_id},
+        {"$set": update_data}
+    )
+    
+    updated = await db.meetings.find_one({"meeting_id": meeting_id}, {"_id": 0})
+    return {"success": True, "meeting": updated}
+
+
+@meetings_router.put("/{meeting_id}/status")
+async def update_meeting_status(request: Request, meeting_id: str, data: dict = Body(...)):
+    """Quick update meeting status"""
+    user = await get_current_user(request)
+    
+    status = data.get("status")
+    if status not in ["scheduled", "ongoing", "completed", "cancelled"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    result = await db.meetings.update_one(
+        {"meeting_id": meeting_id},
+        {"$set": {"status": status, "updated_at": datetime.now(timezone.utc)}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    return {"success": True, "status": status}
+
+
+@meetings_router.delete("/{meeting_id}")
+async def delete_meeting(request: Request, meeting_id: str):
+    """Delete a meeting"""
+    user = await get_current_user(request)
+    
+    result = await db.meetings.delete_one({"meeting_id": meeting_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    
+    return {"success": True, "message": "Meeting deleted"}
+
+
+# Google Calendar Integration Placeholder
+@meetings_router.get("/calendar/status")
+async def get_calendar_status(request: Request):
+    """Check if Google Calendar is connected"""
+    user = await get_current_user(request)
+    
+    # Check if user has google_tokens
+    user_data = await db.users.find_one({"user_id": user["user_id"]})
+    is_connected = user_data.get("google_calendar_connected", False) if user_data else False
+    
+    return {
+        "connected": is_connected,
+        "message": "Google Calendar integration available" if is_connected else "Connect Google Calendar to sync meetings"
+    }
