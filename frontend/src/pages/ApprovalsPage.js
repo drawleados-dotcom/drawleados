@@ -31,17 +31,36 @@ const DEPARTMENTS = [
   { id: 'erp', label: 'ERP', icon: Code }
 ];
 
+// Website stage tabs
+const WEBSITE_STAGES = [
+  { id: 'all', label: 'All Stages' },
+  { id: 'content', label: 'Content' },
+  { id: 'wireframe', label: 'Wireframe' },
+  { id: 'ui', label: 'UI Design' },
+  { id: 'responsive', label: 'Responsive' },
+  { id: 'development', label: 'Development' },
+  { id: 'testing', label: 'Testing' },
+  { id: 'delivery', label: 'Delivery' }
+];
+
 export default function ApprovalsPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
   
   const [activeTab, setActiveTab] = useState('all');
+  const [activeStage, setActiveStage] = useState('all');
   const [approvals, setApprovals] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]); // Today's date default
+  const [dateFilter, setDateFilter] = useState(''); // Empty = all dates
   const [searchTerm, setSearchTerm] = useState('');
+  const [approvalType, setApprovalType] = useState('pm'); // 'pm' or 'ops'
   
   const token = localStorage.getItem('session_token');
+  
+  // Check if user can approve as PM or Ops
+  const canApprovePM = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'project_manager';
+  const canApproveOps = user?.role === 'super_admin' || user?.role === 'admin' || 
+                        (user?.designation || '').toLowerCase().includes('operation');
   
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -58,7 +77,8 @@ export default function ApprovalsPage() {
       const res = await axios.get(`${API}/api/approvals/pending`, {
         params: { 
           department: activeTab === 'all' ? '' : activeTab,
-          date: dateFilter
+          date: dateFilter,
+          approval_level: approvalType
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -69,14 +89,19 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, dateFilter, token]);
+  }, [activeTab, dateFilter, token, approvalType]);
 
   useEffect(() => {
     loadApprovals();
   }, [loadApprovals]);
 
-  // Filter approvals
+  // Filter approvals by stage and search
   const filteredApprovals = approvals.filter(a => {
+    // Stage filter (for website department)
+    if (activeTab === 'website' && activeStage !== 'all') {
+      if (a.stage?.toLowerCase() !== activeStage) return false;
+    }
+    // Search filter
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
       return a.title?.toLowerCase().includes(search) || 
@@ -85,30 +110,77 @@ export default function ApprovalsPage() {
     }
     return true;
   });
+  
+  // Get stage counts for website approvals
+  const getStageCounts = () => {
+    const counts = { all: 0 };
+    WEBSITE_STAGES.forEach(s => { counts[s.id] = 0; });
+    
+    approvals.forEach(a => {
+      if (a.department === 'website') {
+        counts.all++;
+        const stage = a.stage?.toLowerCase();
+        if (stage && counts[stage] !== undefined) {
+          counts[stage]++;
+        }
+      }
+    });
+    return counts;
+  };
+  
+  const stageCounts = getStageCounts();
 
-  // Approve item
+  // Approve item - route to correct endpoint based on approval level
   const handleApprove = async (approval) => {
     try {
-      await axios.put(
-        `${API}/api/approvals/${approval.approval_id}/approve`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success('Approved successfully!');
+      // For website stage tasks, use the specific PM/Ops approve endpoints
+      if (approval.type === 'website_stage') {
+        const endpoint = approvalType === 'pm' 
+          ? `${API}/api/website-projects/stage-tasks/${approval.approval_id}/pm-approve`
+          : `${API}/api/website-projects/stage-tasks/${approval.approval_id}/ops-approve`;
+        
+        await axios.put(
+          endpoint,
+          { stage: approval.stage?.toLowerCase() },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        
+        const msg = approvalType === 'pm' 
+          ? 'PM Approved! Waiting for Ops approval.' 
+          : 'Operations Approved! Task fully approved.';
+        toast.success(msg);
+      } else {
+        // Generic approval endpoint
+        await axios.put(
+          `${API}/api/approvals/${approval.approval_id}/approve`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        toast.success('Approved successfully!');
+      }
       loadApprovals();
     } catch (error) {
-      toast.error('Failed to approve');
+      toast.error(error.response?.data?.detail || 'Failed to approve');
     }
   };
 
   // Reject/Request corrections
   const handleReject = async (approval, remarks) => {
     try {
-      await axios.put(
-        `${API}/api/approvals/${approval.approval_id}/reject`,
-        { remarks },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // For website stage tasks, use stage-tasks endpoint
+      if (approval.type === 'website_stage') {
+        await axios.put(
+          `${API}/api/website-projects/stage-tasks/${approval.approval_id}/corrections`,
+          { stage: approval.stage?.toLowerCase(), remarks },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } else {
+        await axios.put(
+          `${API}/api/approvals/${approval.approval_id}/reject`,
+          { remarks },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
       toast.success('Sent back for corrections');
       loadApprovals();
     } catch (error) {
@@ -155,9 +227,38 @@ export default function ApprovalsPage() {
             </Button>
           </div>
           
+          {/* Approval Level Toggle */}
+          <div className="flex items-center gap-4 mb-4">
+            <span className={`text-sm font-medium ${textPrimary}`}>Approval Queue:</span>
+            <div className={`flex rounded-lg ${bgSecondary} p-1`}>
+              <button
+                onClick={() => setApprovalType('pm')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  approvalType === 'pm' 
+                    ? 'bg-purple-500 text-white' 
+                    : `${textSecondary} hover:${textPrimary}`
+                }`}
+              >
+                <User className="h-4 w-4 inline mr-2" />
+                PM Approvals
+              </button>
+              <button
+                onClick={() => setApprovalType('ops')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  approvalType === 'ops' 
+                    ? 'bg-amber-500 text-white' 
+                    : `${textSecondary} hover:${textPrimary}`
+                }`}
+              >
+                <Briefcase className="h-4 w-4 inline mr-2" />
+                Ops Approvals
+              </button>
+            </div>
+          </div>
+          
           {/* Filters */}
           <div className="flex items-center gap-4 flex-wrap">
-            {/* Date Filter - Default Today */}
+            {/* Date Filter */}
             <div className="flex items-center gap-2">
               <Calendar className={`h-4 w-4 ${textSecondary}`} />
               <Input
@@ -166,14 +267,14 @@ export default function ApprovalsPage() {
                 onChange={(e) => setDateFilter(e.target.value)}
                 className={`w-40 h-9 ${bgSecondary} border-none`}
               />
-              {dateFilter !== new Date().toISOString().split('T')[0] && (
+              {dateFilter && (
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={() => setDateFilter(new Date().toISOString().split('T')[0])}
-                  className="h-9 px-2 text-xs"
+                  onClick={() => setDateFilter('')}
+                  className="h-9 px-2 text-xs text-red-400"
                 >
-                  Today
+                  Clear
                 </Button>
               )}
             </div>
@@ -192,7 +293,7 @@ export default function ApprovalsPage() {
         </div>
 
         {/* Department Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setActiveStage('all'); }} className="flex-1 flex flex-col">
           <div className={`px-6 py-3 border-b ${borderColor} ${bgCard} overflow-x-auto`}>
             <TabsList className={`${bgSecondary} p-1 rounded-lg inline-flex`}>
               {DEPARTMENTS.map(dept => {
@@ -216,6 +317,38 @@ export default function ApprovalsPage() {
               })}
             </TabsList>
           </div>
+          
+          {/* Stage Tabs (for Website department) */}
+          {activeTab === 'website' && (
+            <div className={`px-6 py-2 border-b ${borderColor} ${bgSecondary} overflow-x-auto`}>
+              <div className="flex gap-2">
+                {WEBSITE_STAGES.map(stage => {
+                  const count = stageCounts[stage.id] || 0;
+                  const isActive = activeStage === stage.id;
+                  return (
+                    <button
+                      key={stage.id}
+                      onClick={() => setActiveStage(stage.id)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                        isActive 
+                          ? 'bg-[#6366f1] text-white' 
+                          : `${bgCard} ${textSecondary} hover:${textPrimary}`
+                      }`}
+                    >
+                      {stage.label}
+                      {count > 0 && (
+                        <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${
+                          isActive ? 'bg-white/20' : 'bg-orange-500/20 text-orange-400'
+                        }`}>
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Approvals List */}
           <TabsContent value={activeTab} className="flex-1 overflow-auto p-6">
@@ -236,6 +369,7 @@ export default function ApprovalsPage() {
                   <ApprovalCard
                     key={approval.approval_id}
                     approval={approval}
+                    approvalType={approvalType}
                     onApprove={() => handleApprove(approval)}
                     onReject={(remarks) => handleReject(approval, remarks)}
                     isDark={isDark}

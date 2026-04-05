@@ -33,8 +33,8 @@ async def get_current_user(request: Request):
     return user
 
 @approvals_router.get("/pending")
-async def get_pending_approvals(request: Request, department: str = "", date: str = ""):
-    """Get all pending approvals, optionally filtered by department and date"""
+async def get_pending_approvals(request: Request, department: str = "", date: str = "", approval_level: str = "pm"):
+    """Get all pending approvals, optionally filtered by department, date, and approval level"""
     user = await get_current_user(request)
     
     # Build query
@@ -62,9 +62,26 @@ async def get_pending_approvals(request: Request, department: str = "", date: st
         {"_id": 0}
     ).sort("submitted_at", -1).to_list(100)
     
-    # Also get website stage tasks that are waiting approval
+    # Build website tasks query based on approval level
+    if approval_level == "pm":
+        # PM sees tasks waiting for PM approval (not yet PM approved)
+        website_query = {
+            "$or": [
+                {"status": "waiting_pm"},
+                {"status": "waiting_approval", "pm_approved": {"$ne": True}}
+            ]
+        }
+    else:
+        # Ops sees tasks that have PM approval but not Ops approval
+        website_query = {
+            "pm_approved": True,
+            "ops_approved": {"$ne": True},
+            "status": {"$in": ["waiting_ops", "waiting_approval"]}
+        }
+    
+    # Also get website stage tasks
     website_tasks = await db.website_stage_tasks.find(
-        {"status": "waiting_approval"},
+        website_query,
         {"_id": 0}
     ).to_list(100)
     

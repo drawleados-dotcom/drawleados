@@ -1421,27 +1421,38 @@ async def convert_pages_to_tasks(project_id: str, request: Request):
 
 @website_projects_router.put("/stage-tasks/{task_id}/submit")
 async def submit_task_for_approval(task_id: str, request: Request, data: dict = Body(...)):
-    """Submit a task for approval with optional link and approver assignment"""
+    """Submit a task for approval - goes to PM first, then Operations"""
     user = await get_current_user(request)
     stage = data.get("stage")
     link = data.get("link", "")
-    assignee_type = data.get("assignee_type", "operations")  # operations, project_manager, ceo
     now = datetime.now(timezone.utc)
     
     task = await db.website_stage_tasks.find_one({"task_id": task_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Get project info for the approval
+    # Calculate time spent if timer was running
+    time_spent = task.get("time_spent", 0)
+    timer_started_at = task.get("timer_started_at")
+    if timer_started_at:
+        started = datetime.fromisoformat(timer_started_at.replace("Z", "+00:00"))
+        elapsed_minutes = int((now - started).total_seconds() / 60)
+        time_spent += elapsed_minutes
+    
+    # Get project info
     project = await db.website_projects.find_one({"project_id": task.get("project_id")})
     project_name = project.get("name") if project else "Unknown Project"
     
-    # Update task status to waiting_approval (submitted)
+    # Update task - submitted, waiting for PM approval first
     update_data = {
-        "status": "waiting_approval",
+        "status": "waiting_pm",  # First goes to PM
         "submitted_at": now.isoformat(),
         "submitted_by": user["user_id"],
-        "assignee_type": assignee_type
+        "submitted_by_name": user["name"],
+        "time_spent": time_spent,
+        "timer_started_at": None,
+        "pm_approved": False,
+        "ops_approved": False
     }
     
     if link:
@@ -1456,7 +1467,7 @@ async def submit_task_for_approval(task_id: str, request: Request, data: dict = 
                     "action": "submitted",
                     "stage": stage,
                     "link": link,
-                    "assignee_type": assignee_type,
+                    "time_spent": time_spent,
                     "by": user["name"],
                     "at": now.isoformat()
                 }
@@ -1469,10 +1480,10 @@ async def submit_task_for_approval(task_id: str, request: Request, data: dict = 
     if page_id and link:
         await db.website_page_tasks.update_one(
             {"task_id": page_id},
-            {"$set": {f"{stage}_link": link, f"{stage}_status": "waiting_approval"}}
+            {"$set": {f"{stage}_link": link, f"{stage}_status": "waiting_pm"}}
         )
     
-    return {"success": True, "message": "Task submitted for approval"}
+    return {"success": True, "message": "Submitted for PM approval"}
 
 @website_projects_router.put("/stage-tasks/{task_id}/approve")
 async def approve_task(task_id: str, request: Request, data: dict = Body(...)):
@@ -1532,13 +1543,16 @@ async def request_corrections(task_id: str, request: Request, data: dict = Body(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Update task status
+    # Update task status - reset approval flags, add correction remarks
     await db.website_stage_tasks.update_one(
         {"task_id": task_id},
         {
             "$set": {
                 "status": "corrections",
-                "corrections_requested_at": now.isoformat()
+                "corrections_requested_at": now.isoformat(),
+                "correction_remarks": remarks,
+                "pm_approved": False,
+                "ops_approved": False
             },
             "$push": {
                 "comments": {
@@ -1599,3 +1613,228 @@ async def add_task_comment(task_id: str, request: Request, data: dict = Body(...
     )
     
     return comment
+
+# ==================== TIMER ENDPOINTS ====================
+
+@website_projects_router.post("/stage-tasks/{task_id}/timer")
+async def timer_action(task_id: str, request: Request, data: dict = Body(...)):
+    """Start, pause, or resume task timer"""
+    user = await get_current_user(request)
+    action = data.get("action")  # start, pause
+    now = datetime.now(timezone.utc)
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    current_status = task.get("status", "pending")
+    time_spent = task.get("time_spent", 0)  # Total minutes spent
+    timer_started_at = task.get("timer_started_at")
+    
+    update_data = {}
+    
+    if action == "start":
+        # Starting or resuming the timer
+        update_data = {
+            "status": "in_progress",
+            "timer_started_at": now.isoformat(),
+            "started_by": user["user_id"]
+        }
+    elif action == "pause":
+        # Pausing the timer - calculate time spent
+        if timer_started_at:
+            started = datetime.fromisoformat(timer_started_at.replace("Z", "+00:00"))
+            elapsed_minutes = int((now - started).total_seconds() / 60)
+            time_spent += elapsed_minutes
+        
+        update_data = {
+            "status": "paused",
+            "timer_started_at": None,
+            "time_spent": time_spent
+        }
+    
+    if update_data:
+        await db.website_stage_tasks.update_one(
+            {"task_id": task_id},
+            {
+                "$set": update_data,
+                "$push": {
+                    "history": {
+                        "action": action,
+                        "by": user["name"],
+                        "at": now.isoformat()
+                    }
+                }
+            }
+        )
+    
+    return {"success": True, "status": update_data.get("status", current_status)}
+
+# ==================== 2-LEVEL APPROVAL SYSTEM ====================
+
+@website_projects_router.put("/stage-tasks/{task_id}/pm-approve")
+async def pm_approve_task(task_id: str, request: Request, data: dict = Body(...)):
+    """Project Manager approves a task - first level"""
+    user = await get_current_user(request)
+    stage = data.get("stage")
+    now = datetime.now(timezone.utc)
+    
+    # Check if user is PM or admin
+    if user["role"] not in ["super_admin", "admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Only Project Managers can approve at this level")
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Update task - PM approved, now needs Ops approval
+    await db.website_stage_tasks.update_one(
+        {"task_id": task_id},
+        {
+            "$set": {
+                "pm_approved": True,
+                "pm_approved_at": now.isoformat(),
+                "pm_approved_by": user["user_id"],
+                "status": "waiting_ops"  # Now waiting for operations
+            },
+            "$push": {
+                "history": {
+                    "action": "pm_approved",
+                    "stage": stage,
+                    "by": user["name"],
+                    "at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {"success": True, "message": "PM approved! Waiting for Operations approval."}
+
+@website_projects_router.put("/stage-tasks/{task_id}/ops-approve")
+async def ops_approve_task(task_id: str, request: Request, data: dict = Body(...)):
+    """Operations approves a task - second level (final)"""
+    user = await get_current_user(request)
+    stage = data.get("stage")
+    now = datetime.now(timezone.utc)
+    
+    # Check if user has operations role
+    is_ops = (
+        user["role"] in ["super_admin", "admin"] or
+        "operation" in (user.get("designation") or "").lower() or
+        user.get("department") == "operations"
+    )
+    
+    if not is_ops:
+        raise HTTPException(status_code=403, detail="Only Operations can approve at this level")
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Check PM approval first
+    if not task.get("pm_approved"):
+        raise HTTPException(status_code=400, detail="Task must be approved by PM first")
+    
+    # Update task - fully approved
+    await db.website_stage_tasks.update_one(
+        {"task_id": task_id},
+        {
+            "$set": {
+                "ops_approved": True,
+                "ops_approved_at": now.isoformat(),
+                "ops_approved_by": user["user_id"],
+                "status": "approved"
+            },
+            "$push": {
+                "history": {
+                    "action": "ops_approved",
+                    "stage": stage,
+                    "by": user["name"],
+                    "at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    # Update page task status
+    page_id = task.get("page_id")
+    if page_id:
+        await db.website_page_tasks.update_one(
+            {"task_id": page_id},
+            {"$set": {f"{stage}_status": "approved"}}
+        )
+    
+    return {"success": True, "message": "Operations approved! Task fully approved."}
+
+@website_projects_router.post("/stage-tasks/{task_id}/move-next")
+async def move_to_next_stage(task_id: str, request: Request, data: dict = Body(...)):
+    """Move task to next stage after full approval"""
+    user = await get_current_user(request)
+    current_stage = data.get("current_stage")
+    now = datetime.now(timezone.utc)
+    
+    # Check if user is PM or admin
+    if user["role"] not in ["super_admin", "admin", "project_manager"]:
+        raise HTTPException(status_code=403, detail="Only Project Managers can move tasks")
+    
+    task = await db.website_stage_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Verify task is fully approved
+    if not (task.get("pm_approved") and task.get("ops_approved")):
+        raise HTTPException(status_code=400, detail="Task must be fully approved before moving")
+    
+    # Define stage order (must match frontend WORKFLOW_STAGES)
+    stage_order = ["content", "wireframe", "ui", "responsive", "dev", "test", "delivery"]
+    
+    try:
+        current_idx = stage_order.index(current_stage)
+        if current_idx >= len(stage_order) - 1:
+            raise HTTPException(status_code=400, detail="Already at final stage")
+        
+        next_stage = stage_order[current_idx + 1]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid stage")
+    
+    # Create new task for next stage
+    new_task_id = f"st_{uuid.uuid4().hex[:12]}"
+    new_task = {
+        "task_id": new_task_id,
+        "project_id": task.get("project_id"),
+        "page_id": task.get("page_id"),
+        "page_name": task.get("page_name"),
+        "stage": next_stage,
+        "current_stage": next_stage,  # Required for get_stage_tasks to organize correctly
+        "status": "pending",
+        "assignee": None,  # Will be assigned
+        "created_at": now.isoformat(),
+        "created_by": user["user_id"],
+        "moved_from": task_id,
+        "history": [{
+            "action": "created",
+            "moved_from_stage": current_stage,
+            "by": user["name"],
+            "at": now.isoformat()
+        }]
+    }
+    
+    await db.website_stage_tasks.insert_one(new_task)
+    
+    # Mark current task as moved
+    await db.website_stage_tasks.update_one(
+        {"task_id": task_id},
+        {
+            "$set": {"moved_to_next": True, "moved_to_task": new_task_id},
+            "$push": {
+                "history": {
+                    "action": "moved_to_next",
+                    "next_stage": next_stage,
+                    "by": user["name"],
+                    "at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    return {"success": True, "message": f"Moved to {next_stage.title()}!", "new_task_id": new_task_id}
