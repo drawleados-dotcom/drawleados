@@ -63,7 +63,7 @@ class MeetingCreate(BaseModel):
     description: Optional[str] = None
     date: str  # YYYY-MM-DD
     start_time: str  # HH:MM
-    end_time: str  # HH:MM
+    end_time: Optional[str] = None  # HH:MM
     meeting_type: str = "video"  # video, audio, in-person
     meeting_link: Optional[str] = None  # Google Meet, Zoom, etc.
     location: Optional[str] = None  # For in-person meetings

@@ -12,7 +12,7 @@ import {
   Globe, Plus, Search, Eye, ArrowRight, FolderKanban, 
   Calendar, FileText, LayoutGrid, ListTodo, Filter, X, Check, User, Building2,
   Palette, Type, Link2, Users, Settings, Play, Square, Pencil, Trash2, ExternalLink, Clock,
-  Video, CheckSquare, ClipboardList, UserCircle, ArrowUpDown
+  Video, CheckSquare, ClipboardList, UserCircle, ArrowUpDown, Home, BarChart3
 } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -180,6 +180,17 @@ export default function DLOperationsPage() {
   // Sort state
   const [sortOrder, setSortOrder] = useState('asc'); // asc, desc
   const [sortField, setSortField] = useState('due_date'); // due_date, priority
+  
+  // Mobile state
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mobileOverviewCollapsed, setMobileOverviewCollapsed] = useState(true);
+  
+  // Mobile detection
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Create Project Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -777,41 +788,57 @@ export default function DLOperationsPage() {
   
   return (
     <Layout>
-      <div className="flex flex-col h-full pb-16 md:pb-0" data-testid="dl-operations-page">
-        {/* Title Row - Fixed at top */}
-        <div className={`shrink-0 p-4 md:p-6 border-b ${borderColor} ${isDark ? 'bg-[#0c0a09]' : 'bg-white'}`}>
+      <div className="flex flex-col h-full pb-20 md:pb-0" data-testid="dl-operations-page">
+        {/* Title Row - Compact on mobile */}
+        <div className={`shrink-0 p-3 md:p-6 border-b ${borderColor} ${isDark ? 'bg-[#0c0a09]' : 'bg-white'}`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center">
-                <Globe className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-2 md:gap-3">
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center">
+                <Globe className="h-4 w-4 md:h-5 md:w-5 text-white" />
               </div>
               <div>
-                <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>Website Developments</h1>
-                {!isMasterUser() && (
+                <h1 className={`text-lg md:text-2xl font-bold ${textPrimary}`}>Web Dev</h1>
+                {!isMasterUser() && !isMobile && (
                   <p className={`text-xs ${textSecondary}`}>Showing your assigned projects</p>
                 )}
               </div>
             </div>
             <Button 
               onClick={handleNewProject}
-              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 md:h-10 text-xs md:text-sm px-3 md:px-4"
               data-testid="new-project-btn"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              New Project
+              <Plus className="h-4 w-4 md:mr-2" />
+              <span className="hidden md:inline">New Project</span>
             </Button>
           </div>
         </div>
         
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        {/* PART 1: PROJECT OVERVIEW SECTION - Collapsible */}
+        {/* PART 1: PROJECT OVERVIEW - Collapsible on mobile */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
-        <div className={`shrink-0 p-4 md:p-6 border-b ${borderColor} ${bgCard}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className={`text-lg font-semibold ${textPrimary}`}>Project Overview</h2>
+        <div className={`shrink-0 border-b ${borderColor} ${bgCard} ${isMobile ? 'p-3' : 'p-4 md:p-6'}`}>
+          {/* Mobile: Collapsible header */}
+          {isMobile && (
+            <button 
+              onClick={() => setMobileOverviewCollapsed(!mobileOverviewCollapsed)}
+              className={`w-full flex items-center justify-between mb-2`}
+            >
+              <span className={`text-sm font-semibold ${textPrimary}`}>Overview</span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${textSecondary}`}>{totalProjects} projects</span>
+                <ArrowRight className={`h-4 w-4 ${textSecondary} transition-transform ${mobileOverviewCollapsed ? '' : 'rotate-90'}`} />
+              </div>
+            </button>
+          )}
+          
+          {/* Desktop: Always show header */}
+          {!isMobile && (
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-lg font-semibold ${textPrimary}`}>Project Overview</h2>
             
-            {/* Date Filter for Overview */}
-            <div className="flex items-center gap-2 flex-wrap">
+              {/* Date Filter for Overview */}
+              <div className="flex items-center gap-2 flex-wrap">
               <Select value={overviewDateType} onValueChange={setOverviewDateType}>
                 <SelectTrigger className={`w-24 h-8 ${bgSecondary} border-none text-xs`}>
                   <SelectValue placeholder="Filter" />
@@ -875,70 +902,70 @@ export default function DLOperationsPage() {
                   </SelectContent>
                 </Select>
               )}
+              </div>
             </div>
-          </div>
+          )}
           
-          {/* 4 Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {/* Total Projects */}
-            <div 
-              className={`p-4 rounded-xl ${bgSecondary} cursor-pointer hover:ring-2 hover:ring-[#6366f1]/50 transition-all`}
-              onClick={() => { setMainTab('projects'); setWorkflowStage('all'); }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs ${textSecondary}`}>Total Projects</p>
-                <FolderKanban className="h-4 w-4 text-[#6366f1]" />
+          {/* Summary Cards - Show always, compact on mobile when collapsed */}
+          {(!isMobile || !mobileOverviewCollapsed) && (
+            <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 ${isMobile ? 'mt-2' : ''}`}>
+              {/* Total Projects */}
+              <div 
+                className={`p-3 md:p-4 rounded-xl ${bgSecondary} cursor-pointer hover:ring-2 hover:ring-[#6366f1]/50 transition-all`}
+                onClick={() => { setMainTab('projects'); setWorkflowStage('all'); }}
+              >
+                <div className="flex items-center justify-between mb-1 md:mb-2">
+                  <p className={`text-[10px] md:text-xs ${textSecondary}`}>Total</p>
+                  <FolderKanban className="h-3 w-3 md:h-4 md:w-4 text-[#6366f1]" />
+                </div>
+                <p className={`text-xl md:text-3xl font-bold ${textPrimary}`}>{totalProjects}</p>
               </div>
-              <p className={`text-3xl font-bold ${textPrimary}`}>{totalProjects}</p>
-            </div>
-            
-            {/* New Projects (Creation stage) */}
-            <div 
-              className={`p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 cursor-pointer hover:ring-2 hover:ring-yellow-500/50 transition-all`}
-              onClick={() => { setMainTab('projects'); setWorkflowStage('creation'); }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs ${textSecondary}`}>New Projects</p>
-                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+              
+              {/* New Projects */}
+              <div 
+                className={`p-3 md:p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 cursor-pointer`}
+                onClick={() => { setMainTab('projects'); setWorkflowStage('creation'); }}
+              >
+                <div className="flex items-center justify-between mb-1 md:mb-2">
+                  <p className={`text-[10px] md:text-xs ${textSecondary}`}>New</p>
+                  <div className="w-2 h-2 md:w-3 md:h-3 rounded-full bg-yellow-500" />
+                </div>
+                <p className="text-xl md:text-3xl font-bold text-yellow-500">{newProjects}</p>
               </div>
-              <p className="text-3xl font-bold text-yellow-500">{newProjects}</p>
-              <p className={`text-xs ${textSecondary}`}>Not started</p>
-            </div>
-            
-            {/* Current Projects (Discovery → Testing) */}
-            <div 
-              className={`p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 cursor-pointer hover:ring-2 hover:ring-blue-500/50 transition-all`}
-              onClick={() => { setMainTab('projects'); setWorkflowStage('all'); setStatusFilter('active'); }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs ${textSecondary}`}>Current Projects</p>
-                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+              
+              {/* Current Projects */}
+              <div 
+                className={`p-3 md:p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 cursor-pointer`}
+                onClick={() => { setMainTab('projects'); setWorkflowStage('all'); setStatusFilter('active'); }}
+              >
+                <div className="flex items-center justify-between mb-1 md:mb-2">
+                  <p className={`text-[10px] md:text-xs ${textSecondary}`}>Active</p>
+                  <div className="w-2 h-2 md:w-3 md:h-3 rounded-full bg-blue-500 animate-pulse" />
+                </div>
+                <p className="text-xl md:text-3xl font-bold text-blue-500">{currentProjects}</p>
               </div>
-              <p className="text-3xl font-bold text-blue-500">{currentProjects}</p>
-              <p className={`text-xs ${textSecondary}`}>In progress</p>
-            </div>
-            
-            {/* Delivered */}
-            <div 
-              className={`p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 cursor-pointer hover:ring-2 hover:ring-emerald-500/50 transition-all`}
-              onClick={() => { setMainTab('projects'); setWorkflowStage('delivered'); }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs ${textSecondary}`}>Delivered</p>
-                <Check className="h-4 w-4 text-emerald-500" />
+              
+              {/* Delivered */}
+              <div 
+                className={`p-3 md:p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 cursor-pointer`}
+                onClick={() => { setMainTab('projects'); setWorkflowStage('delivered'); }}
+              >
+                <div className="flex items-center justify-between mb-1 md:mb-2">
+                  <p className={`text-[10px] md:text-xs ${textSecondary}`}>Done</p>
+                  <Check className="h-3 w-3 md:h-4 md:w-4 text-emerald-500" />
+                </div>
+                <p className="text-xl md:text-3xl font-bold text-emerald-500">{deliveredProjects}</p>
               </div>
-              <p className="text-3xl font-bold text-emerald-500">{deliveredProjects}</p>
-              <p className={`text-xs ${textSecondary}`}>Completed</p>
             </div>
-          </div>
+          )}
         </div>
         
         {/* ═══════════════════════════════════════════════════════════════════ */}
         {/* PART 2: MASTER BOARD - Fixed Header + Tabbed Content */}
         {/* ═══════════════════════════════════════════════════════════════════ */}
         <div className={`flex-1 flex flex-col min-h-0 ${bgCard}`}>
-          {/* MASTER BOARD TABS */}
-          <div className={`shrink-0 p-4 border-b ${borderColor} ${bgCard}`}>
+          {/* MASTER BOARD TABS - Desktop only, mobile uses bottom nav */}
+          <div className={`shrink-0 p-2 md:p-4 border-b ${borderColor} ${bgCard} ${isMobile ? 'hidden' : ''}`}>
             <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
               <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
                 {[
@@ -1200,8 +1227,69 @@ export default function DLOperationsPage() {
             )}
           </div>
           
+          {/* Mobile Tab Header - Shows current tab name and quick actions */}
+          {isMobile && (
+            <div className={`shrink-0 p-3 border-b ${borderColor} ${bgCard}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {masterBoardTab === 'tasks' && <ListTodo className="h-5 w-5 text-[#6366f1]" />}
+                  {masterBoardTab === 'trackboard' && <ClipboardList className="h-5 w-5 text-[#6366f1]" />}
+                  {masterBoardTab === 'pages' && <FileText className="h-5 w-5 text-[#6366f1]" />}
+                  {masterBoardTab === 'team' && <Users className="h-5 w-5 text-[#6366f1]" />}
+                  {masterBoardTab === 'adtasks' && <CheckSquare className="h-5 w-5 text-[#6366f1]" />}
+                  {masterBoardTab === 'meetings' && <Video className="h-5 w-5 text-[#6366f1]" />}
+                  <h2 className={`text-base font-semibold ${textPrimary} capitalize`}>
+                    {masterBoardTab === 'adtasks' ? 'Ad. Tasks' : masterBoardTab}
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {['tasks', 'adtasks', 'meetings'].includes(masterBoardTab) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ArrowUpDown className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {masterBoardTab === 'adtasks' && (
+                    <Button size="sm" onClick={() => setShowAdTaskModal(true)} className="bg-[#6366f1] h-8 w-8 p-0">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {masterBoardTab === 'meetings' && (
+                    <Button size="sm" onClick={() => setShowMeetingModal(true)} className="bg-[#6366f1] h-8 w-8 p-0">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+              
+              {/* Mobile Task View Toggle */}
+              {masterBoardTab === 'tasks' && (
+                <div className={`flex items-center gap-2 mt-2`}>
+                  <div className={`inline-flex rounded-lg p-1 ${bgSecondary} flex-1`}>
+                    <button 
+                      onClick={() => setTaskViewMode('task')}
+                      className={`flex-1 py-1.5 px-3 text-xs rounded-md transition-all ${taskViewMode === 'task' ? 'bg-[#6366f1] text-white' : textSecondary}`}
+                    >
+                      Task
+                    </button>
+                    <button 
+                      onClick={() => setTaskViewMode('project')}
+                      className={`flex-1 py-1.5 px-3 text-xs rounded-md transition-all ${taskViewMode === 'project' ? 'bg-[#6366f1] text-white' : textSecondary}`}
+                    >
+                      Project
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
           {/* SCROLLABLE Content Area */}
-          <div className="flex-1 overflow-auto p-4">
+          <div className={`flex-1 overflow-auto ${isMobile ? 'p-3' : 'p-4'}`}>
             {/* TASKS TAB */}
             {masterBoardTab === 'tasks' && (
               <>
@@ -1272,8 +1360,10 @@ export default function DLOperationsPage() {
                 })()}
               </div>
             ) : (
-              /* Task Wise View - Tracker Table Format */
-              <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
+              /* Task Wise View - Tracker Table Format (Desktop) / Card Format (Mobile) */
+              <>
+                {/* Desktop Table View */}
+                <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden ${isMobile ? 'hidden' : ''}`}>
                 <table className="w-full">
                   <thead className={bgSecondary}>
                     <tr className={`text-xs ${textSecondary} uppercase`}>
@@ -1463,6 +1553,137 @@ export default function DLOperationsPage() {
                   </tbody>
                 </table>
               </div>
+              
+              {/* Mobile Card View */}
+              {isMobile && (
+                <div className="space-y-3">
+                  {getTasksForStage(selectedTaskStage).length === 0 ? (
+                    <div className={`text-center py-12 ${textSecondary}`}>
+                      <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                      <p className="text-sm">No tasks found</p>
+                    </div>
+                  ) : (
+                    getTasksForStage(selectedTaskStage).map(task => {
+                      const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+                      let currentStage = 'content';
+                      for (const stage of stageOrder) {
+                        const status = (task[`${stage}_status`] || 'To-Do').toLowerCase();
+                        if (status !== 'completed' && status !== 'approved') {
+                          currentStage = stage;
+                          break;
+                        }
+                      }
+                      const displayStage = selectedTaskStage === 'all' ? currentStage : selectedTaskStage;
+                      const canAct = canActOnTask(task, displayStage);
+                      const assigneeField = STAGE_ASSIGNEE_MAP[displayStage];
+                      const assignee = task[assigneeField];
+                      const stageInfo = TASK_STAGES.find(s => s.id === displayStage);
+                      const stageStatus = task[`${displayStage}_status`] || 'Not Started';
+                      const timeSpent = task[`${displayStage}_time_spent`] || 0;
+                      const isTimerRunning = runningTimers[task.task_id]?.stage === displayStage;
+                      
+                      return (
+                        <div 
+                          key={task.task_id}
+                          className={`p-3 rounded-xl border ${borderColor} ${bgSecondary}`}
+                        >
+                          {/* Header Row */}
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <div className={`w-1 h-8 rounded-full shrink-0 ${stageInfo?.color || 'bg-gray-500'}`} />
+                              <div className="min-w-0">
+                                <p className={`font-medium text-sm ${textPrimary} truncate`}>{task.page_name || task.name}</p>
+                                <p className={`text-xs ${textSecondary} truncate`}>{task.project_name}</p>
+                              </div>
+                            </div>
+                            <Badge variant="outline" className={`shrink-0 text-[10px] ${
+                              stageStatus === 'Not Started' || stageStatus === 'To-Do' ? 'bg-gray-500/10 text-gray-400' : 
+                              stageStatus === 'In Progress' ? 'bg-blue-500/10 text-blue-400' : 
+                              'bg-emerald-500/10 text-emerald-400'
+                            }`}>
+                              {stageStatus}
+                            </Badge>
+                          </div>
+                          
+                          {/* Info Row */}
+                          <div className="flex items-center gap-3 text-xs mb-3">
+                            {assignee && (
+                              <span className={`flex items-center gap-1 ${textSecondary}`}>
+                                <User className="h-3 w-3" /> {assignee.split(' ')[0]}
+                              </span>
+                            )}
+                            {task.due_date && (
+                              <span className={textSecondary}>{task.due_date}</span>
+                            )}
+                            <span className={`flex items-center gap-1 ${textPrimary}`}>
+                              <Clock className="h-3 w-3 text-[#6366f1]" /> {formatTime(timeSpent)}
+                            </span>
+                          </div>
+                          
+                          {/* Actions Row */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {canAct && (
+                                isTimerRunning ? (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    className="h-8 border-red-500/50 text-red-500"
+                                    onClick={() => handleStopTimer(task.task_id, displayStage)}
+                                  >
+                                    <Square className="h-3 w-3 mr-1 fill-red-500" /> Stop
+                                  </Button>
+                                ) : (
+                                  <Button 
+                                    size="sm" 
+                                    className="h-8 bg-emerald-500 hover:bg-emerald-600"
+                                    onClick={() => handleStartTimer(task.task_id, displayStage)}
+                                  >
+                                    <Play className="h-3 w-3 mr-1" /> Start
+                                  </Button>
+                                )
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-8 w-8 p-0"
+                                onClick={() => navigate(`/project/${task.project_id}`)}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              {canAct && (
+                                <Button 
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-emerald-500"
+                                  onClick={async () => {
+                                    try {
+                                      await axios.put(
+                                        `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
+                                        { stage: displayStage, status: 'Completed' },
+                                        { headers: { Authorization: `Bearer ${token}` } }
+                                      );
+                                      toast.success(`${stageInfo?.label} completed!`);
+                                      loadProjects();
+                                    } catch (error) {
+                                      toast.error('Failed to update status');
+                                    }
+                                  }}
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+              </>
             )}
               </>
             )}
@@ -1471,25 +1692,25 @@ export default function DLOperationsPage() {
             {masterBoardTab === 'trackboard' && (
               <div className="space-y-4">
                 <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-                  <div className={`p-4 ${bgSecondary}`}>
-                    <h3 className={`font-semibold ${textPrimary}`}>Time Tracking Overview</h3>
+                  <div className={`p-3 md:p-4 ${bgSecondary}`}>
+                    <h3 className={`font-semibold ${textPrimary}`}>Time Tracking</h3>
                   </div>
-                  <div className="p-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <div className={`p-4 rounded-lg ${bgSecondary}`}>
-                        <p className={`text-xs ${textSecondary}`}>Total Time Today</p>
-                        <p className={`text-2xl font-bold ${textPrimary}`}>{formatTime(allTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0))}</p>
+                  <div className="p-3 md:p-4">
+                    <div className={`grid grid-cols-3 gap-2 md:gap-4 mb-4 md:mb-6`}>
+                      <div className={`p-3 md:p-4 rounded-lg ${bgSecondary}`}>
+                        <p className={`text-[10px] md:text-xs ${textSecondary}`}>Today</p>
+                        <p className={`text-lg md:text-2xl font-bold ${textPrimary}`}>{formatTime(allTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0))}</p>
                       </div>
-                      <div className={`p-4 rounded-lg ${bgSecondary}`}>
-                        <p className={`text-xs ${textSecondary}`}>Active Timers</p>
-                        <p className={`text-2xl font-bold text-emerald-500`}>{Object.keys(runningTimers).length}</p>
+                      <div className={`p-3 md:p-4 rounded-lg ${bgSecondary}`}>
+                        <p className={`text-[10px] md:text-xs ${textSecondary}`}>Active</p>
+                        <p className={`text-lg md:text-2xl font-bold text-emerald-500`}>{Object.keys(runningTimers).length}</p>
                       </div>
-                      <div className={`p-4 rounded-lg ${bgSecondary}`}>
-                        <p className={`text-xs ${textSecondary}`}>Tasks Completed</p>
-                        <p className={`text-2xl font-bold text-blue-500`}>{allTasks.filter(t => t.delivery_status === 'Completed').length}</p>
+                      <div className={`p-3 md:p-4 rounded-lg ${bgSecondary}`}>
+                        <p className={`text-[10px] md:text-xs ${textSecondary}`}>Done</p>
+                        <p className={`text-lg md:text-2xl font-bold text-blue-500`}>{allTasks.filter(t => t.delivery_status === 'Completed').length}</p>
                       </div>
                     </div>
-                    <p className={`text-sm ${textSecondary}`}>Detailed time tracking analytics coming soon...</p>
+                    <p className={`text-xs md:text-sm ${textSecondary}`}>Detailed analytics coming soon...</p>
                   </div>
                 </div>
               </div>
@@ -1497,30 +1718,30 @@ export default function DLOperationsPage() {
             
             {/* PAGES TAB - Page-level tasks */}
             {masterBoardTab === 'pages' && (
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {allTasks.length === 0 ? (
                   <div className={`text-center py-12 ${textSecondary}`}>
-                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No pages found</p>
+                    <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No pages found</p>
                   </div>
                 ) : (
                   sortItems(allTasks, sortField, sortOrder).map(task => (
                     <div 
                       key={task.task_id}
-                      className={`p-4 rounded-xl border ${borderColor} ${bgSecondary} hover:border-[#6366f1]/50 transition-all cursor-pointer`}
+                      className={`p-3 rounded-xl border ${borderColor} ${bgSecondary} cursor-pointer active:scale-[0.98] transition-transform`}
                       onClick={() => navigate(`/project/${task.project_id}`)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-5 w-5 text-[#6366f1]" />
-                          <div>
-                            <p className={`font-medium ${textPrimary}`}>{task.page_name || task.name}</p>
-                            <p className={`text-xs ${textSecondary}`}>{task.project_name}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <FileText className="h-4 w-4 text-[#6366f1] shrink-0" />
+                          <div className="min-w-0">
+                            <p className={`font-medium text-sm ${textPrimary} truncate`}>{task.page_name || task.name}</p>
+                            <p className={`text-xs ${textSecondary} truncate`}>{task.project_name}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">{task.due_date || 'No date'}</Badge>
-                          <Button size="sm" variant="ghost"><Eye className="h-4 w-4" /></Button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-xs ${textSecondary}`}>{task.due_date || '-'}</span>
+                          <Eye className="h-4 w-4 text-[#6366f1]" />
                         </div>
                       </div>
                     </div>
@@ -1531,8 +1752,8 @@ export default function DLOperationsPage() {
             
             {/* TEAM TAB - Team overview */}
             {masterBoardTab === 'team' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
                   {teamMembers.map(member => {
                     const memberTasks = allTasks.filter(t => 
                       t.content_assignee === member.name || 
@@ -1541,19 +1762,18 @@ export default function DLOperationsPage() {
                       t.dev_assignee === member.name
                     );
                     return (
-                      <div key={member.user_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 rounded-full bg-[#6366f1]/20 flex items-center justify-center">
-                            <UserCircle className="h-5 w-5 text-[#6366f1]" />
+                      <div key={member.user_id} className={`p-3 md:p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
+                        <div className="flex items-center gap-2 md:gap-3">
+                          <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#6366f1]/20 flex items-center justify-center shrink-0">
+                            <UserCircle className="h-4 w-4 md:h-5 md:w-5 text-[#6366f1]" />
                           </div>
-                          <div>
-                            <p className={`font-medium ${textPrimary}`}>{member.name}</p>
-                            <p className={`text-xs ${textSecondary}`}>{member.role || 'Team Member'}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className={`font-medium text-sm ${textPrimary} truncate`}>{member.name}</p>
+                            <div className="flex items-center gap-2 text-[10px] md:text-xs">
+                              <span className={textSecondary}>{memberTasks.length} tasks</span>
+                              <span className="text-emerald-500">{memberTasks.filter(t => t.content_status === 'In Progress' || t.dev_status === 'In Progress').length} active</span>
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-4 text-xs">
-                          <span className={textSecondary}>Tasks: <strong className={textPrimary}>{memberTasks.length}</strong></span>
-                          <span className={textSecondary}>Active: <strong className="text-emerald-500">{memberTasks.filter(t => t.content_status === 'In Progress' || t.dev_status === 'In Progress').length}</strong></span>
                         </div>
                       </div>
                     );
@@ -1561,8 +1781,8 @@ export default function DLOperationsPage() {
                 </div>
                 {teamMembers.length === 0 && (
                   <div className={`text-center py-12 ${textSecondary}`}>
-                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No team members found</p>
+                    <Users className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No team members</p>
                   </div>
                 )}
               </div>
@@ -1570,43 +1790,44 @@ export default function DLOperationsPage() {
             
             {/* AD.TASKS TAB - Additional tasks */}
             {masterBoardTab === 'adtasks' && (
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {additionalTasks.length === 0 ? (
                   <div className={`text-center py-12 ${textSecondary}`}>
-                    <CheckSquare className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No additional tasks</p>
-                    <Button className="mt-4 bg-[#6366f1]" onClick={() => setShowAdTaskModal(true)}>
-                      <Plus className="h-4 w-4 mr-2" /> Create Task
+                    <CheckSquare className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No additional tasks</p>
+                    <Button className="mt-4 bg-[#6366f1]" size="sm" onClick={() => setShowAdTaskModal(true)}>
+                      <Plus className="h-4 w-4 mr-1" /> Create Task
                     </Button>
                   </div>
                 ) : (
                   sortItems(additionalTasks, 'due_date', sortOrder).map(task => (
-                    <div key={task.task_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-2 h-10 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
-                          <div>
-                            <p className={`font-medium ${textPrimary}`}>{task.title}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge variant="outline" className="text-xs">{task.status}</Badge>
-                              {task.due_date && <span className={`text-xs ${textSecondary}`}>Due: {task.due_date}</span>}
-                              {task.assignee && <span className={`text-xs ${textSecondary}`}>• {task.assignee}</span>}
-                            </div>
+                    <div key={task.task_id} className={`p-3 rounded-xl border ${borderColor} ${bgSecondary}`}>
+                      {/* Task Header */}
+                      <div className="flex items-start gap-2 mb-2">
+                        <div className={`w-1 h-8 rounded-full shrink-0 ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-medium text-sm ${textPrimary} truncate`}>{task.title}</p>
+                          <div className="flex items-center gap-2 mt-1 text-xs">
+                            <Badge variant="outline" className="text-[10px]">{task.status}</Badge>
+                            {task.due_date && <span className={textSecondary}>{task.due_date}</span>}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs ${textSecondary}`}>{formatTime(task.time_spent || 0)}</span>
+                      </div>
+                      {/* Actions */}
+                      <div className="flex items-center justify-between">
+                        <span className={`text-xs ${textSecondary}`}>{formatTime(task.time_spent || 0)}</span>
+                        <div className="flex items-center gap-1">
                           {adTaskTimers[task.task_id] ? (
-                            <Button size="sm" variant="outline" className="h-8 border-red-500/50 text-red-500" onClick={() => handleStopAdTaskTimer(task.task_id)}>
+                            <Button size="sm" variant="outline" className="h-7 text-xs border-red-500/50 text-red-500" onClick={() => handleStopAdTaskTimer(task.task_id)}>
                               <Square className="h-3 w-3 mr-1 fill-red-500" /> Stop
                             </Button>
                           ) : (
-                            <Button size="sm" className="h-8 bg-emerald-500 hover:bg-emerald-600" onClick={() => handleStartAdTaskTimer(task.task_id)}>
+                            <Button size="sm" className="h-7 text-xs bg-emerald-500" onClick={() => handleStartAdTaskTimer(task.task_id)}>
                               <Play className="h-3 w-3 mr-1" /> Start
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" onClick={() => handleUpdateAdTaskStatus(task.task_id, 'Completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDeleteAdTask(task.task_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleUpdateAdTaskStatus(task.task_id, 'Completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDeleteAdTask(task.task_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                         </div>
                       </div>
                     </div>
@@ -1617,40 +1838,40 @@ export default function DLOperationsPage() {
             
             {/* MEETINGS TAB */}
             {masterBoardTab === 'meetings' && (
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {meetings.length === 0 ? (
                   <div className={`text-center py-12 ${textSecondary}`}>
-                    <Video className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                    <p>No meetings scheduled</p>
-                    <Button className="mt-4 bg-[#6366f1]" onClick={() => setShowMeetingModal(true)}>
-                      <Plus className="h-4 w-4 mr-2" /> Schedule Meeting
+                    <Video className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p className="text-sm">No meetings scheduled</p>
+                    <Button className="mt-4 bg-[#6366f1]" size="sm" onClick={() => setShowMeetingModal(true)}>
+                      <Plus className="h-4 w-4 mr-1" /> Schedule Meeting
                     </Button>
                   </div>
                 ) : (
                   sortItems(meetings, 'date', sortOrder).map(meeting => (
-                    <div key={meeting.meeting_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${meeting.meeting_type === 'video' ? 'bg-blue-500/20' : meeting.meeting_type === 'audio' ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
-                            <Video className={`h-5 w-5 ${meeting.meeting_type === 'video' ? 'text-blue-500' : meeting.meeting_type === 'audio' ? 'text-green-500' : 'text-purple-500'}`} />
-                          </div>
-                          <div>
-                            <p className={`font-medium ${textPrimary}`}>{meeting.title}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`text-xs ${textSecondary}`}>{meeting.date} • {meeting.start_time} - {meeting.end_time}</span>
-                              <Badge variant="outline" className="text-xs">{meeting.status}</Badge>
-                            </div>
+                    <div key={meeting.meeting_id} className={`p-3 rounded-xl border ${borderColor} ${bgSecondary}`}>
+                      {/* Meeting Header */}
+                      <div className="flex items-start gap-2 mb-2">
+                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center shrink-0 ${meeting.meeting_type === 'video' ? 'bg-blue-500/20' : meeting.meeting_type === 'audio' ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
+                          <Video className={`h-4 w-4 md:h-5 md:w-5 ${meeting.meeting_type === 'video' ? 'text-blue-500' : meeting.meeting_type === 'audio' ? 'text-green-500' : 'text-purple-500'}`} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-medium text-sm ${textPrimary} truncate`}>{meeting.title}</p>
+                          <div className="flex items-center gap-2 mt-1 text-xs">
+                            <span className={textSecondary}>{meeting.date} • {meeting.start_time}</span>
+                            <Badge variant="outline" className="text-[10px]">{meeting.status}</Badge>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {meeting.meeting_link && (
-                            <Button size="sm" variant="outline" className="h-8" onClick={() => window.open(meeting.meeting_link, '_blank')}>
-                              <ExternalLink className="h-4 w-4 mr-1" /> Join
-                            </Button>
-                          )}
-                          <Button size="sm" variant="ghost" onClick={() => handleUpdateMeetingStatus(meeting.meeting_id, 'completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleDeleteMeeting(meeting.meeting_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                        </div>
+                      </div>
+                      {/* Actions */}
+                      <div className="flex items-center justify-end gap-1">
+                        {meeting.meeting_link && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(meeting.meeting_link, '_blank')}>
+                            <ExternalLink className="h-3 w-3 mr-1" /> Join
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleUpdateMeetingStatus(meeting.meeting_id, 'completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDeleteMeeting(meeting.meeting_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                       </div>
                     </div>
                   ))
@@ -2573,6 +2794,36 @@ export default function DLOperationsPage() {
               <Button variant="outline" onClick={() => setShowMeetingModal(false)}>Cancel</Button>
               <Button onClick={handleCreateMeeting} className="bg-[#6366f1]">Schedule Meeting</Button>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {isMobile && (
+        <div className={`fixed bottom-0 left-0 right-0 ${isDark ? 'bg-[#0c0a09]' : 'bg-white'} border-t ${borderColor} z-50 safe-area-bottom`}>
+          <div className="flex items-center justify-around py-2">
+            {[
+              { id: 'tasks', label: 'Tasks', icon: ListTodo },
+              { id: 'trackboard', label: 'Track', icon: BarChart3 },
+              { id: 'adtasks', label: 'Ad.Tasks', icon: CheckSquare },
+              { id: 'meetings', label: 'Meeting', icon: Video },
+              { id: 'team', label: 'Team', icon: Users }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setMasterBoardTab(tab.id)}
+                className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg transition-all ${
+                  masterBoardTab === tab.id 
+                    ? 'text-[#6366f1]' 
+                    : textSecondary
+                }`}
+              >
+                <tab.icon className={`h-5 w-5 ${masterBoardTab === tab.id ? 'scale-110' : ''} transition-transform`} />
+                <span className="text-[10px] mt-0.5 font-medium">{tab.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
