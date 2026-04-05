@@ -4,11 +4,12 @@ import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Globe, Plus, Search, Eye, ArrowRight, FolderKanban, 
-  Calendar, FileText, LayoutGrid, ListTodo, Filter, X
+  Calendar, FileText, LayoutGrid, ListTodo, Filter, X, Check, User, Building2
 } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -16,6 +17,10 @@ import axios from 'axios';
 import { toast } from 'sonner';
 
 const API = process.env.REACT_APP_BACKEND_URL;
+
+// Website Types and Platforms
+const WEBSITE_TYPES = ['Landing Page', 'Business Website', 'Shopify Store', 'Web App', 'E-commerce', 'Portfolio'];
+const PLATFORMS = ['WordPress', 'Shopify', 'Wix', 'Webflow', 'Framer', 'AI Builder', 'Custom Code', 'React'];
 
 // Workflow Stage Definitions
 const WORKFLOW_STAGES = [
@@ -43,6 +48,19 @@ export default function DLOperationsPage() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [viewMode, setViewMode] = useState('projects');
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Create Project Modal State
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createStep, setCreateStep] = useState(1);
+  const [newProject, setNewProject] = useState({
+    name: '',
+    website_type: '',
+    platform: '',
+    client_name: '',
+    domain_url: '',
+    deadline: '',
+    notes: ''
+  });
   
   const token = localStorage.getItem('session_token');
   
@@ -94,9 +112,57 @@ export default function DLOperationsPage() {
     return matchesSearch && matchesDeveloper && matchesStage && matchesStatus;
   });
   
-  // Navigate to Website Projects page for creation
+  // Open create project modal
   const handleNewProject = () => {
-    navigate('/website-projects?action=new');
+    setShowCreateModal(true);
+    setCreateStep(1);
+    setNewProject({
+      name: '',
+      website_type: '',
+      platform: '',
+      client_name: '',
+      domain_url: '',
+      deadline: '',
+      notes: ''
+    });
+  };
+  
+  // Create project
+  const handleCreateProject = async () => {
+    if (!newProject.name.trim()) {
+      toast.error('Please enter a project name');
+      return;
+    }
+    if (!newProject.website_type || !newProject.platform) {
+      toast.error('Please select website type and platform');
+      return;
+    }
+    
+    try {
+      const projectData = {
+        ...newProject,
+        workflow_stage: 'creation',
+        status: 'active'
+      };
+      
+      await axios.post(
+        `${API}/api/website-projects/projects`,
+        projectData,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      toast.success('Project created successfully!');
+      setShowCreateModal(false);
+      loadProjects();
+    } catch (error) {
+      toast.error('Failed to create project');
+    }
+  };
+  
+  // Close create modal
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setCreateStep(1);
   };
   
   // Open project detail page (navigate instead of modal)
@@ -420,6 +486,220 @@ export default function DLOperationsPage() {
           )}
         </div>
       </div>
+      
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="create-project-modal">
+          <div className={`${bgCard} rounded-xl w-full max-w-2xl border ${borderColor} max-h-[90vh] overflow-hidden`}>
+            {/* Header */}
+            <div className={`p-6 border-b ${borderColor} flex items-center justify-between`}>
+              <h2 className={`text-xl font-bold ${textPrimary}`}>Create New Project</h2>
+              <Button variant="ghost" size="sm" onClick={closeCreateModal} className="h-8 w-8 p-0">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            {/* Step Indicator */}
+            <div className="px-6 pt-4">
+              <div className="flex items-center justify-center gap-2 mb-4">
+                {[1, 2, 3].map(step => (
+                  <div key={step} className="flex items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                      createStep >= step ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`
+                    }`}>
+                      {createStep > step ? <Check className="h-4 w-4" /> : step}
+                    </div>
+                    {step < 3 && <div className={`w-12 h-0.5 mx-2 ${createStep > step ? 'bg-[#6366f1]' : bgSecondary}`} />}
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+              {/* Step 1: Website Type & Platform */}
+              {createStep === 1 && (
+                <div className="space-y-6">
+                  {/* Website Type */}
+                  <div>
+                    <label className={`text-base font-semibold ${textPrimary} block mb-3`}>Select Website Type</label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {WEBSITE_TYPES.map(type => (
+                        <button
+                          key={type}
+                          onClick={() => setNewProject({ ...newProject, website_type: type })}
+                          className={`p-4 rounded-xl border-2 transition-all text-left ${
+                            newProject.website_type === type
+                              ? 'border-[#6366f1] bg-[#6366f1]/10'
+                              : `border-transparent ${bgSecondary} hover:border-[#6366f1]/50`
+                          }`}
+                        >
+                          <p className={`font-medium ${textPrimary}`}>{type}</p>
+                          <p className={`text-xs ${textSecondary} mt-1`}>
+                            {type === 'Landing Page' && 'Single page website'}
+                            {type === 'Business Website' && 'Multi-page corporate site'}
+                            {type === 'Shopify Store' && 'E-commerce store'}
+                            {type === 'Web App' && 'Custom web application'}
+                            {type === 'E-commerce' && 'Online store'}
+                            {type === 'Portfolio' && 'Showcase work'}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Platform */}
+                  <div>
+                    <label className={`text-base font-semibold ${textPrimary} block mb-3`}>Select Platform</label>
+                    <div className="grid grid-cols-4 gap-3">
+                      {PLATFORMS.map(platform => (
+                        <button
+                          key={platform}
+                          onClick={() => setNewProject({ ...newProject, platform: platform })}
+                          className={`p-3 rounded-xl border-2 transition-all text-center ${
+                            newProject.platform === platform
+                              ? 'border-[#6366f1] bg-[#6366f1]/10'
+                              : `border-transparent ${bgSecondary} hover:border-[#6366f1]/50`
+                          }`}
+                        >
+                          <p className={`font-medium text-sm ${textPrimary}`}>{platform}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Selection Preview */}
+                  {newProject.website_type && newProject.platform && (
+                    <div className={`p-4 rounded-lg ${isDark ? 'bg-[#6366f1]/10' : 'bg-[#6366f1]/5'} border border-[#6366f1]/30`}>
+                      <p className={`text-sm ${textSecondary}`}>Creating:</p>
+                      <p className={`font-semibold ${textPrimary}`}>{newProject.platform} {newProject.website_type}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Step 2: Project Details */}
+              {createStep === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Project Name *</label>
+                    <Input
+                      value={newProject.name}
+                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                      placeholder="e.g., Acme Corp Website"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Client Name</label>
+                    <Input
+                      value={newProject.client_name}
+                      onChange={(e) => setNewProject({ ...newProject, client_name: e.target.value })}
+                      placeholder="e.g., Acme Corporation"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Domain URL</label>
+                    <Input
+                      value={newProject.domain_url}
+                      onChange={(e) => setNewProject({ ...newProject, domain_url: e.target.value })}
+                      placeholder="e.g., www.acme.com"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Deadline</label>
+                    <Input
+                      type="date"
+                      value={newProject.deadline}
+                      onChange={(e) => setNewProject({ ...newProject, deadline: e.target.value })}
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* Step 3: Review & Create */}
+              {createStep === 3 && (
+                <div className="space-y-4">
+                  <div className={`p-6 rounded-xl ${bgSecondary}`}>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-[#6366f1] flex items-center justify-center">
+                        <Globe className="h-6 w-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className={`text-lg font-bold ${textPrimary}`}>{newProject.name || 'Untitled Project'}</h3>
+                        <p className={`text-sm ${textSecondary}`}>{newProject.platform} • {newProject.website_type}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className={`p-3 rounded-lg ${bgCard}`}>
+                        <p className={`text-xs ${textSecondary}`}>Client</p>
+                        <p className={`font-medium ${textPrimary}`}>{newProject.client_name || 'Not specified'}</p>
+                      </div>
+                      <div className={`p-3 rounded-lg ${bgCard}`}>
+                        <p className={`text-xs ${textSecondary}`}>Domain</p>
+                        <p className={`font-medium ${textPrimary}`}>{newProject.domain_url || 'Not specified'}</p>
+                      </div>
+                      <div className={`p-3 rounded-lg ${bgCard}`}>
+                        <p className={`text-xs ${textSecondary}`}>Deadline</p>
+                        <p className={`font-medium ${textPrimary}`}>{newProject.deadline || 'Not set'}</p>
+                      </div>
+                      <div className={`p-3 rounded-lg ${bgCard}`}>
+                        <p className={`text-xs ${textSecondary}`}>Status</p>
+                        <p className={`font-medium ${textPrimary}`}>Project Creation</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Notes (Optional)</label>
+                    <Textarea
+                      value={newProject.notes}
+                      onChange={(e) => setNewProject({ ...newProject, notes: e.target.value })}
+                      placeholder="Any additional notes about this project..."
+                      className={`${bgSecondary} border-none min-h-[80px]`}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div className={`p-6 border-t ${borderColor} flex justify-between`}>
+              <Button 
+                variant="outline" 
+                onClick={() => createStep > 1 ? setCreateStep(createStep - 1) : closeCreateModal()}
+              >
+                {createStep > 1 ? 'Back' : 'Cancel'}
+              </Button>
+              
+              {createStep < 3 ? (
+                <Button 
+                  onClick={() => setCreateStep(createStep + 1)}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                  disabled={createStep === 1 && (!newProject.website_type || !newProject.platform)}
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button 
+                  onClick={handleCreateProject}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                  disabled={!newProject.name.trim()}
+                >
+                  Create Project
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }

@@ -165,13 +165,10 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
+      {/* Old website-projects route redirects to Web Dev */}
       <Route
         path="/website-projects"
-        element={
-          <ProtectedRoute>
-            <WebsiteProjectsPage />
-          </ProtectedRoute>
-        }
+        element={<Navigate to="/dl-operations" replace />}
       />
       <Route
         path="/dl-operations"
