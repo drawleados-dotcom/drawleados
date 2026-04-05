@@ -30,39 +30,51 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
-### Pages Tab Multi-Stage Horizontal Layout (NEW - April 5, 2026)
+### Pages Tab Multi-Stage Horizontal Layout (ENHANCED - April 5, 2026)
 **Purpose:** Redesigned the "Pages" tab in Project Detail page to show all workflow stages horizontally, providing a bird's-eye view of project health.
 
 **Features Implemented:**
-1. **Multi-Stage Table Layout:**
-   - Columns: #, Page Name, Content, Wireframe, UI Design, Responsive, Development, Testing, Delivery, Progress, Actions
-   - Each stage column has colored dot indicator in header
-   - Table is responsive and fits screen without horizontal scrolling
+1. **Multi-Stage Table Layout (ENHANCED):**
+   - Columns: #, Page Name, Content, Wireframe, UI Design, Responsive, Development, Testing, Delivery, **Due Date**, **Time Left**, **Time Spent**, Progress, Actions
+   - Each stage column shows:
+     - Assignee avatar (initials with stage color) or gray user icon if unassigned
+     - Status badge below avatar
+   - Table is responsive with horizontal scroll for smaller screens
 
-2. **Add Page Functionality (Enhanced):**
+2. **Add Page Functionality (ENHANCED):**
    - "+ Add Page" button in header
    - Opens modal with:
      - Page Name input field
-     - Stage Assignees section with 7 dropdown selectors (Content, Wireframe, UI Design, Responsive, Development, Testing, Delivery)
-   - Creates page with all assignees via POST `/api/website-projects/projects/{project_id}/pages`
+     - **Due Date picker** (new!)
+     - Stage Assignees section with 7 dropdown selectors
+   - Creates page with all fields via POST `/api/website-projects/projects/{project_id}/pages`
 
-3. **Edit Page Functionality (Enhanced):**
+3. **Edit Page Functionality (ENHANCED):**
    - Edit (pencil) button on each row
    - Opens modal with pre-filled:
      - Page name
+     - **Due Date** (if previously set)
      - All 7 stage assignees (if previously set)
    - Updates page via PUT `/api/website-projects/pages/{task_id}`
 
-4. **Delete Page Functionality:**
+4. **New Columns (ADDED):**
+   - **Due Date:** Displays formatted date (e.g., "10 Apr")
+   - **Time Left:** Shows:
+     - "Xd left" (green) for future dates
+     - "Xh left" (yellow) for same-day due
+     - "Xd overdue" (red) with alert icon for past dates
+   - **Time Spent:** Total time across all stages with timer icon
+
+5. **Delete Page Functionality:**
    - Delete (trash) button on each row
    - Browser confirmation dialog
    - Deletes page via DELETE `/api/website-projects/pages/{task_id}`
 
-5. **Progress Tracking:**
+6. **Progress Tracking:**
    - Progress bar per page showing completion percentage
    - X/7 format (approved stages / total stages)
 
-6. **Stage Status Indicators:**
+7. **Stage Status Indicators:**
    - ○ Not Started
    - ▶ In Progress
    - ⏳ Waiting PM
@@ -70,14 +82,14 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
    - ✓ Approved
    - ↻ Corrections
 
-7. **Legend Section:**
+8. **Legend Section:**
    - Displays all status types with their icons below the table
 
 **Files Modified:**
-- `/app/frontend/src/pages/ProjectDetailPage.js` - PagesTab component with AssigneeSelect helper
-- `/app/backend/website_projects_routes.py` - PageTaskCreate model with assignee fields
+- `/app/frontend/src/pages/ProjectDetailPage.js` - PagesTab component with AssigneeSelect helper, time calculations
+- `/app/backend/website_projects_routes.py` - PageTaskCreate and PageTaskUpdate models with due_date field
 
-**Testing Status:** ✅ All features verified by testing agent (iteration_59.json)
+**Testing Status:** ✅ All features verified by testing agent (iteration_60.json)
 
 ---
 
