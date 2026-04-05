@@ -11,7 +11,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ArrowLeft, ArrowRight, Globe, Calendar, User, Users, FileText, Settings, Palette, 
-  ChevronDown, ChevronRight, Check, Clock, Play, Pause, Send,
+  ChevronDown, ChevronRight, Check, Clock, Play, Pause, Send, Lock,
   MessageSquare, CheckCircle, CheckCircle2, AlertCircle, RefreshCw, X,
   Eye, Edit2, Trash2, Plus, Link2, ExternalLink, Timer, Layers,
   Code, PenTool, TestTube, Truck, ClipboardCheck
@@ -839,27 +839,56 @@ function TrackerBoard({
   const canFinish = (status) => {
     return status === 'in_progress' || status === 'paused';
   };
+  
+  // Initialize selected stage
+  const currentStage = selectedStage || stages[0]?.id;
+  const currentStageTasks = getTasksForStage(currentStage);
+  const currentStageInfo = stages.find(s => s.id === currentStage);
+  const CurrentStageIcon = currentStageInfo?.icon || FileText;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Stage Progress Header */}
+      {/* Clickable Stage Tabs */}
       <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
         {stages.map((stage, idx) => {
           const stats = getStageStats(stage.id);
           const Icon = stage.icon;
           const isComplete = stats.approved === stats.total && stats.total > 0;
+          const isSelected = currentStage === stage.id;
           
           return (
             <div key={stage.id} className="flex items-center">
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${isComplete ? 'bg-green-500/20' : bgSecondary}`}>
-                <div className={`w-6 h-6 rounded-full ${isComplete ? 'bg-green-500' : stage.color} flex items-center justify-center`}>
-                  {isComplete ? <Check className="h-3 w-3 text-white" /> : <Icon className="h-3 w-3 text-white" />}
+              <button
+                onClick={() => setSelectedStage(stage.id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${
+                  isSelected 
+                    ? 'bg-[#6366f1] text-white shadow-lg scale-105' 
+                    : isComplete 
+                      ? 'bg-green-500/20 hover:bg-green-500/30' 
+                      : `${bgSecondary} hover:bg-[#6366f1]/20`
+                }`}
+                data-testid={`stage-btn-${stage.id}`}
+              >
+                <div className={`w-7 h-7 rounded-lg ${
+                  isSelected ? 'bg-white/20' : isComplete ? 'bg-green-500' : stage.color
+                } flex items-center justify-center`}>
+                  {isComplete && !isSelected ? (
+                    <Check className="h-4 w-4 text-white" />
+                  ) : (
+                    <Icon className={`h-4 w-4 ${isSelected ? 'text-white' : 'text-white'}`} />
+                  )}
                 </div>
-                <span className={`text-sm font-medium ${isComplete ? 'text-green-400' : textPrimary}`}>{stage.label}</span>
-                <span className={`text-xs ${textSecondary}`}>({stats.approved}/{stats.total})</span>
-              </div>
+                <div className="text-left">
+                  <span className={`text-sm font-semibold ${isSelected ? 'text-white' : isComplete ? 'text-green-400' : textPrimary}`}>
+                    {stage.label}
+                  </span>
+                  <span className={`text-xs ml-2 ${isSelected ? 'text-white/70' : textSecondary}`}>
+                    ({stats.approved}/{stats.total})
+                  </span>
+                </div>
+              </button>
               {idx < stages.length - 1 && (
-                <ArrowRight className={`h-4 w-4 mx-1 ${stats.approved === stats.total ? 'text-green-400' : textSecondary}`} />
+                <ArrowRight className={`h-4 w-4 mx-1 ${isComplete ? 'text-green-400' : textSecondary}`} />
               )}
             </div>
           );
@@ -898,203 +927,201 @@ function TrackerBoard({
         )}
       </div>
       
-      {/* Horizontal Stage Columns */}
-      <div className="flex-1 overflow-x-auto">
-        <div className="flex gap-3 min-w-max pb-4 h-full">
-          {stages.map(stage => {
-            const tasks = getTasksForStage(stage.id);
-            const stats = getStageStats(stage.id);
-            const Icon = stage.icon;
-            const isComplete = stats.approved === stats.total && stats.total > 0;
-            
-            return (
-              <div key={stage.id} className={`w-72 flex-shrink-0 rounded-xl border ${isComplete ? 'border-green-500/50' : borderColor} ${bgCard} flex flex-col`}>
-                {/* Stage Header */}
-                <div className={`p-3 border-b ${borderColor} flex items-center gap-2 ${isComplete ? 'bg-green-500/10' : ''}`}>
-                  <div className={`w-8 h-8 rounded-lg ${isComplete ? 'bg-green-500' : stage.color} flex items-center justify-center`}>
-                    {isComplete ? <Check className="h-4 w-4 text-white" /> : <Icon className="h-4 w-4 text-white" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className={`font-semibold ${isComplete ? 'text-green-400' : textPrimary}`}>{stage.label}</p>
-                    <p className={`text-xs ${textSecondary}`}>
-                      {stats.approved}/{stats.total} approved
-                      {stats.waiting > 0 && <span className="text-orange-400 ml-1">• {stats.waiting} waiting</span>}
-                    </p>
-                  </div>
-                </div>
-                
-                {/* Tasks List */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                  {tasks.length === 0 ? (
-                    <div className={`text-center py-8 ${textSecondary} text-sm`}>No tasks</div>
-                  ) : (
-                    tasks.map(task => {
-                      const statusInfo = getStatusStyle(task.displayStatus);
-                      const isLocked = task.displayStatus === 'locked';
-                      // For new workflow: both PM and Ops must approve
-                      // For legacy: just status=approved is fully approved (no pm/ops flags exist)
-                      const hasNewWorkflowFlags = task.pm_approved !== undefined || task.ops_approved !== undefined;
-                      const isFullyApproved = task.displayStatus === 'approved' && 
-                        (hasNewWorkflowFlags ? (task.pm_approved && task.ops_approved) : true);
-                      const isPendingPM = task.displayStatus === 'waiting_pm' || 
-                        (task.displayStatus === 'waiting_approval' && hasNewWorkflowFlags && !task.pm_approved);
-                      const isPendingOps = hasNewWorkflowFlags && task.pm_approved && !task.ops_approved;
+      {/* Selected Stage Header */}
+      <div className={`p-4 rounded-xl mb-4 ${currentStageInfo?.color || 'bg-[#6366f1]'} flex items-center gap-4`}>
+        <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+          <CurrentStageIcon className="h-6 w-6 text-white" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-xl font-bold text-white">{currentStageInfo?.label || 'Stage'}</h3>
+          <p className="text-sm text-white/70">
+            {getStageStats(currentStage).approved} of {getStageStats(currentStage).total} approved
+            {getStageStats(currentStage).waiting_pm > 0 && (
+              <span className="ml-2">• {getStageStats(currentStage).waiting_pm} waiting PM</span>
+            )}
+            {getStageStats(currentStage).waiting_ops > 0 && (
+              <span className="ml-2">• {getStageStats(currentStage).waiting_ops} waiting Ops</span>
+            )}
+          </p>
+        </div>
+      </div>
+      
+      {/* Task List View */}
+      <div className="flex-1 overflow-y-auto">
+        {currentStageTasks.length === 0 ? (
+          <div className={`text-center py-16 ${textSecondary}`}>
+            <FileText className="h-16 w-16 mx-auto mb-4 opacity-30" />
+            <p className="text-lg font-medium">No tasks in this stage</p>
+            <p className="text-sm">Tasks will appear here once pages are converted</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {currentStageTasks.map(task => {
+              const statusInfo = getStatusStyle(task.displayStatus);
+              const isLocked = task.displayStatus === 'locked';
+              const hasNewWorkflowFlags = task.pm_approved !== undefined || task.ops_approved !== undefined;
+              const isFullyApproved = task.displayStatus === 'approved' && 
+                (hasNewWorkflowFlags ? (task.pm_approved && task.ops_approved) : true);
+              const isPendingPM = task.displayStatus === 'waiting_pm' || 
+                (task.displayStatus === 'waiting_approval' && hasNewWorkflowFlags && !task.pm_approved);
+              const isPendingOps = hasNewWorkflowFlags && task.pm_approved && !task.ops_approved;
+              
+              return (
+                <div 
+                  key={task.task_id} 
+                  className={`p-4 rounded-xl border ${borderColor} ${
+                    isLocked ? 'opacity-50' : ''
+                  } ${isFullyApproved ? 'bg-green-500/10 border-green-500/30' : bgCard}`}
+                  data-testid={`task-card-${task.task_id}`}
+                >
+                  <div className="flex items-start gap-4">
+                    {/* Task Icon */}
+                    <div className={`w-10 h-10 rounded-lg ${currentStageInfo?.color || 'bg-[#6366f1]'} flex items-center justify-center flex-shrink-0`}>
+                      <CurrentStageIcon className="h-5 w-5 text-white" />
+                    </div>
+                    
+                    {/* Task Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className={`font-semibold ${textPrimary}`}>{task.page_name}</h4>
+                        <Badge className={`${statusInfo.color} text-xs`}>
+                          {task.pm_approved && !task.ops_approved ? 'PM ✓ Ops ⏳' : statusInfo.label}
+                        </Badge>
+                      </div>
                       
-                      return (
-                        <div 
-                          key={task.task_id} 
-                          className={`p-3 rounded-lg ${isLocked ? 'opacity-50' : ''} ${isFullyApproved ? 'bg-green-500/10 border-green-500/30' : bgSecondary} border ${borderColor}`}
-                        >
-                          {/* Task Header */}
-                          <div className="flex items-start justify-between mb-2">
-                            <p className={`font-medium ${textPrimary} text-sm`}>{task.page_name}</p>
-                            <Badge className={`text-xs ${statusInfo.color}`}>
-                              {task.pm_approved && !task.ops_approved ? 'PM ✓ Ops ⏳' : statusInfo.label}
-                            </Badge>
+                      {/* Meta Info */}
+                      <div className="flex items-center gap-4 mb-3 flex-wrap">
+                        {task.assignee && (
+                          <div className="flex items-center gap-1">
+                            <User className="h-3 w-3 text-[#6366f1]" />
+                            <span className={`text-xs ${textSecondary}`}>{task.assignee}</span>
                           </div>
+                        )}
+                        {task.time_spent > 0 && (
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-purple-400" />
+                            <span className={`text-xs ${textSecondary}`}>
+                              {Math.floor(task.time_spent / 60)}h {task.time_spent % 60}m
+                            </span>
+                          </div>
+                        )}
+                        {task.link && (
+                          <a href={task.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-[#6366f1] hover:underline">
+                            <Link2 className="h-3 w-3" /> View {currentStageInfo?.label}
+                          </a>
+                        )}
+                      </div>
+                      
+                      {/* Corrections Remarks */}
+                      {task.displayStatus === 'corrections' && task.correction_remarks && (
+                        <div className="mb-3 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+                          <p className="text-xs text-red-400 font-medium">Corrections Needed:</p>
+                          <p className={`text-sm ${textSecondary} mt-1`}>{task.correction_remarks}</p>
+                        </div>
+                      )}
+                      
+                      {/* Action Buttons */}
+                      {!isLocked && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Not Started / Corrections - Show Start */}
+                          {(task.displayStatus === 'pending' || task.displayStatus === 'corrections') && (
+                            <Button 
+                              size="sm" 
+                              className="h-8 bg-blue-500 hover:bg-blue-600 gap-1"
+                              onClick={() => onTimerAction(task.task_id, 'start')}
+                            >
+                              <Play className="h-3 w-3" /> Start
+                            </Button>
+                          )}
                           
-                          {/* Assignee */}
-                          {task.assignee && (
-                            <div className="flex items-center gap-1 mb-2">
-                              <User className="h-3 w-3 text-[#6366f1]" />
-                              <span className={`text-xs ${textSecondary}`}>{task.assignee}</span>
+                          {/* In Progress - Show Pause and Finish */}
+                          {task.displayStatus === 'in_progress' && (
+                            <>
+                              <Button 
+                                size="sm" 
+                                className="h-8 bg-yellow-500 hover:bg-yellow-600 gap-1"
+                                onClick={() => onTimerAction(task.task_id, 'pause')}
+                              >
+                                <Pause className="h-3 w-3" /> Pause
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                className="h-8 bg-green-500 hover:bg-green-600 gap-1"
+                                onClick={() => setFinishModal({ open: true, task, stage: currentStage })}
+                              >
+                                <CheckCircle className="h-3 w-3" /> Finish
+                              </Button>
+                            </>
+                          )}
+                          
+                          {/* Paused - Show Resume and Finish */}
+                          {task.displayStatus === 'paused' && (
+                            <>
+                              <Button 
+                                size="sm" 
+                                className="h-8 bg-blue-500 hover:bg-blue-600 gap-1"
+                                onClick={() => onTimerAction(task.task_id, 'start')}
+                              >
+                                <Play className="h-3 w-3" /> Resume
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                className="h-8 bg-green-500 hover:bg-green-600 gap-1"
+                                onClick={() => setFinishModal({ open: true, task, stage: currentStage })}
+                              >
+                                <CheckCircle className="h-3 w-3" /> Finish
+                              </Button>
+                            </>
+                          )}
+                          
+                          {/* Waiting PM - Info */}
+                          {isPendingPM && (
+                            <div className={`text-xs ${textSecondary} flex items-center gap-1 py-2`}>
+                              <Clock className="h-3 w-3 text-orange-400" /> Waiting for PM approval...
                             </div>
                           )}
                           
-                          {/* Timer info */}
-                          {task.time_spent > 0 && (
-                            <div className="flex items-center gap-1 mb-2">
-                              <Clock className="h-3 w-3 text-purple-400" />
-                              <span className={`text-xs ${textSecondary}`}>
-                                {Math.floor(task.time_spent / 60)}h {task.time_spent % 60}m spent
-                              </span>
+                          {/* Waiting Ops - Info */}
+                          {isPendingOps && (
+                            <div className={`text-xs ${textSecondary} flex items-center gap-1 py-2`}>
+                              <Check className="h-3 w-3 text-green-400" /> PM Approved
+                              <Clock className="h-3 w-3 text-amber-400 ml-2" /> Waiting for Ops...
                             </div>
                           )}
                           
-                          {/* Remarks if corrections */}
-                          {task.displayStatus === 'corrections' && task.correction_remarks && (
-                            <div className="mb-2 p-2 bg-red-500/10 rounded-lg border border-red-500/30">
-                              <p className="text-xs text-red-400 font-medium">Corrections Needed:</p>
-                              <p className={`text-xs ${textSecondary} mt-1`}>{task.correction_remarks}</p>
-                            </div>
+                          {/* Fully Approved - Show Move button */}
+                          {isFullyApproved && canApprove && (
+                            <Button 
+                              size="sm" 
+                              className="h-8 bg-[#6366f1] hover:bg-[#5558e3] gap-1"
+                              onClick={() => onMoveNext(task.task_id, currentStage)}
+                            >
+                              <ArrowRight className="h-3 w-3" /> Move to Next Stage
+                            </Button>
                           )}
                           
-                          {/* Link if exists */}
-                          {task.link && (
-                            <div className="flex items-center gap-1 mb-2">
-                              <Link2 className="h-3 w-3 text-[#6366f1]" />
-                              <a href={task.link} target="_blank" rel="noopener noreferrer" className="text-xs text-[#6366f1] hover:underline truncate">
-                                View {stage.label}
-                              </a>
-                            </div>
-                          )}
-                          
-                          {/* Actions */}
-                          {!isLocked && (
-                            <div className="flex flex-col gap-2 pt-2 border-t border-dashed" style={{ borderColor: isDark ? '#3f3f46' : '#e5e7eb' }}>
-                              
-                              {/* Not Started - Show Start button */}
-                              {(task.displayStatus === 'pending' || task.displayStatus === 'corrections') && (
-                                <div className="flex gap-2">
-                                  <Button 
-                                    size="sm" 
-                                    className="h-7 flex-1 text-xs bg-blue-500 hover:bg-blue-600"
-                                    onClick={() => onTimerAction(task.task_id, 'start')}
-                                  >
-                                    <Play className="h-3 w-3 mr-1" /> Start
-                                  </Button>
-                                </div>
-                              )}
-                              
-                              {/* In Progress - Show Pause and Finish */}
-                              {task.displayStatus === 'in_progress' && (
-                                <div className="flex gap-2">
-                                  <Button 
-                                    size="sm" 
-                                    className="h-7 flex-1 text-xs bg-yellow-500 hover:bg-yellow-600"
-                                    onClick={() => onTimerAction(task.task_id, 'pause')}
-                                  >
-                                    <Pause className="h-3 w-3 mr-1" /> Pause
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    className="h-7 flex-1 text-xs bg-green-500 hover:bg-green-600"
-                                    onClick={() => setFinishModal({ open: true, task, stage: stage.id })}
-                                  >
-                                    <CheckCircle className="h-3 w-3 mr-1" /> Finish
-                                  </Button>
-                                </div>
-                              )}
-                              
-                              {/* Paused - Show Resume and Finish */}
-                              {task.displayStatus === 'paused' && (
-                                <div className="flex gap-2">
-                                  <Button 
-                                    size="sm" 
-                                    className="h-7 flex-1 text-xs bg-blue-500 hover:bg-blue-600"
-                                    onClick={() => onTimerAction(task.task_id, 'start')}
-                                  >
-                                    <Play className="h-3 w-3 mr-1" /> Resume
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    className="h-7 flex-1 text-xs bg-green-500 hover:bg-green-600"
-                                    onClick={() => setFinishModal({ open: true, task, stage: stage.id })}
-                                  >
-                                    <CheckCircle className="h-3 w-3 mr-1" /> Finish
-                                  </Button>
-                                </div>
-                              )}
-                              
-                              {/* Waiting PM Approval */}
-                              {isPendingPM && (
-                                <div className={`text-xs ${textSecondary} flex items-center gap-1 justify-center py-1`}>
-                                  <Clock className="h-3 w-3 text-orange-400" /> Waiting for PM approval...
-                                </div>
-                              )}
-                              
-                              {/* Waiting Ops Approval */}
-                              {isPendingOps && (
-                                <div className={`text-xs ${textSecondary} flex items-center gap-1 justify-center py-1`}>
-                                  <Clock className="h-3 w-3 text-amber-400" /> PM ✓ • Waiting for Ops approval...
-                                </div>
-                              )}
-                              
-                              {/* Fully Approved - Show Move button for PM */}
-                              {isFullyApproved && canApprove && (
-                                <Button 
-                                  size="sm" 
-                                  className="h-7 w-full text-xs bg-[#6366f1] hover:bg-[#5558e3]"
-                                  onClick={() => onMoveNext(task.task_id, stage.id)}
-                                >
-                                  <ArrowRight className="h-3 w-3 mr-1" /> Move to Next Stage
-                                </Button>
-                              )}
-                              
-                              {/* Approved but not by ops yet - only show for new workflow */}
-                              {task.displayStatus === 'approved' && hasNewWorkflowFlags && task.pm_approved && !task.ops_approved && (
-                                <div className={`text-center text-xs py-1 ${textSecondary}`}>
-                                  <Check className="h-3 w-3 text-green-400 inline mr-1" /> PM Approved
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {/* Locked message */}
-                          {isLocked && (
-                            <div className={`text-xs ${textSecondary} text-center pt-2`}>
-                              Complete previous stage first
+                          {/* Approved without ops (legacy) */}
+                          {task.displayStatus === 'approved' && hasNewWorkflowFlags && task.pm_approved && !task.ops_approved && (
+                            <div className={`text-xs py-2 ${textSecondary}`}>
+                              <Check className="h-3 w-3 text-green-400 inline mr-1" /> PM Approved
                             </div>
                           )}
                         </div>
-                      );
-                    })
-                  )}
+                      )}
+                      
+                      {/* Locked Message */}
+                      {isLocked && (
+                        <div className={`text-sm ${textSecondary} flex items-center gap-2 py-2`}>
+                          <Lock className="h-4 w-4" /> Complete previous stage first
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
       
       {/* Finish Modal with Link Input */}
