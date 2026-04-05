@@ -18,9 +18,16 @@ import { toast } from 'sonner';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
-// Website Types and Platforms
-const WEBSITE_TYPES = ['Landing Page', 'Business Website', 'Shopify Store', 'Web App', 'E-commerce', 'Portfolio'];
-const PLATFORMS = ['WordPress', 'Shopify', 'Wix', 'Webflow', 'Framer', 'AI Builder', 'Custom Code', 'React'];
+// Website Types
+const WEBSITE_TYPES = ['Landing Page', 'Business Website', 'Ecommerce', 'Web App'];
+
+// Platform options based on website type
+const PLATFORM_OPTIONS = {
+  'Landing Page': ['WordPress', 'Wix', 'Webflow', 'Framer', 'AI Builder', 'Custom Code'],
+  'Business Website': ['WordPress', 'Wix', 'Webflow', 'Framer', 'AI Builder', 'Custom Code'],
+  'Ecommerce': ['Shopify', 'Wix', 'WooCommerce'],
+  'Web App': ['AI Builder', 'Custom Code']
+};
 
 // Workflow Stage Definitions
 const WORKFLOW_STAGES = [
@@ -591,11 +598,11 @@ export default function DLOperationsPage() {
                   {/* Website Type */}
                   <div>
                     <label className={`text-base font-semibold ${textPrimary} block mb-3`}>Select Website Type</label>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {WEBSITE_TYPES.map(type => (
                         <button
                           key={type}
-                          onClick={() => setNewProject({ ...newProject, website_type: type })}
+                          onClick={() => setNewProject({ ...newProject, website_type: type, platform: '' })}
                           className={`p-4 rounded-xl border-2 transition-all text-left ${
                             newProject.website_type === type
                               ? 'border-[#6366f1] bg-[#6366f1]/10'
@@ -606,35 +613,40 @@ export default function DLOperationsPage() {
                           <p className={`text-xs ${textSecondary} mt-1`}>
                             {type === 'Landing Page' && 'Single page website'}
                             {type === 'Business Website' && 'Multi-page corporate site'}
-                            {type === 'Shopify Store' && 'E-commerce store'}
+                            {type === 'Ecommerce' && 'Online store'}
                             {type === 'Web App' && 'Custom web application'}
-                            {type === 'E-commerce' && 'Online store'}
-                            {type === 'Portfolio' && 'Showcase work'}
                           </p>
                         </button>
                       ))}
                     </div>
                   </div>
                   
-                  {/* Platform */}
-                  <div>
-                    <label className={`text-base font-semibold ${textPrimary} block mb-3`}>Select Platform</label>
-                    <div className="grid grid-cols-4 gap-3">
-                      {PLATFORMS.map(platform => (
-                        <button
-                          key={platform}
-                          onClick={() => setNewProject({ ...newProject, platform: platform })}
-                          className={`p-3 rounded-xl border-2 transition-all text-center ${
-                            newProject.platform === platform
-                              ? 'border-[#6366f1] bg-[#6366f1]/10'
-                              : `border-transparent ${bgSecondary} hover:border-[#6366f1]/50`
-                          }`}
-                        >
-                          <p className={`font-medium text-sm ${textPrimary}`}>{platform}</p>
-                        </button>
-                      ))}
+                  {/* Platform - Shows only when website type is selected */}
+                  {newProject.website_type && (
+                    <div>
+                      <label className={`text-base font-semibold ${textPrimary} block mb-3`}>
+                        Select Platform
+                        <span className={`text-sm font-normal ${textSecondary} ml-2`}>
+                          (for {newProject.website_type})
+                        </span>
+                      </label>
+                      <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                        {PLATFORM_OPTIONS[newProject.website_type]?.map(platform => (
+                          <button
+                            key={platform}
+                            onClick={() => setNewProject({ ...newProject, platform: platform })}
+                            className={`p-3 rounded-xl border-2 transition-all text-center ${
+                              newProject.platform === platform
+                                ? 'border-[#6366f1] bg-[#6366f1]/10'
+                                : `border-transparent ${bgSecondary} hover:border-[#6366f1]/50`
+                            }`}
+                          >
+                            <p className={`font-medium text-sm ${textPrimary}`}>{platform}</p>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                   {/* Selection Preview */}
                   {newProject.website_type && newProject.platform && (
