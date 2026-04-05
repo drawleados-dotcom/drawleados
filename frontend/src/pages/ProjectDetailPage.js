@@ -176,11 +176,20 @@ export default function ProjectDetailPage() {
   };
 
   // Add new page
-  const handleAddPage = async (pageName) => {
+  const handleAddPage = async (pageName, assignees = {}) => {
     try {
       await axios.post(
         `${API}/api/website-projects/projects/${projectId}/pages`,
-        { page_name: pageName },
+        { 
+          page_name: pageName,
+          content_assignee: assignees.content || null,
+          wireframe_assignee: assignees.wireframe || null,
+          ui_assignee: assignees.ui || null,
+          responsive_assignee: assignees.responsive || null,
+          dev_assignee: assignees.dev || null,
+          test_assignee: assignees.test || null,
+          delivery_assignee: assignees.delivery || null
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success('Page added successfully');
@@ -638,6 +647,10 @@ function PagesTab({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPage, setEditingPage] = useState(null);
   const [newPageName, setNewPageName] = useState('');
+  // Stage assignee states
+  const [stageAssignees, setStageAssignees] = useState({
+    content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: ''
+  });
   
   // Stage definitions for horizontal columns
   const stageColumns = [
@@ -701,19 +714,73 @@ function PagesTab({
   
   const handleAddPage = () => {
     if (newPageName.trim()) {
-      onAddPage(newPageName.trim());
+      onAddPage(newPageName.trim(), stageAssignees);
       setNewPageName('');
+      setStageAssignees({ content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: '' });
       setShowAddModal(false);
     }
   };
   
   const handleEditPage = () => {
     if (editingPage && newPageName.trim()) {
+      // Update page name
       onUpdatePage(editingPage.task_id, 'page_name', newPageName.trim());
+      // Update stage assignees
+      Object.entries(stageAssignees).forEach(([stage, assignee]) => {
+        if (assignee !== (editingPage[`${stage}_assignee`] || '')) {
+          onUpdatePage(editingPage.task_id, `${stage}_assignee`, assignee);
+        }
+      });
       setEditingPage(null);
       setNewPageName('');
+      setStageAssignees({ content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: '' });
     }
   };
+  
+  const openEditModal = (page) => {
+    setEditingPage(page);
+    setNewPageName(page.page_name);
+    setStageAssignees({
+      content: page.content_assignee || '',
+      wireframe: page.wireframe_assignee || '',
+      ui: page.ui_assignee || '',
+      responsive: page.responsive_assignee || '',
+      dev: page.dev_assignee || '',
+      test: page.test_assignee || '',
+      delivery: page.delivery_assignee || ''
+    });
+  };
+  
+  const closeModal = () => {
+    setShowAddModal(false);
+    setEditingPage(null);
+    setNewPageName('');
+    setStageAssignees({ content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: '' });
+  };
+  
+  // Assignee dropdown component for reuse
+  const AssigneeSelect = ({ stage, label, color }) => (
+    <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${color}`}></div>
+        <span className={`text-sm ${textPrimary}`}>{label}</span>
+      </div>
+      <Select 
+        value={stageAssignees[stage] || 'unassigned'} 
+        onValueChange={(val) => setStageAssignees(prev => ({...prev, [stage]: val === 'unassigned' ? '' : val}))}
+      >
+        <SelectTrigger className={`w-40 h-8 text-xs ${bgSecondary} border-none`}>
+          <SelectValue placeholder="Select Assignee" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="unassigned">Unassigned</SelectItem>
+          {teamMembers.map(m => (
+            <SelectItem key={m.user_id || m.name} value={m.name}>{m.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
   
   return (
     <div className="space-y-4">
@@ -829,7 +896,7 @@ function PagesTab({
                           size="sm"
                           variant="ghost"
                           className="h-7 w-7 p-0 hover:bg-blue-500/20"
-                          onClick={() => { setEditingPage(page); setNewPageName(page.page_name); }}
+                          onClick={() => openEditModal(page)}
                           title="Edit"
                           data-testid={`edit-page-${page.task_id}`}
                         >
@@ -869,24 +936,43 @@ function PagesTab({
       {/* Add Page Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="add-page-modal">
-          <div className={`${bgCard} rounded-xl p-6 w-full max-w-md border ${borderColor}`}>
+          <div className={`${bgCard} rounded-xl p-6 w-full max-w-lg border ${borderColor} max-h-[90vh] overflow-y-auto`}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-[#6366f1] flex items-center justify-center">
                 <Plus className="h-5 w-5 text-white" />
               </div>
               <h3 className={`text-lg font-semibold ${textPrimary}`}>Add New Page</h3>
             </div>
-            <Input
-              value={newPageName}
-              onChange={(e) => setNewPageName(e.target.value)}
-              placeholder="Enter page name (e.g., Home, About Us, Contact)"
-              className={`${bgSecondary} border-none mb-4`}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddPage()}
-              autoFocus
-              data-testid="new-page-name-input"
-            />
+            
+            {/* Page Name */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Page Name</label>
+              <Input
+                value={newPageName}
+                onChange={(e) => setNewPageName(e.target.value)}
+                placeholder="Enter page name (e.g., Home, About Us, Contact)"
+                className={`${bgSecondary} border-none`}
+                autoFocus
+                data-testid="new-page-name-input"
+              />
+            </div>
+            
+            {/* Stage Assignees */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${textPrimary} mb-3`}>Stage Assignees</label>
+              <div className={`space-y-3 p-4 rounded-lg ${bgSecondary}`}>
+                <AssigneeSelect stage="content" label="Content" color="bg-blue-500" />
+                <AssigneeSelect stage="wireframe" label="Wireframe" color="bg-purple-500" />
+                <AssigneeSelect stage="ui" label="UI Design" color="bg-pink-500" />
+                <AssigneeSelect stage="responsive" label="Responsive" color="bg-indigo-500" />
+                <AssigneeSelect stage="dev" label="Development" color="bg-green-500" />
+                <AssigneeSelect stage="test" label="Testing" color="bg-cyan-500" />
+                <AssigneeSelect stage="delivery" label="Delivery" color="bg-emerald-500" />
+              </div>
+            </div>
+            
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowAddModal(false); setNewPageName(''); }}>
+              <Button variant="outline" className="flex-1" onClick={closeModal}>
                 Cancel
               </Button>
               <Button 
@@ -905,24 +991,43 @@ function PagesTab({
       {/* Edit Page Modal */}
       {editingPage && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="edit-page-modal">
-          <div className={`${bgCard} rounded-xl p-6 w-full max-w-md border ${borderColor}`}>
+          <div className={`${bgCard} rounded-xl p-6 w-full max-w-lg border ${borderColor} max-h-[90vh] overflow-y-auto`}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-blue-500 flex items-center justify-center">
                 <Edit2 className="h-5 w-5 text-white" />
               </div>
               <h3 className={`text-lg font-semibold ${textPrimary}`}>Edit Page</h3>
             </div>
-            <Input
-              value={newPageName}
-              onChange={(e) => setNewPageName(e.target.value)}
-              placeholder="Enter page name"
-              className={`${bgSecondary} border-none mb-4`}
-              onKeyDown={(e) => e.key === 'Enter' && handleEditPage()}
-              autoFocus
-              data-testid="edit-page-name-input"
-            />
+            
+            {/* Page Name */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Page Name</label>
+              <Input
+                value={newPageName}
+                onChange={(e) => setNewPageName(e.target.value)}
+                placeholder="Enter page name"
+                className={`${bgSecondary} border-none`}
+                autoFocus
+                data-testid="edit-page-name-input"
+              />
+            </div>
+            
+            {/* Stage Assignees */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${textPrimary} mb-3`}>Stage Assignees</label>
+              <div className={`space-y-3 p-4 rounded-lg ${bgSecondary}`}>
+                <AssigneeSelect stage="content" label="Content" color="bg-blue-500" />
+                <AssigneeSelect stage="wireframe" label="Wireframe" color="bg-purple-500" />
+                <AssigneeSelect stage="ui" label="UI Design" color="bg-pink-500" />
+                <AssigneeSelect stage="responsive" label="Responsive" color="bg-indigo-500" />
+                <AssigneeSelect stage="dev" label="Development" color="bg-green-500" />
+                <AssigneeSelect stage="test" label="Testing" color="bg-cyan-500" />
+                <AssigneeSelect stage="delivery" label="Delivery" color="bg-emerald-500" />
+              </div>
+            </div>
+            
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => { setEditingPage(null); setNewPageName(''); }}>
+              <Button variant="outline" className="flex-1" onClick={closeModal}>
                 Cancel
               </Button>
               <Button 
@@ -954,6 +1059,8 @@ function TrackerBoard({
   const [linkUrl, setLinkUrl] = useState('');
   const [selectedStage, setSelectedStage] = useState(null);
   const [selectedApprover, setSelectedApprover] = useState('project_manager');
+  const [summaryModal, setSummaryModal] = useState({ open: false, task: null });
+  const [summaryTab, setSummaryTab] = useState('timeline');
   
   // Get stage order
   const getStageOrder = (stageId) => {
@@ -1388,12 +1495,14 @@ function TrackerBoard({
                           </a>
                         )}
                         
-                        {/* Edit */}
+                        {/* Edit - Opens Summary Modal */}
                         <Button 
                           size="sm"
                           variant="ghost"
                           className="h-8 w-8 p-0 hover:bg-blue-500/20"
-                          title="Edit"
+                          title="View Summary"
+                          onClick={() => setSummaryModal({ open: true, task })}
+                          data-testid={`summary-btn-${task.task_id}`}
                         >
                           <Edit2 className="h-4 w-4 text-blue-400" />
                         </Button>
@@ -1416,6 +1525,23 @@ function TrackerBoard({
           </table>
         )}
       </div>
+      
+      {/* Task Summary Modal */}
+      {summaryModal.open && summaryModal.task && (
+        <TaskSummaryModal
+          task={summaryModal.task}
+          stage={currentStage}
+          stages={stages}
+          stageTasks={stageTasks}
+          onClose={() => setSummaryModal({ open: false, task: null })}
+          isDark={isDark}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+        />
+      )}
       
       {/* Finish Modal with Link Input */}
       {finishModal.open && (
@@ -1616,6 +1742,391 @@ function LinkApprovalModal({
             data-testid="submit-link-btn"
           >
             <Send className="h-4 w-4" /> Submit for Approval
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== TASK SUMMARY MODAL ====================
+function TaskSummaryModal({ 
+  task, stage, stages, stageTasks, onClose,
+  isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary 
+}) {
+  const [activeTab, setActiveTab] = useState('timeline');
+  
+  // Format time duration
+  const formatDuration = (minutes) => {
+    if (!minutes || minutes === 0) return '-';
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}h ${mins}m`;
+    }
+    return `${minutes}m`;
+  };
+  
+  // Format date/time
+  const formatDateTime = (isoString) => {
+    if (!isoString) return '-';
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return '-';
+    }
+  };
+  
+  // Calculate duration between two dates in minutes
+  const calculateDuration = (startTime, endTime) => {
+    if (!startTime || !endTime) return null;
+    try {
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      return Math.round((end - start) / (1000 * 60));
+    } catch {
+      return null;
+    }
+  };
+  
+  // Get task data from all stages for this page
+  const getTaskHistory = () => {
+    const history = [];
+    stages.forEach(stg => {
+      const tasks = stageTasks[stg.id] || [];
+      const stageTask = tasks.find(t => t.page_id === task.page_id || t.task_id === task.task_id);
+      if (stageTask) {
+        history.push({
+          stage: stg,
+          task: stageTask
+        });
+      }
+    });
+    return history;
+  };
+  
+  const taskHistory = getTaskHistory();
+  const currentStageInfo = stages.find(s => s.id === stage);
+  const CurrentIcon = currentStageInfo?.icon || FileText;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="summary-modal">
+      <div className={`${bgCard} rounded-xl w-full max-w-2xl border ${borderColor} max-h-[90vh] overflow-hidden flex flex-col`}>
+        {/* Header */}
+        <div className={`p-6 border-b ${borderColor}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-xl ${currentStageInfo?.color || 'bg-[#6366f1]'} flex items-center justify-center`}>
+                <CurrentIcon className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h3 className={`text-xl font-bold ${textPrimary}`}>{task.page_name}</h3>
+                <p className={`text-sm ${textSecondary}`}>
+                  {currentStageInfo?.label || 'Task'} • {task.assignee || 'Unassigned'}
+                </p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={onClose} className="h-8 w-8 p-0">
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Tabs */}
+        <div className={`px-6 pt-4 border-b ${borderColor}`}>
+          <div className="flex gap-2">
+            {[
+              { id: 'timeline', label: 'Timeline' },
+              { id: 'stages', label: 'All Stages' },
+              { id: 'details', label: 'Details' }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                  activeTab === tab.id
+                    ? `bg-[#6366f1] text-white`
+                    : `${textSecondary} hover:bg-[#6366f1]/20`
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* Timeline Tab */}
+          {activeTab === 'timeline' && (
+            <div className="space-y-4">
+              <h4 className={`text-sm font-semibold ${textPrimary} mb-4`}>Work Timeline</h4>
+              
+              <div className="relative pl-8 space-y-6">
+                {/* Vertical line */}
+                <div className="absolute left-3 top-2 bottom-2 w-0.5 bg-gray-600/30" />
+                
+                {/* Work Started */}
+                <div className="relative">
+                  <div className={`absolute -left-5 w-4 h-4 rounded-full ${task.timer_started_at || task.started_at ? 'bg-green-500' : 'bg-gray-500/50'} flex items-center justify-center`}>
+                    <Play className="h-2 w-2 text-white" />
+                  </div>
+                  <div className={`${bgSecondary} rounded-lg p-3`}>
+                    <div className="flex items-center justify-between">
+                      <span className={`font-medium ${textPrimary}`}>Work Started</span>
+                      <span className={`text-sm ${task.timer_started_at || task.started_at ? 'text-green-400' : textSecondary}`}>
+                        {formatDateTime(task.timer_started_at || task.started_at)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Paused (if applicable) */}
+                {(task.paused_at || task.status === 'paused') && (
+                  <div className="relative">
+                    <div className="absolute -left-5 w-4 h-4 rounded-full bg-yellow-500 flex items-center justify-center">
+                      <Pause className="h-2 w-2 text-white" />
+                    </div>
+                    <div className={`${bgSecondary} rounded-lg p-3`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`font-medium ${textPrimary}`}>Paused</span>
+                        <span className="text-sm text-yellow-400">
+                          {formatDateTime(task.paused_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Time Spent */}
+                <div className="relative">
+                  <div className={`absolute -left-5 w-4 h-4 rounded-full bg-purple-500 flex items-center justify-center`}>
+                    <Timer className="h-2 w-2 text-white" />
+                  </div>
+                  <div className={`${bgSecondary} rounded-lg p-3`}>
+                    <div className="flex items-center justify-between">
+                      <span className={`font-medium ${textPrimary}`}>Time Spent</span>
+                      <span className="text-sm text-purple-400">
+                        {formatDuration(task.time_spent)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Submitted for PM */}
+                {(task.pm_submitted_at || task.status === 'waiting_pm' || task.pm_approved) && (
+                  <div className="relative">
+                    <div className={`absolute -left-5 w-4 h-4 rounded-full ${task.pm_approved ? 'bg-green-500' : 'bg-orange-500'} flex items-center justify-center`}>
+                      <Send className="h-2 w-2 text-white" />
+                    </div>
+                    <div className={`${bgSecondary} rounded-lg p-3`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`font-medium ${textPrimary}`}>Submitted to PM</span>
+                        <span className={`text-sm ${task.pm_approved ? 'text-green-400' : 'text-orange-400'}`}>
+                          {formatDateTime(task.pm_submitted_at || task.submitted_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* PM Approved */}
+                {task.pm_approved && (
+                  <div className="relative">
+                    <div className="absolute -left-5 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                      <Check className="h-2 w-2 text-white" />
+                    </div>
+                    <div className={`${bgSecondary} rounded-lg p-3`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`font-medium ${textPrimary}`}>PM Approved</span>
+                        <span className="text-sm text-green-400">
+                          {formatDateTime(task.pm_approved_at)}
+                        </span>
+                      </div>
+                      {task.pm_approved_at && task.pm_submitted_at && (
+                        <p className={`text-xs ${textSecondary}`}>
+                          Approval time: {formatDuration(calculateDuration(task.pm_submitted_at || task.submitted_at, task.pm_approved_at))}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Ops Approved */}
+                {task.ops_approved && (
+                  <div className="relative">
+                    <div className="absolute -left-5 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                      <CheckCircle2 className="h-2 w-2 text-white" />
+                    </div>
+                    <div className={`${bgSecondary} rounded-lg p-3`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`font-medium ${textPrimary}`}>Operations Approved</span>
+                        <span className="text-sm text-emerald-400">
+                          {formatDateTime(task.ops_approved_at)}
+                        </span>
+                      </div>
+                      {task.ops_approved_at && task.pm_approved_at && (
+                        <p className={`text-xs ${textSecondary}`}>
+                          Approval time: {formatDuration(calculateDuration(task.pm_approved_at, task.ops_approved_at))}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Delivered */}
+                {task.delivered_at && (
+                  <div className="relative">
+                    <div className="absolute -left-5 w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                      <Truck className="h-2 w-2 text-white" />
+                    </div>
+                    <div className={`${bgSecondary} rounded-lg p-3`}>
+                      <div className="flex items-center justify-between">
+                        <span className={`font-medium ${textPrimary}`}>Delivered</span>
+                        <span className="text-sm text-blue-400">
+                          {formatDateTime(task.delivered_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* All Stages Tab */}
+          {activeTab === 'stages' && (
+            <div className="space-y-3">
+              <h4 className={`text-sm font-semibold ${textPrimary} mb-4`}>Progress Across All Stages</h4>
+              
+              {stages.map(stg => {
+                const stgTasks = stageTasks[stg.id] || [];
+                const stgTask = stgTasks.find(t => t.page_id === task.page_id || t.task_id === task.task_id);
+                const Icon = stg.icon;
+                const isApproved = stgTask?.status === 'approved' && stgTask?.ops_approved;
+                const isPending = stgTask?.status === 'waiting_pm' || stgTask?.status === 'waiting_ops';
+                const isInProgress = stgTask?.status === 'in_progress';
+                
+                return (
+                  <div key={stg.id} className={`${bgSecondary} rounded-lg p-4`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg ${stg.color} flex items-center justify-center`}>
+                          <Icon className="h-5 w-5 text-white" />
+                        </div>
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{stg.label}</p>
+                          <p className={`text-xs ${textSecondary}`}>
+                            {stgTask?.assignee || 'Unassigned'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isApproved && (
+                          <Badge className="bg-green-500/20 text-green-400">
+                            <Check className="h-3 w-3 mr-1" /> Approved
+                          </Badge>
+                        )}
+                        {isPending && (
+                          <Badge className="bg-orange-500/20 text-orange-400">
+                            <Clock className="h-3 w-3 mr-1" /> Pending
+                          </Badge>
+                        )}
+                        {isInProgress && (
+                          <Badge className="bg-blue-500/20 text-blue-400">
+                            <Play className="h-3 w-3 mr-1" /> In Progress
+                          </Badge>
+                        )}
+                        {!stgTask && (
+                          <Badge className="bg-gray-500/20 text-gray-400">
+                            Not Started
+                          </Badge>
+                        )}
+                        {stgTask?.time_spent > 0 && (
+                          <span className={`text-xs ${textSecondary}`}>
+                            <Timer className="h-3 w-3 inline mr-1" />
+                            {formatDuration(stgTask.time_spent)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          
+          {/* Details Tab */}
+          {activeTab === 'details' && (
+            <div className="space-y-4">
+              <h4 className={`text-sm font-semibold ${textPrimary} mb-4`}>Task Details</h4>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`${bgSecondary} rounded-lg p-4`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Status</p>
+                  <Badge className={`${
+                    task.status === 'approved' ? 'bg-green-500/20 text-green-400' :
+                    task.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                    task.status === 'waiting_pm' || task.status === 'waiting_ops' ? 'bg-orange-500/20 text-orange-400' :
+                    'bg-gray-500/20 text-gray-400'
+                  }`}>
+                    {task.pm_approved && !task.ops_approved ? 'PM Approved' : 
+                     task.ops_approved ? 'Fully Approved' : 
+                     task.status?.replace(/_/g, ' ').toUpperCase() || 'Pending'}
+                  </Badge>
+                </div>
+                
+                <div className={`${bgSecondary} rounded-lg p-4`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Assignee</p>
+                  <p className={`font-medium ${textPrimary}`}>{task.assignee || 'Unassigned'}</p>
+                </div>
+                
+                <div className={`${bgSecondary} rounded-lg p-4`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Due Date</p>
+                  <p className={`font-medium ${textPrimary}`}>{task.due_date || 'Not set'}</p>
+                </div>
+                
+                <div className={`${bgSecondary} rounded-lg p-4`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Time Spent</p>
+                  <p className={`font-medium ${textPrimary}`}>{formatDuration(task.time_spent)}</p>
+                </div>
+              </div>
+              
+              {task.link && (
+                <div className={`${bgSecondary} rounded-lg p-4`}>
+                  <p className={`text-xs ${textSecondary} mb-2`}>Work Link</p>
+                  <a 
+                    href={task.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#6366f1] hover:underline flex items-center gap-2"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    View Work
+                  </a>
+                </div>
+              )}
+              
+              {task.remarks && (
+                <div className={`${bgSecondary} rounded-lg p-4`}>
+                  <p className={`text-xs ${textSecondary} mb-2`}>Remarks</p>
+                  <p className={`text-sm ${textPrimary}`}>{task.remarks}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Footer */}
+        <div className={`p-4 border-t ${borderColor} flex justify-end`}>
+          <Button onClick={onClose} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+            Close
           </Button>
         </div>
       </div>

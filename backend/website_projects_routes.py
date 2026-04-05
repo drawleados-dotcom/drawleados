@@ -122,18 +122,28 @@ class PageTaskCreate(BaseModel):
     wireframe_url: Optional[str] = None
     wireframe_due: Optional[str] = None
     wireframe_status: str = "To-Do"
+    wireframe_assignee: Optional[str] = None
     # UI phase
     ui_url: Optional[str] = None
     ui_due: Optional[str] = None
     ui_status: str = "To-Do"
+    ui_assignee: Optional[str] = None
     # Content phase
     content_url: Optional[str] = None
     content_due: Optional[str] = None
     content_status: str = "To-Do"
+    content_assignee: Optional[str] = None
+    # Responsive phase
+    responsive_assignee: Optional[str] = None
     # Dev phase
     dev_url: Optional[str] = None
     dev_due: Optional[str] = None
     dev_status: str = "To-Do"
+    dev_assignee: Optional[str] = None
+    # Test phase
+    test_assignee: Optional[str] = None
+    # Delivery phase
+    delivery_assignee: Optional[str] = None
     # Overall
     overall_status: str = "To-Do"
     assigned_to: Optional[str] = None
@@ -157,11 +167,17 @@ class PageTaskUpdate(BaseModel):
     content_due: Optional[str] = None
     content_status: Optional[str] = None
     content_assignee: Optional[str] = None
+    # Responsive phase
+    responsive_assignee: Optional[str] = None
     # Dev phase
     dev_url: Optional[str] = None
     dev_due: Optional[str] = None
     dev_status: Optional[str] = None
     dev_assignee: Optional[str] = None
+    # Test phase
+    test_assignee: Optional[str] = None
+    # Delivery phase
+    delivery_assignee: Optional[str] = None
     # Overall
     overall_status: Optional[str] = None
     assigned_to: Optional[str] = None
@@ -587,15 +603,22 @@ async def add_page_task(request: Request, project_id: str, task_data: PageTaskCr
         "wireframe_url": task_data.wireframe_url,
         "wireframe_due": task_data.wireframe_due,
         "wireframe_status": task_data.wireframe_status,
+        "wireframe_assignee": task_data.wireframe_assignee,
         "ui_url": task_data.ui_url,
         "ui_due": task_data.ui_due,
         "ui_status": task_data.ui_status,
+        "ui_assignee": task_data.ui_assignee,
         "content_url": task_data.content_url,
         "content_due": task_data.content_due,
         "content_status": task_data.content_status,
+        "content_assignee": task_data.content_assignee,
+        "responsive_assignee": task_data.responsive_assignee,
         "dev_url": task_data.dev_url,
         "dev_due": task_data.dev_due,
         "dev_status": task_data.dev_status,
+        "dev_assignee": task_data.dev_assignee,
+        "test_assignee": task_data.test_assignee,
+        "delivery_assignee": task_data.delivery_assignee,
         "overall_status": task_data.overall_status,
         "assigned_to": task_data.assigned_to,
         "notes": task_data.notes,
