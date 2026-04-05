@@ -33,13 +33,13 @@ const DEPARTMENTS = [
 
 // Website stage tabs
 const WEBSITE_STAGES = [
-  { id: 'all', label: 'All Stages' },
+  { id: 'all', label: 'All' },
   { id: 'content', label: 'Content' },
   { id: 'wireframe', label: 'Wireframe' },
   { id: 'ui', label: 'UI Design' },
   { id: 'responsive', label: 'Responsive' },
-  { id: 'development', label: 'Development' },
-  { id: 'testing', label: 'Testing' },
+  { id: 'dev', label: 'Development' },
+  { id: 'test', label: 'Testing' },
   { id: 'delivery', label: 'Delivery' }
 ];
 
@@ -99,7 +99,12 @@ export default function ApprovalsPage() {
   const filteredApprovals = approvals.filter(a => {
     // Stage filter (for website department)
     if (activeTab === 'website' && activeStage !== 'all') {
-      if (a.stage?.toLowerCase() !== activeStage) return false;
+      // Normalize stage name for comparison
+      let stage = (a.stage || '').toLowerCase().trim();
+      if (stage === 'development') stage = 'dev';
+      if (stage === 'testing') stage = 'test';
+      if (stage === 'ui design') stage = 'ui';
+      if (stage !== activeStage) return false;
     }
     // Search filter
     if (searchTerm) {
@@ -119,8 +124,14 @@ export default function ApprovalsPage() {
     approvals.forEach(a => {
       if (a.department === 'website') {
         counts.all++;
-        const stage = a.stage?.toLowerCase();
-        if (stage && counts[stage] !== undefined) {
+        // Normalize stage name to match our IDs
+        let stage = (a.stage || '').toLowerCase().trim();
+        // Handle variations
+        if (stage === 'development') stage = 'dev';
+        if (stage === 'testing') stage = 'test';
+        if (stage === 'ui design') stage = 'ui';
+        
+        if (counts[stage] !== undefined) {
           counts[stage]++;
         }
       }
@@ -318,10 +329,10 @@ export default function ApprovalsPage() {
             </TabsList>
           </div>
           
-          {/* Stage Tabs (for Website department) */}
+          {/* Stage Sub-Tabs (for Website department) */}
           {activeTab === 'website' && (
-            <div className={`px-6 py-2 border-b ${borderColor} ${bgSecondary} overflow-x-auto`}>
-              <div className="flex gap-2">
+            <div className={`px-6 py-3 border-b ${borderColor} ${bgCard}`}>
+              <div className="flex items-center gap-1 overflow-x-auto">
                 {WEBSITE_STAGES.map(stage => {
                   const count = stageCounts[stage.id] || 0;
                   const isActive = activeStage === stage.id;
@@ -329,20 +340,23 @@ export default function ApprovalsPage() {
                     <button
                       key={stage.id}
                       onClick={() => setActiveStage(stage.id)}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
                         isActive 
-                          ? 'bg-[#6366f1] text-white' 
-                          : `${bgCard} ${textSecondary} hover:${textPrimary}`
+                          ? 'bg-[#6366f1] text-white shadow-md' 
+                          : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20 hover:text-[#6366f1]`
                       }`}
+                      data-testid={`stage-tab-${stage.id}`}
                     >
                       {stage.label}
-                      {count > 0 && (
-                        <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${
-                          isActive ? 'bg-white/20' : 'bg-orange-500/20 text-orange-400'
-                        }`}>
-                          {count}
-                        </span>
-                      )}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                        isActive 
+                          ? 'bg-white/20 text-white' 
+                          : count > 0 
+                            ? 'bg-orange-500 text-white' 
+                            : `${bgCard} ${textSecondary}`
+                      }`}>
+                        {count}
+                      </span>
                     </button>
                   );
                 })}
