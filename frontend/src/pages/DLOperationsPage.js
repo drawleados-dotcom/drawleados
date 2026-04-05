@@ -126,20 +126,24 @@ export default function DLOperationsPage() {
   const [mainTab, setMainTab] = useState('dashboard'); // dashboard | projects
   const [showFilters, setShowFilters] = useState(false);
   
-  // Part 1 - Project Overview Filters
-  const [overviewDateType, setOverviewDateType] = useState('all'); // all, date, range, month, year
-  const [overviewDate, setOverviewDate] = useState('');
+  // Get current date in YYYY-MM-DD format
+  const getCurrentDate = () => new Date().toISOString().split('T')[0];
+  const getCurrentMonth = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+  
+  // Part 1 - Project Overview Filters (default to current date)
+  const [overviewDateType, setOverviewDateType] = useState('date'); // all, date, range, month, year
+  const [overviewDate, setOverviewDate] = useState(getCurrentDate());
   const [overviewDateStart, setOverviewDateStart] = useState('');
   const [overviewDateEnd, setOverviewDateEnd] = useState('');
-  const [overviewMonth, setOverviewMonth] = useState('');
+  const [overviewMonth, setOverviewMonth] = useState(getCurrentMonth());
   const [overviewYear, setOverviewYear] = useState(new Date().getFullYear().toString());
   
-  // Part 2 - Stage Task Board
-  const [taskDateType, setTaskDateType] = useState('all'); // all, date, range, month, year
-  const [taskDate, setTaskDate] = useState('');
+  // Part 2 - Stage Task Board (default to current date)
+  const [taskDateType, setTaskDateType] = useState('date'); // all, date, range, month, year
+  const [taskDate, setTaskDate] = useState(getCurrentDate());
   const [taskDateStart, setTaskDateStart] = useState('');
   const [taskDateEnd, setTaskDateEnd] = useState('');
-  const [taskMonth, setTaskMonth] = useState('');
+  const [taskMonth, setTaskMonth] = useState(getCurrentMonth());
   const [taskYear, setTaskYear] = useState(new Date().getFullYear().toString());
   const [selectedTaskStage, setSelectedTaskStage] = useState('content'); // Currently selected stage
   const [taskViewMode, setTaskViewMode] = useState('task'); // task | project
