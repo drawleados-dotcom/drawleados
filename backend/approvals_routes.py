@@ -12,10 +12,25 @@ def set_db(database):
     db = database
 
 async def get_current_user(request: Request):
-    """Get current user from request state"""
-    if not hasattr(request.state, 'user') or not request.state.user:
+    """Get current user from session token"""
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            session_token = auth_header[7:]
+    
+    if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return request.state.user
+    
+    session = await db.user_sessions.find_one({"session_token": session_token})
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return user
 
 @approvals_router.get("/pending")
 async def get_pending_approvals(request: Request, department: str = "", date: str = ""):
@@ -67,6 +82,13 @@ async def get_pending_approvals(request: Request, department: str = "", date: st
             {"_id": 0, "name": 1}
         )
         
+        # Get submitter info
+        submitter = await db.users.find_one(
+            {"user_id": task.get("submitted_by")},
+            {"_id": 0, "name": 1}
+        )
+        submitter_name = submitter.get("name") if submitter else task.get("assignee", "Unknown")
+        
         approvals.append({
             "approval_id": task["task_id"],
             "type": "website_stage",
@@ -76,8 +98,9 @@ async def get_pending_approvals(request: Request, department: str = "", date: st
             "stage": task.get("stage", "").title(),
             "link": task.get("link", ""),
             "submitted_by": task.get("submitted_by"),
-            "submitted_by_name": task.get("assignee", "Unknown"),
+            "submitted_by_name": submitter_name,
             "submitted_at": task.get("submitted_at"),
+            "assignee_type": task.get("assignee_type", "operations"),
             "priority": "normal",
             "status": "pending"
         })

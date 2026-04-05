@@ -326,6 +326,16 @@ function ApprovalCard({ approval, onApprove, onReject, isDark, bgCard, bgSeconda
                   {new Date(approval.submitted_at).toLocaleString()}
                 </span>
               </div>
+              {approval.assignee_type && (
+                <Badge className={`text-xs ${
+                  approval.assignee_type === 'ceo' ? 'bg-red-500/20 text-red-400' :
+                  approval.assignee_type === 'project_manager' ? 'bg-purple-500/20 text-purple-400' :
+                  'bg-blue-500/20 text-blue-400'
+                }`}>
+                  {approval.assignee_type === 'ceo' ? 'CEO' : 
+                   approval.assignee_type === 'project_manager' ? 'PM' : 'Operations'}
+                </Badge>
+              )}
               {approval.link && (
                 <a 
                   href={approval.link} 

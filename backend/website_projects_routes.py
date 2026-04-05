@@ -1421,21 +1421,27 @@ async def convert_pages_to_tasks(project_id: str, request: Request):
 
 @website_projects_router.put("/stage-tasks/{task_id}/submit")
 async def submit_task_for_approval(task_id: str, request: Request, data: dict = Body(...)):
-    """Submit a task for approval with optional link"""
+    """Submit a task for approval with optional link and approver assignment"""
     user = await get_current_user(request)
     stage = data.get("stage")
     link = data.get("link", "")
+    assignee_type = data.get("assignee_type", "operations")  # operations, project_manager, ceo
     now = datetime.now(timezone.utc)
     
     task = await db.website_stage_tasks.find_one({"task_id": task_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
+    # Get project info for the approval
+    project = await db.website_projects.find_one({"project_id": task.get("project_id")})
+    project_name = project.get("name") if project else "Unknown Project"
+    
     # Update task status to waiting_approval (submitted)
     update_data = {
         "status": "waiting_approval",
         "submitted_at": now.isoformat(),
-        "submitted_by": user["user_id"]
+        "submitted_by": user["user_id"],
+        "assignee_type": assignee_type
     }
     
     if link:
@@ -1450,6 +1456,7 @@ async def submit_task_for_approval(task_id: str, request: Request, data: dict = 
                     "action": "submitted",
                     "stage": stage,
                     "link": link,
+                    "assignee_type": assignee_type,
                     "by": user["name"],
                     "at": now.isoformat()
                 }

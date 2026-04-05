@@ -172,12 +172,12 @@ export default function ProjectDetailPage() {
   };
 
   // Submit task for approval
-  // Submit task for approval with link
-  const handleSubmitForApproval = async (taskId, stage, link = '') => {
+  // Submit task for approval with link and approver assignment
+  const handleSubmitForApproval = async (taskId, stage, link = '', assignee_type = 'operations') => {
     try {
       await axios.put(
         `${API}/api/website-projects/stage-tasks/${taskId}/submit`,
-        { stage, link },
+        { stage, link, assignee_type },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success('Submitted for approval');
@@ -738,11 +738,11 @@ function TrackerBoard({
     };
   };
   
-  const handleAddLink = async () => {
+  const handleAddLink = async (approver = 'operations') => {
     if (!linkUrl.trim() || !linkModal.task) return;
     try {
-      // Save link and submit for approval
-      await onSubmit(linkModal.task.task_id, linkModal.stage, linkUrl);
+      // Save link and submit for approval with selected approver
+      await onSubmit(linkModal.task.task_id, linkModal.stage, linkUrl, approver);
       setLinkModal({ open: false, task: null, stage: null });
       setLinkUrl('');
     } catch (error) {
@@ -1010,6 +1010,126 @@ function TrackerBoard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ==================== LINK APPROVAL MODAL ====================
+function LinkApprovalModal({ 
+  isOpen, task, stage, stages, linkUrl, setLinkUrl, onClose, onSubmit,
+  isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary 
+}) {
+  const [selectedApprover, setSelectedApprover] = useState('operations');
+  
+  const approverOptions = [
+    { value: 'operations', label: 'Operations Team', description: 'For routine task approvals' },
+    { value: 'project_manager', label: 'Project Manager', description: 'For project-specific decisions' },
+    { value: 'ceo', label: 'CEO', description: 'For critical business decisions' }
+  ];
+  
+  const stageInfo = stages?.find(s => s.id === stage);
+  const StageIcon = stageInfo?.icon || FileText;
+  
+  const handleSubmit = () => {
+    if (!linkUrl.trim()) {
+      return;
+    }
+    onSubmit(selectedApprover);
+  };
+  
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" data-testid="link-approval-modal">
+      <div className={`${bgCard} rounded-xl p-6 w-full max-w-lg border ${borderColor}`}>
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-6">
+          <div className={`w-12 h-12 rounded-xl ${stageInfo?.color || 'bg-[#6366f1]'} flex items-center justify-center`}>
+            <StageIcon className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h3 className={`text-lg font-semibold ${textPrimary}`}>Submit {stageInfo?.label || 'Task'}</h3>
+            <p className={`text-sm ${textSecondary}`}>{task?.page_name}</p>
+          </div>
+        </div>
+        
+        {/* Link Input */}
+        <div className="mb-6">
+          <label className={`block text-sm font-medium ${textPrimary} mb-2`}>
+            {stageInfo?.label || 'Task'} Link
+          </label>
+          <Input
+            value={linkUrl}
+            onChange={(e) => setLinkUrl(e.target.value)}
+            placeholder={`Enter ${stageInfo?.label || 'work'} link (e.g., Figma, Google Docs, etc.)`}
+            className={`${bgSecondary} border-none`}
+            data-testid="link-input"
+          />
+          <p className={`text-xs ${textSecondary} mt-1`}>
+            Paste the link to your completed work for this stage
+          </p>
+        </div>
+        
+        {/* Approver Selection */}
+        <div className="mb-6">
+          <label className={`block text-sm font-medium ${textPrimary} mb-2`}>
+            Assign Approver
+          </label>
+          <div className="space-y-2">
+            {approverOptions.map(option => (
+              <label 
+                key={option.value}
+                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                  selectedApprover === option.value 
+                    ? 'bg-[#6366f1]/20 border-2 border-[#6366f1]' 
+                    : `${bgSecondary} border-2 border-transparent hover:border-[#6366f1]/30`
+                }`}
+                data-testid={`approver-option-${option.value}`}
+              >
+                <input
+                  type="radio"
+                  name="approver"
+                  value={option.value}
+                  checked={selectedApprover === option.value}
+                  onChange={(e) => setSelectedApprover(e.target.value)}
+                  className="sr-only"
+                />
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                  selectedApprover === option.value ? 'border-[#6366f1] bg-[#6366f1]' : 'border-gray-500'
+                }`}>
+                  {selectedApprover === option.value && (
+                    <Check className="h-3 w-3 text-white" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className={`font-medium ${textPrimary}`}>{option.label}</p>
+                  <p className={`text-xs ${textSecondary}`}>{option.description}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+        
+        {/* Actions */}
+        <div className="flex gap-3">
+          <Button 
+            variant="outline" 
+            className="flex-1" 
+            onClick={onClose}
+            data-testid="cancel-link-btn"
+          >
+            Cancel
+          </Button>
+          <Button 
+            className="flex-1 bg-[#6366f1] hover:bg-[#5558e3] gap-2"
+            onClick={handleSubmit}
+            disabled={!linkUrl.trim()}
+            data-testid="submit-link-btn"
+          >
+            <Send className="h-4 w-4" /> Submit for Approval
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
