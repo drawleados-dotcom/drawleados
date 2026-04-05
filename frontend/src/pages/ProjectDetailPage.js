@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  ArrowLeft, Globe, Calendar, User, Users, FileText, Settings, Palette, 
+  ArrowLeft, ArrowRight, Globe, Calendar, User, Users, FileText, Settings, Palette, 
   ChevronDown, ChevronRight, Check, Clock, Play, Pause, Send,
   MessageSquare, CheckCircle2, AlertCircle, RefreshCw, X,
   Eye, Edit2, Trash2, Plus, Link2, ExternalLink, Timer, Layers,
@@ -21,16 +21,26 @@ import { toast } from 'sonner';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
-// Stage definitions with colors
+// Stage definitions with colors - Sequential workflow
 const WORKFLOW_STAGES = [
-  { id: 'tasks', label: 'Tasks', icon: ClipboardCheck, color: 'bg-yellow-500', textColor: 'text-yellow-400' },
-  { id: 'content', label: 'Content', icon: FileText, color: 'bg-blue-500', textColor: 'text-blue-400' },
-  { id: 'wireframe', label: 'Wireframe', icon: PenTool, color: 'bg-purple-500', textColor: 'text-purple-400' },
-  { id: 'ui', label: 'UI Design', icon: Palette, color: 'bg-pink-500', textColor: 'text-pink-400' },
-  { id: 'dev', label: 'Development', icon: Code, color: 'bg-green-500', textColor: 'text-green-400' },
-  { id: 'test', label: 'Testing', icon: TestTube, color: 'bg-cyan-500', textColor: 'text-cyan-400' },
-  { id: 'delivery', label: 'Delivery', icon: Truck, color: 'bg-emerald-500', textColor: 'text-emerald-400' }
+  { id: 'content', label: 'Content', icon: FileText, color: 'bg-blue-500', textColor: 'text-blue-400', order: 1 },
+  { id: 'wireframe', label: 'Wireframe', icon: PenTool, color: 'bg-purple-500', textColor: 'text-purple-400', order: 2 },
+  { id: 'ui', label: 'UI Design', icon: Palette, color: 'bg-pink-500', textColor: 'text-pink-400', order: 3 },
+  { id: 'responsive', label: 'Responsive', icon: Layers, color: 'bg-indigo-500', textColor: 'text-indigo-400', order: 4 },
+  { id: 'dev', label: 'Development', icon: Code, color: 'bg-green-500', textColor: 'text-green-400', order: 5 },
+  { id: 'test', label: 'Testing', icon: TestTube, color: 'bg-cyan-500', textColor: 'text-cyan-400', order: 6 },
+  { id: 'delivery', label: 'Delivery', icon: Truck, color: 'bg-emerald-500', textColor: 'text-emerald-400', order: 7 }
 ];
+
+// Task status types
+const TASK_STATUS = {
+  locked: { label: 'Locked', color: 'bg-gray-600/50 text-gray-500', icon: '🔒' },
+  pending: { label: 'Pending', color: 'bg-gray-500/20 text-gray-400', icon: '⏳' },
+  in_progress: { label: 'In Progress', color: 'bg-blue-500/20 text-blue-400', icon: '🔄' },
+  waiting_approval: { label: 'Waiting Approval', color: 'bg-orange-500/20 text-orange-400', icon: '⏰' },
+  approved: { label: 'Approved', color: 'bg-green-500/20 text-green-400', icon: '✅' },
+  corrections: { label: 'Corrections', color: 'bg-red-500/20 text-red-400', icon: '❌' }
+};
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -162,15 +172,17 @@ export default function ProjectDetailPage() {
   };
 
   // Submit task for approval
-  const handleSubmitForApproval = async (taskId, stage) => {
+  // Submit task for approval with link
+  const handleSubmitForApproval = async (taskId, stage, link = '') => {
     try {
       await axios.put(
         `${API}/api/website-projects/stage-tasks/${taskId}/submit`,
-        { stage },
+        { stage, link },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast.success('Submitted for approval');
       loadStageTasks();
+      loadProject();
     } catch (error) {
       toast.error('Failed to submit');
     }
@@ -655,30 +667,87 @@ function TrackerBoard({
 }) {
   const [correctionsModal, setCorrectionsModal] = useState({ open: false, task: null, stage: null });
   const [remarks, setRemarks] = useState('');
+  const [linkModal, setLinkModal] = useState({ open: false, task: null, stage: null });
+  const [linkUrl, setLinkUrl] = useState('');
   
-  const getTasksForStage = (stageId) => {
-    if (stageTasks[stageId]) return stageTasks[stageId];
+  // Get stage order
+  const getStageOrder = (stageId) => {
+    const stage = stages.find(s => s.id === stageId);
+    return stage?.order || 0;
+  };
+  
+  // Check if previous stage is approved for a page
+  const isPreviousStageApproved = (pageId, currentStageId) => {
+    const currentOrder = getStageOrder(currentStageId);
+    if (currentOrder <= 1) return true; // Content is first stage, always unlocked
     
-    // For "tasks" stage, return empty - tasks need to be created explicitly
-    if (stageId === 'tasks') {
-      return stageTasks['tasks'] || [];
+    const prevStage = stages.find(s => s.order === currentOrder - 1);
+    if (!prevStage) return true;
+    
+    // Check if the previous stage task is approved
+    const prevTasks = stageTasks[prevStage.id] || [];
+    const prevTask = prevTasks.find(t => t.page_id === pageId);
+    return prevTask?.status === 'approved';
+  };
+  
+  // Get task status with lock check
+  const getTaskStatus = (task, stageId) => {
+    const isLocked = !isPreviousStageApproved(task.page_id || task.task_id, stageId);
+    if (isLocked) return 'locked';
+    return task.status || 'pending';
+  };
+  
+  // Get tasks for stage with status
+  const getTasksForStage = (stageId) => {
+    if (stageTasks[stageId]) {
+      return stageTasks[stageId].map(t => ({
+        ...t,
+        displayStatus: getTaskStatus(t, stageId)
+      }));
     }
     
-    return pages.map(page => ({
-      task_id: `${page.task_id}_${stageId}`,
-      page_id: page.task_id,
-      page_name: page.page_name,
-      stage: stageId,
-      assignee: page[`${stageId}_assignee`],
-      due_date: page[`${stageId}_due`],
-      status: page[`${stageId}_status`] || 'pending',
-      url: page[`${stageId}_url`],
-      time_spent: 0
-    })).filter(t => {
+    return pages.map(page => {
+      const task = {
+        task_id: `${page.task_id}_${stageId}`,
+        page_id: page.task_id,
+        page_name: page.page_name,
+        stage: stageId,
+        assignee: page[`${stageId}_assignee`],
+        due_date: page[`${stageId}_due`],
+        status: page[`${stageId}_status`] || 'pending',
+        url: page[`${stageId}_url`],
+        link: page[`${stageId}_link`]
+      };
+      task.displayStatus = getTaskStatus(task, stageId);
+      return task;
+    }).filter(t => {
       if (assigneeFilter !== 'all' && t.assignee !== assigneeFilter) return false;
       if (dateFilter && t.due_date !== dateFilter) return false;
       return true;
     });
+  };
+  
+  // Count tasks by status
+  const getStageStats = (stageId) => {
+    const tasks = getTasksForStage(stageId);
+    return {
+      total: tasks.length,
+      approved: tasks.filter(t => t.displayStatus === 'approved').length,
+      waiting: tasks.filter(t => t.displayStatus === 'waiting_approval').length,
+      locked: tasks.filter(t => t.displayStatus === 'locked').length
+    };
+  };
+  
+  const handleAddLink = async () => {
+    if (!linkUrl.trim() || !linkModal.task) return;
+    try {
+      // Save link and submit for approval
+      await onSubmit(linkModal.task.task_id, linkModal.stage, linkUrl);
+      setLinkModal({ open: false, task: null, stage: null });
+      setLinkUrl('');
+    } catch (error) {
+      console.error('Failed to add link:', error);
+    }
   };
   
   const handleCorrectionsSubmit = () => {
@@ -689,17 +758,36 @@ function TrackerBoard({
     }
   };
 
-  const statusColors = {
-    pending: 'bg-gray-500/20 text-gray-400',
-    in_progress: 'bg-blue-500/20 text-blue-400',
-    submitted: 'bg-purple-500/20 text-purple-400',
-    approved: 'bg-green-500/20 text-green-400',
-    corrections: 'bg-orange-500/20 text-orange-400',
-    completed: 'bg-emerald-500/20 text-emerald-400'
+  const getStatusStyle = (status) => {
+    return TASK_STATUS[status] || TASK_STATUS.pending;
   };
 
   return (
     <div className="flex flex-col h-full">
+      {/* Stage Progress Header */}
+      <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
+        {stages.map((stage, idx) => {
+          const stats = getStageStats(stage.id);
+          const Icon = stage.icon;
+          const isComplete = stats.approved === stats.total && stats.total > 0;
+          
+          return (
+            <div key={stage.id} className="flex items-center">
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${isComplete ? 'bg-green-500/20' : bgSecondary}`}>
+                <div className={`w-6 h-6 rounded-full ${isComplete ? 'bg-green-500' : stage.color} flex items-center justify-center`}>
+                  {isComplete ? <Check className="h-3 w-3 text-white" /> : <Icon className="h-3 w-3 text-white" />}
+                </div>
+                <span className={`text-sm font-medium ${isComplete ? 'text-green-400' : textPrimary}`}>{stage.label}</span>
+                <span className={`text-xs ${textSecondary}`}>({stats.approved}/{stats.total})</span>
+              </div>
+              {idx < stages.length - 1 && (
+                <ArrowRight className={`h-4 w-4 mx-1 ${stats.approved === stats.total ? 'text-green-400' : textSecondary}`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      
       {/* Filters Row */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
@@ -734,100 +822,153 @@ function TrackerBoard({
       
       {/* Horizontal Stage Columns */}
       <div className="flex-1 overflow-x-auto">
-        <div className="flex gap-4 min-w-max pb-4 h-full">
+        <div className="flex gap-3 min-w-max pb-4 h-full">
           {stages.map(stage => {
             const tasks = getTasksForStage(stage.id);
+            const stats = getStageStats(stage.id);
             const Icon = stage.icon;
+            const isComplete = stats.approved === stats.total && stats.total > 0;
             
             return (
-              <div key={stage.id} className={`w-64 flex-shrink-0 rounded-xl border ${borderColor} ${bgCard} flex flex-col`}>
+              <div key={stage.id} className={`w-72 flex-shrink-0 rounded-xl border ${isComplete ? 'border-green-500/50' : borderColor} ${bgCard} flex flex-col`}>
                 {/* Stage Header */}
-                <div className={`p-3 border-b ${borderColor} flex items-center gap-2`}>
-                  <div className={`w-8 h-8 rounded-lg ${stage.color} flex items-center justify-center`}>
-                    <Icon className="h-4 w-4 text-white" />
+                <div className={`p-3 border-b ${borderColor} flex items-center gap-2 ${isComplete ? 'bg-green-500/10' : ''}`}>
+                  <div className={`w-8 h-8 rounded-lg ${isComplete ? 'bg-green-500' : stage.color} flex items-center justify-center`}>
+                    {isComplete ? <Check className="h-4 w-4 text-white" /> : <Icon className="h-4 w-4 text-white" />}
                   </div>
                   <div className="flex-1">
-                    <p className={`font-semibold ${textPrimary}`}>{stage.label}</p>
-                    <p className={`text-xs ${textSecondary}`}>{tasks.length} tasks</p>
+                    <p className={`font-semibold ${isComplete ? 'text-green-400' : textPrimary}`}>{stage.label}</p>
+                    <p className={`text-xs ${textSecondary}`}>
+                      {stats.approved}/{stats.total} approved
+                      {stats.waiting > 0 && <span className="text-orange-400 ml-1">• {stats.waiting} waiting</span>}
+                    </p>
                   </div>
                 </div>
                 
                 {/* Tasks List */}
                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
                   {tasks.length === 0 ? (
-                    <div className={`text-center py-8 ${textSecondary} text-sm`}>
-                      No tasks
-                    </div>
+                    <div className={`text-center py-8 ${textSecondary} text-sm`}>No tasks</div>
                   ) : (
-                    tasks.map(task => (
-                      <div 
-                        key={task.task_id} 
-                        className={`p-3 rounded-lg ${bgSecondary} border ${borderColor} hover:border-[#6366f1]/50`}
-                      >
-                        {/* Task Name & Status */}
-                        <div className="flex items-start justify-between mb-2">
-                          <p className={`font-medium ${textPrimary} text-sm`}>{task.page_name}</p>
-                          <Badge className={`text-xs ${statusColors[task.status] || statusColors.pending}`}>
-                            {task.status?.replace('_', ' ') || 'pending'}
-                          </Badge>
-                        </div>
-                        
-                        {/* Assignee */}
-                        {task.assignee && (
-                          <div className="flex items-center gap-1 mb-2">
-                            <User className="h-3 w-3 text-[#6366f1]" />
-                            <span className={`text-xs ${textSecondary}`}>{task.assignee}</span>
+                    tasks.map(task => {
+                      const statusInfo = getStatusStyle(task.displayStatus);
+                      const isLocked = task.displayStatus === 'locked';
+                      const isApproved = task.displayStatus === 'approved';
+                      const isWaiting = task.displayStatus === 'waiting_approval';
+                      
+                      return (
+                        <div 
+                          key={task.task_id} 
+                          className={`p-3 rounded-lg ${isLocked ? 'opacity-50' : ''} ${isApproved ? 'bg-green-500/10 border-green-500/30' : bgSecondary} border ${borderColor}`}
+                        >
+                          {/* Task Header */}
+                          <div className="flex items-start justify-between mb-2">
+                            <p className={`font-medium ${textPrimary} text-sm`}>{task.page_name}</p>
+                            <Badge className={`text-xs ${statusInfo.color}`}>
+                              {statusInfo.label}
+                            </Badge>
                           </div>
-                        )}
-                        
-                        {/* Actions */}
-                        <div className="flex items-center justify-between pt-2 border-t border-dashed" style={{ borderColor: isDark ? '#3f3f46' : '#e5e7eb' }}>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-7 px-2 text-xs"
-                            onClick={() => onViewComments(task)}
-                          >
-                            <MessageSquare className="h-3 w-3 mr-1" /> Comments
-                          </Button>
                           
-                          {(task.status === 'pending' || task.status === 'in_progress' || task.status === 'corrections') && (
-                            <Button 
-                              size="sm" 
-                              className="h-7 px-2 text-xs bg-purple-500 hover:bg-purple-600"
-                              onClick={() => onSubmit(task.task_id, stage.id)}
-                            >
-                              <Send className="h-3 w-3 mr-1" /> Submit
-                            </Button>
-                          )}
-                          
-                          {task.status === 'submitted' && canApprove && (
-                            <div className="flex gap-1">
-                              <Button 
-                                size="sm" 
-                                className="h-7 w-7 p-0 bg-green-500 hover:bg-green-600"
-                                onClick={() => onApprove(task.task_id, stage.id)}
-                              >
-                                <Check className="h-3 w-3" />
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                className="h-7 w-7 p-0 bg-orange-500 hover:bg-orange-600"
-                                onClick={() => setCorrectionsModal({ open: true, task, stage: stage.id })}
-                              >
-                                <AlertCircle className="h-3 w-3" />
-                              </Button>
+                          {/* Assignee */}
+                          {task.assignee && (
+                            <div className="flex items-center gap-1 mb-2">
+                              <User className="h-3 w-3 text-[#6366f1]" />
+                              <span className={`text-xs ${textSecondary}`}>{task.assignee}</span>
                             </div>
                           )}
                           
-                          {task.status === 'approved' && (
-                            <Badge className="bg-green-500/20 text-green-400 text-xs">
-                              <CheckCircle2 className="h-3 w-3 mr-1" /> Done
-                            </Badge>
+                          {/* Link if exists */}
+                          {task.link && (
+                            <div className="flex items-center gap-1 mb-2">
+                              <Link2 className="h-3 w-3 text-[#6366f1]" />
+                              <a href={task.link} target="_blank" rel="noopener noreferrer" className="text-xs text-[#6366f1] hover:underline truncate">
+                                View {stage.label}
+                              </a>
+                            </div>
+                          )}
+                          
+                          {/* Actions */}
+                          {!isLocked && (
+                            <div className="flex items-center justify-between pt-2 border-t border-dashed" style={{ borderColor: isDark ? '#3f3f46' : '#e5e7eb' }}>
+                              {/* Pending - Show Add Link button */}
+                              {task.displayStatus === 'pending' && (
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 px-3 text-xs bg-[#6366f1] hover:bg-[#5558e3] w-full"
+                                  onClick={() => setLinkModal({ open: true, task, stage: stage.id })}
+                                >
+                                  <Link2 className="h-3 w-3 mr-1" /> Add {stage.label} Link
+                                </Button>
+                              )}
+                              
+                              {/* In Progress - Show Submit button */}
+                              {task.displayStatus === 'in_progress' && (
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 px-3 text-xs bg-purple-500 hover:bg-purple-600 w-full"
+                                  onClick={() => onSubmit(task.task_id, stage.id)}
+                                >
+                                  <Send className="h-3 w-3 mr-1" /> Submit for Approval
+                                </Button>
+                              )}
+                              
+                              {/* Waiting Approval - Show Approve/Corrections for PM */}
+                              {isWaiting && canApprove && (
+                                <div className="flex gap-2 w-full">
+                                  <Button 
+                                    size="sm" 
+                                    className="h-7 flex-1 text-xs bg-green-500 hover:bg-green-600"
+                                    onClick={() => onApprove(task.task_id, stage.id)}
+                                  >
+                                    <Check className="h-3 w-3 mr-1" /> Approve
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    className="h-7 px-2 text-xs bg-orange-500 hover:bg-orange-600"
+                                    onClick={() => setCorrectionsModal({ open: true, task, stage: stage.id })}
+                                  >
+                                    <AlertCircle className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                              
+                              {/* Waiting Approval - Show waiting message for others */}
+                              {isWaiting && !canApprove && (
+                                <div className={`text-xs ${textSecondary} flex items-center gap-1`}>
+                                  <Clock className="h-3 w-3" /> Waiting for approval...
+                                </div>
+                              )}
+                              
+                              {/* Corrections - Show edit button */}
+                              {task.displayStatus === 'corrections' && (
+                                <Button 
+                                  size="sm" 
+                                  className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 w-full"
+                                  onClick={() => setLinkModal({ open: true, task, stage: stage.id })}
+                                >
+                                  <Edit2 className="h-3 w-3 mr-1" /> Update & Resubmit
+                                </Button>
+                              )}
+                              
+                              {/* Approved - Show checkmark */}
+                              {isApproved && (
+                                <div className="flex items-center gap-1 text-green-400 text-xs w-full justify-center">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  <span>Approved</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Locked message */}
+                          {isLocked && (
+                            <div className={`text-xs ${textSecondary} text-center pt-2`}>
+                              Complete previous stage first
+                            </div>
                           )}
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -835,6 +976,32 @@ function TrackerBoard({
           })}
         </div>
       </div>
+      
+      {/* Add Link Modal */}
+      {linkModal.open && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`${bgCard} rounded-xl p-6 w-full max-w-md border ${borderColor}`}>
+            <h3 className={`text-lg font-semibold ${textPrimary} mb-2`}>
+              Add {linkModal.stage ? stages.find(s => s.id === linkModal.stage)?.label : ''} Link
+            </h3>
+            <p className={`text-sm ${textSecondary} mb-4`}>Page: {linkModal.task?.page_name}</p>
+            <Input 
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="Paste your link here..."
+              className={`${bgSecondary} border-none mb-4`}
+            />
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => { setLinkModal({ open: false, task: null, stage: null }); setLinkUrl(''); }}>
+                Cancel
+              </Button>
+              <Button className="flex-1 bg-[#6366f1] hover:bg-[#5558e3]" onClick={handleAddLink}>
+                Submit for Approval
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Corrections Modal */}
       {correctionsModal.open && (

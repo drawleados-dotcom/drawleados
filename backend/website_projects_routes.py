@@ -1421,28 +1421,35 @@ async def convert_pages_to_tasks(project_id: str, request: Request):
 
 @website_projects_router.put("/stage-tasks/{task_id}/submit")
 async def submit_task_for_approval(task_id: str, request: Request, data: dict = Body(...)):
-    """Submit a task for approval"""
+    """Submit a task for approval with optional link"""
     user = await get_current_user(request)
     stage = data.get("stage")
+    link = data.get("link", "")
     now = datetime.now(timezone.utc)
     
     task = await db.website_stage_tasks.find_one({"task_id": task_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Update task status to submitted
+    # Update task status to waiting_approval (submitted)
+    update_data = {
+        "status": "waiting_approval",
+        "submitted_at": now.isoformat(),
+        "submitted_by": user["user_id"]
+    }
+    
+    if link:
+        update_data["link"] = link
+    
     await db.website_stage_tasks.update_one(
         {"task_id": task_id},
         {
-            "$set": {
-                "status": "submitted",
-                "submitted_at": now.isoformat(),
-                "submitted_by": user["user_id"]
-            },
+            "$set": update_data,
             "$push": {
                 "history": {
                     "action": "submitted",
                     "stage": stage,
+                    "link": link,
                     "by": user["name"],
                     "at": now.isoformat()
                 }
@@ -1450,11 +1457,19 @@ async def submit_task_for_approval(task_id: str, request: Request, data: dict = 
         }
     )
     
+    # Also update the page task with the link
+    page_id = task.get("page_id")
+    if page_id and link:
+        await db.website_page_tasks.update_one(
+            {"task_id": page_id},
+            {"$set": {f"{stage}_link": link, f"{stage}_status": "waiting_approval"}}
+        )
+    
     return {"success": True, "message": "Task submitted for approval"}
 
 @website_projects_router.put("/stage-tasks/{task_id}/approve")
 async def approve_task(task_id: str, request: Request, data: dict = Body(...)):
-    """Approve a task and move to next stage"""
+    """Approve a task"""
     user = await get_current_user(request)
     stage = data.get("stage")
     now = datetime.now(timezone.utc)
@@ -1468,18 +1483,12 @@ async def approve_task(task_id: str, request: Request, data: dict = Body(...)):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    # Define stage order
-    stage_order = ["content", "wireframe", "ui", "dev", "test", "delivery"]
-    current_idx = stage_order.index(stage) if stage in stage_order else 0
-    next_stage = stage_order[current_idx + 1] if current_idx < len(stage_order) - 1 else "completed"
-    
-    # Update task
+    # Update task status to approved
     await db.website_stage_tasks.update_one(
         {"task_id": task_id},
         {
             "$set": {
-                "status": "approved" if next_stage == "completed" else "pending",
-                "current_stage": next_stage,
+                "status": "approved",
                 "approved_at": now.isoformat(),
                 "approved_by": user["user_id"]
             },
@@ -1487,7 +1496,6 @@ async def approve_task(task_id: str, request: Request, data: dict = Body(...)):
                 "history": {
                     "action": "approved",
                     "stage": stage,
-                    "next_stage": next_stage,
                     "by": user["name"],
                     "at": now.isoformat()
                 }
@@ -1498,12 +1506,12 @@ async def approve_task(task_id: str, request: Request, data: dict = Body(...)):
     # Update the page status
     page_id = task.get("page_id")
     if page_id:
-        await db.website_pages.update_one(
+        await db.website_page_tasks.update_one(
             {"task_id": page_id},
-            {"$set": {f"{stage}_status": "Completed"}}
+            {"$set": {f"{stage}_status": "approved"}}
         )
     
-    return {"success": True, "message": f"Task approved! Moved to {next_stage}"}
+    return {"success": True, "message": f"{stage.title()} approved!"}
 
 @website_projects_router.put("/stage-tasks/{task_id}/corrections")
 async def request_corrections(task_id: str, request: Request, data: dict = Body(...)):
