@@ -23,13 +23,13 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 // Stage definitions with colors
 const WORKFLOW_STAGES = [
+  { id: 'tasks', label: 'Tasks', icon: ClipboardCheck, color: 'bg-yellow-500', textColor: 'text-yellow-400' },
   { id: 'content', label: 'Content', icon: FileText, color: 'bg-blue-500', textColor: 'text-blue-400' },
   { id: 'wireframe', label: 'Wireframe', icon: PenTool, color: 'bg-purple-500', textColor: 'text-purple-400' },
   { id: 'ui', label: 'UI Design', icon: Palette, color: 'bg-pink-500', textColor: 'text-pink-400' },
   { id: 'dev', label: 'Development', icon: Code, color: 'bg-green-500', textColor: 'text-green-400' },
   { id: 'test', label: 'Testing', icon: TestTube, color: 'bg-cyan-500', textColor: 'text-cyan-400' },
-  { id: 'delivery', label: 'Delivery', icon: Truck, color: 'bg-emerald-500', textColor: 'text-emerald-400' },
-  { id: 'approval', label: 'Approvals', icon: ClipboardCheck, color: 'bg-orange-500', textColor: 'text-orange-400' }
+  { id: 'delivery', label: 'Delivery', icon: Truck, color: 'bg-emerald-500', textColor: 'text-emerald-400' }
 ];
 
 export default function ProjectDetailPage() {
@@ -655,12 +655,14 @@ function TrackerBoard({
 }) {
   const [correctionsModal, setCorrectionsModal] = useState({ open: false, task: null, stage: null });
   const [remarks, setRemarks] = useState('');
-  const [viewMode, setViewMode] = useState('kanban');
-  const [activeStage, setActiveStage] = useState('all');
-  const [runningTimers, setRunningTimers] = useState({});
   
   const getTasksForStage = (stageId) => {
     if (stageTasks[stageId]) return stageTasks[stageId];
+    
+    // For "tasks" stage, return empty - tasks need to be created explicitly
+    if (stageId === 'tasks') {
+      return stageTasks['tasks'] || [];
+    }
     
     return pages.map(page => ({
       task_id: `${page.task_id}_${stageId}`,
@@ -677,27 +679,6 @@ function TrackerBoard({
       if (dateFilter && t.due_date !== dateFilter) return false;
       return true;
     });
-  };
-  
-  const getAllTasks = () => {
-    let allTasks = [];
-    stages.forEach(stage => {
-      const tasks = getTasksForStage(stage.id);
-      tasks.forEach(t => allTasks.push({ ...t, stageInfo: stage }));
-    });
-    if (activeStage !== 'all') {
-      allTasks = allTasks.filter(t => t.stage === activeStage);
-    }
-    return allTasks;
-  };
-  
-  const formatDuration = (seconds) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    if (hrs > 0) return `${hrs}h ${mins}m`;
-    if (mins > 0) return `${mins}m ${secs}s`;
-    return `${secs}s`;
   };
   
   const handleCorrectionsSubmit = () => {
@@ -719,260 +700,141 @@ function TrackerBoard({
 
   return (
     <div className="flex flex-col h-full">
-      {/* View Toggle & Filters */}
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
-            <Button 
-              size="sm" 
-              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
-              onClick={() => setViewMode('kanban')}
-              className={`h-8 ${viewMode === 'kanban' ? 'bg-[#6366f1]' : ''}`}
-            >
-              <Layers className="h-4 w-4 mr-1" /> Kanban
-            </Button>
-            <Button 
-              size="sm" 
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              onClick={() => setViewMode('list')}
-              className={`h-8 ${viewMode === 'list' ? 'bg-[#6366f1]' : ''}`}
-            >
-              <FileText className="h-4 w-4 mr-1" /> List
-            </Button>
-          </div>
-          
-          <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
-            <SelectTrigger className={`w-40 h-8 ${bgSecondary} border-none`}>
-              <User className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="All Assignees" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Assignees</SelectItem>
-              {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          
-          <Input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className={`w-40 h-8 ${bgSecondary} border-none`}
-          />
-          
-          {(dateFilter || assigneeFilter !== 'all') && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => { setDateFilter(''); setAssigneeFilter('all'); }}
-              className="text-red-400 h-8"
-            >
-              <X className="h-4 w-4 mr-1" /> Clear
-            </Button>
-          )}
-        </div>
+      {/* Filters Row */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+          <SelectTrigger className={`w-40 h-8 ${bgSecondary} border-none`}>
+            <User className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="All Assignees" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Assignees</SelectItem>
+            {teamMembers.map(m => <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        
+        <Input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className={`w-40 h-8 ${bgSecondary} border-none`}
+        />
+        
+        {(dateFilter || assigneeFilter !== 'all') && (
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => { setDateFilter(''); setAssigneeFilter('all'); }}
+            className="text-red-400 h-8"
+          >
+            <X className="h-4 w-4 mr-1" /> Clear
+          </Button>
+        )}
       </div>
       
-      {/* List View - Stage Tabs */}
-      {viewMode === 'list' && (
-        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
-          <Button
-            size="sm"
-            variant={activeStage === 'all' ? 'default' : 'outline'}
-            onClick={() => setActiveStage('all')}
-            className={`h-8 shrink-0 ${activeStage === 'all' ? 'bg-[#6366f1]' : ''}`}
-          >
-            All ({getAllTasks().length})
-          </Button>
+      {/* Horizontal Stage Columns */}
+      <div className="flex-1 overflow-x-auto">
+        <div className="flex gap-4 min-w-max pb-4 h-full">
           {stages.map(stage => {
-            const count = getTasksForStage(stage.id).length;
+            const tasks = getTasksForStage(stage.id);
+            const Icon = stage.icon;
+            
             return (
-              <Button
-                key={stage.id}
-                size="sm"
-                variant={activeStage === stage.id ? 'default' : 'outline'}
-                onClick={() => setActiveStage(stage.id)}
-                className={`h-8 gap-2 shrink-0 ${activeStage === stage.id ? 'bg-[#6366f1]' : ''}`}
-              >
-                <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                {stage.label}
-                <span className="text-xs opacity-70">({count})</span>
-              </Button>
+              <div key={stage.id} className={`w-64 flex-shrink-0 rounded-xl border ${borderColor} ${bgCard} flex flex-col`}>
+                {/* Stage Header */}
+                <div className={`p-3 border-b ${borderColor} flex items-center gap-2`}>
+                  <div className={`w-8 h-8 rounded-lg ${stage.color} flex items-center justify-center`}>
+                    <Icon className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`font-semibold ${textPrimary}`}>{stage.label}</p>
+                    <p className={`text-xs ${textSecondary}`}>{tasks.length} tasks</p>
+                  </div>
+                </div>
+                
+                {/* Tasks List */}
+                <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                  {tasks.length === 0 ? (
+                    <div className={`text-center py-8 ${textSecondary} text-sm`}>
+                      No tasks
+                    </div>
+                  ) : (
+                    tasks.map(task => (
+                      <div 
+                        key={task.task_id} 
+                        className={`p-3 rounded-lg ${bgSecondary} border ${borderColor} hover:border-[#6366f1]/50`}
+                      >
+                        {/* Task Name & Status */}
+                        <div className="flex items-start justify-between mb-2">
+                          <p className={`font-medium ${textPrimary} text-sm`}>{task.page_name}</p>
+                          <Badge className={`text-xs ${statusColors[task.status] || statusColors.pending}`}>
+                            {task.status?.replace('_', ' ') || 'pending'}
+                          </Badge>
+                        </div>
+                        
+                        {/* Assignee */}
+                        {task.assignee && (
+                          <div className="flex items-center gap-1 mb-2">
+                            <User className="h-3 w-3 text-[#6366f1]" />
+                            <span className={`text-xs ${textSecondary}`}>{task.assignee}</span>
+                          </div>
+                        )}
+                        
+                        {/* Actions */}
+                        <div className="flex items-center justify-between pt-2 border-t border-dashed" style={{ borderColor: isDark ? '#3f3f46' : '#e5e7eb' }}>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-7 px-2 text-xs"
+                            onClick={() => onViewComments(task)}
+                          >
+                            <MessageSquare className="h-3 w-3 mr-1" /> Comments
+                          </Button>
+                          
+                          {(task.status === 'pending' || task.status === 'in_progress' || task.status === 'corrections') && (
+                            <Button 
+                              size="sm" 
+                              className="h-7 px-2 text-xs bg-purple-500 hover:bg-purple-600"
+                              onClick={() => onSubmit(task.task_id, stage.id)}
+                            >
+                              <Send className="h-3 w-3 mr-1" /> Submit
+                            </Button>
+                          )}
+                          
+                          {task.status === 'submitted' && canApprove && (
+                            <div className="flex gap-1">
+                              <Button 
+                                size="sm" 
+                                className="h-7 w-7 p-0 bg-green-500 hover:bg-green-600"
+                                onClick={() => onApprove(task.task_id, stage.id)}
+                              >
+                                <Check className="h-3 w-3" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                className="h-7 w-7 p-0 bg-orange-500 hover:bg-orange-600"
+                                onClick={() => setCorrectionsModal({ open: true, task, stage: stage.id })}
+                              >
+                                <AlertCircle className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                          
+                          {task.status === 'approved' && (
+                            <Badge className="bg-green-500/20 text-green-400 text-xs">
+                              <CheckCircle2 className="h-3 w-3 mr-1" /> Done
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>
-      )}
-      
-      {/* Kanban View */}
-      {viewMode === 'kanban' && (
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex gap-4 min-w-max pb-4">
-            {stages.map(stage => {
-              const tasks = getTasksForStage(stage.id);
-              const Icon = stage.icon;
-              
-              return (
-                <div key={stage.id} className={`w-72 flex-shrink-0 rounded-xl border ${borderColor} ${bgCard} flex flex-col`}>
-                  <div className={`p-3 border-b ${borderColor} flex items-center gap-2`}>
-                    <div className={`w-8 h-8 rounded-lg ${stage.color} flex items-center justify-center`}>
-                      <Icon className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className={`font-semibold ${textPrimary}`}>{stage.label}</p>
-                      <p className={`text-xs ${textSecondary}`}>{tasks.length} tasks</p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-2 space-y-2 max-h-[calc(100vh-350px)]">
-                    {tasks.length === 0 ? (
-                      <div className={`text-center py-8 ${textSecondary} text-sm`}>No tasks</div>
-                    ) : (
-                      tasks.map(task => (
-                        <div 
-                          key={task.task_id} 
-                          className={`p-3 rounded-lg ${bgSecondary} border ${borderColor} hover:border-[#6366f1]/50 cursor-pointer`}
-                          onClick={() => onViewComments(task)}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <p className={`font-medium ${textPrimary} truncate`}>{task.page_name}</p>
-                            <Badge className={`text-xs ${statusColors[task.status] || statusColors.pending}`}>
-                              {task.status?.replace('_', ' ') || 'Pending'}
-                            </Badge>
-                          </div>
-                          {task.assignee && (
-                            <div className="flex items-center gap-1 mb-2">
-                              <User className="h-3 w-3 text-[#6366f1]" />
-                              <span className={`text-xs ${textSecondary}`}>{task.assignee}</span>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1 pt-2 border-t border-dashed" style={{ borderColor: isDark ? '#3f3f46' : '#e5e7eb' }}>
-                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                              <MessageSquare className="h-3 w-3 mr-1" /> Comments
-                            </Button>
-                            {(task.status === 'pending' || task.status === 'in_progress') && (
-                              <Button 
-                                size="sm" 
-                                className="h-7 px-2 text-xs bg-purple-500 hover:bg-purple-600 ml-auto"
-                                onClick={(e) => { e.stopPropagation(); onSubmit(task.task_id, stage.id); }}
-                              >
-                                <Send className="h-3 w-3 mr-1" /> Submit
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      
-      {/* List View - Task Table */}
-      {viewMode === 'list' && (
-        <div className={`flex-1 rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className={bgSecondary}>
-                <tr>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Task / Page</th>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Stage</th>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Assigned To</th>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Due Date</th>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Time</th>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Timer</th>
-                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
-                {getAllTasks().length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
-                      <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                      <p>No tasks found</p>
-                    </td>
-                  </tr>
-                ) : (
-                  getAllTasks().map(task => {
-                    const isRunning = runningTimers[task.task_id];
-                    return (
-                      <tr key={task.task_id} className={`${bgCard} hover:${bgSecondary} cursor-pointer`} onClick={() => onViewComments(task)}>
-                        <td className="px-4 py-3">
-                          <div className={`font-medium ${textPrimary}`}>{task.page_name}</div>
-                          <div className={`text-xs ${textSecondary}`}>Page Task</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${task.stageInfo?.color}`} />
-                            <span className={`text-sm ${textPrimary}`}>{task.stageInfo?.label}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge className={statusColors[task.status] || statusColors.pending}>
-                            {task.status?.replace('_', ' ') || 'Pending'}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-[#6366f1]" />
-                            <span className={`text-sm ${textPrimary}`}>{task.assignee || 'Unassigned'}</span>
-                          </div>
-                        </td>
-                        <td className={`px-4 py-3 text-sm ${task.due_date && new Date(task.due_date) < new Date() ? 'text-red-400' : textPrimary}`}>
-                          {task.due_date || '-'}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Timer className={`h-4 w-4 ${isRunning ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
-                            <span className={`text-sm font-medium ${textPrimary}`}>{formatDuration(task.time_spent || 0)}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant={isRunning ? 'destructive' : 'outline'}
-                            className={`h-8 ${isRunning ? 'bg-red-500' : 'border-[#6366f1] text-[#6366f1]'}`}
-                            onClick={() => setRunningTimers(prev => ({ ...prev, [task.task_id]: !prev[task.task_id] }))}
-                          >
-                            {isRunning ? <><Pause className="h-3 w-3 mr-1" /> Stop</> : <><Play className="h-3 w-3 mr-1" /> Start</>}
-                          </Button>
-                        </td>
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex gap-1">
-                            {(task.status === 'pending' || task.status === 'in_progress') && (
-                              <Button size="sm" className="h-8 bg-purple-500 hover:bg-purple-600" onClick={() => onSubmit(task.task_id, task.stage)}>
-                                <Send className="h-3 w-3 mr-1" /> Submit
-                              </Button>
-                            )}
-                            {task.status === 'submitted' && canApprove && (
-                              <>
-                                <Button size="sm" className="h-8 bg-green-500 hover:bg-green-600" onClick={() => onApprove(task.task_id, task.stage)}>
-                                  <Check className="h-3 w-3" />
-                                </Button>
-                                <Button size="sm" className="h-8 bg-orange-500 hover:bg-orange-600" onClick={() => setCorrectionsModal({ open: true, task, stage: task.stage })}>
-                                  <AlertCircle className="h-3 w-3" />
-                                </Button>
-                              </>
-                            )}
-                            {task.status === 'approved' && (
-                              <Badge className="bg-green-500/20 text-green-400"><CheckCircle2 className="h-3 w-3 mr-1" /> Approved</Badge>
-                            )}
-                            <Button variant="ghost" size="sm" className="h-8" onClick={() => onViewComments(task)}>
-                              <MessageSquare className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      </div>
       
       {/* Corrections Modal */}
       {correctionsModal.open && (
