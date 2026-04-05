@@ -1767,3 +1767,30 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - `/app/backend/meetings_routes.py` - Made `end_time` optional
 
 ---
+
+## Latest Updates (April 2026 - Session 65)
+
+### Developer Assignment Popup with Calendar (DONE)
+**Purpose:** Enhanced the assignment workflow in Project Pages to show developer workload before assigning tasks.
+
+**User Flow:**
+1. Click on any **assignee icon** in a stage column (Content, Wireframe, etc.)
+2. **Step 1 - Select Developer:** Popup shows grid of all team members with avatars and roles
+3. **Step 2 - Select Date:** Full calendar view for the selected month
+   - Navigate between months with arrows
+   - See task count per day (highlighted dates)
+   - Select a date to view detailed workload
+4. **Workload Panel:** Shows all tasks the developer has on that day with project/page names
+5. **Assignment:** Click "Assign to [Name]" to set both assignee and due date
+
+**Backend APIs Added:**
+- `GET /api/website-projects/developer-workload/{developer_name}` - Get all tasks for a developer, optionally filtered by date
+- `GET /api/website-projects/developer-workload-calendar/{developer_name}` - Get task count per day for calendar view
+- `PUT /api/website-projects/pages/{task_id}/assign-with-date` - Assign developer and due date in one call
+
+**Files Created/Modified:**
+- `/app/frontend/src/components/website/AssignmentPopup.js` (NEW)
+- `/app/frontend/src/pages/ProjectDetailPage.js` - Integrated AssignmentPopup
+- `/app/backend/website_projects_routes.py` - Added 3 new endpoints
+
+---

@@ -2066,3 +2066,172 @@ async def move_to_next_stage(task_id: str, request: Request, data: dict = Body(.
     )
     
     return {"success": True, "message": f"Moved to {next_stage.title()}!", "new_task_id": new_task_id}
+
+
+
+# ============== DEVELOPER WORKLOAD ==============
+
+@website_projects_router.get("/developer-workload/{developer_name}")
+async def get_developer_workload(developer_name: str, date: str = None, request: Request = None):
+    """
+    Get all tasks assigned to a developer for a specific date or date range.
+    Used for the assignment popup to show developer's workload.
+    """
+    # Get all page tasks where this developer is assigned to any stage
+    query = {
+        "$or": [
+            {"content_assignee": developer_name},
+            {"wireframe_assignee": developer_name},
+            {"ui_assignee": developer_name},
+            {"dev_assignee": developer_name},
+            {"responsive_assignee": developer_name},
+            {"test_assignee": developer_name},
+            {"delivery_assignee": developer_name}
+        ]
+    }
+    
+    # If date is provided, filter by due_date
+    if date:
+        query["due_date"] = date
+    
+    tasks = await db.website_page_tasks.find(query, {"_id": 0}).to_list(1000)
+    
+    # Group tasks by date
+    tasks_by_date = {}
+    for task in tasks:
+        due_date = task.get("due_date") or "unscheduled"
+        if due_date not in tasks_by_date:
+            tasks_by_date[due_date] = []
+        
+        # Find which stages this developer is assigned to
+        assigned_stages = []
+        stage_map = {
+            "content_assignee": "Content",
+            "wireframe_assignee": "Wireframe", 
+            "ui_assignee": "UI Design",
+            "dev_assignee": "Development",
+            "responsive_assignee": "Responsive",
+            "test_assignee": "Testing",
+            "delivery_assignee": "Delivery"
+        }
+        for field, label in stage_map.items():
+            if task.get(field) == developer_name:
+                assigned_stages.append(label)
+        
+        tasks_by_date[due_date].append({
+            "task_id": task.get("task_id"),
+            "page_name": task.get("page_name"),
+            "project_id": task.get("project_id"),
+            "project_name": task.get("project_name"),
+            "due_date": due_date,
+            "assigned_stages": assigned_stages,
+            "content_status": task.get("content_status"),
+            "wireframe_status": task.get("wireframe_status"),
+            "ui_status": task.get("ui_status"),
+            "dev_status": task.get("dev_status")
+        })
+    
+    return {
+        "developer": developer_name,
+        "total_tasks": len(tasks),
+        "tasks_by_date": tasks_by_date
+    }
+
+
+@website_projects_router.get("/developer-workload-calendar/{developer_name}")
+async def get_developer_workload_calendar(developer_name: str, month: str = None, request: Request = None):
+    """
+    Get task count per day for a developer for calendar view.
+    month format: YYYY-MM (e.g., 2026-04)
+    """
+    from datetime import datetime
+    import calendar
+    
+    # If no month provided, use current month
+    if not month:
+        now = datetime.now()
+        month = now.strftime("%Y-%m")
+    
+    # Parse month
+    year, mon = map(int, month.split("-"))
+    
+    # Get number of days in month
+    num_days = calendar.monthrange(year, mon)[1]
+    
+    # Generate date strings for the month
+    date_strings = [f"{year}-{str(mon).zfill(2)}-{str(d).zfill(2)}" for d in range(1, num_days + 1)]
+    
+    # Query tasks with due dates in this month
+    query = {
+        "$or": [
+            {"content_assignee": developer_name},
+            {"wireframe_assignee": developer_name},
+            {"ui_assignee": developer_name},
+            {"dev_assignee": developer_name},
+            {"responsive_assignee": developer_name},
+            {"test_assignee": developer_name},
+            {"delivery_assignee": developer_name}
+        ],
+        "due_date": {"$regex": f"^{month}"}
+    }
+    
+    tasks = await db.website_page_tasks.find(query, {"_id": 0, "due_date": 1, "page_name": 1}).to_list(1000)
+    
+    # Count tasks per date
+    calendar_data = {}
+    for date in date_strings:
+        date_tasks = [t for t in tasks if t.get("due_date") == date]
+        calendar_data[date] = {
+            "count": len(date_tasks),
+            "tasks": [t.get("page_name") for t in date_tasks[:3]]  # First 3 task names
+        }
+    
+    return {
+        "developer": developer_name,
+        "month": month,
+        "calendar": calendar_data
+    }
+
+
+@website_projects_router.put("/pages/{task_id}/assign-with-date")
+async def assign_task_with_date(task_id: str, request: Request):
+    """
+    Assign a developer to a specific stage with a due date.
+    Body: { stage: str, assignee: str, due_date: str }
+    """
+    body = await request.json()
+    stage = body.get("stage")
+    assignee = body.get("assignee")
+    due_date = body.get("due_date")
+    
+    if not stage or not assignee:
+        raise HTTPException(status_code=400, detail="Stage and assignee required")
+    
+    # Map stage to field name
+    field_map = {
+        "content": "content_assignee",
+        "wireframe": "wireframe_assignee",
+        "ui": "ui_assignee",
+        "dev": "dev_assignee",
+        "responsive": "responsive_assignee",
+        "test": "test_assignee",
+        "delivery": "delivery_assignee"
+    }
+    
+    assignee_field = field_map.get(stage)
+    if not assignee_field:
+        raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
+    
+    update_data = {assignee_field: assignee}
+    if due_date:
+        update_data["due_date"] = due_date
+    
+    result = await db.website_page_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    return {"success": True, "message": f"{stage.title()} assigned to {assignee}"}

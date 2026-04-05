@@ -14,10 +14,11 @@ import {
   ChevronDown, ChevronRight, Check, Clock, Play, Pause, Send, Lock, Search,
   MessageSquare, CheckCircle, CheckCircle2, AlertCircle, RefreshCw, X,
   Eye, Edit2, Trash2, Plus, Link2, ExternalLink, Timer, Layers,
-  Code, PenTool, TestTube, Truck, ClipboardCheck
+  Code, PenTool, TestTube, Truck, ClipboardCheck, UserPlus
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import AssignmentPopup from '../components/website/AssignmentPopup';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -649,6 +650,15 @@ function PagesTab({
   const [editingPage, setEditingPage] = useState(null);
   const [newPageName, setNewPageName] = useState('');
   const [dueDate, setDueDate] = useState('');
+  // Assignment popup state
+  const [assignmentPopup, setAssignmentPopup] = useState({
+    isOpen: false,
+    taskId: null,
+    taskName: '',
+    stage: '',
+    currentAssignee: '',
+    currentDueDate: ''
+  });
   // Stage assignee states
   const [stageAssignees, setStageAssignees] = useState({
     content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: ''
@@ -949,7 +959,7 @@ function PagesTab({
                       </div>
                     </td>
                     
-                    {/* Stage Cells - Show Assignee + Status */}
+                    {/* Stage Cells - Show Assignee + Status - Clickable for Assignment */}
                     {stageColumns.map(stage => {
                       const statusInfo = getPageStageStatus(page.task_id, stage.id);
                       const badge = getStatusBadge(statusInfo);
@@ -959,19 +969,33 @@ function PagesTab({
                       return (
                         <td key={`${page.task_id}-${stage.id}`} className="px-1 py-2 text-center">
                           <div className="flex flex-col items-center gap-1">
-                            {/* Assignee Avatar or Unassigned */}
-                            {assignee ? (
-                              <div 
-                                className={`w-6 h-6 rounded-full ${stage.color} flex items-center justify-center`}
-                                title={assignee}
-                              >
-                                <span className="text-[9px] font-bold text-white">{initials}</span>
-                              </div>
-                            ) : (
-                              <div className="w-6 h-6 rounded-full bg-gray-500/30 flex items-center justify-center">
-                                <User className="h-3 w-3 text-gray-400" />
-                              </div>
-                            )}
+                            {/* Assignee Avatar - Clickable to open Assignment Popup */}
+                            <button
+                              onClick={() => setAssignmentPopup({
+                                isOpen: true,
+                                taskId: page.task_id,
+                                taskName: page.page_name,
+                                stage: stage.id,
+                                currentAssignee: assignee || '',
+                                currentDueDate: page.due_date || ''
+                              })}
+                              className="group relative"
+                              title={assignee ? `${assignee} - Click to reassign` : 'Click to assign'}
+                            >
+                              {assignee ? (
+                                <div 
+                                  className={`w-6 h-6 rounded-full ${stage.color} flex items-center justify-center 
+                                    ring-2 ring-transparent group-hover:ring-white/50 transition-all cursor-pointer`}
+                                >
+                                  <span className="text-[9px] font-bold text-white">{initials}</span>
+                                </div>
+                              ) : (
+                                <div className="w-6 h-6 rounded-full bg-gray-500/30 flex items-center justify-center 
+                                  group-hover:bg-[#6366f1]/30 group-hover:ring-2 group-hover:ring-[#6366f1]/50 transition-all cursor-pointer">
+                                  <UserPlus className="h-3 w-3 text-gray-400 group-hover:text-[#6366f1]" />
+                                </div>
+                              )}
+                            </button>
                             {/* Status Badge */}
                             <div 
                               className={`inline-flex items-center justify-center w-6 h-5 rounded ${badge.bg} cursor-default`}
@@ -1195,6 +1219,31 @@ function PagesTab({
           </div>
         </div>
       )}
+      
+      {/* Assignment Popup */}
+      <AssignmentPopup
+        isOpen={assignmentPopup.isOpen}
+        onClose={() => setAssignmentPopup({ ...assignmentPopup, isOpen: false })}
+        taskId={assignmentPopup.taskId}
+        taskName={assignmentPopup.taskName}
+        stage={assignmentPopup.stage}
+        currentAssignee={assignmentPopup.currentAssignee}
+        currentDueDate={assignmentPopup.currentDueDate}
+        teamMembers={teamMembers}
+        onAssign={(assignee, dueDate) => {
+          // Refresh the page data after assignment
+          onUpdatePage(assignmentPopup.taskId, `${assignmentPopup.stage}_assignee`, assignee);
+          if (dueDate) {
+            onUpdatePage(assignmentPopup.taskId, 'due_date', dueDate);
+          }
+        }}
+        isDark={isDark}
+        bgCard={bgCard}
+        bgSecondary={bgSecondary}
+        borderColor={borderColor}
+        textPrimary={textPrimary}
+        textSecondary={textSecondary}
+      />
     </div>
   );
 }
