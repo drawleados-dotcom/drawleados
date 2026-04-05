@@ -140,12 +140,12 @@ export default function DLOperationsPage() {
   const [overviewYear, setOverviewYear] = useState(new Date().getFullYear().toString());
   
   // Part 2 - Stage Task Board (default to current date)
-  const [taskDateType, setTaskDateType] = useState('date'); // all, date, range, month, year
+  const [taskDateType, setTaskDateType] = useState('date'); // date, range, month
   const [taskDate, setTaskDate] = useState(getCurrentDate());
   const [taskDateStart, setTaskDateStart] = useState('');
   const [taskDateEnd, setTaskDateEnd] = useState('');
   const [taskMonth, setTaskMonth] = useState(getCurrentMonth());
-  const [taskYear, setTaskYear] = useState(new Date().getFullYear().toString());
+  const [taskProjectFilter, setTaskProjectFilter] = useState('all'); // all or specific project_id
   const [selectedTaskStage, setSelectedTaskStage] = useState('all'); // Default to all tasks
   const [taskViewMode, setTaskViewMode] = useState('task'); // task | project
   
@@ -288,17 +288,23 @@ export default function DLOperationsPage() {
   const clientNames = [...new Set(roleFilteredProjects.map(p => p.client_name).filter(Boolean))];
   const developerNames = [...new Set(roleFilteredProjects.map(p => p.developer).filter(Boolean))];
   
-  // Tasks filtered by stage and date for Part 2
+  // Tasks filtered by stage, date, and project for Part 2
   const getTasksForStage = (stageId) => {
-    // Apply date filter first to all tasks
-    const dateFilteredTasks = allTasks.filter(task => {
+    // Apply date and project filters first to all tasks
+    const filteredTasks = allTasks.filter(task => {
+      // Date filter
       const dateToCheck = task.due_date;
-      return filterByDate(dateToCheck, taskDateType, taskDate, taskDateStart, taskDateEnd, taskMonth, taskYear);
+      const passesDate = filterByDate(dateToCheck, taskDateType, taskDate, taskDateStart, taskDateEnd, taskMonth, '');
+      
+      // Project filter
+      const passesProject = taskProjectFilter === 'all' || task.project_id === taskProjectFilter;
+      
+      return passesDate && passesProject;
     });
     
     // For "all" tab - show ALL incomplete tasks (any stage not fully completed)
     if (stageId === 'all') {
-      return dateFilteredTasks.filter(task => {
+      return filteredTasks.filter(task => {
         // Check if task is fully completed (all stages done)
         const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
         const isFullyComplete = stageOrder.every(stage => {
@@ -311,7 +317,7 @@ export default function DLOperationsPage() {
     }
     
     // For specific stages - show tasks that are at this stage
-    const stageTasks = dateFilteredTasks.filter(task => {
+    const stageTasks = filteredTasks.filter(task => {
       const stageStatus = (task[`${stageId}_status`] || 'To-Do').toLowerCase();
       
       // If this stage is completed, don't show it
@@ -710,69 +716,70 @@ export default function DLOperationsPage() {
                 </div>
               </div>
               
-              {/* Date Filter for Stage Board */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Select value={taskDateType} onValueChange={setTaskDateType}>
-                  <SelectTrigger className={`w-24 h-8 ${bgSecondary} border-none text-xs`}>
-                    <SelectValue placeholder="Filter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Time</SelectItem>
-                    <SelectItem value="date">Date</SelectItem>
-                    <SelectItem value="range">Range</SelectItem>
-                    <SelectItem value="month">Month</SelectItem>
-                    <SelectItem value="year">Year</SelectItem>
-                  </SelectContent>
-                </Select>
-                
-                {taskDateType === 'date' && (
-                  <Input
-                    type="date"
-                    value={taskDate}
-                    onChange={(e) => setTaskDate(e.target.value)}
-                    className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
-                  />
-                )}
-                
-                {taskDateType === 'range' && (
-                  <>
-                    <Input
-                      type="date"
-                      value={taskDateStart}
-                      onChange={(e) => setTaskDateStart(e.target.value)}
-                      className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
-                    />
-                    <span className={textSecondary}>to</span>
-                    <Input
-                      type="date"
-                      value={taskDateEnd}
-                      onChange={(e) => setTaskDateEnd(e.target.value)}
-                      className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
-                    />
-                  </>
-                )}
-                
-                {taskDateType === 'month' && (
-                  <Input
-                    type="month"
-                    value={taskMonth}
-                    onChange={(e) => setTaskMonth(e.target.value)}
-                    className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
-                  />
-                )}
-                
-                {taskDateType === 'year' && (
-                  <Select value={taskYear} onValueChange={setTaskYear}>
-                    <SelectTrigger className={`w-24 h-8 ${bgSecondary} border-none text-xs`}>
-                      <SelectValue />
+              {/* Date & Project Filter for Stage Board */}
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Date Filter */}
+                <div className="flex items-center gap-2">
+                  <Select value={taskDateType} onValueChange={setTaskDateType}>
+                    <SelectTrigger className={`w-28 h-8 ${bgSecondary} border-none text-xs`}>
+                      <SelectValue placeholder="Date" />
                     </SelectTrigger>
                     <SelectContent>
-                      {[2024, 2025, 2026].map(y => (
-                        <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
-                      ))}
+                      <SelectItem value="date">Date</SelectItem>
+                      <SelectItem value="range">Date Range</SelectItem>
+                      <SelectItem value="month">Month</SelectItem>
                     </SelectContent>
                   </Select>
-                )}
+                  
+                  {taskDateType === 'date' && (
+                    <Input
+                      type="date"
+                      value={taskDate}
+                      onChange={(e) => setTaskDate(e.target.value)}
+                      className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
+                    />
+                  )}
+                  
+                  {taskDateType === 'range' && (
+                    <>
+                      <Input
+                        type="date"
+                        value={taskDateStart}
+                        onChange={(e) => setTaskDateStart(e.target.value)}
+                        className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
+                      />
+                      <span className={textSecondary}>to</span>
+                      <Input
+                        type="date"
+                        value={taskDateEnd}
+                        onChange={(e) => setTaskDateEnd(e.target.value)}
+                        className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
+                      />
+                    </>
+                  )}
+                  
+                  {taskDateType === 'month' && (
+                    <Input
+                      type="month"
+                      value={taskMonth}
+                      onChange={(e) => setTaskMonth(e.target.value)}
+                      className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
+                    />
+                  )}
+                </div>
+                
+                {/* Project Filter */}
+                <Select value={taskProjectFilter} onValueChange={setTaskProjectFilter}>
+                  <SelectTrigger className={`w-48 h-8 ${bgSecondary} border-none text-xs`}>
+                    <SelectValue placeholder="All Projects" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Projects</SelectItem>
+                    {roleFilteredProjects.map(p => (
+                      <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
