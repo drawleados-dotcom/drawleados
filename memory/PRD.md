@@ -1679,3 +1679,58 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - All 13 backend tests passed (iteration_56.json)
 - All frontend flows verified
 - 100% success rate
+
+---
+
+## Latest Updates (April 2026 - Session 63)
+
+### Master Board Enhanced Tabs (DONE)
+**Purpose:** Added new tabs to the Web Dev Master Board for comprehensive task, meeting, and team management.
+
+**New Tabs Added:**
+1. **Tasks** (default): Shows task-wise and project-wise views with stage filtering
+2. **Trackboard**: Time tracking overview with stats (Total Time Today, Active Timers, Tasks Completed)
+3. **Pages**: List of all page tasks from all projects with quick view
+4. **Team**: Team members overview showing task counts and active assignments
+5. **Ad.Tasks**: Additional tasks not tied to specific project pages with full CRUD
+6. **Meeting**: Meeting scheduler with Google Meet-style UI
+
+**Ad.Tasks Features:**
+- Create tasks with title, description, due date, priority (Low/Medium/High/Urgent)
+- Assign to team members and optionally link to projects
+- Start/Stop timer with time tracking
+- Mark complete, delete task
+- Sorting by due date (Oldest/Newest First)
+
+**Meetings Features:**
+- Schedule meetings with title, agenda, date, start/end time
+- Meeting types: Video Call, Audio Call, In-Person
+- Add meeting link (Google Meet, Zoom, etc.)
+- Link to projects (optional)
+- Mark complete, delete meeting
+- Join button for meetings with links
+- Sorting by date
+
+**Backend APIs Added:**
+- `GET/POST /api/additional-tasks/` - List and create additional tasks
+- `PUT /api/additional-tasks/{id}/status` - Update task status
+- `PUT /api/additional-tasks/{id}/add-time` - Add time spent
+- `DELETE /api/additional-tasks/{id}` - Delete task
+- `GET/POST /api/meetings/` - List and create meetings
+- `GET /api/meetings/upcoming` - Get upcoming meetings
+- `PUT /api/meetings/{id}/status` - Update meeting status
+- `DELETE /api/meetings/{id}` - Delete meeting
+- `GET /api/meetings/calendar/status` - Check Google Calendar connection
+
+**Files Modified/Created:**
+- `/app/backend/additional_tasks_routes.py` (NEW)
+- `/app/backend/meetings_routes.py` (NEW)
+- `/app/backend/server.py` - Added new route registrations
+- `/app/frontend/src/pages/DLOperationsPage.js` - Master Board tabs UI
+
+**Test Report:** `/app/test_reports/iteration_63.json`
+- Backend: 100% (14/14 tests passed)
+- Frontend: 100% (all tabs and features working)
+- Bug fixed: SelectItem empty value in modals
+
+---
