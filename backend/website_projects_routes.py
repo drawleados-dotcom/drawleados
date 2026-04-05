@@ -703,6 +703,71 @@ async def update_page_task(request: Request, task_id: str, update_data: PageTask
     updated = await db.website_page_tasks.find_one({"task_id": task_id}, {"_id": 0})
     return updated
 
+
+@website_projects_router.put("/pages/{task_id}/stage-status")
+async def update_page_stage_status(request: Request, task_id: str, data: dict = Body(...)):
+    """Update a specific stage status for a page task (used by Stage Task Board)"""
+    user = await get_current_user(request)
+    
+    task = await db.website_page_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    stage = data.get("stage")
+    status = data.get("status", "completed")
+    
+    # Map stage to the correct field name
+    stage_field_map = {
+        "content": "content_status",
+        "wireframe": "wireframe_status",
+        "ui": "ui_status",
+        "development": "dev_status",
+        "dev": "dev_status",
+        "responsive": "responsive_status",
+        "testing": "test_status",
+        "test": "test_status",
+        "delivery": "delivery_status"
+    }
+    
+    field_name = stage_field_map.get(stage)
+    if not field_name:
+        raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
+    
+    # Update the stage status
+    update_dict = {
+        field_name: status.title() if status.lower() in ["completed", "approved"] else status,
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    # Auto-calculate overall status based on all phases
+    current = {**task, **update_dict}
+    statuses = [
+        current.get("content_status", "To-Do"),
+        current.get("wireframe_status", "To-Do"),
+        current.get("ui_status", "To-Do"),
+        current.get("dev_status", "To-Do"),
+        current.get("responsive_status", "To-Do"),
+        current.get("test_status", "To-Do"),
+        current.get("delivery_status", "To-Do")
+    ]
+    
+    if all(s in ["Completed", "Approved"] for s in statuses):
+        update_dict["overall_status"] = "Completed"
+    elif any(s == "In Progress" for s in statuses):
+        update_dict["overall_status"] = "In Progress"
+    elif any(s in ["Completed", "Approved"] for s in statuses):
+        update_dict["overall_status"] = "In Progress"
+    
+    await db.website_page_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.website_page_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    return {"success": True, "message": f"{stage.title()} marked as {status}", "task": updated}
+
+
+
 @website_projects_router.delete("/pages/{task_id}")
 async def delete_page_task(request: Request, task_id: str):
     """Delete a page task"""
@@ -736,6 +801,62 @@ async def bulk_update_tasks(request: Request, project_id: str, updates: List[Dic
     return {"updated": updated_count}
 
 # ============== FILTERS & OPTIONS ==============
+
+@website_projects_router.get("/all-tasks")
+async def get_all_tasks(request: Request):
+    """Get all page tasks across all projects for the stage task board"""
+    user = await get_current_user(request)
+    
+    # Get all tasks with project name
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "website_projects",
+                "localField": "project_id",
+                "foreignField": "project_id",
+                "as": "project"
+            }
+        },
+        {
+            "$unwind": {
+                "path": "$project",
+                "preserveNullAndEmptyArrays": True
+            }
+        },
+        {
+            "$project": {
+                "_id": 0,
+                "task_id": 1,
+                "project_id": 1,
+                "project_name": "$project.name",
+                "page_name": 1,
+                "name": "$page_name",
+                "due_date": 1,
+                # Assignees
+                "content_assignee": 1,
+                "wireframe_assignee": 1,
+                "ui_assignee": 1,
+                "dev_assignee": 1,
+                "responsive_assignee": 1,
+                "test_assignee": 1,
+                "delivery_assignee": 1,
+                # Stage statuses
+                "content_status": 1,
+                "wireframe_status": 1,
+                "ui_status": 1,
+                "dev_status": 1,
+                "responsive_status": 1,
+                "test_status": 1,
+                "delivery_status": 1,
+                "overall_status": 1,
+                "created_at": 1
+            }
+        },
+        {"$sort": {"created_at": -1}}
+    ]
+    
+    tasks = await db.website_page_tasks.aggregate(pipeline).to_list(length=1000)
+    return tasks
 
 @website_projects_router.get("/options")
 async def get_options(request: Request):

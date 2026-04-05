@@ -87,22 +87,62 @@ const WORKFLOW_STAGES = [
   { id: 'delivered', label: 'Delivered', color: 'bg-emerald-500', description: 'Project completed and delivered' }
 ];
 
+// Stage to assignee field mapping
+const STAGE_ASSIGNEE_MAP = {
+  'content': 'content_assignee',
+  'wireframe': 'wireframe_assignee',
+  'ui': 'ui_assignee',
+  'development': 'dev_assignee',
+  'responsive': 'responsive_assignee',
+  'testing': 'test_assignee',
+  'delivery': 'delivery_assignee'
+};
+
+// Task Stages (for task-level tracking - excludes creation/discovery/delivered)
+const TASK_STAGES = [
+  { id: 'content', label: 'Content', color: 'bg-blue-500' },
+  { id: 'wireframe', label: 'Wireframe', color: 'bg-purple-500' },
+  { id: 'ui', label: 'UI Design', color: 'bg-pink-500' },
+  { id: 'development', label: 'Development', color: 'bg-green-500' },
+  { id: 'responsive', label: 'Responsive', color: 'bg-teal-500' },
+  { id: 'testing', label: 'Testing', color: 'bg-cyan-500' },
+  { id: 'delivery', label: 'Delivery', color: 'bg-emerald-500' }
+];
+
 export default function DLOperationsPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
   const navigate = useNavigate();
   
   const [projects, setProjects] = useState([]);
+  const [allTasks, setAllTasks] = useState([]); // All page tasks from all projects
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [workflowStage, setWorkflowStage] = useState('all');
   const [developerFilter, setDeveloperFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('all'); // all, this_month, this_year
   const [teamMembers, setTeamMembers] = useState([]);
-  const [mainTab, setMainTab] = useState('tracker'); // tracker | projects
+  const [mainTab, setMainTab] = useState('dashboard'); // dashboard | projects
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Part 1 - Project Overview Filters
+  const [overviewDateType, setOverviewDateType] = useState('all'); // all, date, range, month, year
+  const [overviewDate, setOverviewDate] = useState('');
+  const [overviewDateStart, setOverviewDateStart] = useState('');
+  const [overviewDateEnd, setOverviewDateEnd] = useState('');
+  const [overviewMonth, setOverviewMonth] = useState('');
+  const [overviewYear, setOverviewYear] = useState(new Date().getFullYear().toString());
+  
+  // Part 2 - Stage Task Board
+  const [taskDateType, setTaskDateType] = useState('all'); // all, date, range, month, year
+  const [taskDate, setTaskDate] = useState('');
+  const [taskDateStart, setTaskDateStart] = useState('');
+  const [taskDateEnd, setTaskDateEnd] = useState('');
+  const [taskMonth, setTaskMonth] = useState('');
+  const [taskYear, setTaskYear] = useState(new Date().getFullYear().toString());
+  const [selectedTaskStage, setSelectedTaskStage] = useState('content'); // Currently selected stage
+  const [taskViewMode, setTaskViewMode] = useState('task'); // task | project
   
   // Create Project Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -157,15 +197,141 @@ export default function DLOperationsPage() {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   
-  // Computed stats
-  const totalProjects = projects.length;
-  const uniqueClients = [...new Set(projects.map(p => p.client_name).filter(Boolean))].length;
-  const uniqueDevelopers = [...new Set(projects.map(p => p.developer).filter(Boolean))].length;
-  const totalPages = projects.reduce((sum, p) => sum + (p.total_pages || 0), 0);
+  // ═══════════════════════════════════════════════════════════════════
+  // HELPER FUNCTIONS (defined BEFORE computed values that use them)
+  // ═══════════════════════════════════════════════════════════════════
+  
+  // Check if user is PM or Operations Head (can see all)
+  const isMasterUser = () => {
+    if (!user) return false;
+    const role = user.role?.toLowerCase() || '';
+    const name = user.name?.toLowerCase() || '';
+    return role.includes('manager') || role.includes('admin') || role.includes('operations') || 
+           role.includes('head') || role.includes('super') || name.includes('vinoth');
+  };
+  
+  // Check if user can act on a specific stage task
+  const canActOnTask = (task, stageId) => {
+    if (isMasterUser()) return true;
+    const assigneeField = STAGE_ASSIGNEE_MAP[stageId];
+    if (!assigneeField || !task[assigneeField]) return false;
+    const assigneeName = task[assigneeField]?.toLowerCase() || '';
+    const userName = user?.name?.toLowerCase() || '';
+    return assigneeName.includes(userName) || userName.includes(assigneeName);
+  };
+  
+  // Check if user is assigned to a project (any role)
+  const isUserAssignedToProject = (project) => {
+    if (isMasterUser()) return true;
+    const userName = user?.name?.toLowerCase() || '';
+    const assignedRoles = [
+      project.developer, project.designer, project.content_writer, project.project_manager
+    ].filter(Boolean).map(n => n.toLowerCase());
+    return assignedRoles.some(r => r.includes(userName) || userName.includes(r));
+  };
+  
+  // Date filter helper
+  const filterByDate = (dateStr, filterType, specificDate, startDate, endDate, month, year) => {
+    if (filterType === 'all' || !dateStr) return true;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return true;
+    
+    if (filterType === 'date' && specificDate) {
+      return dateStr === specificDate;
+    }
+    if (filterType === 'range' && startDate && endDate) {
+      return dateStr >= startDate && dateStr <= endDate;
+    }
+    if (filterType === 'month' && month) {
+      const [filterYear, filterMonth] = month.split('-');
+      return date.getFullYear() === parseInt(filterYear) && (date.getMonth() + 1) === parseInt(filterMonth);
+    }
+    if (filterType === 'year' && year) {
+      return date.getFullYear() === parseInt(year);
+    }
+    return true;
+  };
+  
+  // ═══════════════════════════════════════════════════════════════════
+  // COMPUTED VALUES (use helper functions defined above)
+  // ═══════════════════════════════════════════════════════════════════
+  
+  // Role-filtered projects (team members see only their assigned projects)
+  const roleFilteredProjects = projects.filter(p => isUserAssignedToProject(p));
+  
+  // Overview date-filtered projects
+  const overviewFilteredProjects = roleFilteredProjects.filter(p => {
+    const dateToCheck = p.deadline || p.onboarding_date;
+    return filterByDate(dateToCheck, overviewDateType, overviewDate, overviewDateStart, overviewDateEnd, overviewMonth, overviewYear);
+  });
+  
+  // Computed stats for Part 1
+  const totalProjects = overviewFilteredProjects.length;
+  const newProjects = overviewFilteredProjects.filter(p => (p.workflow_stage || 'creation') === 'creation').length;
+  const currentProjects = overviewFilteredProjects.filter(p => {
+    const stage = p.workflow_stage || 'creation';
+    return ['discovery', 'content', 'wireframe', 'ui', 'development', 'responsive', 'testing'].includes(stage);
+  }).length;
+  const deliveredProjects = overviewFilteredProjects.filter(p => (p.workflow_stage || 'creation') === 'delivered').length;
+  
+  // Legacy stats (for other parts)
+  const uniqueClients = [...new Set(overviewFilteredProjects.map(p => p.client_name).filter(Boolean))].length;
+  const uniqueDevelopers = [...new Set(overviewFilteredProjects.map(p => p.developer).filter(Boolean))].length;
+  const totalPages = overviewFilteredProjects.reduce((sum, p) => sum + (p.total_pages || 0), 0);
   
   // Get unique values for filters
-  const clientNames = [...new Set(projects.map(p => p.client_name).filter(Boolean))];
-  const developerNames = [...new Set(projects.map(p => p.developer).filter(Boolean))];
+  const clientNames = [...new Set(roleFilteredProjects.map(p => p.client_name).filter(Boolean))];
+  const developerNames = [...new Set(roleFilteredProjects.map(p => p.developer).filter(Boolean))];
+  
+  // Tasks filtered by stage and date for Part 2
+  const getTasksForStage = (stageId) => {
+    // For content stage, show all tasks that haven't completed content yet
+    // For other stages, show tasks where previous stages are completed but this stage isn't
+    const stageTasks = allTasks.filter(task => {
+      const stageStatus = (task[`${stageId}_status`] || 'To-Do').toLowerCase();
+      
+      // If this stage is completed, don't show it
+      if (stageStatus === 'completed' || stageStatus === 'approved') return false;
+      
+      // For content (first stage), show all non-completed content tasks
+      if (stageId === 'content') {
+        return true;
+      }
+      
+      // For other stages, check if all previous stages are completed/approved
+      const stageOrder = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+      const currentStageIndex = stageOrder.indexOf(stageId);
+      
+      // All previous stages should be completed/approved
+      for (let i = 0; i < currentStageIndex; i++) {
+        const prevStageStatus = (task[`${stageOrder[i]}_status`] || 'To-Do').toLowerCase();
+        if (prevStageStatus !== 'completed' && prevStageStatus !== 'approved') {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+    
+    // Apply date filter
+    const dateFiltered = stageTasks.filter(task => {
+      const dateToCheck = task.due_date;
+      return filterByDate(dateToCheck, taskDateType, taskDate, taskDateStart, taskDateEnd, taskMonth, taskYear);
+    });
+    
+    return dateFiltered;
+  };
+  
+  // Get stage task counts
+  const getStageCounts = () => {
+    const counts = {};
+    TASK_STAGES.forEach(stage => {
+      counts[stage.id] = getTasksForStage(stage.id).length;
+    });
+    return counts;
+  };
+  
+  const stageCounts = getStageCounts();
   
   // Load projects
   const loadProjects = useCallback(async () => {
@@ -174,8 +340,16 @@ export default function DLOperationsPage() {
         headers: { Authorization: `Bearer ${token}` }
       });
       setProjects(res.data);
+      
+      // Also load all tasks for the stage task board
+      const tasksRes = await axios.get(`${API}/api/website-projects/all-tasks`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAllTasks(tasksRes.data || []);
     } catch (error) {
       console.error('Error loading projects:', error);
+      // If all-tasks endpoint doesn't exist yet, fallback to empty
+      setAllTasks([]);
     } finally {
       setLoading(false);
     }
@@ -317,8 +491,8 @@ export default function DLOperationsPage() {
     );
   }
   
-  // Filter projects
-  const filteredProjects = projects.filter(project => {
+  // Filter projects for Projects tab
+  const filteredProjects = roleFilteredProjects.filter(project => {
     const matchesSearch = !searchTerm || 
       project.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       project.client_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -331,16 +505,20 @@ export default function DLOperationsPage() {
   
   return (
     <Layout>
-      <div className="flex flex-col h-full pb-16 md:pb-0" data-testid="dl-operations-page">
-        {/* Header with Stats */}
+      <div className="flex flex-col h-full pb-16 md:pb-0 overflow-auto" data-testid="dl-operations-page">
+        {/* Title Row */}
         <div className={`p-4 md:p-6 border-b ${borderColor} ${isDark ? 'bg-[#0c0a09]' : 'bg-white'}`}>
-          {/* Title Row */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center">
                 <Globe className="h-5 w-5 text-white" />
               </div>
-              <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>Website Developments</h1>
+              <div>
+                <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>Website Developments</h1>
+                {!isMasterUser() && (
+                  <p className={`text-xs ${textSecondary}`}>Showing your assigned projects</p>
+                )}
+              </div>
             </div>
             <Button 
               onClick={handleNewProject}
@@ -351,202 +529,449 @@ export default function DLOperationsPage() {
               New Project
             </Button>
           </div>
-          
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-            {/* No of Projects */}
-            <div className={`p-4 rounded-xl ${bgSecondary}`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>No of Projects</p>
-              <p className={`text-2xl font-bold ${textPrimary}`}>{totalProjects}</p>
-            </div>
+        </div>
+        
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* PART 1: PROJECT OVERVIEW SECTION */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className={`p-4 md:p-6 border-b ${borderColor} ${bgCard}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className={`text-lg font-semibold ${textPrimary}`}>Project Overview</h2>
             
-            {/* Clients */}
-            <div className={`p-4 rounded-xl ${bgSecondary}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-xs ${textSecondary} mb-1`}>Clients</p>
-                  <p className={`text-2xl font-bold ${textPrimary}`}>{uniqueClients}</p>
-                </div>
-                <Building2 className="h-5 w-5 text-[#6366f1]" />
-              </div>
-            </div>
-            
-            {/* Developers */}
-            <div className={`p-4 rounded-xl ${bgSecondary}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-xs ${textSecondary} mb-1`}>Developers</p>
-                  <p className={`text-2xl font-bold ${textPrimary}`}>{uniqueDevelopers}</p>
-                </div>
-                <User className="h-5 w-5 text-[#6366f1]" />
-              </div>
-            </div>
-            
-            {/* Total Pages */}
-            <div className={`p-4 rounded-xl ${bgSecondary}`}>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-xs ${textSecondary} mb-1`}>Pages</p>
-                  <p className={`text-2xl font-bold ${textPrimary}`}>{totalPages}</p>
-                </div>
-                <FileText className="h-5 w-5 text-[#6366f1]" />
-              </div>
-            </div>
-            
-            {/* Date Filter */}
-            <div className={`p-3 rounded-xl ${bgSecondary}`}>
-              <p className={`text-xs ${textSecondary} mb-2`}>Filter by Date</p>
-              <Select value={dateFilter} onValueChange={setDateFilter}>
-                <SelectTrigger className={`h-8 ${bgCard} border-none text-xs`}>
-                  <SelectValue placeholder="All Time" />
+            {/* Date Filter for Overview */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Select value={overviewDateType} onValueChange={setOverviewDateType}>
+                <SelectTrigger className={`w-24 h-8 ${bgSecondary} border-none text-xs`}>
+                  <SelectValue placeholder="Filter" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="this_month">This Month</SelectItem>
-                  <SelectItem value="this_year">This Year</SelectItem>
+                  <SelectItem value="date">Date</SelectItem>
+                  <SelectItem value="range">Range</SelectItem>
+                  <SelectItem value="month">Month</SelectItem>
+                  <SelectItem value="year">Year</SelectItem>
                 </SelectContent>
               </Select>
+              
+              {overviewDateType === 'date' && (
+                <Input
+                  type="date"
+                  value={overviewDate}
+                  onChange={(e) => setOverviewDate(e.target.value)}
+                  className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
+                />
+              )}
+              
+              {overviewDateType === 'range' && (
+                <>
+                  <Input
+                    type="date"
+                    value={overviewDateStart}
+                    onChange={(e) => setOverviewDateStart(e.target.value)}
+                    className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
+                    placeholder="Start"
+                  />
+                  <span className={textSecondary}>to</span>
+                  <Input
+                    type="date"
+                    value={overviewDateEnd}
+                    onChange={(e) => setOverviewDateEnd(e.target.value)}
+                    className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
+                    placeholder="End"
+                  />
+                </>
+              )}
+              
+              {overviewDateType === 'month' && (
+                <Input
+                  type="month"
+                  value={overviewMonth}
+                  onChange={(e) => setOverviewMonth(e.target.value)}
+                  className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
+                />
+              )}
+              
+              {overviewDateType === 'year' && (
+                <Select value={overviewYear} onValueChange={setOverviewYear}>
+                  <SelectTrigger className={`w-24 h-8 ${bgSecondary} border-none text-xs`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[2024, 2025, 2026].map(y => (
+                      <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
           
-          {/* Main Tabs: Tracker Board | Projects */}
-          <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
-            <Button 
-              size="sm" 
-              variant={mainTab === 'tracker' ? 'default' : 'ghost'}
-              onClick={() => setMainTab('tracker')}
-              className={`gap-2 ${mainTab === 'tracker' ? 'bg-[#6366f1]' : ''}`}
+          {/* 4 Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Total Projects */}
+            <div 
+              className={`p-4 rounded-xl ${bgSecondary} cursor-pointer hover:ring-2 hover:ring-[#6366f1]/50 transition-all`}
+              onClick={() => { setMainTab('projects'); setWorkflowStage('all'); }}
             >
-              <FolderKanban className="h-4 w-4" /> Tracker Board
-            </Button>
-            <Button 
-              size="sm" 
-              variant={mainTab === 'projects' ? 'default' : 'ghost'}
-              onClick={() => setMainTab('projects')}
-              className={`gap-2 ${mainTab === 'projects' ? 'bg-[#6366f1]' : ''}`}
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-xs ${textSecondary}`}>Total Projects</p>
+                <FolderKanban className="h-4 w-4 text-[#6366f1]" />
+              </div>
+              <p className={`text-3xl font-bold ${textPrimary}`}>{totalProjects}</p>
+            </div>
+            
+            {/* New Projects (Creation stage) */}
+            <div 
+              className={`p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 cursor-pointer hover:ring-2 hover:ring-yellow-500/50 transition-all`}
+              onClick={() => { setMainTab('projects'); setWorkflowStage('creation'); }}
             >
-              <LayoutGrid className="h-4 w-4" /> Projects
-            </Button>
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-xs ${textSecondary}`}>New Projects</p>
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+              </div>
+              <p className="text-3xl font-bold text-yellow-500">{newProjects}</p>
+              <p className={`text-xs ${textSecondary}`}>Not started</p>
+            </div>
+            
+            {/* Current Projects (Discovery → Testing) */}
+            <div 
+              className={`p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 cursor-pointer hover:ring-2 hover:ring-blue-500/50 transition-all`}
+              onClick={() => { setMainTab('projects'); setWorkflowStage('all'); setStatusFilter('active'); }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-xs ${textSecondary}`}>Current Projects</p>
+                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />
+              </div>
+              <p className="text-3xl font-bold text-blue-500">{currentProjects}</p>
+              <p className={`text-xs ${textSecondary}`}>In progress</p>
+            </div>
+            
+            {/* Delivered */}
+            <div 
+              className={`p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 cursor-pointer hover:ring-2 hover:ring-emerald-500/50 transition-all`}
+              onClick={() => { setMainTab('projects'); setWorkflowStage('delivered'); }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-xs ${textSecondary}`}>Delivered</p>
+                <Check className="h-4 w-4 text-emerald-500" />
+              </div>
+              <p className="text-3xl font-bold text-emerald-500">{deliveredProjects}</p>
+              <p className={`text-xs ${textSecondary}`}>Completed</p>
+            </div>
           </div>
         </div>
         
-        {/* Tracker Board Tab */}
-        {mainTab === 'tracker' && (
-          <div className="flex-1 overflow-auto">
-            {/* Stage Sub-tabs */}
-            <div className={`p-4 border-b ${borderColor} ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 hide-scrollbar">
-                <Button
-                  size="sm"
-                  variant={workflowStage === 'all' ? 'default' : 'outline'}
-                  onClick={() => setWorkflowStage('all')}
-                  className={`h-8 shrink-0 ${workflowStage === 'all' ? 'bg-[#6366f1]' : ''}`}
-                >
-                  All ({projects.length})
-                </Button>
-                {WORKFLOW_STAGES.map(stage => {
-                  const stageCount = projects.filter(p => (p.workflow_stage || 'creation') === stage.id).length;
-                  return (
-                    <Button
-                      key={stage.id}
-                      size="sm"
-                      variant={workflowStage === stage.id ? 'default' : 'outline'}
-                      onClick={() => setWorkflowStage(stage.id)}
-                      className={`h-8 gap-2 shrink-0 ${workflowStage === stage.id ? 'bg-[#6366f1]' : ''}`}
-                    >
-                      <div className={`w-2 h-2 rounded-full ${stage.color}`} />
-                      {stage.label}
-                      {stageCount > 0 && <span className="text-xs opacity-70">({stageCount})</span>}
-                    </Button>
-                  );
-                })}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* PART 2: STAGE TASK BOARD */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        <div className={`flex-1 ${bgCard}`}>
+          {/* Header with filters */}
+          <div className={`p-4 border-b ${borderColor}`}>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className={`text-lg font-semibold ${textPrimary}`}>Stage Task Board</h2>
+                
+                {/* Task Wise / Project Wise Toggle */}
+                <div className={`inline-flex rounded-lg p-1 ${bgSecondary}`}>
+                  <Button 
+                    size="sm" 
+                    variant={taskViewMode === 'task' ? 'default' : 'ghost'}
+                    onClick={() => setTaskViewMode('task')}
+                    className={`h-7 text-xs ${taskViewMode === 'task' ? 'bg-[#6366f1]' : ''}`}
+                  >
+                    Task Wise
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    variant={taskViewMode === 'project' ? 'default' : 'ghost'}
+                    onClick={() => setTaskViewMode('project')}
+                    className={`h-7 text-xs ${taskViewMode === 'project' ? 'bg-[#6366f1]' : ''}`}
+                  >
+                    Project Wise
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Date Filter for Stage Board */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={taskDateType} onValueChange={setTaskDateType}>
+                  <SelectTrigger className={`w-24 h-8 ${bgSecondary} border-none text-xs`}>
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="range">Range</SelectItem>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="year">Year</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {taskDateType === 'date' && (
+                  <Input
+                    type="date"
+                    value={taskDate}
+                    onChange={(e) => setTaskDate(e.target.value)}
+                    className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
+                  />
+                )}
+                
+                {taskDateType === 'range' && (
+                  <>
+                    <Input
+                      type="date"
+                      value={taskDateStart}
+                      onChange={(e) => setTaskDateStart(e.target.value)}
+                      className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
+                    />
+                    <span className={textSecondary}>to</span>
+                    <Input
+                      type="date"
+                      value={taskDateEnd}
+                      onChange={(e) => setTaskDateEnd(e.target.value)}
+                      className={`w-32 h-8 ${bgSecondary} border-none text-xs`}
+                    />
+                  </>
+                )}
+                
+                {taskDateType === 'month' && (
+                  <Input
+                    type="month"
+                    value={taskMonth}
+                    onChange={(e) => setTaskMonth(e.target.value)}
+                    className={`w-36 h-8 ${bgSecondary} border-none text-xs`}
+                  />
+                )}
+                
+                {taskDateType === 'year' && (
+                  <Select value={taskYear} onValueChange={setTaskYear}>
+                    <SelectTrigger className={`w-24 h-8 ${bgSecondary} border-none text-xs`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[2024, 2025, 2026].map(y => (
+                        <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
             
-            {/* Projects Table in Tracker View */}
-            <div className="p-4">
-              <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-                <table className="w-full">
-                  <thead className={bgSecondary}>
-                    <tr className={`text-xs ${textSecondary} uppercase`}>
-                      <th className="px-4 py-3 text-left font-semibold">Project</th>
-                      <th className="px-4 py-3 text-left font-semibold">Client</th>
-                      <th className="px-4 py-3 text-left font-semibold">Developer</th>
-                      <th className="px-4 py-3 text-center font-semibold">Pages</th>
-                      <th className="px-4 py-3 text-center font-semibold">Progress</th>
-                      <th className="px-4 py-3 text-center font-semibold">Stage</th>
-                      <th className="px-4 py-3 text-center font-semibold">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProjects.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="px-6 py-12 text-center">
-                          <div className={textSecondary}>
-                            <Globe className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                            <p className="text-sm">No projects found</p>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredProjects.map(project => {
-                        const stage = WORKFLOW_STAGES.find(s => s.id === (project.workflow_stage || 'creation'));
-                        const nextStage = getNextStage(project.workflow_stage || 'creation');
-                        return (
-                          <tr key={project.project_id} className={`border-t ${borderColor} hover:${bgSecondary} transition-colors cursor-pointer`} onClick={() => openProject(project.project_id)}>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-3">
-                                <Globe className="h-5 w-5 text-[#6366f1]" />
-                                <div>
-                                  <p className={`font-medium ${textPrimary}`}>{project.name}</p>
-                                  <p className={`text-xs ${textSecondary}`}>{project.platform} • {project.website_type}</p>
-                                </div>
-                              </div>
-                            </td>
-                            <td className={`px-4 py-3 ${textPrimary}`}>{project.client_name || '-'}</td>
-                            <td className={`px-4 py-3 ${textPrimary}`}>{project.developer || 'Unassigned'}</td>
-                            <td className={`px-4 py-3 text-center ${textPrimary}`}>{project.total_pages || 0}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <Progress value={project.overall_percent || 0} className="w-16 h-2" />
-                                <span className={`text-xs ${textSecondary}`}>{project.overall_percent || 0}%</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <Badge className={`${stage?.color}/20 ${stage?.color?.replace('bg-', 'text-')}`}>
-                                {stage?.label || 'Creation'}
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center justify-center gap-2">
-                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={(e) => { e.stopPropagation(); openProject(project.project_id); }}>
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                {nextStage && (
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    className="h-8 w-8 p-0 hover:bg-green-500/20"
-                                    onClick={(e) => { e.stopPropagation(); handleStageTransition(project.project_id, nextStage); }}
-                                    title={`Move to ${WORKFLOW_STAGES.find(s => s.id === nextStage)?.label}`}
-                                  >
-                                    <ArrowRight className="h-4 w-4 text-green-500" />
-                                  </Button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            {/* Horizontal Stage Tabs */}
+            <div className="flex items-center gap-2 overflow-x-auto mt-4 pb-2 hide-scrollbar">
+              {TASK_STAGES.map(stage => {
+                const count = stageCounts[stage.id] || 0;
+                return (
+                  <Button
+                    key={stage.id}
+                    size="sm"
+                    variant={selectedTaskStage === stage.id ? 'default' : 'outline'}
+                    onClick={() => setSelectedTaskStage(stage.id)}
+                    className={`h-9 gap-2 shrink-0 ${selectedTaskStage === stage.id ? stage.color.replace('bg-', 'bg-') : ''}`}
+                    style={selectedTaskStage === stage.id ? { backgroundColor: stage.color.includes('blue') ? '#3b82f6' : stage.color.includes('purple') ? '#a855f7' : stage.color.includes('pink') ? '#ec4899' : stage.color.includes('green') ? '#22c55e' : stage.color.includes('teal') ? '#14b8a6' : stage.color.includes('cyan') ? '#06b6d4' : stage.color.includes('emerald') ? '#10b981' : '#6366f1' } : {}}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${stage.color}`} />
+                    {stage.label}
+                    <Badge variant="secondary" className="ml-1 text-xs">{count}</Badge>
+                  </Button>
+                );
+              })}
             </div>
           </div>
-        )}
+          
+          {/* Task List for Selected Stage */}
+          <div className="p-4">
+            {taskViewMode === 'task' ? (
+              /* Task Wise View */
+              <div className="space-y-3">
+                {getTasksForStage(selectedTaskStage).length === 0 ? (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No tasks in {TASK_STAGES.find(s => s.id === selectedTaskStage)?.label} stage</p>
+                    <p className="text-sm">Tasks will appear here when pages reach this stage</p>
+                  </div>
+                ) : (
+                  getTasksForStage(selectedTaskStage).map(task => {
+                    const canAct = canActOnTask(task, selectedTaskStage);
+                    const assigneeField = STAGE_ASSIGNEE_MAP[selectedTaskStage];
+                    const assignee = task[assigneeField];
+                    
+                    return (
+                      <div 
+                        key={task.task_id}
+                        className={`p-4 rounded-xl border ${borderColor} ${bgSecondary} hover:border-[#6366f1]/50 transition-all`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2 h-10 rounded-full ${TASK_STAGES.find(s => s.id === selectedTaskStage)?.color || 'bg-gray-500'}`} />
+                            <div>
+                              <p className={`font-medium ${textPrimary}`}>{task.project_name || 'Unknown Project'}</p>
+                              <p className={`text-sm ${textSecondary}`}>{task.page_name || task.name}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-4">
+                            {/* Assignee */}
+                            <div className="flex items-center gap-2">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${assignee ? 'bg-[#6366f1] text-white' : bgCard + ' ' + textSecondary}`}>
+                                {assignee ? assignee.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : <User className="h-4 w-4" />}
+                              </div>
+                              <span className={`text-sm ${textSecondary}`}>{assignee || 'Unassigned'}</span>
+                            </div>
+                            
+                            {/* Due Date */}
+                            {task.due_date && (
+                              <div className="flex items-center gap-1 text-sm">
+                                <Calendar className="h-4 w-4 text-[#6366f1]" />
+                                <span className={textSecondary}>{task.due_date}</span>
+                              </div>
+                            )}
+                            
+                            {/* Actions */}
+                            {canAct && (
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => navigate(`/project/${task.project_id}`)}
+                                  className="h-8"
+                                >
+                                  <Eye className="h-4 w-4 mr-1" /> View
+                                </Button>
+                                <Button 
+                                  size="sm"
+                                  className="h-8 bg-[#6366f1] hover:bg-[#4f46e5]"
+                                  onClick={async () => {
+                                    try {
+                                      await axios.put(
+                                        `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
+                                        { stage: selectedTaskStage, status: 'completed' },
+                                        { headers: { Authorization: `Bearer ${token}` } }
+                                      );
+                                      toast.success(`${TASK_STAGES.find(s => s.id === selectedTaskStage)?.label} completed!`);
+                                      loadProjects();
+                                    } catch (error) {
+                                      toast.error('Failed to update status');
+                                    }
+                                  }}
+                                >
+                                  <Check className="h-4 w-4 mr-1" /> Complete
+                                </Button>
+                              </div>
+                            )}
+                            {!canAct && (
+                              <Badge variant="secondary">View Only</Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            ) : (
+              /* Project Wise View */
+              <div className="space-y-4">
+                {(() => {
+                  // Group tasks by project
+                  const tasksByProject = {};
+                  getTasksForStage(selectedTaskStage).forEach(task => {
+                    const projectId = task.project_id;
+                    if (!tasksByProject[projectId]) {
+                      tasksByProject[projectId] = {
+                        project_id: projectId,
+                        project_name: task.project_name,
+                        tasks: []
+                      };
+                    }
+                    tasksByProject[projectId].tasks.push(task);
+                  });
+                  
+                  const projectGroups = Object.values(tasksByProject);
+                  
+                  if (projectGroups.length === 0) {
+                    return (
+                      <div className={`text-center py-12 ${textSecondary}`}>
+                        <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No projects with tasks in {TASK_STAGES.find(s => s.id === selectedTaskStage)?.label} stage</p>
+                      </div>
+                    );
+                  }
+                  
+                  return projectGroups.map(group => (
+                    <div key={group.project_id} className={`rounded-xl border ${borderColor} overflow-hidden`}>
+                      {/* Project Header */}
+                      <div 
+                        className={`p-4 ${bgSecondary} flex items-center justify-between cursor-pointer hover:opacity-90`}
+                        onClick={() => navigate(`/project/${group.project_id}`)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Globe className="h-5 w-5 text-[#6366f1]" />
+                          <span className={`font-semibold ${textPrimary}`}>{group.project_name}</span>
+                          <Badge variant="secondary">{group.tasks.length} pages</Badge>
+                        </div>
+                        <ArrowRight className="h-5 w-5 text-[#6366f1]" />
+                      </div>
+                      
+                      {/* Tasks List */}
+                      <div className="divide-y divide-gray-800">
+                        {group.tasks.map(task => {
+                          const canAct = canActOnTask(task, selectedTaskStage);
+                          const assigneeField = STAGE_ASSIGNEE_MAP[selectedTaskStage];
+                          const assignee = task[assigneeField];
+                          
+                          return (
+                            <div key={task.task_id} className={`p-3 ${bgCard} flex items-center justify-between`}>
+                              <div className="flex items-center gap-3">
+                                <FileText className={`h-4 w-4 ${textSecondary}`} />
+                                <span className={textPrimary}>{task.page_name || task.name}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className={`text-sm ${textSecondary}`}>{assignee || 'Unassigned'}</span>
+                                {task.due_date && (
+                                  <span className={`text-xs ${textSecondary}`}>{task.due_date}</span>
+                                )}
+                                {canAct ? (
+                                  <Button 
+                                    size="sm"
+                                    className="h-7 text-xs bg-[#6366f1] hover:bg-[#4f46e5]"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        await axios.put(
+                                          `${API}/api/website-projects/pages/${task.task_id}/stage-status`,
+                                          { stage: selectedTaskStage, status: 'completed' },
+                                          { headers: { Authorization: `Bearer ${token}` } }
+                                        );
+                                        toast.success('Stage completed!');
+                                        loadProjects();
+                                      } catch (error) {
+                                        toast.error('Failed to update');
+                                      }
+                                    }}
+                                  >
+                                    <Check className="h-3 w-3 mr-1" /> Done
+                                  </Button>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs">View Only</Badge>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
+        </div>
         
-        {/* Projects Tab */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
+        {/* PROJECTS TAB (kept for direct project list access) */}
+        {/* ═══════════════════════════════════════════════════════════════════ */}
         {mainTab === 'projects' && (
           <div className="flex-1 overflow-auto">
             {/* Filter Bar */}
@@ -562,6 +987,19 @@ export default function DLOperationsPage() {
                     className={`pl-10 ${bgSecondary} border-none`} 
                   />
                 </div>
+                
+                {/* Stage Filter */}
+                <Select value={workflowStage} onValueChange={setWorkflowStage}>
+                  <SelectTrigger className={`w-44 ${bgSecondary} border-none`}>
+                    <SelectValue placeholder="All Stages" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Stages</SelectItem>
+                    {WORKFLOW_STAGES.map(stage => (
+                      <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 
                 {/* Client Filter */}
                 <Select value={clientFilter} onValueChange={setClientFilter}>
@@ -584,23 +1022,10 @@ export default function DLOperationsPage() {
                     {developerNames.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                
-                {/* Status Filter */}
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className={`w-36 ${bgSecondary} border-none`}>
-                    <SelectValue placeholder="All Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="paused">Paused</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
             
-            {/* Projects Grid/List */}
+            {/* Projects Grid */}
             <div className="p-4">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {filteredProjects.length === 0 ? (
@@ -650,9 +1075,9 @@ export default function DLOperationsPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 flex-1">
                             <Progress value={project.overall_percent || 0} className="flex-1 h-2" />
-                            <span className={`text-sm ${textPrimary}`}>{project.overall_percent || 0}%</span>
+                            <span className={`text-xs ${textSecondary}`}>{project.overall_percent || 0}%</span>
                           </div>
-                          <Button size="sm" variant="ghost" className="ml-2">
+                          <Button size="sm" variant="ghost" className="ml-2" onClick={(e) => { e.stopPropagation(); openProject(project.project_id); }}>
                             <Eye className="h-4 w-4" />
                           </Button>
                         </div>
