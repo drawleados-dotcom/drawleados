@@ -149,7 +149,7 @@ export default function DLOperationsPage() {
                 <Globe className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>DL Operations</h1>
+                <h1 className={`text-xl md:text-2xl font-bold ${textPrimary}`}>Web Dev</h1>
                 <p className={`text-sm ${textSecondary}`}>Website Development Department</p>
               </div>
               <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{projects.length} Projects</Badge>
