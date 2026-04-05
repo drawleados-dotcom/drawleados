@@ -30,6 +30,55 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Website Development Dashboard Redesign (DONE - December 2025)
+**Purpose:** Completely redesigned the Web Dev main dashboard with a two-part layout for comprehensive project and task tracking.
+
+**Part 1: Project Overview Section**
+- Date Filters: All Time, Single Date, Date Range, Month, Year
+- 4 Summary Cards (clickable to filter projects):
+  - **Total Projects**: All projects count
+  - **New Projects**: Projects in "Project Creation" stage (yellow, "Not started")
+  - **Current Projects**: Projects in Discovery → Testing stages (blue, "In progress")
+  - **Delivered**: Completed projects (green, "Completed")
+
+**Part 2: Stage Task Board**
+- Date Filters: Same options as Part 1
+- **Task Wise / Project Wise Toggle**: Switch between task list and project-grouped view
+- **7 Horizontal Stage Tabs** (clickable with task counts):
+  - Content, Wireframe, UI Design, Development, Responsive, Testing, Delivery
+- **Task List View**:
+  - Shows: Project Name, Page Name, Assignee (avatar + name), Due Date
+  - Action buttons: View (navigates to project), Complete (marks stage done)
+- **Project Wise View**:
+  - Groups tasks by project
+  - Each project header shows project name + page count
+  - Individual page tasks with Done button
+
+**Role-Based Access Control**:
+- **Admin/PM/Operations Head**: See ALL projects (Master Board)
+- **Team Members**: See only projects they're assigned to (any role)
+- All users can view all stages, but can only ACT on tasks they're assigned to
+
+**Stage Filtering Logic**:
+- Content: All tasks where content_status is not completed/approved
+- Wireframe: Tasks where content is completed/approved AND wireframe is not
+- UI Design: Tasks where content+wireframe are done AND UI is not
+- And so on for subsequent stages...
+
+**Backend Changes**:
+- Added `/api/website-projects/all-tasks` endpoint to fetch all page tasks with project names
+- Added `/api/website-projects/pages/{task_id}/stage-status` endpoint for marking stages complete
+
+**Files Modified**:
+- `/app/frontend/src/pages/DLOperationsPage.js` - Two-part dashboard layout
+- `/app/backend/website_projects_routes.py` - all-tasks and stage-status endpoints
+
+**Testing Status:** ✅ All features verified (iteration_62.json)
+
+---
+
+
+
 ### Comprehensive 4-Step Project Creation Wizard (DONE - December 2025)
 **Purpose:** Implemented a comprehensive multi-tab project creation wizard in the Web Dev module (DLOperationsPage.js) to handle robust project creation with detailed requirements and branding.
 
