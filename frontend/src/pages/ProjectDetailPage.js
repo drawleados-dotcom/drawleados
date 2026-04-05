@@ -176,12 +176,13 @@ export default function ProjectDetailPage() {
   };
 
   // Add new page
-  const handleAddPage = async (pageName, assignees = {}) => {
+  const handleAddPage = async (pageName, assignees = {}, dueDate = null) => {
     try {
       await axios.post(
         `${API}/api/website-projects/projects/${projectId}/pages`,
         { 
           page_name: pageName,
+          due_date: dueDate || null,
           content_assignee: assignees.content || null,
           wireframe_assignee: assignees.wireframe || null,
           ui_assignee: assignees.ui || null,
@@ -647,6 +648,7 @@ function PagesTab({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPage, setEditingPage] = useState(null);
   const [newPageName, setNewPageName] = useState('');
+  const [dueDate, setDueDate] = useState('');
   // Stage assignee states
   const [stageAssignees, setStageAssignees] = useState({
     content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: ''
@@ -667,12 +669,14 @@ function PagesTab({
   const getPageStageStatus = (pageId, stageId) => {
     const tasks = stageTasks[stageId] || [];
     const task = tasks.find(t => t.page_id === pageId || t.task_id?.includes(pageId));
-    if (!task) return { status: 'pending', pm: false, ops: false };
+    if (!task) return { status: 'pending', pm: false, ops: false, assignee: null, time_spent: 0 };
     return {
       status: task.status || 'pending',
       pm: task.pm_approved || false,
       ops: task.ops_approved || false,
-      link: task.link
+      link: task.link,
+      assignee: task.assignee,
+      time_spent: task.time_spent || 0
     };
   };
   
@@ -712,10 +716,85 @@ function PagesTab({
     return { approved, total: stageColumns.length };
   };
   
+  // Calculate total time spent across all stages
+  const getTotalTimeSpent = (pageId) => {
+    let total = 0;
+    stageColumns.forEach(stage => {
+      const statusInfo = getPageStageStatus(pageId, stage.id);
+      total += statusInfo.time_spent || 0;
+    });
+    return total;
+  };
+  
+  // Format time spent in hours/minutes
+  const formatTimeSpent = (minutes) => {
+    if (!minutes || minutes === 0) return '-';
+    if (minutes >= 60) {
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${hours}h ${mins > 0 ? mins + 'm' : ''}`;
+    }
+    return `${minutes}m`;
+  };
+  
+  // Calculate time left until due date
+  const getTimeLeft = (dueDateStr) => {
+    if (!dueDateStr) return { text: '-', isOverdue: false, color: 'text-gray-400' };
+    
+    try {
+      const dueDateTime = new Date(dueDateStr);
+      const now = new Date();
+      const diffMs = dueDateTime - now;
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      if (diffMs < 0) {
+        // Overdue
+        const overdueDays = Math.abs(diffDays);
+        const overdueHours = Math.abs(diffHours);
+        if (overdueDays > 0) {
+          return { text: `${overdueDays}d overdue`, isOverdue: true, color: 'text-red-400' };
+        }
+        return { text: `${overdueHours}h overdue`, isOverdue: true, color: 'text-red-400' };
+      } else if (diffDays === 0) {
+        // Due today
+        if (diffHours <= 2) {
+          return { text: `${diffHours}h left`, isOverdue: false, color: 'text-orange-400' };
+        }
+        return { text: `${diffHours}h left`, isOverdue: false, color: 'text-yellow-400' };
+      } else if (diffDays <= 2) {
+        // Due soon
+        return { text: `${diffDays}d ${diffHours}h`, isOverdue: false, color: 'text-yellow-400' };
+      } else {
+        // Plenty of time
+        return { text: `${diffDays}d left`, isOverdue: false, color: 'text-green-400' };
+      }
+    } catch {
+      return { text: '-', isOverdue: false, color: 'text-gray-400' };
+    }
+  };
+  
+  // Format due date for display
+  const formatDueDate = (dateStr) => {
+    if (!dateStr) return '-';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+    } catch {
+      return '-';
+    }
+  };
+  
+  // Get assignee name for a stage (from page data)
+  const getStageAssignee = (page, stageId) => {
+    return page[`${stageId}_assignee`] || null;
+  };
+  
   const handleAddPage = () => {
     if (newPageName.trim()) {
-      onAddPage(newPageName.trim(), stageAssignees);
+      onAddPage(newPageName.trim(), stageAssignees, dueDate);
       setNewPageName('');
+      setDueDate('');
       setStageAssignees({ content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: '' });
       setShowAddModal(false);
     }
@@ -725,6 +804,10 @@ function PagesTab({
     if (editingPage && newPageName.trim()) {
       // Update page name
       onUpdatePage(editingPage.task_id, 'page_name', newPageName.trim());
+      // Update due date
+      if (dueDate !== (editingPage.due_date || '')) {
+        onUpdatePage(editingPage.task_id, 'due_date', dueDate);
+      }
       // Update stage assignees
       Object.entries(stageAssignees).forEach(([stage, assignee]) => {
         if (assignee !== (editingPage[`${stage}_assignee`] || '')) {
@@ -733,6 +816,7 @@ function PagesTab({
       });
       setEditingPage(null);
       setNewPageName('');
+      setDueDate('');
       setStageAssignees({ content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: '' });
     }
   };
@@ -740,6 +824,7 @@ function PagesTab({
   const openEditModal = (page) => {
     setEditingPage(page);
     setNewPageName(page.page_name);
+    setDueDate(page.due_date || '');
     setStageAssignees({
       content: page.content_assignee || '',
       wireframe: page.wireframe_assignee || '',
@@ -755,6 +840,7 @@ function PagesTab({
     setShowAddModal(false);
     setEditingPage(null);
     setNewPageName('');
+    setDueDate('');
     setStageAssignees({ content: '', wireframe: '', ui: '', responsive: '', dev: '', test: '', delivery: '' });
   };
   
@@ -809,28 +895,31 @@ function PagesTab({
       </div>
       
       {/* Multi-Stage Horizontal Table */}
-      <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
-        <table className="w-full table-fixed">
+      <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden overflow-x-auto`}>
+        <table className="w-full min-w-[1200px]">
           <thead className={bgSecondary}>
             <tr className={`text-xs ${textSecondary} uppercase`}>
-              <th className="w-12 px-2 py-3 text-center font-semibold">#</th>
-              <th className="w-36 px-3 py-3 text-left font-semibold">Page Name</th>
+              <th className="w-10 px-2 py-3 text-center font-semibold">#</th>
+              <th className="w-32 px-2 py-3 text-left font-semibold">Page Name</th>
               {stageColumns.map(stage => (
-                <th key={stage.id} className="px-1 py-3 text-center font-semibold">
+                <th key={stage.id} className="w-24 px-1 py-3 text-center font-semibold">
                   <div className="flex flex-col items-center gap-1">
                     <div className={`w-2 h-2 rounded-full ${stage.color}`}></div>
                     <span className="text-[10px] leading-tight">{stage.label}</span>
                   </div>
                 </th>
               ))}
-              <th className="w-20 px-2 py-3 text-center font-semibold">Progress</th>
-              <th className="w-20 px-2 py-3 text-center font-semibold">Actions</th>
+              <th className="w-20 px-2 py-3 text-center font-semibold">Due Date</th>
+              <th className="w-20 px-2 py-3 text-center font-semibold">Time Left</th>
+              <th className="w-20 px-2 py-3 text-center font-semibold">Time Spent</th>
+              <th className="w-16 px-2 py-3 text-center font-semibold">Progress</th>
+              <th className="w-16 px-2 py-3 text-center font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {pages.length === 0 ? (
               <tr>
-                <td colSpan={stageColumns.length + 4} className="px-6 py-12 text-center">
+                <td colSpan={stageColumns.length + 7} className="px-6 py-12 text-center">
                   <div className={`${textSecondary}`}>
                     <Layers className="h-10 w-10 mx-auto mb-3 opacity-50" />
                     <p className="text-sm">No pages added yet</p>
@@ -841,15 +930,17 @@ function PagesTab({
             ) : (
               pages.map((page, idx) => {
                 const progress = getOverallProgress(page.task_id);
+                const timeSpent = getTotalTimeSpent(page.task_id);
+                const timeLeft = getTimeLeft(page.due_date);
                 return (
                   <tr key={page.task_id} className={`border-t ${borderColor} hover:${bgSecondary} transition-colors`}>
                     {/* S.No */}
-                    <td className={`px-2 py-3 text-center ${textSecondary} text-sm`}>
+                    <td className={`px-2 py-2 text-center ${textSecondary} text-sm`}>
                       {idx + 1}
                     </td>
                     
                     {/* Page Name */}
-                    <td className="px-3 py-3">
+                    <td className="px-2 py-2">
                       <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-[#6366f1] flex-shrink-0" />
                         <span className={`font-medium ${textPrimary} text-sm truncate`} title={page.page_name}>
@@ -858,59 +949,97 @@ function PagesTab({
                       </div>
                     </td>
                     
-                    {/* Stage Status Cells */}
+                    {/* Stage Cells - Show Assignee + Status */}
                     {stageColumns.map(stage => {
                       const statusInfo = getPageStageStatus(page.task_id, stage.id);
                       const badge = getStatusBadge(statusInfo);
+                      const assignee = getStageAssignee(page, stage.id);
+                      const initials = assignee ? assignee.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : null;
+                      
                       return (
-                        <td key={`${page.task_id}-${stage.id}`} className="px-1 py-3 text-center">
-                          <div 
-                            className={`inline-flex items-center justify-center w-8 h-8 rounded-lg ${badge.bg} cursor-default`}
-                            title={badge.title}
-                          >
-                            <span className={`text-xs font-bold ${badge.text}`}>{badge.label}</span>
+                        <td key={`${page.task_id}-${stage.id}`} className="px-1 py-2 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            {/* Assignee Avatar or Unassigned */}
+                            {assignee ? (
+                              <div 
+                                className={`w-6 h-6 rounded-full ${stage.color} flex items-center justify-center`}
+                                title={assignee}
+                              >
+                                <span className="text-[9px] font-bold text-white">{initials}</span>
+                              </div>
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-gray-500/30 flex items-center justify-center">
+                                <User className="h-3 w-3 text-gray-400" />
+                              </div>
+                            )}
+                            {/* Status Badge */}
+                            <div 
+                              className={`inline-flex items-center justify-center w-6 h-5 rounded ${badge.bg} cursor-default`}
+                              title={badge.title}
+                            >
+                              <span className={`text-[10px] font-bold ${badge.text}`}>{badge.label}</span>
+                            </div>
                           </div>
                         </td>
                       );
                     })}
                     
+                    {/* Due Date */}
+                    <td className={`px-2 py-2 text-center text-xs ${textPrimary}`}>
+                      {formatDueDate(page.due_date)}
+                    </td>
+                    
+                    {/* Time Left */}
+                    <td className={`px-2 py-2 text-center text-xs font-medium ${timeLeft.color}`}>
+                      {timeLeft.isOverdue && <AlertCircle className="h-3 w-3 inline mr-1" />}
+                      {timeLeft.text}
+                    </td>
+                    
+                    {/* Time Spent */}
+                    <td className={`px-2 py-2 text-center text-xs ${textSecondary}`}>
+                      <div className="flex items-center justify-center gap-1">
+                        <Timer className="h-3 w-3" />
+                        {formatTimeSpent(timeSpent)}
+                      </div>
+                    </td>
+                    
                     {/* Progress */}
-                    <td className="px-2 py-3 text-center">
+                    <td className="px-2 py-2 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <div className="w-full max-w-[60px] h-1.5 bg-gray-600/30 rounded-full overflow-hidden">
+                        <div className="w-full max-w-[40px] h-1.5 bg-gray-600/30 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-green-500 rounded-full transition-all"
                             style={{ width: `${(progress.approved / progress.total) * 100}%` }}
                           />
                         </div>
-                        <span className={`text-xs ${textSecondary}`}>
+                        <span className={`text-[10px] ${textSecondary}`}>
                           {progress.approved}/{progress.total}
                         </span>
                       </div>
                     </td>
                     
                     {/* Actions */}
-                    <td className="px-2 py-3">
+                    <td className="px-2 py-2">
                       <div className="flex items-center justify-center gap-1">
                         <Button 
                           size="sm"
                           variant="ghost"
-                          className="h-7 w-7 p-0 hover:bg-blue-500/20"
+                          className="h-6 w-6 p-0 hover:bg-blue-500/20"
                           onClick={() => openEditModal(page)}
                           title="Edit"
                           data-testid={`edit-page-${page.task_id}`}
                         >
-                          <Edit2 className="h-3.5 w-3.5 text-blue-400" />
+                          <Edit2 className="h-3 w-3 text-blue-400" />
                         </Button>
                         <Button 
                           size="sm"
                           variant="ghost"
-                          className="h-7 w-7 p-0 hover:bg-red-500/20"
+                          className="h-6 w-6 p-0 hover:bg-red-500/20"
                           onClick={() => onDeletePage(page.task_id)}
                           title="Delete"
                           data-testid={`delete-page-${page.task_id}`}
                         >
-                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                          <Trash2 className="h-3 w-3 text-red-400" />
                         </Button>
                       </div>
                     </td>
@@ -954,6 +1083,18 @@ function PagesTab({
                 className={`${bgSecondary} border-none`}
                 autoFocus
                 data-testid="new-page-name-input"
+              />
+            </div>
+            
+            {/* Due Date */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Due Date</label>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className={`${bgSecondary} border-none`}
+                data-testid="new-page-due-date"
               />
             </div>
             
@@ -1009,6 +1150,18 @@ function PagesTab({
                 className={`${bgSecondary} border-none`}
                 autoFocus
                 data-testid="edit-page-name-input"
+              />
+            </div>
+            
+            {/* Due Date */}
+            <div className="mb-4">
+              <label className={`block text-sm font-medium ${textPrimary} mb-2`}>Due Date</label>
+              <Input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className={`${bgSecondary} border-none`}
+                data-testid="edit-page-due-date"
               />
             </div>
             

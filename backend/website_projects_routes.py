@@ -118,6 +118,7 @@ class ProjectUpdate(BaseModel):
 class PageTaskCreate(BaseModel):
     page_name: str  # Home Page, About Us, etc.
     sno: Optional[int] = None
+    due_date: Optional[str] = None  # Overall page due date
     # Wireframe phase
     wireframe_url: Optional[str] = None
     wireframe_due: Optional[str] = None
@@ -152,6 +153,7 @@ class PageTaskCreate(BaseModel):
 class PageTaskUpdate(BaseModel):
     page_name: Optional[str] = None
     sno: Optional[int] = None
+    due_date: Optional[str] = None  # Overall page due date
     # Wireframe phase
     wireframe_url: Optional[str] = None
     wireframe_due: Optional[str] = None
@@ -600,6 +602,7 @@ async def add_page_task(request: Request, project_id: str, task_data: PageTaskCr
         "project_id": project_id,
         "sno": task_data.sno or next_sno,
         "page_name": task_data.page_name,
+        "due_date": task_data.due_date,
         "wireframe_url": task_data.wireframe_url,
         "wireframe_due": task_data.wireframe_due,
         "wireframe_status": task_data.wireframe_status,
