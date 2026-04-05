@@ -30,6 +30,54 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Pages Tab Multi-Stage Horizontal Layout (NEW - April 5, 2026)
+**Purpose:** Redesigned the "Pages" tab in Project Detail page to show all workflow stages horizontally, providing a bird's-eye view of project health.
+
+**Features Implemented:**
+1. **Multi-Stage Table Layout:**
+   - Columns: #, Page Name, Content, Wireframe, UI Design, Responsive, Development, Testing, Delivery, Progress, Actions
+   - Each stage column has colored dot indicator in header
+   - Table is responsive and fits screen without horizontal scrolling
+
+2. **Add Page Functionality:**
+   - "+ Add Page" button in header
+   - Opens modal with input field and placeholder text
+   - Creates page via POST `/api/website-projects/projects/{project_id}/pages`
+
+3. **Edit Page Functionality:**
+   - Edit (pencil) button on each row
+   - Opens modal with pre-filled page name
+   - Updates page via PUT `/api/website-projects/pages/{task_id}`
+
+4. **Delete Page Functionality:**
+   - Delete (trash) button on each row
+   - Browser confirmation dialog
+   - Deletes page via DELETE `/api/website-projects/pages/{task_id}`
+
+5. **Progress Tracking:**
+   - Progress bar per page showing completion percentage
+   - X/7 format (approved stages / total stages)
+
+6. **Stage Status Indicators:**
+   - ○ Not Started
+   - ▶ In Progress
+   - ⏳ Waiting PM
+   - PM✓ Waiting Ops
+   - ✓ Approved
+   - ↻ Corrections
+
+7. **Legend Section:**
+   - Displays all status types with their icons below the table
+
+**Files Modified:**
+- `/app/frontend/src/pages/ProjectDetailPage.js` - PagesTab component completely rewritten
+
+**Testing Status:** ✅ All features verified by testing agent (iteration_58.json)
+
+---
+
+
+
 ### Monthly Leave Quota System (NEW - April 2026)
 **Purpose:** Implemented monthly-based leave quota system with cascading logic for all request sub-tabs.
 
