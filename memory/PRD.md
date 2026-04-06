@@ -1794,3 +1794,54 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - `/app/backend/website_projects_routes.py` - Added 3 new endpoints
 
 ---
+
+
+
+### Ad.Tasks Tab UI Redesign (DONE - April 2026)
+**Purpose:** Redesigned the Additional Tasks tab within the Project Detail page to match the "Our Tasks" page design with summary cards, filters, and a table view.
+
+**Features Implemented:**
+1. **Summary Cards Row:**
+   - Total Tasks (purple icon)
+   - Pending (gray icon)
+   - In Progress (blue icon)
+   - Completed (green icon)
+   - Counts update dynamically
+
+2. **Filter Tabs:**
+   - All / Pending / In Progress / Completed
+   - Single-click filtering of task list
+
+3. **Advanced Filters Panel:**
+   - Toggle with "Filters" button
+   - Date filter (All Time, Today, Single Date)
+   - Assigned To dropdown (team members)
+   - Type filter (General, Bug Fix, Feature, Content, Design)
+   - Status filter (All, To-Do, In Progress, Completed)
+   - Reset Filters button
+
+4. **Table View with Columns:**
+   - TASK: Title, description, type badge, priority indicator (colored bar)
+   - STATUS: Badge (To-Do, In Progress, Completed)
+   - ASSIGNED: Assignee name
+   - DUE DATE: Formatted date (red if overdue)
+   - LINK: Link icon (if work_link exists)
+   - TIME: HH:MM:SS format time spent
+   - TIMER: Start/Pause/Done buttons
+   - ACTIONS: Edit/Delete buttons
+
+5. **Enhanced Add/Edit Modal:**
+   - Type dropdown (General, Bug Fix, Feature, Content, Design)
+   - Work Link input field (optional)
+
+**Backend Changes:**
+- Added `type` and `work_link` fields to AdditionalTaskCreate and AdditionalTaskUpdate models
+- Tasks now store and return type and work_link fields
+
+**Files Modified:**
+- `/app/frontend/src/pages/ProjectDetailPage.js` - AdTasksTab component redesigned
+- `/app/backend/additional_tasks_routes.py` - Added type and work_link fields
+
+**Testing Status:** ✅ All features verified (iteration_64.json)
+
+---
