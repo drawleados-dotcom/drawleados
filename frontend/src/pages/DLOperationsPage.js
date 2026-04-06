@@ -12,7 +12,7 @@ import {
   Globe, Plus, Search, Eye, ArrowRight, FolderKanban, 
   Calendar, FileText, LayoutGrid, ListTodo, Filter, X, Check, User, Building2,
   Palette, Type, Link2, Users, Settings, Play, Square, Pencil, Trash2, ExternalLink, Clock,
-  Video, CheckSquare, ClipboardList, UserCircle, ArrowUpDown, Home, BarChart3
+  Video, CheckSquare, ClipboardList, UserCircle, ArrowUpDown, Home, BarChart3, Edit2
 } from 'lucide-react';
 import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -195,6 +195,11 @@ export default function DLOperationsPage() {
   // Create Project Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createStep, setCreateStep] = useState(1);
+  
+  // Edit Project Modal State
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  
   const [newProject, setNewProject] = useState({
     name: '',
     website_type: '',
@@ -575,6 +580,26 @@ export default function DLOperationsPage() {
     setCreateStep(1);
   };
   
+  // Update project
+  const handleUpdateProject = async () => {
+    if (!editingProject) return;
+    
+    try {
+      await axios.put(
+        `${API}/api/website-projects/projects/${editingProject.project_id}`,
+        editingProject,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      toast.success('Project updated successfully!');
+      setShowEditProjectModal(false);
+      setEditingProject(null);
+      loadProjects();
+    } catch (error) {
+      toast.error('Failed to update project');
+    }
+  };
+
   // Open project detail page (navigate instead of modal)
   const openProject = (projectId) => {
     navigate(`/project/${projectId}`);
@@ -1361,10 +1386,22 @@ export default function DLOperationsPage() {
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3">
                             <Badge className={`${workflowStage?.color}/20`} style={{ color: workflowStage?.color?.includes('yellow') ? '#eab308' : workflowStage?.color?.includes('blue') ? '#3b82f6' : workflowStage?.color?.includes('green') ? '#22c55e' : '#6366f1' }}>
                               {workflowStage?.label || 'Creation'}
                             </Badge>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-8"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingProject(project);
+                                setShowEditProjectModal(true);
+                              }}
+                            >
+                              <Edit2 className="h-4 w-4 mr-1" /> Edit
+                            </Button>
                             <Button size="sm" variant="outline" className="h-8">
                               <Eye className="h-4 w-4 mr-1" /> View
                             </Button>
@@ -2650,6 +2687,225 @@ export default function DLOperationsPage() {
       )}
       
       {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* Edit Project Modal */}
+      {showEditProjectModal && editingProject && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className={`${bgCard} rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto`}>
+            <div className={`sticky top-0 ${bgCard} border-b ${borderColor} px-6 py-4 flex items-center justify-between z-10`}>
+              <h2 className={`text-xl font-bold ${textPrimary}`}>Edit Project</h2>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => { setShowEditProjectModal(false); setEditingProject(null); }}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {/* Basic Info */}
+              <div className="space-y-4">
+                <h3 className={`text-sm font-semibold ${textSecondary} uppercase`}>Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Project Name *</label>
+                    <Input
+                      value={editingProject.name || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+                      placeholder="Project name"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Client Name</label>
+                    <Input
+                      value={editingProject.client_name || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, client_name: e.target.value })}
+                      placeholder="Client name"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Website Type</label>
+                    <Select 
+                      value={editingProject.website_type || ''} 
+                      onValueChange={(v) => setEditingProject({ ...editingProject, website_type: v })}
+                    >
+                      <SelectTrigger className={`${bgSecondary} border-none`}>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Business Website">Business Website</SelectItem>
+                        <SelectItem value="E-commerce">E-commerce</SelectItem>
+                        <SelectItem value="Landing Page">Landing Page</SelectItem>
+                        <SelectItem value="Portfolio">Portfolio</SelectItem>
+                        <SelectItem value="Blog">Blog</SelectItem>
+                        <SelectItem value="Corporate">Corporate</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Platform</label>
+                    <Select 
+                      value={editingProject.platform || ''} 
+                      onValueChange={(v) => setEditingProject({ ...editingProject, platform: v })}
+                    >
+                      <SelectTrigger className={`${bgSecondary} border-none`}>
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="WordPress">WordPress</SelectItem>
+                        <SelectItem value="Shopify">Shopify</SelectItem>
+                        <SelectItem value="Webflow">Webflow</SelectItem>
+                        <SelectItem value="Wix">Wix</SelectItem>
+                        <SelectItem value="Custom">Custom</SelectItem>
+                        <SelectItem value="React">React</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Contact Info */}
+              <div className="space-y-4">
+                <h3 className={`text-sm font-semibold ${textSecondary} uppercase`}>Contact Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Email</label>
+                    <Input
+                      value={editingProject.client_email || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, client_email: e.target.value })}
+                      placeholder="client@email.com"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Phone</label>
+                    <Input
+                      value={editingProject.client_phone || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, client_phone: e.target.value })}
+                      placeholder="+91..."
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Location</label>
+                    <Input
+                      value={editingProject.client_location || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, client_location: e.target.value })}
+                      placeholder="City, Country"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Domain URL</label>
+                    <Input
+                      value={editingProject.domain_url || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, domain_url: e.target.value })}
+                      placeholder="https://..."
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Dates & Status */}
+              <div className="space-y-4">
+                <h3 className={`text-sm font-semibold ${textSecondary} uppercase`}>Dates & Status</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Onboarding Date</label>
+                    <Input
+                      type="date"
+                      value={editingProject.onboarding_date || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, onboarding_date: e.target.value })}
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Deadline</label>
+                    <Input
+                      type="date"
+                      value={editingProject.deadline || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, deadline: e.target.value })}
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Workflow Stage</label>
+                    <Select 
+                      value={editingProject.workflow_stage || 'creation'} 
+                      onValueChange={(v) => setEditingProject({ ...editingProject, workflow_stage: v })}
+                    >
+                      <SelectTrigger className={`${bgSecondary} border-none`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="creation">Project Creation</SelectItem>
+                        <SelectItem value="discovery">Discovery</SelectItem>
+                        <SelectItem value="content">Content</SelectItem>
+                        <SelectItem value="wireframe">Wireframe</SelectItem>
+                        <SelectItem value="ui">UI Design</SelectItem>
+                        <SelectItem value="development">Development</SelectItem>
+                        <SelectItem value="testing">Testing</SelectItem>
+                        <SelectItem value="delivered">Delivered</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Links */}
+              <div className="space-y-4">
+                <h3 className={`text-sm font-semibold ${textSecondary} uppercase`}>Links</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Client Drive</label>
+                    <Input
+                      value={editingProject.client_drive_url || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, client_drive_url: e.target.value })}
+                      placeholder="Google Drive URL"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Documents</label>
+                    <Input
+                      value={editingProject.documents_url || ''}
+                      onChange={(e) => setEditingProject({ ...editingProject, documents_url: e.target.value })}
+                      placeholder="Documents URL"
+                      className={`${bgSecondary} border-none`}
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Notes */}
+              <div className="space-y-2">
+                <label className={`text-sm ${textSecondary} block`}>Notes</label>
+                <Textarea
+                  value={editingProject.notes || ''}
+                  onChange={(e) => setEditingProject({ ...editingProject, notes: e.target.value })}
+                  placeholder="Additional notes..."
+                  className={`${bgSecondary} border-none`}
+                  rows={3}
+                />
+              </div>
+            </div>
+            
+            <div className={`sticky bottom-0 ${bgCard} border-t ${borderColor} px-6 py-4 flex justify-end gap-3`}>
+              <Button variant="outline" onClick={() => { setShowEditProjectModal(false); setEditingProject(null); }}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateProject} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MOBILE BOTTOM NAVIGATION BAR */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {isMobile && (
