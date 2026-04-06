@@ -4,11 +4,23 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Loader2, Eye, EyeOff, Shield, ArrowLeft } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Loader2, Eye, EyeOff, Shield, ArrowLeft, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 
 const API = process.env.REACT_APP_BACKEND_URL;
+
+// Demo users for quick login
+const DEMO_USERS = [
+  { name: 'Demo User', email: 'demo@drawlead.com', password: 'demo123', role: 'Business Development' },
+  { name: 'Harish', email: 'harish@drawlead.com', password: 'harish123', role: 'Website Developer' },
+  { name: 'Nirmal', email: 'nirmal@drawlead.com', password: 'nirmal123', role: 'UI UX Designer' },
+  { name: 'Swathi', email: 'swathi@drawlead.com', password: 'swathi123', role: 'Content Writer' },
+  { name: 'N. Anbarasan', email: 'n.anbarasan@drawlead.com', password: 'anbarasan123', role: 'Project Manager' },
+  { name: 'Saranya', email: 'saranya@drawlead.com', password: 'saranya123', role: 'Operation Head' },
+  { name: 'Admin', email: 'vinoth@drawlead.com', password: 'admin123', role: 'Super Admin' },
+];
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -151,6 +163,50 @@ export default function LoginPage() {
                   'Sign In'
                 )}
               </Button>
+              
+              {/* Demo Users Dropdown */}
+              <div className="pt-4 border-t border-[#27272a]">
+                <div className="flex items-center gap-2 mb-3">
+                  <Users className="h-4 w-4 text-[#6366f1]" />
+                  <span className="text-xs text-[#a1a1aa]">Quick Demo Login</span>
+                </div>
+                <Select
+                  onValueChange={(value) => {
+                    const user = DEMO_USERS.find(u => u.email === value);
+                    if (user) {
+                      setEmail(user.email);
+                      setPassword(user.password);
+                      toast.info(`Selected: ${user.name} (${user.role})`);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full bg-[#18181b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]" data-testid="demo-user-select">
+                    <SelectValue placeholder="Select demo account..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#18181b] border-[#27272a]">
+                    {DEMO_USERS.map((user) => (
+                      <SelectItem 
+                        key={user.email} 
+                        value={user.email}
+                        className="text-[#fafafa] focus:bg-[#27272a] cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-[#6366f1]/20 flex items-center justify-center text-xs font-bold text-[#6366f1]">
+                            {user.name.charAt(0)}
+                          </div>
+                          <div>
+                            <span className="font-medium">{user.name}</span>
+                            <span className="text-[#a1a1aa] text-xs ml-2">({user.role})</span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-[#71717a] mt-2 text-center">
+                  Select a demo user and click Sign In
+                </p>
+              </div>
             </form>
           ) : (
             // 2FA Code Form
