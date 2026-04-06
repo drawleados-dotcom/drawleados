@@ -411,7 +411,7 @@ export default function ProjectDetailPage() {
           textSecondary={textSecondary}
         />
 
-        {/* Tabs - Only Pages, Tracker Board, Team (no Overview) */}
+        {/* Tabs - Pages, Tracker Board, Team, Ad.Tasks, Meeting */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
           <div className={`px-6 pt-4 ${bgCard} border-b ${borderColor}`}>
             <TabsList className={`${bgSecondary} p-1 rounded-lg`}>
@@ -423,6 +423,12 @@ export default function ProjectDetailPage() {
               </TabsTrigger>
               <TabsTrigger value="team" className="gap-2">
                 <Users className="h-4 w-4" /> Team
+              </TabsTrigger>
+              <TabsTrigger value="adtasks" className="gap-2">
+                <CheckCircle2 className="h-4 w-4" /> Ad.Tasks
+              </TabsTrigger>
+              <TabsTrigger value="meetings" className="gap-2">
+                <Calendar className="h-4 w-4" /> Meeting
               </TabsTrigger>
             </TabsList>
           </div>
@@ -483,6 +489,34 @@ export default function ProjectDetailPage() {
           <TabsContent value="team" className="flex-1 overflow-auto p-6">
             <TeamTab
               project={project}
+              teamMembers={teamMembers}
+              isDark={isDark}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              borderColor={borderColor}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+            />
+          </TabsContent>
+          
+          {/* Ad.Tasks Tab */}
+          <TabsContent value="adtasks" className="flex-1 overflow-auto p-6">
+            <AdTasksTab
+              projectId={project?.project_id}
+              teamMembers={teamMembers}
+              isDark={isDark}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              borderColor={borderColor}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+            />
+          </TabsContent>
+          
+          {/* Meeting Tab */}
+          <TabsContent value="meetings" className="flex-1 overflow-auto p-6">
+            <MeetingsTab
+              projectId={project?.project_id}
               teamMembers={teamMembers}
               isDark={isDark}
               bgCard={bgCard}
@@ -2372,6 +2406,360 @@ function TeamTab({ project, teamMembers, isDark, bgCard, bgSecondary, borderColo
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ==================== AD.TASKS TAB ====================
+function AdTasksTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary }) {
+  const [tasks, setTasks] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [newTask, setNewTask] = useState({
+    title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: ''
+  });
+  const [timers, setTimers] = useState({});
+  const token = localStorage.getItem('session_token');
+  const API = process.env.REACT_APP_BACKEND_URL;
+  
+  const loadTasks = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/additional-tasks/?project_id=${projectId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setTasks(res.data || []);
+    } catch (error) {
+      console.error('Error loading tasks:', error);
+    }
+  }, [projectId, token, API]);
+  
+  useEffect(() => {
+    if (projectId) loadTasks();
+  }, [projectId, loadTasks]);
+  
+  const handleCreate = async () => {
+    if (!newTask.title.trim()) {
+      toast.error('Please enter a task title');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/additional-tasks/`, { ...newTask, project_id: projectId }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Task created!');
+      setShowModal(false);
+      setNewTask({ title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: '' });
+      loadTasks();
+    } catch (error) {
+      toast.error('Failed to create task');
+    }
+  };
+  
+  const handleStart = (taskId) => {
+    setTimers(prev => ({ ...prev, [taskId]: { startTime: Date.now() } }));
+  };
+  
+  const handleStop = async (taskId) => {
+    const timerInfo = timers[taskId];
+    if (timerInfo) {
+      const seconds = Math.floor((Date.now() - timerInfo.startTime) / 1000);
+      try {
+        await axios.put(`${API}/api/additional-tasks/${taskId}/add-time`, { seconds }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setTimers(prev => { const n = {...prev}; delete n[taskId]; return n; });
+        loadTasks();
+      } catch (error) {
+        toast.error('Failed to save time');
+      }
+    }
+  };
+  
+  const handleComplete = async (taskId) => {
+    try {
+      await axios.put(`${API}/api/additional-tasks/${taskId}/status`, { status: 'Completed' }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      loadTasks();
+    } catch (error) {
+      toast.error('Failed to update');
+    }
+  };
+  
+  const handleDelete = async (taskId) => {
+    try {
+      await axios.delete(`${API}/api/additional-tasks/${taskId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Task deleted');
+      loadTasks();
+    } catch (error) {
+      toast.error('Failed to delete');
+    }
+  };
+  
+  const formatTime = (secs) => {
+    if (!secs) return '00:00:00';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  };
+  
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className={`text-lg font-semibold ${textPrimary}`}>Additional Tasks</h3>
+        <Button onClick={() => setShowModal(true)} className="bg-[#6366f1] h-9">
+          <Plus className="h-4 w-4 mr-2" /> Add Task
+        </Button>
+      </div>
+      
+      {tasks.length === 0 ? (
+        <div className={`text-center py-12 ${textSecondary}`}>
+          <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+          <p>No additional tasks for this project</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {tasks.map(task => (
+            <div key={task.task_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className={`w-1.5 h-12 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                  <div>
+                    <p className={`font-medium ${textPrimary}`}>{task.title}</p>
+                    <div className="flex items-center gap-2 mt-1 text-sm">
+                      <Badge variant="outline">{task.status}</Badge>
+                      {task.due_date && <span className={textSecondary}>Due: {task.due_date}</span>}
+                      {task.assignee && <span className={textSecondary}>• {task.assignee}</span>}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm ${textSecondary}`}>{formatTime(task.time_spent || 0)}</span>
+                  {timers[task.task_id] ? (
+                    <Button size="sm" variant="outline" className="border-red-500 text-red-500" onClick={() => handleStop(task.task_id)}>
+                      <Pause className="h-3 w-3 mr-1" /> Stop
+                    </Button>
+                  ) : (
+                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600" onClick={() => handleStart(task.task_id)}>
+                      <Play className="h-3 w-3 mr-1" /> Start
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => handleComplete(task.task_id)}><Check className="h-4 w-4 text-emerald-500" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDelete(task.task_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Create Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`${bgCard} rounded-xl w-full max-w-md border ${borderColor} p-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-lg font-bold ${textPrimary}`}>Create Additional Task</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowModal(false)} className="h-8 w-8 p-0">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <Input placeholder="Task title *" value={newTask.title} onChange={(e) => setNewTask({...newTask, title: e.target.value})} className={`${bgSecondary} border-none`} />
+              <Textarea placeholder="Description" value={newTask.description} onChange={(e) => setNewTask({...newTask, description: e.target.value})} className={`${bgSecondary} border-none`} rows={2} />
+              <div className="grid grid-cols-2 gap-3">
+                <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask({...newTask, due_date: e.target.value})} className={`${bgSecondary} border-none`} />
+                <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v})}>
+                  <SelectTrigger className={`${bgSecondary} border-none`}><SelectValue placeholder="Priority" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Select value={newTask.assignee_id || 'none'} onValueChange={(v) => {
+                const m = teamMembers.find(x => x.user_id === v);
+                setNewTask({...newTask, assignee_id: v === 'none' ? '' : v, assignee: m?.name || ''});
+              }}>
+                <SelectTrigger className={`${bgSecondary} border-none`}><SelectValue placeholder="Assign to" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+              <Button onClick={handleCreate} className="bg-[#6366f1]">Create Task</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== MEETINGS TAB ====================
+function MeetingsTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary }) {
+  const [meetings, setMeetings] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [newMeeting, setNewMeeting] = useState({
+    title: '', date: '', start_time: '', end_time: '', meeting_type: 'video', meeting_link: '', agenda: ''
+  });
+  const token = localStorage.getItem('session_token');
+  const API = process.env.REACT_APP_BACKEND_URL;
+  
+  const loadMeetings = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/meetings/?project_id=${projectId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setMeetings(res.data || []);
+    } catch (error) {
+      console.error('Error loading meetings:', error);
+    }
+  }, [projectId, token, API]);
+  
+  useEffect(() => {
+    if (projectId) loadMeetings();
+  }, [projectId, loadMeetings]);
+  
+  const handleCreate = async () => {
+    if (!newMeeting.title.trim() || !newMeeting.date || !newMeeting.start_time) {
+      toast.error('Please fill in title, date, and start time');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/meetings/`, { ...newMeeting, project_id: projectId }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Meeting scheduled!');
+      setShowModal(false);
+      setNewMeeting({ title: '', date: '', start_time: '', end_time: '', meeting_type: 'video', meeting_link: '', agenda: '' });
+      loadMeetings();
+    } catch (error) {
+      toast.error('Failed to create meeting');
+    }
+  };
+  
+  const handleComplete = async (meetingId) => {
+    try {
+      await axios.put(`${API}/api/meetings/${meetingId}/status`, { status: 'completed' }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      loadMeetings();
+    } catch (error) {
+      toast.error('Failed to update');
+    }
+  };
+  
+  const handleDelete = async (meetingId) => {
+    try {
+      await axios.delete(`${API}/api/meetings/${meetingId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Meeting deleted');
+      loadMeetings();
+    } catch (error) {
+      toast.error('Failed to delete');
+    }
+  };
+  
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className={`text-lg font-semibold ${textPrimary}`}>Meetings</h3>
+        <Button onClick={() => setShowModal(true)} className="bg-[#6366f1] h-9">
+          <Plus className="h-4 w-4 mr-2" /> Schedule Meeting
+        </Button>
+      </div>
+      
+      {meetings.length === 0 ? (
+        <div className={`text-center py-12 ${textSecondary}`}>
+          <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+          <p>No meetings scheduled for this project</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {meetings.map(meeting => (
+            <div key={meeting.meeting_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${meeting.meeting_type === 'video' ? 'bg-blue-500/20' : meeting.meeting_type === 'audio' ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
+                    <Calendar className={`h-5 w-5 ${meeting.meeting_type === 'video' ? 'text-blue-500' : meeting.meeting_type === 'audio' ? 'text-green-500' : 'text-purple-500'}`} />
+                  </div>
+                  <div>
+                    <p className={`font-medium ${textPrimary}`}>{meeting.title}</p>
+                    <div className="flex items-center gap-2 mt-1 text-sm">
+                      <span className={textSecondary}>{meeting.date} • {meeting.start_time}{meeting.end_time ? ` - ${meeting.end_time}` : ''}</span>
+                      <Badge variant="outline">{meeting.status}</Badge>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {meeting.meeting_link && (
+                    <Button size="sm" variant="outline" onClick={() => window.open(meeting.meeting_link, '_blank')}>
+                      <ExternalLink className="h-3 w-3 mr-1" /> Join
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => handleComplete(meeting.meeting_id)}><Check className="h-4 w-4 text-emerald-500" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDelete(meeting.meeting_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      {/* Create Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`${bgCard} rounded-xl w-full max-w-md border ${borderColor} p-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-lg font-bold ${textPrimary}`}>Schedule Meeting</h2>
+              <Button variant="ghost" size="sm" onClick={() => setShowModal(false)} className="h-8 w-8 p-0">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="space-y-4">
+              <Input placeholder="Meeting title *" value={newMeeting.title} onChange={(e) => setNewMeeting({...newMeeting, title: e.target.value})} className={`${bgSecondary} border-none`} />
+              <Textarea placeholder="Agenda" value={newMeeting.agenda} onChange={(e) => setNewMeeting({...newMeeting, agenda: e.target.value})} className={`${bgSecondary} border-none`} rows={2} />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Date *</label>
+                  <Input type="date" value={newMeeting.date} onChange={(e) => setNewMeeting({...newMeeting, date: e.target.value})} className={`${bgSecondary} border-none`} />
+                </div>
+                <Select value={newMeeting.meeting_type} onValueChange={(v) => setNewMeeting({...newMeeting, meeting_type: v})}>
+                  <SelectTrigger className={`${bgSecondary} border-none mt-5`}><SelectValue placeholder="Type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="video">Video Call</SelectItem>
+                    <SelectItem value="audio">Audio Call</SelectItem>
+                    <SelectItem value="in-person">In Person</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Start Time *</label>
+                  <Input type="time" value={newMeeting.start_time} onChange={(e) => setNewMeeting({...newMeeting, start_time: e.target.value})} className={`${bgSecondary} border-none`} />
+                </div>
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>End Time</label>
+                  <Input type="time" value={newMeeting.end_time} onChange={(e) => setNewMeeting({...newMeeting, end_time: e.target.value})} className={`${bgSecondary} border-none`} />
+                </div>
+              </div>
+              <Input placeholder="Meeting link (Google Meet, Zoom)" value={newMeeting.meeting_link} onChange={(e) => setNewMeeting({...newMeeting, meeting_link: e.target.value})} className={`${bgSecondary} border-none`} />
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+              <Button onClick={handleCreate} className="bg-[#6366f1]">Schedule Meeting</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -972,9 +972,7 @@ export default function DLOperationsPage() {
                   { id: 'tasks', label: 'Tasks', icon: ListTodo },
                   { id: 'trackboard', label: 'Trackboard', icon: ClipboardList },
                   { id: 'pages', label: 'Pages', icon: FileText },
-                  { id: 'team', label: 'Team', icon: Users },
-                  { id: 'adtasks', label: 'Ad.Tasks', icon: CheckSquare },
-                  { id: 'meetings', label: 'Meeting', icon: Video }
+                  { id: 'team', label: 'Team', icon: Users }
                 ].map(tab => (
                   <Button
                     key={tab.id}
@@ -990,7 +988,7 @@ export default function DLOperationsPage() {
               </div>
               
               {/* Sort Toggle (visible for lists) */}
-              {['tasks', 'adtasks', 'meetings'].includes(masterBoardTab) && (
+              {['tasks'].includes(masterBoardTab) && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -999,18 +997,6 @@ export default function DLOperationsPage() {
                 >
                   <ArrowUpDown className="h-4 w-4" />
                   {sortOrder === 'asc' ? 'Oldest First' : 'Newest First'}
-                </Button>
-              )}
-              
-              {/* Add Buttons per Tab */}
-              {masterBoardTab === 'adtasks' && (
-                <Button size="sm" onClick={() => setShowAdTaskModal(true)} className="bg-[#6366f1] h-8">
-                  <Plus className="h-4 w-4 mr-1" /> Add Task
-                </Button>
-              )}
-              {masterBoardTab === 'meetings' && (
-                <Button size="sm" onClick={() => setShowMeetingModal(true)} className="bg-[#6366f1] h-8">
-                  <Plus className="h-4 w-4 mr-1" /> Schedule Meeting
                 </Button>
               )}
             </div>
@@ -1787,97 +1773,6 @@ export default function DLOperationsPage() {
                 )}
               </div>
             )}
-            
-            {/* AD.TASKS TAB - Additional tasks */}
-            {masterBoardTab === 'adtasks' && (
-              <div className="space-y-2 md:space-y-3">
-                {additionalTasks.length === 0 ? (
-                  <div className={`text-center py-12 ${textSecondary}`}>
-                    <CheckSquare className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                    <p className="text-sm">No additional tasks</p>
-                    <Button className="mt-4 bg-[#6366f1]" size="sm" onClick={() => setShowAdTaskModal(true)}>
-                      <Plus className="h-4 w-4 mr-1" /> Create Task
-                    </Button>
-                  </div>
-                ) : (
-                  sortItems(additionalTasks, 'due_date', sortOrder).map(task => (
-                    <div key={task.task_id} className={`p-3 rounded-xl border ${borderColor} ${bgSecondary}`}>
-                      {/* Task Header */}
-                      <div className="flex items-start gap-2 mb-2">
-                        <div className={`w-1 h-8 rounded-full shrink-0 ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className={`font-medium text-sm ${textPrimary} truncate`}>{task.title}</p>
-                          <div className="flex items-center gap-2 mt-1 text-xs">
-                            <Badge variant="outline" className="text-[10px]">{task.status}</Badge>
-                            {task.due_date && <span className={textSecondary}>{task.due_date}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Actions */}
-                      <div className="flex items-center justify-between">
-                        <span className={`text-xs ${textSecondary}`}>{formatTime(task.time_spent || 0)}</span>
-                        <div className="flex items-center gap-1">
-                          {adTaskTimers[task.task_id] ? (
-                            <Button size="sm" variant="outline" className="h-7 text-xs border-red-500/50 text-red-500" onClick={() => handleStopAdTaskTimer(task.task_id)}>
-                              <Square className="h-3 w-3 mr-1 fill-red-500" /> Stop
-                            </Button>
-                          ) : (
-                            <Button size="sm" className="h-7 text-xs bg-emerald-500" onClick={() => handleStartAdTaskTimer(task.task_id)}>
-                              <Play className="h-3 w-3 mr-1" /> Start
-                            </Button>
-                          )}
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleUpdateAdTaskStatus(task.task_id, 'Completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDeleteAdTask(task.task_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-            
-            {/* MEETINGS TAB */}
-            {masterBoardTab === 'meetings' && (
-              <div className="space-y-2 md:space-y-3">
-                {meetings.length === 0 ? (
-                  <div className={`text-center py-12 ${textSecondary}`}>
-                    <Video className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                    <p className="text-sm">No meetings scheduled</p>
-                    <Button className="mt-4 bg-[#6366f1]" size="sm" onClick={() => setShowMeetingModal(true)}>
-                      <Plus className="h-4 w-4 mr-1" /> Schedule Meeting
-                    </Button>
-                  </div>
-                ) : (
-                  sortItems(meetings, 'date', sortOrder).map(meeting => (
-                    <div key={meeting.meeting_id} className={`p-3 rounded-xl border ${borderColor} ${bgSecondary}`}>
-                      {/* Meeting Header */}
-                      <div className="flex items-start gap-2 mb-2">
-                        <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg flex items-center justify-center shrink-0 ${meeting.meeting_type === 'video' ? 'bg-blue-500/20' : meeting.meeting_type === 'audio' ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
-                          <Video className={`h-4 w-4 md:h-5 md:w-5 ${meeting.meeting_type === 'video' ? 'text-blue-500' : meeting.meeting_type === 'audio' ? 'text-green-500' : 'text-purple-500'}`} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`font-medium text-sm ${textPrimary} truncate`}>{meeting.title}</p>
-                          <div className="flex items-center gap-2 mt-1 text-xs">
-                            <span className={textSecondary}>{meeting.date} • {meeting.start_time}</span>
-                            <Badge variant="outline" className="text-[10px]">{meeting.status}</Badge>
-                          </div>
-                        </div>
-                      </div>
-                      {/* Actions */}
-                      <div className="flex items-center justify-end gap-1">
-                        {meeting.meeting_link && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(meeting.meeting_link, '_blank')}>
-                            <ExternalLink className="h-3 w-3 mr-1" /> Join
-                          </Button>
-                        )}
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleUpdateMeetingStatus(meeting.meeting_id, 'completed')}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => handleDeleteMeeting(meeting.meeting_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
           </div>
         </div>
         
@@ -2626,178 +2521,6 @@ export default function DLOperationsPage() {
         </div>
       )}
       
-      {/* Additional Task Modal */}
-      {showAdTaskModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className={`${bgCard} rounded-xl w-full max-w-md border ${borderColor} p-6`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-lg font-bold ${textPrimary}`}>Create Additional Task</h2>
-              <Button variant="ghost" size="sm" onClick={() => setShowAdTaskModal(false)} className="h-8 w-8 p-0">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <div className="space-y-4">
-              <Input
-                placeholder="Task title *"
-                value={newAdTask.title}
-                onChange={(e) => setNewAdTask({ ...newAdTask, title: e.target.value })}
-                className={`${bgSecondary} border-none`}
-              />
-              <Textarea
-                placeholder="Description"
-                value={newAdTask.description}
-                onChange={(e) => setNewAdTask({ ...newAdTask, description: e.target.value })}
-                className={`${bgSecondary} border-none`}
-                rows={3}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <Input
-                  type="date"
-                  value={newAdTask.due_date}
-                  onChange={(e) => setNewAdTask({ ...newAdTask, due_date: e.target.value })}
-                  className={`${bgSecondary} border-none`}
-                />
-                <Select value={newAdTask.priority} onValueChange={(v) => setNewAdTask({ ...newAdTask, priority: v })}>
-                  <SelectTrigger className={`${bgSecondary} border-none`}>
-                    <SelectValue placeholder="Priority" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Select value={newAdTask.assignee_id || 'none'} onValueChange={(v) => {
-                if (v === 'none') {
-                  setNewAdTask({ ...newAdTask, assignee_id: '', assignee: '' });
-                } else {
-                  const member = teamMembers.find(m => m.user_id === v);
-                  setNewAdTask({ ...newAdTask, assignee_id: v, assignee: member?.name || '' });
-                }
-              }}>
-                <SelectTrigger className={`${bgSecondary} border-none`}>
-                  <SelectValue placeholder="Assign to" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {teamMembers.map(m => (
-                    <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={newAdTask.project_id || 'none'} onValueChange={(v) => setNewAdTask({ ...newAdTask, project_id: v === 'none' ? '' : v })}>
-                <SelectTrigger className={`${bgSecondary} border-none`}>
-                  <SelectValue placeholder="Link to project (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Project</SelectItem>
-                  {roleFilteredProjects.map(p => (
-                    <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <Button variant="outline" onClick={() => setShowAdTaskModal(false)}>Cancel</Button>
-              <Button onClick={handleCreateAdTask} className="bg-[#6366f1]">Create Task</Button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Meeting Modal */}
-      {showMeetingModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className={`${bgCard} rounded-xl w-full max-w-md border ${borderColor} p-6`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-lg font-bold ${textPrimary}`}>Schedule Meeting</h2>
-              <Button variant="ghost" size="sm" onClick={() => setShowMeetingModal(false)} className="h-8 w-8 p-0">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <div className="space-y-4">
-              <Input
-                placeholder="Meeting title *"
-                value={newMeeting.title}
-                onChange={(e) => setNewMeeting({ ...newMeeting, title: e.target.value })}
-                className={`${bgSecondary} border-none`}
-              />
-              <Textarea
-                placeholder="Agenda / Description"
-                value={newMeeting.agenda}
-                onChange={(e) => setNewMeeting({ ...newMeeting, agenda: e.target.value })}
-                className={`${bgSecondary} border-none`}
-                rows={2}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={`text-xs ${textSecondary} mb-1 block`}>Date *</label>
-                  <Input
-                    type="date"
-                    value={newMeeting.date}
-                    onChange={(e) => setNewMeeting({ ...newMeeting, date: e.target.value })}
-                    className={`${bgSecondary} border-none`}
-                  />
-                </div>
-                <Select value={newMeeting.meeting_type} onValueChange={(v) => setNewMeeting({ ...newMeeting, meeting_type: v })}>
-                  <SelectTrigger className={`${bgSecondary} border-none mt-5`}>
-                    <SelectValue placeholder="Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="video">Video Call</SelectItem>
-                    <SelectItem value="audio">Audio Call</SelectItem>
-                    <SelectItem value="in-person">In Person</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={`text-xs ${textSecondary} mb-1 block`}>Start Time *</label>
-                  <Input
-                    type="time"
-                    value={newMeeting.start_time}
-                    onChange={(e) => setNewMeeting({ ...newMeeting, start_time: e.target.value })}
-                    className={`${bgSecondary} border-none`}
-                  />
-                </div>
-                <div>
-                  <label className={`text-xs ${textSecondary} mb-1 block`}>End Time</label>
-                  <Input
-                    type="time"
-                    value={newMeeting.end_time}
-                    onChange={(e) => setNewMeeting({ ...newMeeting, end_time: e.target.value })}
-                    className={`${bgSecondary} border-none`}
-                  />
-                </div>
-              </div>
-              <Input
-                placeholder="Meeting link (Google Meet, Zoom, etc.)"
-                value={newMeeting.meeting_link}
-                onChange={(e) => setNewMeeting({ ...newMeeting, meeting_link: e.target.value })}
-                className={`${bgSecondary} border-none`}
-              />
-              <Select value={newMeeting.project_id || 'none'} onValueChange={(v) => setNewMeeting({ ...newMeeting, project_id: v === 'none' ? '' : v })}>
-                <SelectTrigger className={`${bgSecondary} border-none`}>
-                  <SelectValue placeholder="Link to project (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Project</SelectItem>
-                  {roleFilteredProjects.map(p => (
-                    <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <Button variant="outline" onClick={() => setShowMeetingModal(false)}>Cancel</Button>
-              <Button onClick={handleCreateMeeting} className="bg-[#6366f1]">Schedule Meeting</Button>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* MOBILE BOTTOM NAVIGATION BAR */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
@@ -2807,8 +2530,7 @@ export default function DLOperationsPage() {
             {[
               { id: 'tasks', label: 'Tasks', icon: ListTodo },
               { id: 'trackboard', label: 'Track', icon: BarChart3 },
-              { id: 'adtasks', label: 'Ad.Tasks', icon: CheckSquare },
-              { id: 'meetings', label: 'Meeting', icon: Video },
+              { id: 'pages', label: 'Pages', icon: FileText },
               { id: 'team', label: 'Team', icon: Users }
             ].map(tab => (
               <button
