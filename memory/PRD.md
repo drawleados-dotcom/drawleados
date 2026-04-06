@@ -1845,3 +1845,53 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 **Testing Status:** ✅ All features verified (iteration_64.json)
 
 ---
+
+
+### Role-Based Team Assignment (IN PROGRESS - April 2026)
+**Purpose:** Implement comprehensive role-based project team assignment where team members can only work on their assigned stages.
+
+**Features Implemented:**
+
+1. **Backend Changes:**
+   - Added `team_assignments` field to ProjectCreate and ProjectUpdate models
+   - Format: `[{user_id, user_name, roles: ['content', 'wireframe', 'ui', ...]}]`
+   - Added `/api/website-projects/projects/{project_id}/my-access` endpoint
+   - Returns: `{is_master, allowed_stages, can_view_all, can_act_on_all, team_assignments}`
+
+2. **Project Creation Team Tab (DLOperationsPage.js):**
+   - Matrix-style team assignment table
+   - Columns: Member Name, Content, Wireframe, UI Design, Development, Responsive, Testing, Delivery
+   - Add team member from employee dropdown
+   - Checkmark toggle for each stage
+   - Quick role presets: Content Writer, UI/UX Designer, Website Developer, Tester, Project Manager (All)
+
+3. **Tracker Board Role-Based Access (ProjectDetailPage.js):**
+   - Stage tabs show lock icon for inaccessible stages
+   - Disabled stages have 50% opacity and cursor-not-allowed
+   - "View Only" banner shows when user can't act on current stage
+   - All team members can VIEW all stages but only ACT on assigned stages
+   - PM/Ops/Admin users have full access to all stages
+
+**Role-Stage Mapping:**
+| Role | Active Stages |
+|------|--------------|
+| Content Writer | content |
+| Wireframe Designer | wireframe |
+| UI/UX Designer | wireframe, ui |
+| Website Developer | development, responsive |
+| Tester | testing |
+| PM/Operations | ALL stages |
+
+**Files Modified:**
+- `/app/backend/website_projects_routes.py` - Added team_assignments field and my-access endpoint
+- `/app/frontend/src/pages/DLOperationsPage.js` - New Team Assignment UI in project creation
+- `/app/frontend/src/pages/ProjectDetailPage.js` - Role-based stage access in TrackerBoard
+
+**Testing Status:** Backend API verified, Frontend UI needs testing
+
+**Next Steps:**
+- Test with non-admin users to verify restricted access
+- Update Master Board filtering by user's stages
+- Add "My Tasks" view for individual team members
+
+---

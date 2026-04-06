@@ -211,6 +211,7 @@ export default function DLOperationsPage() {
     designer: '',
     content_writer: '',
     project_manager: '',
+    team_assignments: [], // NEW: Role-based stage assignments
     // Credentials
     domain_username: '',
     domain_password: '',
@@ -271,11 +272,40 @@ export default function DLOperationsPage() {
   // Check if user is assigned to a project (any role)
   const isUserAssignedToProject = (project) => {
     if (isMasterUser()) return true;
+    const userId = user?.user_id || '';
     const userName = user?.name?.toLowerCase() || '';
+    
+    // Check new team_assignments array
+    const teamAssignments = project.team_assignments || [];
+    const isInTeam = teamAssignments.some(member => 
+      member.user_id === userId || 
+      (member.user_name || '').toLowerCase().includes(userName) ||
+      userName.includes((member.user_name || '').toLowerCase())
+    );
+    if (isInTeam) return true;
+    
+    // Fallback to legacy fields
     const assignedRoles = [
       project.developer, project.designer, project.content_writer, project.project_manager
     ].filter(Boolean).map(n => n.toLowerCase());
     return assignedRoles.some(r => r.includes(userName) || userName.includes(r));
+  };
+  
+  // Get user's allowed stages for a project
+  const getUserAllowedStages = (project) => {
+    if (isMasterUser()) return ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+    
+    const userId = user?.user_id || '';
+    const userName = user?.name?.toLowerCase() || '';
+    const teamAssignments = project.team_assignments || [];
+    
+    const member = teamAssignments.find(m => 
+      m.user_id === userId || 
+      (m.user_name || '').toLowerCase().includes(userName) ||
+      userName.includes((m.user_name || '').toLowerCase())
+    );
+    
+    return member?.roles || [];
   };
   
   // Date filter helper
@@ -2369,72 +2399,170 @@ export default function DLOperationsPage() {
                       </div>
                     </TabsContent>
 
-                    {/* Team Tab */}
+                    {/* Team Tab - Role-Based Stage Assignment */}
                     <TabsContent value="team" className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className={`text-sm ${textSecondary} block mb-1`}>Developer</label>
-                          <Select
-                            value={newProject.developer || ''}
-                            onValueChange={(v) => setNewProject({ ...newProject, developer: v })}
-                          >
-                            <SelectTrigger className={`${bgSecondary} border-none`}>
-                              <SelectValue placeholder="Select developer" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {teamMembers.map(m => (
-                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
+                      <p className={`text-sm ${textSecondary}`}>
+                        Assign team members and select which stages they can work on. One person can have multiple stages.
+                      </p>
+                      
+                      {/* Team Assignment Table */}
+                      <div className={`border ${borderColor} rounded-lg overflow-hidden`}>
+                        <table className="w-full">
+                          <thead className={bgSecondary}>
+                            <tr>
+                              <th className={`px-3 py-2 text-left text-xs font-medium ${textSecondary}`}>Team Member</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}>Content</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}>Wireframe</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}>UI Design</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}>Development</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}>Responsive</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}>Testing</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}>Delivery</th>
+                              <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary}`}></th>
+                            </tr>
+                          </thead>
+                          <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
+                            {(newProject.team_assignments || []).map((member, idx) => (
+                              <tr key={idx} className={bgCard}>
+                                <td className={`px-3 py-2 ${textPrimary} text-sm`}>{member.user_name}</td>
+                                {['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'].map(stage => (
+                                  <td key={stage} className="px-3 py-2 text-center">
+                                    <button
+                                      onClick={() => {
+                                        const updatedAssignments = [...(newProject.team_assignments || [])];
+                                        const roles = updatedAssignments[idx].roles || [];
+                                        if (roles.includes(stage)) {
+                                          updatedAssignments[idx].roles = roles.filter(r => r !== stage);
+                                        } else {
+                                          updatedAssignments[idx].roles = [...roles, stage];
+                                        }
+                                        setNewProject({ ...newProject, team_assignments: updatedAssignments });
+                                      }}
+                                      className={`w-6 h-6 rounded flex items-center justify-center transition-all ${
+                                        (member.roles || []).includes(stage)
+                                          ? 'bg-[#6366f1] text-white'
+                                          : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+                                      }`}
+                                    >
+                                      {(member.roles || []).includes(stage) && <Check className="h-4 w-4" />}
+                                    </button>
+                                  </td>
+                                ))}
+                                <td className="px-3 py-2 text-center">
+                                  <button
+                                    onClick={() => {
+                                      const updatedAssignments = (newProject.team_assignments || []).filter((_, i) => i !== idx);
+                                      setNewProject({ ...newProject, team_assignments: updatedAssignments });
+                                    }}
+                                    className="text-red-500 hover:text-red-400"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* Add Team Member */}
+                      <div className="flex gap-2">
+                        <Select
+                          onValueChange={(userId) => {
+                            const member = teamMembers.find(m => m.user_id === userId);
+                            if (member && !(newProject.team_assignments || []).find(a => a.user_id === userId)) {
+                              setNewProject({
+                                ...newProject,
+                                team_assignments: [
+                                  ...(newProject.team_assignments || []),
+                                  { user_id: member.user_id, user_name: member.name, roles: [] }
+                                ]
+                              });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`${bgSecondary} border-none flex-1`}>
+                            <SelectValue placeholder="+ Add team member" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {teamMembers
+                              .filter(m => !(newProject.team_assignments || []).find(a => a.user_id === m.user_id))
+                              .map(m => (
+                                <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
                               ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className={`text-sm ${textSecondary} block mb-1`}>Project Manager</label>
-                          <Select
-                            value={newProject.project_manager || ''}
-                            onValueChange={(v) => setNewProject({ ...newProject, project_manager: v })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {/* Quick Role Presets */}
+                      <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                        <p className={`text-xs ${textSecondary} mb-2`}>Quick Role Presets (click to auto-assign stages)</p>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge 
+                            variant="outline" 
+                            className="cursor-pointer hover:bg-blue-500/20 text-blue-400 border-blue-500"
+                            onClick={() => {
+                              if ((newProject.team_assignments || []).length > 0) {
+                                const last = newProject.team_assignments[newProject.team_assignments.length - 1];
+                                last.roles = ['content'];
+                                setNewProject({ ...newProject, team_assignments: [...newProject.team_assignments] });
+                              }
+                            }}
                           >
-                            <SelectTrigger className={`${bgSecondary} border-none`}>
-                              <SelectValue placeholder="Select PM" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {teamMembers.map(m => (
-                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className={`text-sm ${textSecondary} block mb-1`}>Designer</label>
-                          <Select
-                            value={newProject.designer || ''}
-                            onValueChange={(v) => setNewProject({ ...newProject, designer: v })}
+                            Content Writer
+                          </Badge>
+                          <Badge 
+                            variant="outline" 
+                            className="cursor-pointer hover:bg-purple-500/20 text-purple-400 border-purple-500"
+                            onClick={() => {
+                              if ((newProject.team_assignments || []).length > 0) {
+                                const last = newProject.team_assignments[newProject.team_assignments.length - 1];
+                                last.roles = ['wireframe', 'ui'];
+                                setNewProject({ ...newProject, team_assignments: [...newProject.team_assignments] });
+                              }
+                            }}
                           >
-                            <SelectTrigger className={`${bgSecondary} border-none`}>
-                              <SelectValue placeholder="Select designer" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {teamMembers.map(m => (
-                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <label className={`text-sm ${textSecondary} block mb-1`}>Content Writer</label>
-                          <Select
-                            value={newProject.content_writer || ''}
-                            onValueChange={(v) => setNewProject({ ...newProject, content_writer: v })}
+                            UI/UX Designer
+                          </Badge>
+                          <Badge 
+                            variant="outline" 
+                            className="cursor-pointer hover:bg-green-500/20 text-green-400 border-green-500"
+                            onClick={() => {
+                              if ((newProject.team_assignments || []).length > 0) {
+                                const last = newProject.team_assignments[newProject.team_assignments.length - 1];
+                                last.roles = ['development', 'responsive'];
+                                setNewProject({ ...newProject, team_assignments: [...newProject.team_assignments] });
+                              }
+                            }}
                           >
-                            <SelectTrigger className={`${bgSecondary} border-none`}>
-                              <SelectValue placeholder="Select writer" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {teamMembers.map(m => (
-                                <SelectItem key={m.user_id} value={m.name}>{m.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            Website Developer
+                          </Badge>
+                          <Badge 
+                            variant="outline" 
+                            className="cursor-pointer hover:bg-cyan-500/20 text-cyan-400 border-cyan-500"
+                            onClick={() => {
+                              if ((newProject.team_assignments || []).length > 0) {
+                                const last = newProject.team_assignments[newProject.team_assignments.length - 1];
+                                last.roles = ['testing'];
+                                setNewProject({ ...newProject, team_assignments: [...newProject.team_assignments] });
+                              }
+                            }}
+                          >
+                            Tester
+                          </Badge>
+                          <Badge 
+                            variant="outline" 
+                            className="cursor-pointer hover:bg-orange-500/20 text-orange-400 border-orange-500"
+                            onClick={() => {
+                              if ((newProject.team_assignments || []).length > 0) {
+                                const last = newProject.team_assignments[newProject.team_assignments.length - 1];
+                                last.roles = ['content', 'wireframe', 'ui', 'development', 'responsive', 'testing', 'delivery'];
+                                setNewProject({ ...newProject, team_assignments: [...newProject.team_assignments] });
+                              }
+                            }}
+                          >
+                            Project Manager (All)
+                          </Badge>
                         </div>
                       </div>
                     </TabsContent>

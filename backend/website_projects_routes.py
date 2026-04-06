@@ -17,6 +17,11 @@ def init_website_projects_db(database):
 
 # ============== MODELS ==============
 
+class TeamMemberAssignment(BaseModel):
+    user_id: str
+    user_name: str
+    roles: List[str]  # e.g., ['content', 'wireframe'] - stages they can work on
+    
 class ProjectCreate(BaseModel):
     name: str  # Client/Project name
     # Basic Details
@@ -52,11 +57,13 @@ class ProjectCreate(BaseModel):
     website_type: str = "Business Website"  # Business, E-commerce, Portfolio, Landing Page, Blog, etc.
     # Workflow Stage
     workflow_stage: str = "creation"  # creation, discovery, content, wireframe, ui, development, testing, delivered
-    # Team
+    # Team (legacy fields for backward compatibility)
     developer: Optional[str] = None
     designer: Optional[str] = None
     content_writer: Optional[str] = None
     project_manager: Optional[str] = None
+    # NEW: Team Assignments with role-stage mapping
+    team_assignments: Optional[List[Dict[str, Any]]] = None  # [{user_id, user_name, roles: ['content', 'wireframe']}]
     # Product Details
     product_details: Optional[str] = None
     onboarding_form: Optional[str] = None
@@ -107,11 +114,13 @@ class ProjectUpdate(BaseModel):
     website_type: Optional[str] = None
     # Workflow Stage
     workflow_stage: Optional[str] = None  # creation, discovery, content, wireframe, ui, development, testing, delivered
-    # Team
+    # Team (legacy)
     developer: Optional[str] = None
     designer: Optional[str] = None
     content_writer: Optional[str] = None
     project_manager: Optional[str] = None
+    # NEW: Team Assignments with role-stage mapping
+    team_assignments: Optional[List[Dict[str, Any]]] = None
     # Product Details
     product_details: Optional[str] = None
     onboarding_form: Optional[str] = None
@@ -327,6 +336,7 @@ async def create_project(request: Request, project_data: ProjectCreate):
         "designer": project_data.designer,
         "content_writer": project_data.content_writer,
         "project_manager": project_data.project_manager,
+        "team_assignments": project_data.team_assignments or [],  # NEW: Team with role-stage mapping
         "server_details": project_data.server_details,
         "client_drive_url": project_data.client_drive_url,
         "documents_url": project_data.documents_url,
@@ -482,6 +492,64 @@ async def get_project(request: Request, project_id: str):
         **project,
         "tasks": tasks,
         "stats": stats
+    }
+
+@website_projects_router.get("/projects/{project_id}/my-access")
+async def get_my_project_access(request: Request, project_id: str):
+    """Get current user's role and allowed stages for a specific project"""
+    user = await get_current_user(request)
+    
+    project = await db.website_projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    user_id = user.get("user_id")
+    user_role = user.get("role", "").lower()
+    user_name = user.get("name", "").lower()
+    
+    # Super admin, admin, PM, Operations Head can access all stages
+    is_master_user = any(x in user_role for x in ['admin', 'manager', 'operations', 'head', 'super'])
+    if 'vinoth' in user_name:  # Fallback for main admin
+        is_master_user = True
+    
+    if is_master_user:
+        return {
+            "is_master": True,
+            "allowed_stages": ["content", "wireframe", "ui", "development", "responsive", "testing", "delivery"],
+            "can_view_all": True,
+            "can_act_on_all": True,
+            "team_assignments": project.get("team_assignments", [])
+        }
+    
+    # Find user in team_assignments
+    team_assignments = project.get("team_assignments", [])
+    user_assignment = None
+    
+    for member in team_assignments:
+        if member.get("user_id") == user_id:
+            user_assignment = member
+            break
+        # Also check by name for backward compatibility
+        if member.get("user_name", "").lower() == user_name:
+            user_assignment = member
+            break
+    
+    if not user_assignment:
+        # User is not assigned to this project
+        return {
+            "is_master": False,
+            "allowed_stages": [],
+            "can_view_all": False,
+            "can_act_on_all": False,
+            "team_assignments": team_assignments
+        }
+    
+    return {
+        "is_master": False,
+        "allowed_stages": user_assignment.get("roles", []),
+        "can_view_all": True,  # All team members can view all stages
+        "can_act_on_all": False,  # But can only act on their stages
+        "team_assignments": team_assignments
     }
 
 @website_projects_router.put("/projects/{project_id}")

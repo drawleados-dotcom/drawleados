@@ -60,6 +60,14 @@ export default function ProjectDetailPage() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Role-based access
+  const [userAccess, setUserAccess] = useState({
+    is_master: false,
+    allowed_stages: [],
+    can_view_all: false,
+    can_act_on_all: false
+  });
+  
   // Filters
   const [stageFilter, setStageFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -86,6 +94,12 @@ export default function ProjectDetailPage() {
                      user?.role === 'admin' || 
                      user?.role === 'project_manager' ||
                      user?.designation?.toLowerCase()?.includes('operation');
+  
+  // Helper: Check if user can act on a specific stage
+  const canActOnStage = (stageId) => {
+    if (userAccess.is_master || userAccess.can_act_on_all) return true;
+    return userAccess.allowed_stages.includes(stageId);
+  };
 
   // Load project details
   const loadProject = useCallback(async () => {
@@ -129,6 +143,20 @@ export default function ProjectDetailPage() {
     }
   }, [projectId, token]);
 
+  // Load user's project access (role-based stages)
+  const loadUserAccess = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const res = await axios.get(`${API}/api/website-projects/projects/${projectId}/my-access`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUserAccess(res.data || { is_master: false, allowed_stages: [], can_view_all: false, can_act_on_all: false });
+    } catch (error) {
+      // Default to master user view if API fails (backward compatibility)
+      setUserAccess({ is_master: true, allowed_stages: [], can_view_all: true, can_act_on_all: true });
+    }
+  }, [projectId, token]);
+
   // Load task comments
   const loadComments = useCallback(async (taskId) => {
     try {
@@ -145,7 +173,8 @@ export default function ProjectDetailPage() {
     loadProject();
     loadTeamMembers();
     loadStageTasks();
-  }, [loadProject, loadTeamMembers, loadStageTasks]);
+    loadUserAccess();
+  }, [loadProject, loadTeamMembers, loadStageTasks, loadUserAccess]);
 
   // Convert pages to tasks
   const handleConvertToTasks = async () => {
@@ -466,6 +495,8 @@ export default function ProjectDetailPage() {
               assigneeFilter={assigneeFilter}
               setAssigneeFilter={setAssigneeFilter}
               canApprove={canApprove}
+              userAccess={userAccess}
+              canActOnStage={canActOnStage}
               onSubmit={handleSubmitForApproval}
               onApprove={handleApproveTask}
               onCorrections={handleRequestCorrections}
@@ -1286,7 +1317,7 @@ function PagesTab({
 function TrackerBoard({ 
   stages, stageTasks, pages, teamMembers, 
   stageFilter, setStageFilter, dateFilter, setDateFilter, assigneeFilter, setAssigneeFilter,
-  canApprove, onSubmit, onApprove, onCorrections, onTimerAction, onMoveNext, onViewComments,
+  canApprove, userAccess, canActOnStage, onSubmit, onApprove, onCorrections, onTimerAction, onMoveNext, onViewComments,
   isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary 
 }) {
   const [correctionsModal, setCorrectionsModal] = useState({ open: false, task: null, stage: null });
@@ -1433,22 +1464,31 @@ function TrackerBoard({
   const currentStageTasks = getTasksForStage(currentStage);
   const currentStageInfo = stages.find(s => s.id === currentStage);
   const CurrentStageIcon = currentStageInfo?.icon || FileText;
+  
+  // Check if user can act on the current stage
+  const canActOnCurrentStage = canActOnStage ? canActOnStage(currentStage) : true;
 
   return (
     <div className="flex flex-col h-full">
-      {/* Clickable Stage Tabs */}
+      {/* Clickable Stage Tabs - Role-Based Access */}
       <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-2">
         {stages.map((stage, idx) => {
           const stats = getStageStats(stage.id);
           const Icon = stage.icon;
           const isComplete = stats.approved === stats.total && stats.total > 0;
           const isSelected = currentStage === stage.id;
+          const canAct = canActOnStage ? canActOnStage(stage.id) : true;
           
           return (
             <div key={stage.id} className="flex items-center">
               <button
                 onClick={() => setSelectedStage(stage.id)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${
+                disabled={!canAct && !userAccess?.is_master}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all relative ${
+                  !canAct && !userAccess?.is_master
+                    ? 'opacity-50 cursor-not-allowed'
+                    : ''
+                } ${
                   isSelected 
                     ? 'bg-[#6366f1] text-white shadow-lg scale-105' 
                     : isComplete 
@@ -1457,6 +1497,10 @@ function TrackerBoard({
                 }`}
                 data-testid={`stage-btn-${stage.id}`}
               >
+                {/* Lock icon for inaccessible stages */}
+                {!canAct && !userAccess?.is_master && (
+                  <Lock className="h-3 w-3 absolute top-1 right-1 text-gray-400" />
+                )}
                 <div className={`w-7 h-7 rounded-lg ${
                   isSelected ? 'bg-white/20' : isComplete ? 'bg-green-500' : stage.color
                 } flex items-center justify-center`}>
@@ -1482,6 +1526,14 @@ function TrackerBoard({
           );
         })}
       </div>
+      
+      {/* Role-based access notice */}
+      {!canActOnCurrentStage && !userAccess?.is_master && (
+        <div className={`flex items-center gap-2 mb-4 px-4 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30`}>
+          <Eye className="h-4 w-4 text-yellow-500" />
+          <span className="text-sm text-yellow-500">View Only - You can see this stage but cannot make changes</span>
+        </div>
+      )}
       
       {/* Filters Row */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
