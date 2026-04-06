@@ -69,6 +69,8 @@ class AdditionalTaskCreate(BaseModel):
     status: str = "To-Do"  # To-Do, In Progress, Completed, Paused
     category: Optional[str] = None  # General, Meeting, Follow-up, etc.
     tags: Optional[List[str]] = []
+    type: Optional[str] = "general"  # general, bug, feature, content, design
+    work_link: Optional[str] = None  # Link to work/doc
 
 
 class AdditionalTaskUpdate(BaseModel):
@@ -83,6 +85,8 @@ class AdditionalTaskUpdate(BaseModel):
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     time_spent: Optional[int] = None  # in seconds
+    type: Optional[str] = None  # general, bug, feature, content, design
+    work_link: Optional[str] = None  # Link to work/doc
 
 
 @additional_tasks_router.get("/")
@@ -134,6 +138,8 @@ async def create_additional_task(request: Request, task_data: AdditionalTaskCrea
         "status": task_data.status,
         "category": task_data.category,
         "tags": task_data.tags or [],
+        "type": task_data.type or "general",
+        "work_link": task_data.work_link,
         "time_spent": 0,
         "created_by": user["user_id"],
         "created_by_name": user.get("name", "Unknown"),

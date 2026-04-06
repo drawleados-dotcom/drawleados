@@ -2414,12 +2414,23 @@ function TeamTab({ project, teamMembers, isDark, bgCard, bgSecondary, borderColo
 function AdTasksTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary }) {
   const [tasks, setTasks] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
   const [newTask, setNewTask] = useState({
-    title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: ''
+    title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: '', type: 'general', work_link: ''
   });
   const [timers, setTimers] = useState({});
+  const [filter, setFilter] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    dateFilter: 'all',
+    singleDate: '',
+    assignedTo: 'all',
+    taskType: 'all',
+    status: 'all'
+  });
   const token = localStorage.getItem('session_token');
   const API = process.env.REACT_APP_BACKEND_URL;
+  const { user } = useAuth();
   
   const loadTasks = useCallback(async () => {
     try {
@@ -2436,6 +2447,49 @@ function AdTasksTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borde
     if (projectId) loadTasks();
   }, [projectId, loadTasks]);
   
+  // Stats calculation
+  const stats = {
+    total: tasks.length,
+    pending: tasks.filter(t => t.status === 'To-Do' || t.status === 'pending').length,
+    in_progress: tasks.filter(t => t.status === 'In Progress' || t.status === 'in_progress').length,
+    completed: tasks.filter(t => t.status === 'Completed' || t.status === 'completed').length
+  };
+  
+  // Filter tasks
+  const filteredTasks = tasks.filter(task => {
+    // Quick filter tabs
+    if (filter === 'pending' && task.status !== 'To-Do' && task.status !== 'pending') return false;
+    if (filter === 'in_progress' && task.status !== 'In Progress' && task.status !== 'in_progress') return false;
+    if (filter === 'completed' && task.status !== 'Completed' && task.status !== 'completed') return false;
+    
+    // Advanced filters
+    if (filters.dateFilter === 'today') {
+      const today = new Date().toISOString().split('T')[0];
+      if (task.due_date !== today) return false;
+    } else if (filters.dateFilter === 'single' && filters.singleDate) {
+      if (task.due_date !== filters.singleDate) return false;
+    }
+    
+    if (filters.assignedTo !== 'all' && task.assignee_id !== filters.assignedTo) return false;
+    if (filters.taskType !== 'all' && task.type !== filters.taskType) return false;
+    if (filters.status !== 'all') {
+      const normalizedStatus = task.status?.toLowerCase().replace(/[- ]/g, '_');
+      if (normalizedStatus !== filters.status) return false;
+    }
+    
+    return true;
+  });
+  
+  const resetFilters = () => {
+    setFilters({
+      dateFilter: 'all',
+      singleDate: '',
+      assignedTo: 'all',
+      taskType: 'all',
+      status: 'all'
+    });
+  };
+  
   const handleCreate = async () => {
     if (!newTask.title.trim()) {
       toast.error('Please enter a task title');
@@ -2447,15 +2501,57 @@ function AdTasksTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borde
       });
       toast.success('Task created!');
       setShowModal(false);
-      setNewTask({ title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: '' });
+      setNewTask({ title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: '', type: 'general', work_link: '' });
       loadTasks();
     } catch (error) {
       toast.error('Failed to create task');
     }
   };
   
-  const handleStart = (taskId) => {
+  const handleUpdate = async () => {
+    if (!newTask.title.trim()) {
+      toast.error('Please enter a task title');
+      return;
+    }
+    try {
+      await axios.put(`${API}/api/additional-tasks/${editingTask.task_id}`, { ...newTask }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success('Task updated!');
+      setShowModal(false);
+      setEditingTask(null);
+      setNewTask({ title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: '', type: 'general', work_link: '' });
+      loadTasks();
+    } catch (error) {
+      toast.error('Failed to update task');
+    }
+  };
+  
+  const openEditModal = (task) => {
+    setEditingTask(task);
+    setNewTask({
+      title: task.title,
+      description: task.description || '',
+      priority: task.priority || 'medium',
+      due_date: task.due_date || '',
+      assignee: task.assignee || '',
+      assignee_id: task.assignee_id || '',
+      type: task.type || 'general',
+      work_link: task.work_link || ''
+    });
+    setShowModal(true);
+  };
+  
+  const handleStart = async (taskId) => {
     setTimers(prev => ({ ...prev, [taskId]: { startTime: Date.now() } }));
+    try {
+      await axios.put(`${API}/api/additional-tasks/${taskId}/status`, { status: 'In Progress' }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      loadTasks();
+    } catch (error) {
+      console.error('Error updating status');
+    }
   };
   
   const handleStop = async (taskId) => {
@@ -2475,6 +2571,18 @@ function AdTasksTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borde
   };
   
   const handleComplete = async (taskId) => {
+    const timerInfo = timers[taskId];
+    if (timerInfo) {
+      const seconds = Math.floor((Date.now() - timerInfo.startTime) / 1000);
+      try {
+        await axios.put(`${API}/api/additional-tasks/${taskId}/add-time`, { seconds }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setTimers(prev => { const n = {...prev}; delete n[taskId]; return n; });
+      } catch (error) {
+        console.error('Failed to save time');
+      }
+    }
     try {
       await axios.put(`${API}/api/additional-tasks/${taskId}/status`, { status: 'Completed' }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -2505,95 +2613,410 @@ function AdTasksTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borde
     return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
   };
   
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  
+  const statusColors = {
+    'To-Do': 'bg-[#71717a]/20 text-[#71717a]',
+    'pending': 'bg-[#71717a]/20 text-[#71717a]',
+    'In Progress': 'bg-[#3b82f6]/20 text-[#3b82f6]',
+    'in_progress': 'bg-[#3b82f6]/20 text-[#3b82f6]',
+    'Completed': 'bg-[#10b981]/20 text-[#10b981]',
+    'completed': 'bg-[#10b981]/20 text-[#10b981]'
+  };
+
+  const getTimerButton = (task) => {
+    const isRunning = timers[task.task_id];
+    const isCompleted = task.status === 'Completed' || task.status === 'completed';
+    
+    if (isCompleted) {
+      return (
+        <Badge className="bg-[#10b981]/20 text-[#10b981]">
+          <CheckCircle2 className="h-3 w-3 mr-1" /> Done
+        </Badge>
+      );
+    }
+    
+    if (isRunning) {
+      return (
+        <div className="flex gap-1">
+          <Button size="sm" onClick={() => handleStop(task.task_id)} className="bg-[#f59e0b] hover:bg-[#d97706] text-white h-7 px-2">
+            <Pause className="h-3 w-3 mr-1" /> Pause
+          </Button>
+          <Button size="sm" onClick={() => handleComplete(task.task_id)} className="bg-[#ef4444] hover:bg-[#dc2626] text-white h-7 px-2">
+            <Check className="h-3 w-3" />
+          </Button>
+        </div>
+      );
+    }
+    
+    return (
+      <Button size="sm" onClick={() => handleStart(task.task_id)} className="bg-[#10b981] hover:bg-[#059669] text-white h-7 px-3">
+        <Play className="h-3 w-3 mr-1" /> Start
+      </Button>
+    );
+  };
+  
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className={`text-lg font-semibold ${textPrimary}`}>Additional Tasks</h3>
-        <Button onClick={() => setShowModal(true)} className="bg-[#6366f1] h-9">
+        <Button onClick={() => { setEditingTask(null); setNewTask({ title: '', description: '', priority: 'medium', due_date: '', assignee: '', assignee_id: '', type: 'general', work_link: '' }); setShowModal(true); }} className="bg-[#6366f1] h-9">
           <Plus className="h-4 w-4 mr-2" /> Add Task
         </Button>
       </div>
       
-      {tasks.length === 0 ? (
-        <div className={`text-center py-12 ${textSecondary}`}>
-          <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No additional tasks for this project</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {tasks.map(task => (
-            <div key={task.task_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className={`w-1.5 h-12 rounded-full ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
-                  <div>
-                    <p className={`font-medium ${textPrimary}`}>{task.title}</p>
-                    <div className="flex items-center gap-2 mt-1 text-sm">
-                      <Badge variant="outline">{task.status}</Badge>
-                      {task.due_date && <span className={textSecondary}>Due: {task.due_date}</span>}
-                      {task.assignee && <span className={textSecondary}>• {task.assignee}</span>}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm ${textSecondary}`}>{formatTime(task.time_spent || 0)}</span>
-                  {timers[task.task_id] ? (
-                    <Button size="sm" variant="outline" className="border-red-500 text-red-500" onClick={() => handleStop(task.task_id)}>
-                      <Pause className="h-3 w-3 mr-1" /> Stop
-                    </Button>
-                  ) : (
-                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600" onClick={() => handleStart(task.task_id)}>
-                      <Play className="h-3 w-3 mr-1" /> Start
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => handleComplete(task.task_id)}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(task.task_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                </div>
-              </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className={`${bgCard} border ${borderColor} rounded-lg p-3`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-xs ${textSecondary}`}>Total Tasks</p>
+              <p className={`text-xl font-bold ${textPrimary}`}>{stats.total}</p>
             </div>
+            <ClipboardCheck className="h-6 w-6 text-[#6366f1]" />
+          </div>
+        </div>
+        <div className={`${bgCard} border ${borderColor} rounded-lg p-3`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-xs ${textSecondary}`}>Pending</p>
+              <p className="text-xl font-bold text-[#71717a]">{stats.pending}</p>
+            </div>
+            <Clock className="h-6 w-6 text-[#71717a]" />
+          </div>
+        </div>
+        <div className={`${bgCard} border ${borderColor} rounded-lg p-3`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-xs ${textSecondary}`}>In Progress</p>
+              <p className="text-xl font-bold text-[#3b82f6]">{stats.in_progress}</p>
+            </div>
+            <RefreshCw className="h-6 w-6 text-[#3b82f6]" />
+          </div>
+        </div>
+        <div className={`${bgCard} border ${borderColor} rounded-lg p-3`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-xs ${textSecondary}`}>Completed</p>
+              <p className="text-xl font-bold text-[#10b981]">{stats.completed}</p>
+            </div>
+            <CheckCircle2 className="h-6 w-6 text-[#10b981]" />
+          </div>
+        </div>
+      </div>
+      
+      {/* Filter Tabs & Filters Toggle */}
+      <div className="flex gap-2 justify-between items-center flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          {['all', 'pending', 'in_progress', 'completed'].map(f => (
+            <Button
+              key={f}
+              variant={filter === f ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFilter(f)}
+              className={filter === f ? 'bg-[#6366f1]' : ''}
+            >
+              {f === 'all' ? 'All' : f.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            </Button>
           ))}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowFilters(!showFilters)}
+          className={showFilters ? 'bg-[#6366f1] text-white' : ''}
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          Filters
+        </Button>
+      </div>
+      
+      {/* Advanced Filters Panel */}
+      {showFilters && (
+        <div className={`${bgCard} border ${borderColor} rounded-lg p-4`}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Date Filter */}
+            <div>
+              <label className={`text-xs ${textSecondary} mb-1 block`}>Date</label>
+              <Select value={filters.dateFilter} onValueChange={(v) => setFilters({...filters, dateFilter: v})}>
+                <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="single">Single Date</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Single Date Picker */}
+            {filters.dateFilter === 'single' && (
+              <div>
+                <label className={`text-xs ${textSecondary} mb-1 block`}>Select Date</label>
+                <Input
+                  type="date"
+                  value={filters.singleDate}
+                  onChange={(e) => setFilters({...filters, singleDate: e.target.value})}
+                  className={`h-9 ${bgSecondary} border ${borderColor}`}
+                />
+              </div>
+            )}
+            
+            {/* Assigned To */}
+            <div>
+              <label className={`text-xs ${textSecondary} mb-1 block`}>Assigned To</label>
+              <Select value={filters.assignedTo} onValueChange={(v) => setFilters({...filters, assignedTo: v})}>
+                <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  {teamMembers.map(m => (
+                    <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Task Type */}
+            <div>
+              <label className={`text-xs ${textSecondary} mb-1 block`}>Type</label>
+              <Select value={filters.taskType} onValueChange={(v) => setFilters({...filters, taskType: v})}>
+                <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="general">General</SelectItem>
+                  <SelectItem value="bug">Bug Fix</SelectItem>
+                  <SelectItem value="feature">Feature</SelectItem>
+                  <SelectItem value="content">Content</SelectItem>
+                  <SelectItem value="design">Design</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Status */}
+            <div>
+              <label className={`text-xs ${textSecondary} mb-1 block`}>Status</label>
+              <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
+                <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="to_do">To-Do</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="flex justify-end mt-4">
+            <Button variant="ghost" size="sm" onClick={resetFilters}>
+              Reset Filters
+            </Button>
+          </div>
         </div>
       )}
       
-      {/* Create Modal */}
+      {/* Tasks Table */}
+      <div className={`${bgCard} border ${borderColor} rounded-lg overflow-hidden`}>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className={bgSecondary}>
+              <tr>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Task</th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Assigned</th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Due Date</th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Link</th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Time</th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Timer</th>
+                <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
+              </tr>
+            </thead>
+            <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
+              {filteredTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className={`px-4 py-12 text-center ${textSecondary}`}>
+                    <CheckCircle2 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No tasks found</p>
+                    <p className="text-sm mt-1">Create a new task to get started</p>
+                  </td>
+                </tr>
+              ) : filteredTasks.map(task => (
+                <tr key={task.task_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-start gap-2">
+                      <div className={`w-1 h-8 rounded-full flex-shrink-0 ${task.priority === 'urgent' ? 'bg-red-500' : task.priority === 'high' ? 'bg-orange-500' : task.priority === 'medium' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                      <div>
+                        <p className={`font-medium ${textPrimary}`}>{task.title}</p>
+                        {task.description && (
+                          <p className={`text-xs ${textSecondary} truncate max-w-xs`}>{task.description}</p>
+                        )}
+                        <Badge className="text-xs mt-1" variant="outline">{task.type || 'General'}</Badge>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge className={statusColors[task.status] || statusColors['To-Do']}>
+                      {task.status || 'To-Do'}
+                    </Badge>
+                  </td>
+                  <td className={`px-4 py-3 text-sm ${textPrimary}`}>
+                    {task.assignee || '-'}
+                  </td>
+                  <td className={`px-4 py-3 text-sm`}>
+                    {task.due_date ? (
+                      <span className={new Date(task.due_date) < new Date() && task.status !== 'Completed' && task.status !== 'completed' ? 'text-[#ef4444]' : textPrimary}>
+                        {formatDate(task.due_date)}
+                      </span>
+                    ) : (
+                      <span className={textSecondary}>-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {task.work_link ? (
+                      <a 
+                        href={task.work_link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[#3b82f6] hover:text-[#2563eb]"
+                      >
+                        <Link2 className="h-4 w-4" />
+                      </a>
+                    ) : (
+                      <span className={textSecondary}>-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Timer className={`h-4 w-4 ${timers[task.task_id] ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
+                      <span className={`text-sm font-medium ${textPrimary}`}>
+                        {formatTime(task.time_spent || 0)}
+                      </span>
+                    </div>
+                    {timers[task.task_id] && (
+                      <div className="text-xs text-[#10b981] mt-1">Running...</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {getTimerButton(task)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEditModal(task)}>
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => handleDelete(task.task_id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className={`${bgCard} rounded-xl w-full max-w-md border ${borderColor} p-6`}>
+          <div className={`${bgCard} rounded-xl w-full max-w-lg border ${borderColor} p-6`}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-lg font-bold ${textPrimary}`}>Create Additional Task</h2>
-              <Button variant="ghost" size="sm" onClick={() => setShowModal(false)} className="h-8 w-8 p-0">
+              <h2 className={`text-lg font-bold ${textPrimary}`}>{editingTask ? 'Edit Task' : 'Create Additional Task'}</h2>
+              <Button variant="ghost" size="sm" onClick={() => { setShowModal(false); setEditingTask(null); }} className="h-8 w-8 p-0">
                 <X className="h-5 w-5" />
               </Button>
             </div>
             <div className="space-y-4">
-              <Input placeholder="Task title *" value={newTask.title} onChange={(e) => setNewTask({...newTask, title: e.target.value})} className={`${bgSecondary} border-none`} />
-              <Textarea placeholder="Description" value={newTask.description} onChange={(e) => setNewTask({...newTask, description: e.target.value})} className={`${bgSecondary} border-none`} rows={2} />
+              <Input 
+                placeholder="Task title *" 
+                value={newTask.title} 
+                onChange={(e) => setNewTask({...newTask, title: e.target.value})} 
+                className={`${bgSecondary} border-none`} 
+              />
+              <Textarea 
+                placeholder="Description" 
+                value={newTask.description} 
+                onChange={(e) => setNewTask({...newTask, description: e.target.value})} 
+                className={`${bgSecondary} border-none`} 
+                rows={2} 
+              />
               <div className="grid grid-cols-2 gap-3">
-                <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask({...newTask, due_date: e.target.value})} className={`${bgSecondary} border-none`} />
-                <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v})}>
-                  <SelectTrigger className={`${bgSecondary} border-none`}><SelectValue placeholder="Priority" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Due Date</label>
+                  <Input 
+                    type="date" 
+                    value={newTask.due_date} 
+                    onChange={(e) => setNewTask({...newTask, due_date: e.target.value})} 
+                    className={`${bgSecondary} border-none`} 
+                  />
+                </div>
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Priority</label>
+                  <Select value={newTask.priority} onValueChange={(v) => setNewTask({...newTask, priority: v})}>
+                    <SelectTrigger className={`${bgSecondary} border-none`}><SelectValue placeholder="Priority" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <Select value={newTask.assignee_id || 'none'} onValueChange={(v) => {
-                const m = teamMembers.find(x => x.user_id === v);
-                setNewTask({...newTask, assignee_id: v === 'none' ? '' : v, assignee: m?.name || ''});
-              }}>
-                <SelectTrigger className={`${bgSecondary} border-none`}><SelectValue placeholder="Assign to" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Unassigned</SelectItem>
-                  {teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Type</label>
+                  <Select value={newTask.type || 'general'} onValueChange={(v) => setNewTask({...newTask, type: v})}>
+                    <SelectTrigger className={`${bgSecondary} border-none`}><SelectValue placeholder="Type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="bug">Bug Fix</SelectItem>
+                      <SelectItem value="feature">Feature</SelectItem>
+                      <SelectItem value="content">Content</SelectItem>
+                      <SelectItem value="design">Design</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className={`text-xs ${textSecondary} mb-1 block`}>Assign To</label>
+                  <Select value={newTask.assignee_id || 'none'} onValueChange={(v) => {
+                    const m = teamMembers.find(x => x.user_id === v);
+                    setNewTask({...newTask, assignee_id: v === 'none' ? '' : v, assignee: m?.name || ''});
+                  }}>
+                    <SelectTrigger className={`${bgSecondary} border-none`}><SelectValue placeholder="Assign to" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Unassigned</SelectItem>
+                      {teamMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div>
+                <label className={`text-xs ${textSecondary} mb-1 block`}>Work Link (optional)</label>
+                <Input 
+                  placeholder="https://..." 
+                  value={newTask.work_link || ''} 
+                  onChange={(e) => setNewTask({...newTask, work_link: e.target.value})} 
+                  className={`${bgSecondary} border-none`} 
+                />
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
-              <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
-              <Button onClick={handleCreate} className="bg-[#6366f1]">Create Task</Button>
+              <Button variant="outline" onClick={() => { setShowModal(false); setEditingTask(null); }}>Cancel</Button>
+              <Button onClick={editingTask ? handleUpdate : handleCreate} className="bg-[#6366f1]">
+                {editingTask ? 'Update Task' : 'Create Task'}
+              </Button>
             </div>
           </div>
         </div>
