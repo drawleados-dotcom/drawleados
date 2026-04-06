@@ -55,7 +55,8 @@ const MODULES = [
   { value: 'leads', label: 'Leads', icon: Users },
   { value: 'bde_tasks', label: 'BDE Tasks', icon: Briefcase },
   
-  // Operations
+  // Operations / Web Dev
+  { value: 'web_dev', label: 'Web Dev', icon: Globe },
   { value: 'operations', label: 'Operations', icon: Briefcase },
   { value: 'tasks', label: 'Tasks', icon: Briefcase },
   { value: 'website_projects', label: 'Website Projects', icon: Globe },
@@ -5538,7 +5539,8 @@ function DesignationsDeptsTab({
     { value: 'leads', label: 'Leads' },
     { value: 'bde_tasks', label: 'BDE Tasks' },
     
-    // Operations
+    // Operations / Web Dev
+    { value: 'web_dev', label: 'Web Dev' },
     { value: 'operations', label: 'Operations' },
     { value: 'tasks', label: 'Tasks' },
     { value: 'website_projects', label: 'Website Projects' },

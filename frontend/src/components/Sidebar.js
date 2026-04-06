@@ -92,7 +92,7 @@ const Sidebar = () => {
     }
     
     // Operations - check explicit access
-    if (module === 'operations') return moduleAccess.includes('operations');
+    if (module === 'operations') return moduleAccess.includes('operations') || moduleAccess.includes('web_dev');
     
     // Profile - ALL employees get Profile access
     if (module === 'profile') return true;
@@ -586,7 +586,7 @@ const Sidebar = () => {
         )}
 
         {/* 3.5 Web Dev - Website Development Projects */}
-        {(hasAccess('operations') || userRole === 'super_admin' || isAdmin || isProjectManager) && (
+        {(hasAccess('operations') || hasAccess('web_dev') || userRole === 'super_admin' || isAdmin || isProjectManager) && (
           <Link
             to="/dl-operations"
             data-testid="nav-web-dev"
