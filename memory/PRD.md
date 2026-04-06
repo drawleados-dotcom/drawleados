@@ -1847,6 +1847,51 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 ---
 
 
+
+### Approvals Module with Department Selection (DONE - April 2026)
+**Purpose:** Added "Approvals" as a selectable module in HR Admin → Designation Creation with department-level and stage-level granularity.
+
+**Features Implemented:**
+
+1. **Approvals Module in Module Access:**
+   - Added "Approvals" to the module list in the Designation creation modal
+   - Shows a dropdown chevron indicator when has sub-options
+
+2. **Department Selection Checkboxes:**
+   When "Approvals" module is selected, shows checkboxes for:
+   - Website
+   - Social Media
+   - Meta Ads
+   - SEO
+   - Finance
+   - HR
+   - Business Dev
+   - ERP
+
+3. **Website Approval Stages:**
+   When "Website" department is selected, additional checkboxes appear for:
+   - Content
+   - Wireframe
+   - UI Design
+   - Development
+   - Responsive
+   - Testing
+   - Delivery
+
+**Use Cases:**
+- **Project Manager:** Select Approvals → Website → specific stages only (e.g., Testing)
+- **Operations Head:** Select Approvals → Website, Social Media, Meta Ads (all stages)
+- **Finance Manager:** Select Approvals → Finance only
+
+**Files Modified:**
+- `/app/frontend/src/pages/HRAdminPage.js` - Added Approvals module with department/stage checkboxes
+- `/app/frontend/src/pages/ApprovalsPage.js` - Updated filter UI with department checkboxes
+
+**Testing Status:** ✅ UI verified working
+
+---
+
+
 ### Role-Based Team Assignment (IN PROGRESS - April 2026)
 **Purpose:** Implement comprehensive role-based project team assignment where team members can only work on their assigned stages.
 

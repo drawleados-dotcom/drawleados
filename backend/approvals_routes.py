@@ -34,14 +34,19 @@ async def get_current_user(request: Request):
 
 @approvals_router.get("/pending")
 async def get_pending_approvals(request: Request, department: str = "", date: str = "", approval_level: str = "pm"):
-    """Get all pending approvals, optionally filtered by department, date, and approval level"""
+    """Get all pending approvals, optionally filtered by department(s), date, and approval level"""
     user = await get_current_user(request)
     
     # Build query
     query = {"status": "pending"}
     
+    # Support multiple departments (comma-separated)
     if department:
-        query["department"] = department
+        departments = [d.strip() for d in department.split(",") if d.strip()]
+        if len(departments) == 1:
+            query["department"] = departments[0]
+        elif len(departments) > 1:
+            query["department"] = {"$in": departments}
     
     # Filter by date if provided
     if date:

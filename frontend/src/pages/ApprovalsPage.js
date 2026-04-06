@@ -3,7 +3,6 @@ import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -47,7 +46,6 @@ export default function ApprovalsPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
   
-  const [activeTab, setActiveTab] = useState('all');
   const [activeStage, setActiveStage] = useState('all');
   const [approvals, setApprovals] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,7 +53,34 @@ export default function ApprovalsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [approvalType, setApprovalType] = useState('pm'); // 'pm' or 'ops'
   
+  // Department checkboxes - selected departments
+  const [selectedDepartments, setSelectedDepartments] = useState(['all']);
+  
   const token = localStorage.getItem('session_token');
+  
+  // Toggle department selection
+  const toggleDepartment = (deptId) => {
+    if (deptId === 'all') {
+      // If selecting 'all', clear other selections
+      setSelectedDepartments(['all']);
+    } else {
+      // Remove 'all' if selecting specific departments
+      let newSelection = selectedDepartments.filter(d => d !== 'all');
+      if (newSelection.includes(deptId)) {
+        // Remove if already selected
+        newSelection = newSelection.filter(d => d !== deptId);
+      } else {
+        // Add to selection
+        newSelection = [...newSelection, deptId];
+      }
+      // If nothing selected, default to 'all'
+      if (newSelection.length === 0) {
+        setSelectedDepartments(['all']);
+      } else {
+        setSelectedDepartments(newSelection);
+      }
+    }
+  };
   
   // Check if user can approve as PM or Ops
   const canApprovePM = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'project_manager';
@@ -74,9 +99,14 @@ export default function ApprovalsPage() {
   const loadApprovals = useCallback(async () => {
     try {
       setLoading(true);
+      // Build department filter - empty for 'all', comma-separated for specific departments
+      const deptFilter = selectedDepartments.includes('all') 
+        ? '' 
+        : selectedDepartments.join(',');
+      
       const res = await axios.get(`${API}/api/approvals/pending`, {
         params: { 
-          department: activeTab === 'all' ? '' : activeTab,
+          department: deptFilter,
           date: dateFilter,
           approval_level: approvalType
         },
@@ -89,7 +119,7 @@ export default function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, dateFilter, token, approvalType]);
+  }, [selectedDepartments, dateFilter, token, approvalType]);
 
   useEffect(() => {
     loadApprovals();
@@ -97,8 +127,13 @@ export default function ApprovalsPage() {
 
   // Filter approvals by stage and search
   const filteredApprovals = approvals.filter(a => {
+    // Department filter (if specific departments selected)
+    if (!selectedDepartments.includes('all')) {
+      if (!selectedDepartments.includes(a.department)) return false;
+    }
+    
     // Stage filter (for website department)
-    if (activeTab === 'website' && activeStage !== 'all') {
+    if (selectedDepartments.includes('website') && activeStage !== 'all') {
       // Normalize stage name for comparison
       let stage = (a.stage || '').toLowerCase().trim();
       if (stage === 'development') stage = 'dev';
@@ -303,101 +338,126 @@ export default function ApprovalsPage() {
           </div>
         </div>
 
-        {/* Department Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setActiveStage('all'); }} className="flex-1 flex flex-col">
-          <div className={`px-6 py-3 border-b ${borderColor} ${bgCard} overflow-x-auto`}>
-            <TabsList className={`${bgSecondary} p-1 rounded-lg inline-flex`}>
-              {DEPARTMENTS.map(dept => {
-                const Icon = dept.icon;
-                const count = dept.id === 'all' ? stats.total : (stats.byDept[dept.id] || 0);
+        {/* Department Checkboxes Selection */}
+        <div className={`px-6 py-4 border-b ${borderColor} ${bgCard}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <Filter className={`h-4 w-4 ${textSecondary}`} />
+            <span className={`text-sm font-medium ${textPrimary}`}>Select Departments:</span>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {DEPARTMENTS.map(dept => {
+              const Icon = dept.icon;
+              const count = dept.id === 'all' ? stats.total : (stats.byDept[dept.id] || 0);
+              const isSelected = selectedDepartments.includes(dept.id);
+              
+              return (
+                <label
+                  key={dept.id}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl cursor-pointer transition-all border-2 ${
+                    isSelected 
+                      ? 'bg-[#6366f1]/20 border-[#6366f1] text-[#6366f1]' 
+                      : `${bgSecondary} border-transparent ${textSecondary} hover:border-[#6366f1]/50`
+                  }`}
+                  data-testid={`dept-checkbox-${dept.id}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleDepartment(dept.id)}
+                    className="hidden"
+                  />
+                  <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-all ${
+                    isSelected 
+                      ? 'bg-[#6366f1] border-[#6366f1]' 
+                      : `${isDark ? 'border-gray-600' : 'border-gray-300'}`
+                  }`}>
+                    {isSelected && <Check className="h-3 w-3 text-white" />}
+                  </div>
+                  <Icon className="h-4 w-4" />
+                  <span className="text-sm font-medium">{dept.label}</span>
+                  {count > 0 && (
+                    <Badge className={`text-xs ${isSelected ? 'bg-[#6366f1] text-white' : 'bg-orange-500/20 text-orange-400'}`}>
+                      {count}
+                    </Badge>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        
+        {/* Stage Sub-Tabs (for Website department - shown when Website is selected) */}
+        {selectedDepartments.includes('website') && (
+          <div className={`px-6 py-3 border-b ${borderColor} ${bgCard}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <Globe className={`h-4 w-4 ${textSecondary}`} />
+              <span className={`text-sm ${textSecondary}`}>Website Stages:</span>
+            </div>
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {WEBSITE_STAGES.map(stage => {
+                const count = stageCounts[stage.id] || 0;
+                const isActive = activeStage === stage.id;
                 return (
-                  <TabsTrigger 
-                    key={dept.id} 
-                    value={dept.id} 
-                    className="gap-2 whitespace-nowrap"
+                  <button
+                    key={stage.id}
+                    onClick={() => setActiveStage(stage.id)}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
+                      isActive 
+                        ? 'bg-[#6366f1] text-white shadow-md' 
+                        : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20 hover:text-[#6366f1]`
+                    }`}
+                    data-testid={`stage-tab-${stage.id}`}
                   >
-                    <Icon className="h-4 w-4" />
-                    {dept.label}
-                    {count > 0 && (
-                      <Badge className="bg-orange-500/20 text-orange-400 text-xs ml-1">
-                        {count}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
+                    {stage.label}
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                      isActive 
+                        ? 'bg-white/20 text-white' 
+                        : count > 0 
+                          ? 'bg-orange-500 text-white' 
+                          : `${bgCard} ${textSecondary}`
+                    }`}>
+                      {count}
+                    </span>
+                  </button>
                 );
               })}
-            </TabsList>
+            </div>
           </div>
-          
-          {/* Stage Sub-Tabs (for Website department) */}
-          {activeTab === 'website' && (
-            <div className={`px-6 py-3 border-b ${borderColor} ${bgCard}`}>
-              <div className="flex items-center gap-1 overflow-x-auto">
-                {WEBSITE_STAGES.map(stage => {
-                  const count = stageCounts[stage.id] || 0;
-                  const isActive = activeStage === stage.id;
-                  return (
-                    <button
-                      key={stage.id}
-                      onClick={() => setActiveStage(stage.id)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
-                        isActive 
-                          ? 'bg-[#6366f1] text-white shadow-md' 
-                          : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20 hover:text-[#6366f1]`
-                      }`}
-                      data-testid={`stage-tab-${stage.id}`}
-                    >
-                      {stage.label}
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${
-                        isActive 
-                          ? 'bg-white/20 text-white' 
-                          : count > 0 
-                            ? 'bg-orange-500 text-white' 
-                            : `${bgCard} ${textSecondary}`
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+        )}
+
+        {/* Approvals List */}
+        <div className="flex-1 overflow-auto p-6">
+          {loading ? (
+            <div className={`text-center py-16 ${textSecondary}`}>
+              <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin" />
+              <p>Loading approvals...</p>
+            </div>
+          ) : filteredApprovals.length === 0 ? (
+            <div className={`text-center py-16 ${textSecondary}`}>
+              <CheckCircle2 className="h-16 w-16 mx-auto mb-4 opacity-30" />
+              <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>No pending approvals</h3>
+              <p>All caught up! Check back later for new requests.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredApprovals.map(approval => (
+                <ApprovalCard
+                  key={approval.approval_id}
+                  approval={approval}
+                  approvalType={approvalType}
+                  onApprove={() => handleApprove(approval)}
+                  onReject={(remarks) => handleReject(approval, remarks)}
+                  isDark={isDark}
+                  bgCard={bgCard}
+                  bgSecondary={bgSecondary}
+                  borderColor={borderColor}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                />
+              ))}
             </div>
           )}
-
-          {/* Approvals List */}
-          <TabsContent value={activeTab} className="flex-1 overflow-auto p-6">
-            {loading ? (
-              <div className={`text-center py-16 ${textSecondary}`}>
-                <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin" />
-                <p>Loading approvals...</p>
-              </div>
-            ) : filteredApprovals.length === 0 ? (
-              <div className={`text-center py-16 ${textSecondary}`}>
-                <CheckCircle2 className="h-16 w-16 mx-auto mb-4 opacity-30" />
-                <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>No pending approvals</h3>
-                <p>All caught up! Check back later for new requests.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {filteredApprovals.map(approval => (
-                  <ApprovalCard
-                    key={approval.approval_id}
-                    approval={approval}
-                    approvalType={approvalType}
-                    onApprove={() => handleApprove(approval)}
-                    onReject={(remarks) => handleReject(approval, remarks)}
-                    isDark={isDark}
-                    bgCard={bgCard}
-                    bgSecondary={bgSecondary}
-                    borderColor={borderColor}
-                    textPrimary={textPrimary}
-                    textSecondary={textSecondary}
-                  />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        </div>
       </div>
     </Layout>
   );

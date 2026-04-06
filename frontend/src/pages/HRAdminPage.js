@@ -16,7 +16,8 @@ import {
   Home, Building, Edit, Edit2, Search, UserPlus, X, Trash2,
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
-  Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2
+  Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
+  ChevronDown, Check
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -70,9 +71,33 @@ const MODULES = [
   { value: 'finance', label: 'Finance', icon: CreditCard },
   { value: 'settings', label: 'Settings', icon: Settings },
   { value: 'documentations', label: 'Documentations', icon: FileText },
+  { value: 'approvals', label: 'Approvals', icon: CheckCircle, hasSubOptions: true },
   
   // Reports
   { value: 'reports', label: 'Reports', icon: FileText },
+];
+
+// Departments available for Approvals module
+const APPROVAL_DEPARTMENTS = [
+  { value: 'website', label: 'Website', icon: Globe },
+  { value: 'social_media', label: 'Social Media', icon: Users },
+  { value: 'meta_ads', label: 'Meta Ads', icon: Globe },
+  { value: 'seo', label: 'SEO', icon: Globe },
+  { value: 'finance', label: 'Finance', icon: CreditCard },
+  { value: 'hr', label: 'HR', icon: Users },
+  { value: 'business_dev', label: 'Business Dev', icon: Briefcase },
+  { value: 'erp', label: 'ERP', icon: Settings },
+];
+
+// Website stages for approval granularity
+const WEBSITE_APPROVAL_STAGES = [
+  { value: 'content', label: 'Content' },
+  { value: 'wireframe', label: 'Wireframe' },
+  { value: 'ui', label: 'UI Design' },
+  { value: 'development', label: 'Development' },
+  { value: 'responsive', label: 'Responsive' },
+  { value: 'testing', label: 'Testing' },
+  { value: 'delivery', label: 'Delivery' },
 ];
 
 export default function HRAdminPage() {
@@ -168,7 +193,15 @@ export default function HRAdminPage() {
   const [departments, setDepartments] = useState([]);
   const [showDesignationModal, setShowDesignationModal] = useState(false);
   const [showDepartmentModal, setShowDepartmentModal] = useState(false);
-  const [newDesignation, setNewDesignation] = useState({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [] });
+  const [newDesignation, setNewDesignation] = useState({ 
+    title: '', 
+    description: '', 
+    roles_responsibilities: '', 
+    reporting_to: [], 
+    module_access: [],
+    approval_departments: [],  // Departments this designation can approve
+    approval_stages: []        // Website stages this designation can approve
+  });
   const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
   const [editingDesignation, setEditingDesignation] = useState(null);
 
@@ -1041,7 +1074,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [] });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [] });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -1298,6 +1331,7 @@ export default function HRAdminPage() {
             onCreateDepartment={handleCreateDepartment}
             onDeleteDepartment={handleDeleteDepartment}
             canEdit={canEdit}
+            isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
@@ -5484,6 +5518,7 @@ function DesignationsDeptsTab({
   onCreateDesignation, onUpdateDesignation, onDeleteDesignation,
   onCreateDepartment, onDeleteDepartment,
   canEdit = true,
+  isDark = false,
   bgCard, bgSecondary, textPrimary, textSecondary, borderColor
 }) {
   // HR Manager cannot edit - view only
@@ -5519,9 +5554,33 @@ function DesignationsDeptsTab({
     { value: 'finance', label: 'Finance' },
     { value: 'settings', label: 'Settings' },
     { value: 'documentations', label: 'Documentations' },
+    { value: 'approvals', label: 'Approvals', hasSubOptions: true },
     
     // Reports
     { value: 'reports', label: 'Reports' },
+  ];
+  
+  // Departments available for Approvals module
+  const APPROVAL_DEPARTMENTS = [
+    { value: 'website', label: 'Website' },
+    { value: 'social_media', label: 'Social Media' },
+    { value: 'meta_ads', label: 'Meta Ads' },
+    { value: 'seo', label: 'SEO' },
+    { value: 'finance', label: 'Finance' },
+    { value: 'hr', label: 'HR' },
+    { value: 'business_dev', label: 'Business Dev' },
+    { value: 'erp', label: 'ERP' },
+  ];
+
+  // Website stages for approval granularity
+  const WEBSITE_APPROVAL_STAGES = [
+    { value: 'content', label: 'Content' },
+    { value: 'wireframe', label: 'Wireframe' },
+    { value: 'ui', label: 'UI Design' },
+    { value: 'development', label: 'Development' },
+    { value: 'responsive', label: 'Responsive' },
+    { value: 'testing', label: 'Testing' },
+    { value: 'delivery', label: 'Delivery' },
   ];
 
   return (
@@ -5746,7 +5805,7 @@ function DesignationsDeptsTab({
           {/* Add Designation Modal */}
           {showDesignationModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <Card className={`${bgCard} w-full max-w-lg`}>
+              <Card className={`${bgCard} w-full max-w-2xl max-h-[90vh] overflow-y-auto`}>
                 <CardContent className="p-6">
                   <div className="flex justify-between items-center mb-4">
                     <h3 className={`text-lg font-semibold ${textPrimary}`}>Add New Designation</h3>
@@ -5798,17 +5857,106 @@ function DesignationsDeptsTab({
                                   : [...prev.module_access, m.value]
                               }));
                             }}
-                            className={`px-3 py-1 rounded-full text-sm ${
+                            className={`px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 transition-all ${
                               newDesignation.module_access.includes(m.value)
                                 ? 'bg-[#6366f1] text-white'
-                                : `${bgSecondary} ${textSecondary}`
+                                : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
                             }`}
                           >
+                            {m.hasSubOptions && <ChevronDown className="h-3 w-3" />}
                             {m.label}
                           </button>
                         ))}
                       </div>
                     </div>
+                    
+                    {/* Approval Departments - shown when "approvals" module is selected */}
+                    {newDesignation.module_access.includes('approvals') && (
+                      <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                        <Label className={`${textPrimary} flex items-center gap-2 mb-3`}>
+                          <CheckCircle className="h-4 w-4 text-orange-500" />
+                          Select Departments to Approve
+                        </Label>
+                        <p className={`text-xs ${textSecondary} mb-3`}>
+                          Choose which departments this designation can approve work for
+                        </p>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                          {APPROVAL_DEPARTMENTS.map(dept => {
+                            const isSelected = (newDesignation.approval_departments || []).includes(dept.value);
+                            return (
+                              <button
+                                key={dept.value}
+                                type="button"
+                                onClick={() => {
+                                  setNewDesignation(prev => ({
+                                    ...prev,
+                                    approval_departments: isSelected
+                                      ? (prev.approval_departments || []).filter(x => x !== dept.value)
+                                      : [...(prev.approval_departments || []), dept.value]
+                                  }));
+                                }}
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all border-2 ${
+                                  isSelected
+                                    ? 'bg-orange-500/20 border-orange-500 text-orange-400'
+                                    : `${bgCard} border-transparent ${textSecondary} hover:border-orange-500/50`
+                                }`}
+                              >
+                                <div className={`w-5 h-5 rounded flex items-center justify-center border-2 ${
+                                  isSelected ? 'bg-orange-500 border-orange-500' : `${isDark ? 'border-gray-600' : 'border-gray-300'}`
+                                }`}>
+                                  {isSelected && <Check className="h-3 w-3 text-white" />}
+                                </div>
+                                {dept.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        
+                        {/* Website Stages - shown when Website department is selected */}
+                        {(newDesignation.approval_departments || []).includes('website') && (
+                          <div className="mt-4 pt-4 border-t border-gray-600">
+                            <Label className={`${textPrimary} flex items-center gap-2 mb-2`}>
+                              <Globe className="h-4 w-4 text-blue-500" />
+                              Website Approval Stages
+                            </Label>
+                            <p className={`text-xs ${textSecondary} mb-3`}>
+                              Select which stages this designation can approve
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              {WEBSITE_APPROVAL_STAGES.map(stage => {
+                                const isSelected = (newDesignation.approval_stages || []).includes(stage.value);
+                                return (
+                                  <button
+                                    key={stage.value}
+                                    type="button"
+                                    onClick={() => {
+                                      setNewDesignation(prev => ({
+                                        ...prev,
+                                        approval_stages: isSelected
+                                          ? (prev.approval_stages || []).filter(x => x !== stage.value)
+                                          : [...(prev.approval_stages || []), stage.value]
+                                      }));
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-sm transition-all flex items-center gap-2 ${
+                                      isSelected
+                                        ? 'bg-blue-500 text-white'
+                                        : `${bgCard} ${textSecondary} hover:bg-blue-500/20`
+                                    }`}
+                                  >
+                                    <div className={`w-4 h-4 rounded flex items-center justify-center border ${
+                                      isSelected ? 'bg-white/20 border-white/30' : 'border-gray-500'
+                                    }`}>
+                                      {isSelected && <Check className="h-2.5 w-2.5" />}
+                                    </div>
+                                    {stage.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex justify-end gap-2 mt-6">
                     <Button variant="ghost" onClick={() => setShowDesignationModal(false)}>Cancel</Button>
