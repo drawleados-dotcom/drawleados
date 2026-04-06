@@ -396,6 +396,7 @@ async def create_project(request: Request, project_data: ProjectCreate):
             "overall_status": "To-Do",
             "assigned_to": None,
             "notes": None,
+            "is_converted_to_task": False,  # Only show in Master Board after Convert to Tasks
             "created_at": now,
             "updated_at": now
         }
@@ -847,8 +848,13 @@ async def get_all_tasks(request: Request):
     """Get all page tasks across all projects for the stage task board"""
     user = await get_current_user(request)
     
-    # Get all tasks with project name
+    # Get all tasks with project name - ONLY converted tasks
     pipeline = [
+        {
+            "$match": {
+                "is_converted_to_task": True  # Only show tasks that have been converted
+            }
+        },
         {
             "$lookup": {
                 "from": "website_projects",
@@ -1344,7 +1350,9 @@ async def get_all_tasks_across_projects(
     project_map = {p["project_id"]: p for p in projects}
     
     # 1. Get page-level tasks (with phase due dates)
-    page_tasks = await db.website_page_tasks.find({}, {"_id": 0}).to_list(500)
+    # ONLY get tasks that have been converted (is_converted_to_task = True)
+    page_tasks_query = {"is_converted_to_task": True}
+    page_tasks = await db.website_page_tasks.find(page_tasks_query, {"_id": 0}).to_list(500)
     
     for pt in page_tasks:
         project = project_map.get(pt.get("project_id"), {})
@@ -1600,7 +1608,7 @@ async def get_stage_tasks(project_id: str, request: Request):
 
 @website_projects_router.post("/projects/{project_id}/convert-pages-to-tasks")
 async def convert_pages_to_tasks(project_id: str, request: Request):
-    """Convert all pages to stage tasks for tracking"""
+    """Convert all pages to stage tasks for tracking - makes them visible in Master Board"""
     user = await get_current_user(request)
     
     # Check if project exists
@@ -1608,7 +1616,14 @@ async def convert_pages_to_tasks(project_id: str, request: Request):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    # Get all pages for this project (from website_page_tasks collection)
+    # Update all page tasks for this project to be converted
+    # This makes them visible in the Master Board
+    result = await db.website_page_tasks.update_many(
+        {"project_id": project_id},
+        {"$set": {"is_converted_to_task": True}}
+    )
+    
+    # Also create stage tasks for detailed tracking
     pages = await db.website_page_tasks.find({"project_id": project_id}).to_list(100)
     
     tasks_created = 0
