@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"bb1177ad5df846f297fb984c64a967f6","collectionName":"salary_history","type":"collection"}

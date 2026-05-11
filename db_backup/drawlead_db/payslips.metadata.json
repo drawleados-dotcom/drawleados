@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"807c0aa580524e09997ab0da53115360","collectionName":"payslips","type":"collection"}

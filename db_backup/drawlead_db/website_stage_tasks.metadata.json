@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"d55e51a0afae4bae9acd30ad8de7ac66","collectionName":"website_stage_tasks","type":"collection"}
