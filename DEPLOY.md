@@ -1,7 +1,7 @@
 # 🚀 Drawlead OS — Hostinger VPS Deployment Guide
 
 This guide takes a fresh Hostinger Ubuntu 22.04 VPS to a fully running production
-deployment of Drawlead OS at **https://os.drawlead.com**, complete with MongoDB,
+deployment of Drawlead OS at **https://seyalos.com**, complete with MongoDB,
 SSL, and a GitHub Actions CI/CD pipeline.
 
 ---
@@ -10,7 +10,7 @@ SSL, and a GitHub Actions CI/CD pipeline.
 
 1. A Hostinger VPS running **Ubuntu 22.04 LTS**
 2. Root SSH access (you have password access; we'll set up SSH key auth shortly)
-3. DNS A-record `os.drawlead.com  →  187.127.165.130`
+3. DNS A-record `seyalos.com  →  187.127.165.130`  AND `www.seyalos.com  →  187.127.165.130`
    - Do this in your domain provider's DNS panel BEFORE you run `deploy.sh`
    - Wait ~5 min for propagation
 4. The code pushed to GitHub at <https://github.com/drawleados-dotcom/drawleados>
@@ -54,12 +54,12 @@ This will (~10 min):
 When done, you'll see:
 ```
 ✅  Deployment complete!
-🌐  Open https://os.drawlead.com
+🌐  Open https://seyalos.com
 ```
 
 > ⚠️ If the SSL step fails, your DNS hasn't propagated yet. Wait 10 min and run:
 > ```bash
-> sudo certbot --nginx -d os.drawlead.com
+> sudo certbot --nginx -d seyalos.com -d www.seyalos.com
 > ```
 
 ---
@@ -79,7 +79,7 @@ Then restart the backend:
 pm2 restart drawlead-backend
 ```
 
-Open https://os.drawlead.com — log in with your existing credentials:
+Open https://seyalos.com — log in with your existing credentials:
 - `vinoth@drawlead.com` / `admin123`
 
 ---
@@ -123,7 +123,7 @@ It will:
 1. Build the frontend on GitHub's runner (sanity check)
 2. SSH into your VPS
 3. Pull latest code, rebuild frontend, restart backend
-4. Run a health check on https://os.drawlead.com/api
+4. Run a health check on https://seyalos.com/api
 
 ---
 

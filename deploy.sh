@@ -20,7 +20,7 @@ set -euo pipefail
 # ============================================================================
 # CONFIGURATION — Edit these only if needed
 # ============================================================================
-DOMAIN="os.drawlead.com"
+DOMAIN="seyalos.com"
 GITHUB_REPO="https://github.com/drawleados-dotcom/drawleados.git"
 APP_DIR="/var/www/drawlead"
 
@@ -33,8 +33,8 @@ MONGO_DB="drawlead_db"
 # These keys come from your existing Emergent .env — keep them in sync
 EMERGENT_LLM_KEY="sk-emergent-4EeCa20C4B6287b5aF"
 RESEND_API_KEY="re_6puQgDKe_A8UsPEhqD77MqZnmSuNXZGjM"
-SENDER_EMAIL="noreply@os.drawlead.com"
-ADMIN_EMAIL="admin@drawlead.com"
+SENDER_EMAIL="noreply@seyalos.com"
+ADMIN_EMAIL="admin@seyalos.com"
 GOOGLE_CALENDAR_CLIENT_ID="742630088923-g68bkp0nupf3e09akg7igl79r3fmm37q.apps.googleusercontent.com"
 GOOGLE_CALENDAR_CLIENT_SECRET="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"
 
@@ -150,7 +150,7 @@ cd "$APP_DIR/backend"
 cat > .env <<EOF
 MONGO_URL=mongodb://${MONGO_USER}:${MONGO_PASS_ENCODED}@127.0.0.1:27017/?authSource=admin
 DB_NAME=${MONGO_DB}
-CORS_ORIGINS=https://${DOMAIN},http://${DOMAIN}
+CORS_ORIGINS=https://${DOMAIN},https://www.${DOMAIN}
 RESEND_API_KEY=${RESEND_API_KEY}
 SENDER_EMAIL=${SENDER_EMAIL}
 ADMIN_EMAIL=${ADMIN_EMAIL}
@@ -201,7 +201,7 @@ cat > /etc/nginx/sites-available/drawlead <<NGINX
 server {
     listen 80;
     listen [::]:80;
-    server_name ${DOMAIN};
+    server_name ${DOMAIN} www.${DOMAIN};
 
     client_max_body_size 50M;
 
@@ -259,8 +259,8 @@ apt-get install -y certbot python3-certbot-nginx
 
 log "Requesting SSL certificate..."
 log "(Make sure your DNS A-record for ${DOMAIN} points to this VPS IP)"
-certbot --nginx -d "${DOMAIN}" --non-interactive --agree-tos -m "${ADMIN_EMAIL}" --redirect || \
-  warn "SSL setup skipped/failed. Run manually:  sudo certbot --nginx -d ${DOMAIN}"
+certbot --nginx -d "${DOMAIN}" -d "www.${DOMAIN}" --non-interactive --agree-tos -m "${ADMIN_EMAIL}" --redirect || \
+  warn "SSL setup skipped/failed. Run manually:  sudo certbot --nginx -d ${DOMAIN} -d www.${DOMAIN}"
 
 # ============================================================================
 # 12. DONE

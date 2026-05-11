@@ -30,7 +30,7 @@ jobs:
       - name: Frontend - install & build (CI sanity)
         working-directory: frontend
         env:
-          REACT_APP_BACKEND_URL: https://os.drawlead.com
+          REACT_APP_BACKEND_URL: https://seyalos.com
           CI: false
         run: |
           yarn install --frozen-lockfile
@@ -91,7 +91,7 @@ jobs:
       - name: Health check
         run: |
           sleep 5
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://os.drawlead.com/api/health || echo "000")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://seyalos.com/api/health || echo "000")
           echo "Health check returned: $STATUS"
           if [ "$STATUS" != "200" ] && [ "$STATUS" != "404" ]; then
             echo "⚠️  Backend returned $STATUS — please check pm2 logs on VPS"
