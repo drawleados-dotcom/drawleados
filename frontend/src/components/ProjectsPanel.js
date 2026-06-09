@@ -35,6 +35,7 @@ export default function ProjectsPanel({
   const [projectDraft, setProjectDraft] = useState({ name: '', description: '', due_date: '', departments: [], members: [] });
   const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
+  const [activeCategoryTab, setActiveCategoryTab] = useState('all');
 
   const loadProjects = useCallback(async () => {
     try {
@@ -110,6 +111,25 @@ export default function ProjectsPanel({
 
   // ---------- Project Detail View ----------
   if (selectedProject) {
+    // Build category sub-tabs from project's selected departments
+    const projectDepts = selectedProject.departments || [];
+    const categoryTabs = projectDepts.flatMap(deptKey => {
+      const dept = deptCategories.find(d => d.dept_key === deptKey);
+      if (!dept) return [];
+      return (dept.categories || []).map(cat => ({
+        id: `${deptKey}::${cat}`,
+        deptKey,
+        deptLabel: dept.label,
+        category: cat,
+      }));
+    });
+    const projectTasks = selectedProject.tasks || [];
+    const filteredTasks = activeCategoryTab === 'all'
+      ? projectTasks
+      : projectTasks.filter(t => `${t.department}::${t.category}` === activeCategoryTab);
+
+    const countFor = (tab) => projectTasks.filter(t => `${t.department}::${t.category}` === tab.id).length;
+
     return (
       <div className="space-y-4" data-testid="project-detail-view">
         <div className="flex items-center justify-between">
@@ -137,10 +157,41 @@ export default function ProjectsPanel({
 
         <div className="space-y-2">
           <h3 className={`text-base font-semibold ${textPrimary}`}>Tasks</h3>
-          {(selectedProject.tasks || []).length === 0 ? (
-            <p className={`text-sm ${textSecondary}`}>No tasks yet. Click &quot;Add Task&quot; to create one.</p>
+
+          {/* Category sub-tabs */}
+          {categoryTabs.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2" data-testid="project-category-tabs">
+              <button
+                onClick={() => setActiveCategoryTab('all')}
+                className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                  activeCategoryTab === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+                }`}
+                data-testid="project-cat-tab-all"
+              >
+                All ({projectTasks.length})
+              </button>
+              {categoryTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveCategoryTab(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                    activeCategoryTab === tab.id ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+                  }`}
+                  data-testid={`project-cat-tab-${tab.deptKey}-${tab.category.toLowerCase().replace(/\s+/g, '-')}`}
+                  title={`${tab.deptLabel} · ${tab.category}`}
+                >
+                  {tab.category} ({countFor(tab)})
+                </button>
+              ))}
+            </div>
+          )}
+
+          {filteredTasks.length === 0 ? (
+            <p className={`text-sm ${textSecondary}`}>
+              {activeCategoryTab === 'all' ? 'No tasks yet. Click "Add Task" to create one.' : 'No tasks in this category.'}
+            </p>
           ) : (
-            (selectedProject.tasks || []).map(task => {
+            filteredTasks.map(task => {
               const user = users.find(u => u.user_id === task.assigned_to);
               return (
                 <Card key={task.task_id} className={`${bgCard} border ${borderColor}`} data-testid={`project-task-${task.task_id}`}>
@@ -153,6 +204,9 @@ export default function ProjectsPanel({
                           task.status === 'in_progress' ? 'bg-[#3b82f6]/20 text-[#3b82f6]' :
                           'bg-[#71717a]/20 text-[#71717a]'
                         }>{task.status?.replace('_', ' ') || 'pending'}</Badge>
+                        {task.category && (
+                          <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{task.category}</Badge>
+                        )}
                       </div>
                       <p className={`text-xs ${textSecondary} mt-1`}>
                         Assigned to <span className={textPrimary}>{user?.name || task.assigned_to}</span>
