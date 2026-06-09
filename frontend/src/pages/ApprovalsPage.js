@@ -42,7 +42,7 @@ const WEBSITE_STAGES = [
   { id: 'delivery', label: 'Delivery' }
 ];
 
-export default function ApprovalsPage() {
+export default function ApprovalsPage({ embedded = false }) {
   const { isDark } = useTheme();
   const { user } = useAuth();
   
@@ -248,8 +248,7 @@ export default function ApprovalsPage() {
 
   const stats = getStats();
 
-  return (
-    <Layout>
+  const content = (
       <div className={`flex flex-col h-full ${bgTertiary}`} data-testid="approvals-page">
         {/* Header */}
         <div className={`px-6 py-4 border-b ${borderColor} ${bgCard}`}>
@@ -459,8 +458,10 @@ export default function ApprovalsPage() {
           )}
         </div>
       </div>
-    </Layout>
   );
+
+  if (embedded) return content;
+  return <Layout>{content}</Layout>;
 }
 
 // Approval Card Component

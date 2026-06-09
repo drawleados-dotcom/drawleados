@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import ApprovalsPage from './ApprovalsPage';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -724,8 +725,29 @@ export default function OurTasksPage() {
             <Users className="h-4 w-4 inline mr-2" />
             Assign to Team ({assignedToTeamTasks.length})
           </button>
+          <button
+            onClick={() => setMainTab('approvals')}
+            data-testid="ops-tab-approvals"
+            className={`px-4 py-2 font-medium transition-all ${
+              mainTab === 'approvals'
+                ? 'text-[#f59e0b] border-b-2 border-[#f59e0b]'
+                : `${textSecondary} hover:text-[#f59e0b]`
+            }`}
+          >
+            <CheckCircle2 className="h-4 w-4 inline mr-2" />
+            Approvals
+          </button>
         </div>
 
+        {/* Approvals tab — embed the dedicated page */}
+        {mainTab === 'approvals' && (
+          <div data-testid="ops-approvals-panel">
+            <ApprovalsPage embedded />
+          </div>
+        )}
+
+        {mainTab !== 'approvals' && (
+        <>
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card className={`${bgCard} border ${borderColor}`}>
@@ -1158,6 +1180,8 @@ export default function OurTasksPage() {
             </div>
           </CardContent>
         </Card>
+        </>
+        )}
 
         {/* Create/Edit Task Modal */}
         {(showCreateModal || editingTask) && (
