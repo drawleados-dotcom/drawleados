@@ -739,29 +739,120 @@ async def list_pending_task_approvals(request: Request, approver_role: Optional[
 
 @our_tasks_router.post("/tasks/{task_id}/approval-decision")
 async def decide_task_approval(task_id: str, payload: dict, request: Request):
-    """Approve or reject a task approval request. payload: { decision: 'approve'|'reject', remarks?: str }"""
+    """Decide on a task approval request.
+    payload:
+      { decision: 'approve' | 'reject' | 'forward_ceo',
+        approved_by: 'operations' | 'client' (required for approve),
+        remarks: str (required for reject) }
+
+    Behaviour:
+      - approve         → mark approved, store who approved (operations/client)
+      - forward_ceo     → keep status=pending, switch approver_role to 'ceo' (re-route)
+      - reject          → mark rejected AND create a new task in our_tasks for the original assignee
+                          with title "[Rejected by <role>] <original task>" and remarks in description
+    """
     from server import get_current_user, db
     user = await get_current_user(request)
 
     decision = (payload or {}).get("decision")
-    if decision not in {"approve", "reject"}:
-        raise HTTPException(status_code=400, detail="decision must be 'approve' or 'reject'")
+    if decision not in {"approve", "reject", "forward_ceo"}:
+        raise HTTPException(status_code=400, detail="decision must be 'approve', 'reject', or 'forward_ceo'")
 
     task = await db.our_tasks.find_one({"task_id": task_id})
     if not task or not task.get("approval_request"):
         raise HTTPException(status_code=404, detail="Task or pending approval not found")
 
-    status = "approved" if decision == "approve" else "rejected"
-    await db.our_tasks.update_one(
-        {"task_id": task_id},
-        {"$set": {
-            "approval_request.status": status,
-            "approval_request.decided_by": user.user_id,
-            "approval_request.decided_at": datetime.now(timezone.utc).isoformat(),
-            "approval_request.decision_remarks": (payload or {}).get("remarks"),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }}
-    )
+    now_iso = datetime.now(timezone.utc).isoformat()
+    req = task.get("approval_request") or {}
+
+    if decision == "approve":
+        approved_by = (payload or {}).get("approved_by")
+        if approved_by not in {"operations", "client"}:
+            raise HTTPException(status_code=400, detail="approved_by must be 'operations' or 'client'")
+        await db.our_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {
+                "approval_request.status": "approved",
+                "approval_request.decided_by": user.user_id,
+                "approval_request.decided_at": now_iso,
+                "approval_request.approved_by_role": approved_by,
+                "updated_at": now_iso,
+            }}
+        )
+
+    elif decision == "forward_ceo":
+        # Re-route the same pending request to CEO queue
+        await db.our_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {
+                "approval_request.approver_role": "ceo",
+                "approval_request.forwarded_by": user.user_id,
+                "approval_request.forwarded_from": req.get("approver_role"),
+                "approval_request.forwarded_at": now_iso,
+                "updated_at": now_iso,
+            }}
+        )
+
+    else:  # reject
+        remarks = ((payload or {}).get("remarks") or "").strip()
+        if not remarks:
+            raise HTTPException(status_code=400, detail="Remarks are required when rejecting")
+
+        # Capture the rejecting role label (PM / Operations / CEO / Marketing Head / HR / Client)
+        rejected_by_role = (payload or {}).get("rejected_by_role") or req.get("approver_role") or "operations"
+        role_label_map = {
+            "operations": "Operations",
+            "pm": "PM",
+            "ceo": "CEO",
+            "marketing_head": "Marketing Head",
+            "hr": "HR",
+            "client": "Client",
+        }
+        rejected_label = role_label_map.get(rejected_by_role, rejected_by_role.title())
+
+        # Mark original task's approval as rejected
+        await db.our_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {
+                "approval_request.status": "rejected",
+                "approval_request.decided_by": user.user_id,
+                "approval_request.decided_at": now_iso,
+                "approval_request.decision_remarks": remarks,
+                "approval_request.rejected_by_role": rejected_by_role,
+                "updated_at": now_iso,
+            }}
+        )
+
+        # Create a NEW task assigned back to the original assignee/requester
+        original_assignee = task.get("assigned_to") or req.get("requested_by")
+        new_task = {
+            "task_id": f"ot_{uuid.uuid4().hex[:12]}",
+            "task_name": f"[Rejected by {rejected_label}] {task.get('task_name', 'Task')}",
+            "description": f"Rejection remarks: {remarks}\n\nOriginal task: {task.get('task_name')}\nOriginal task_id: {task_id}",
+            "status": "pending",
+            "priority": task.get("priority") or "high",
+            "type": task.get("type") or "general",
+            "tags": list({*(task.get("tags") or []), f"rejected_by_{rejected_by_role}", "rework"}),
+            "assigned_to": original_assignee,
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "due_date": None,
+            "work_link": task.get("work_link"),
+            "department": req.get("department") or task.get("department"),
+            "parent_task_id": task_id,
+            "rejection_metadata": {
+                "rejected_by_role": rejected_by_role,
+                "rejected_by_user_id": user.user_id,
+                "rejected_by_name": user.name,
+                "remarks": remarks,
+                "rejected_at": now_iso,
+            },
+            "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        await db.our_tasks.insert_one(new_task)
+
     updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
     return updated
 

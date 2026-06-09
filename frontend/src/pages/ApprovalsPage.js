@@ -143,18 +143,31 @@ export default function ApprovalsPage({ embedded = false }) {
     loadTaskApprovals();
   }, [loadTaskApprovals]);
 
-  // Approve / reject a task approval request
-  const handleTaskApprovalDecision = async (taskId, decision) => {
+  // Open the View Decision modal for a task approval
+  const [decisionTask, setDecisionTask] = useState(null);
+  const [decisionRemarks, setDecisionRemarks] = useState('');
+  const [decisionSubmitting, setDecisionSubmitting] = useState(false);
+
+  const submitTaskDecision = async (taskId, body) => {
+    setDecisionSubmitting(true);
     try {
       await axios.post(
         `${API}/api/our-tasks/tasks/${taskId}/approval-decision`,
-        { decision },
+        body,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast.success(`Task ${decision === 'approve' ? 'approved' : 'rejected'}`);
+      toast.success(
+        body.decision === 'approve' ? 'Task approved' :
+        body.decision === 'forward_ceo' ? 'Forwarded to CEO' :
+        'Task rejected and new task created'
+      );
+      setDecisionTask(null);
+      setDecisionRemarks('');
       loadTaskApprovals();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to update approval');
+    } finally {
+      setDecisionSubmitting(false);
     }
   };
 
@@ -471,19 +484,11 @@ export default function ApprovalsPage({ embedded = false }) {
                         <div className="flex gap-2">
                           <Button
                             size="sm"
-                            onClick={() => handleTaskApprovalDecision(task.task_id, 'approve')}
-                            className="bg-[#10b981] hover:bg-[#059669] text-white"
-                            data-testid={`task-approve-${task.task_id}`}
+                            onClick={() => { setDecisionTask(task); setDecisionRemarks(''); }}
+                            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                            data-testid={`task-view-${task.task_id}`}
                           >
-                            <Check className="h-3 w-3 mr-1" /> Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleTaskApprovalDecision(task.task_id, 'reject')}
-                            className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                            data-testid={`task-reject-${task.task_id}`}
-                          >
-                            <X className="h-3 w-3 mr-1" /> Reject
+                            <Eye className="h-3 w-3 mr-1" /> View
                           </Button>
                         </div>
                       </div>
@@ -525,6 +530,97 @@ export default function ApprovalsPage({ embedded = false }) {
             </div>
           )}
         </div>
+
+        {/* Task Approval Decision Popup */}
+        {decisionTask && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !decisionSubmitting && setDecisionTask(null)}>
+            <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-xl mx-4`} onClick={(e) => e.stopPropagation()}>
+              <div className="p-6 border-b ${borderColor}">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-lg font-semibold ${textPrimary} flex items-center gap-2`}>
+                    <CheckCircle2 className="h-5 w-5 text-[#6366f1]" />
+                    Task Approval Decision
+                  </h3>
+                  <button onClick={() => !decisionSubmitting && setDecisionTask(null)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <p className={`text-sm ${textSecondary}`}>Task</p>
+                  <p className={`text-base font-semibold ${textPrimary}`}>{decisionTask.task_name}</p>
+                  <p className={`text-xs ${textSecondary} mt-1`}>
+                    Requested by <span className={textPrimary}>{decisionTask.approval_request?.requested_by_name}</span>
+                    {decisionTask.approval_request?.department && ` · ${decisionTask.approval_request.department}`}
+                  </p>
+                  {decisionTask.approval_request?.note && (
+                    <p className={`text-sm ${textPrimary} mt-2 italic`}>&ldquo;{decisionTask.approval_request.note}&rdquo;</p>
+                  )}
+                </div>
+
+                {/* Approve By */}
+                <div>
+                  <p className={`text-sm font-medium ${textPrimary} mb-2`}>Approved By</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: 'operations' })}
+                      disabled={decisionSubmitting}
+                      className="bg-[#3b82f6] hover:bg-[#2563eb] text-white"
+                      data-testid="decision-approve-operations"
+                    >
+                      <Check className="h-3 w-3 mr-1" /> Operations
+                    </Button>
+                    <Button
+                      onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: 'client' })}
+                      disabled={decisionSubmitting}
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      data-testid="decision-approve-client"
+                    >
+                      <Check className="h-3 w-3 mr-1" /> Client
+                    </Button>
+                    <Button
+                      onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'forward_ceo' })}
+                      disabled={decisionSubmitting}
+                      className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                      data-testid="decision-forward-ceo"
+                    >
+                      Send to CEO
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Reject */}
+                <div className={`border-t ${borderColor} pt-5`}>
+                  <p className={`text-sm font-medium ${textPrimary} mb-2`}>Or Reject (creates a new rework task)</p>
+                  <textarea
+                    value={decisionRemarks}
+                    onChange={(e) => setDecisionRemarks(e.target.value)}
+                    rows={3}
+                    placeholder="Rejection remarks (required)…"
+                    className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="decision-reject-remarks"
+                  />
+                  <Button
+                    onClick={() => {
+                      if (!decisionRemarks.trim()) { toast.error('Please add rejection remarks'); return; }
+                      submitTaskDecision(decisionTask.task_id, {
+                        decision: 'reject',
+                        remarks: decisionRemarks.trim(),
+                        rejected_by_role: decisionTask.approval_request?.approver_role,
+                      });
+                    }}
+                    disabled={decisionSubmitting}
+                    className="mt-3 w-full bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                    data-testid="decision-reject-btn"
+                  >
+                    <X className="h-3 w-3 mr-1" /> Reject & Create Rework Task
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
   );
 
