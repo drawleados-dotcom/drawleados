@@ -709,42 +709,31 @@ export default function OurTasksPage() {
           </Button>
         </div>
 
-        {/* Main Tabs - Assigned to Me / Assign to Team */}
-        <div className="flex gap-4 border-b border-gray-700 pb-2">
-          <button
-            onClick={() => { setMainTab('assigned_to_me'); setFilter('all'); }}
-            className={`px-4 py-2 font-medium transition-all ${
-              mainTab === 'assigned_to_me' 
-                ? 'text-[#6366f1] border-b-2 border-[#6366f1]' 
-                : `${textSecondary} hover:text-[#6366f1]`
-            }`}
-          >
-            <User className="h-4 w-4 inline mr-2" />
-            My Tasks ({assignedToMeTasks.length + myOwnTasks.length})
-          </button>
-          <button
-            onClick={() => { setMainTab('assign_to_team'); setFilter('all'); }}
-            className={`px-4 py-2 font-medium transition-all ${
-              mainTab === 'assign_to_team' 
-                ? 'text-[#8b5cf6] border-b-2 border-[#8b5cf6]' 
-                : `${textSecondary} hover:text-[#8b5cf6]`
-            }`}
-          >
-            <Users className="h-4 w-4 inline mr-2" />
-            Assign to Team ({assignedToTeamTasks.length})
-          </button>
-          <button
-            onClick={() => setMainTab('approvals')}
-            data-testid="ops-tab-approvals"
-            className={`px-4 py-2 font-medium transition-all ${
-              mainTab === 'approvals'
-                ? 'text-[#f59e0b] border-b-2 border-[#f59e0b]'
-                : `${textSecondary} hover:text-[#f59e0b]`
-            }`}
-          >
-            <CheckCircle2 className="h-4 w-4 inline mr-2" />
-            Approvals
-          </button>
+        {/* Main Tabs — pill style matching My Profile */}
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          {[
+            { id: 'assigned_to_me', label: `My Tasks (${assignedToMeTasks.length + myOwnTasks.length})`, icon: User },
+            { id: 'assign_to_team', label: `Assign to Team (${assignedToTeamTasks.length})`, icon: Users },
+            { id: 'approvals', label: 'Approvals', icon: CheckCircle2 },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = mainTab === tab.id;
+            return (
+              <Button
+                key={tab.id}
+                onClick={() => { setMainTab(tab.id); if (tab.id !== 'approvals') setFilter('all'); }}
+                data-testid={`ops-tab-${tab.id.replace('_', '-')}`}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
+                  isActive
+                    ? 'bg-[#6366f1] text-white shadow-lg'
+                    : `${bgCard} ${textSecondary} ${hoverBg} border ${borderColor}`
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {tab.label}
+              </Button>
+            );
+          })}
         </div>
 
         {/* Approvals tab — embed the dedicated page */}
