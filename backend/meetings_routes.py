@@ -65,7 +65,8 @@ class MeetingCreate(BaseModel):
     start_time: Optional[str] = None  # HH:MM (optional when all_day)
     end_time: Optional[str] = None  # HH:MM
     all_day: Optional[bool] = False
-    recurrence: Optional[str] = "none"  # none | daily | weekly | monthly | yearly | weekdays
+    recurrence: Optional[str] = "none"  # none | daily | weekly | monthly | yearly | weekdays | custom
+    custom_recurrence: Optional[dict] = None  # {repeat_every, repeat_unit, repeat_on_days, ends, end_date, occurrences}
     meeting_type: str = "video"  # video, audio, in-person
     category: Optional[str] = "team"  # 'client' | 'team' (for filtering)
     meeting_link: Optional[str] = None  # Google Meet, Zoom, etc.
@@ -158,6 +159,7 @@ async def create_meeting(request: Request, meeting_data: MeetingCreate):
         "end_time": meeting_data.end_time,
         "all_day": bool(meeting_data.all_day),
         "recurrence": meeting_data.recurrence or "none",
+        "custom_recurrence": meeting_data.custom_recurrence,
         "meeting_type": meeting_data.meeting_type,
         "category": meeting_data.category or "team",
         "meeting_link": meeting_data.meeting_link,

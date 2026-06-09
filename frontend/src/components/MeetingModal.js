@@ -37,11 +37,20 @@ export default function MeetingModal({
     end_time: '',
     all_day: false,
     recurrence: 'none',
+    custom_recurrence: {
+      repeat_every: 1,
+      repeat_unit: 'week', // day, week, month, year
+      repeat_on_days: [],   // 0-6 (Sun-Sat)
+      ends: 'never',        // never, on_date, after_occurrences
+      end_date: '',
+      occurrences: 13,
+    },
     meeting_link: '',
     agenda: '',
     attendees: [],
   });
   const [saving, setSaving] = useState(false);
+  const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -49,8 +58,10 @@ export default function MeetingModal({
       title: '', category: 'team', client_name: '',
       date: '', start_time: '', end_time: '',
       all_day: false, recurrence: 'none',
+      custom_recurrence: { repeat_every: 1, repeat_unit: 'week', repeat_on_days: [], ends: 'never', end_date: '', occurrences: 13 },
       meeting_link: '', agenda: '', attendees: [],
     });
+    setShowCustomRecurrence(false);
   }, [open]);
 
   if (!open) return null;
@@ -81,6 +92,7 @@ export default function MeetingModal({
       end_time: form.all_day ? null : (form.end_time || null),
       all_day: form.all_day,
       recurrence: form.recurrence,
+      custom_recurrence: form.recurrence === 'custom' ? form.custom_recurrence : null,
       meeting_type: 'video',
       category: form.category,
       meeting_link: form.meeting_link.trim() || null,
@@ -210,19 +222,46 @@ export default function MeetingModal({
               <span className={`text-sm ${textPrimary}`}>All day</span>
             </label>
 
-            <select
-              value={form.recurrence}
-              onChange={(e) => setForm(prev => ({ ...prev, recurrence: e.target.value }))}
-              className={`w-full h-11 px-3 rounded-lg border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
-              data-testid="mtg-recurrence"
-            >
-              <option value="none">Does not repeat</option>
-              <option value="daily">Daily</option>
-              <option value="weekdays">Every weekday (Mon–Fri)</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={form.recurrence}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === 'custom') {
+                    setForm(prev => ({ ...prev, recurrence: 'custom' }));
+                    setShowCustomRecurrence(true);
+                  } else {
+                    setForm(prev => ({ ...prev, recurrence: v }));
+                  }
+                }}
+                className={`flex-1 h-11 px-3 rounded-lg border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                data-testid="mtg-recurrence"
+              >
+                <option value="none">Does not repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">
+                  {`Weekly on ${form.date ? new Date(form.date).toLocaleDateString('en-US', { weekday: 'long' }) : 'selected day'}`}
+                </option>
+                <option value="monthly">
+                  {`Monthly on the ${form.date ? new Date(form.date).getDate() : 'selected date'}`}
+                </option>
+                <option value="yearly">
+                  {`Annually on ${form.date ? new Date(form.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'selected date'}`}
+                </option>
+                <option value="weekdays">Every weekday (Monday to Friday)</option>
+                <option value="custom">Custom…</option>
+              </select>
+              {form.recurrence === 'custom' && (
+                <button
+                  type="button"
+                  onClick={() => setShowCustomRecurrence(true)}
+                  className={`px-3 h-11 rounded-lg border ${borderColor} ${bgCard} text-sm text-[#6366f1]`}
+                  data-testid="mtg-recurrence-edit"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
           </div>
 
           <div>
@@ -288,6 +327,150 @@ export default function MeetingModal({
           </div>
         </CardContent>
       </Card>
+
+      {/* Custom recurrence sub-modal */}
+      {showCustomRecurrence && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90] p-4"
+          onClick={() => setShowCustomRecurrence(false)}
+        >
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <h4 className={`text-base font-semibold ${textPrimary}`}>Custom recurrence</h4>
+                <button onClick={() => setShowCustomRecurrence(false)} className={textSecondary}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Repeat every N (day/week/month/year) */}
+              <div className="flex items-center gap-3">
+                <span className={`text-sm ${textSecondary}`}>Repeat every</span>
+                <Input
+                  type="number"
+                  min="1"
+                  value={form.custom_recurrence.repeat_every}
+                  onChange={(e) => setForm(prev => ({
+                    ...prev,
+                    custom_recurrence: { ...prev.custom_recurrence, repeat_every: parseInt(e.target.value) || 1 }
+                  }))}
+                  className={`w-16 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="cr-every"
+                />
+                <select
+                  value={form.custom_recurrence.repeat_unit}
+                  onChange={(e) => setForm(prev => ({
+                    ...prev,
+                    custom_recurrence: { ...prev.custom_recurrence, repeat_unit: e.target.value }
+                  }))}
+                  className={`h-10 px-2 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="cr-unit"
+                >
+                  <option value="day">day</option>
+                  <option value="week">week</option>
+                  <option value="month">month</option>
+                  <option value="year">year</option>
+                </select>
+              </div>
+
+              {/* Repeat on (weekday picker) — only for weekly */}
+              {form.custom_recurrence.repeat_unit === 'week' && (
+                <div>
+                  <span className={`text-sm ${textSecondary}`}>Repeat on</span>
+                  <div className="flex gap-2 mt-2">
+                    {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => {
+                      const isActive = form.custom_recurrence.repeat_on_days.includes(idx);
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            const days = isActive
+                              ? form.custom_recurrence.repeat_on_days.filter(d => d !== idx)
+                              : [...form.custom_recurrence.repeat_on_days, idx];
+                            setForm(prev => ({ ...prev, custom_recurrence: { ...prev.custom_recurrence, repeat_on_days: days } }));
+                          }}
+                          className={`h-9 w-9 rounded-full text-sm font-medium border ${
+                            isActive ? 'bg-[#6366f1] text-white border-transparent' : `${bgSecondary} ${textSecondary} ${borderColor}`
+                          }`}
+                          data-testid={`cr-day-${idx}`}
+                        >
+                          {day}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Ends */}
+              <div>
+                <span className={`text-sm ${textSecondary}`}>Ends</span>
+                <div className="space-y-2 mt-2">
+                  {[
+                    { v: 'never', label: 'Never' },
+                    { v: 'on_date', label: 'On' },
+                    { v: 'after_occurrences', label: 'After' },
+                  ].map(opt => (
+                    <label key={opt.v} className={`flex items-center gap-3 cursor-pointer`}>
+                      <input
+                        type="radio"
+                        name="cr-ends"
+                        checked={form.custom_recurrence.ends === opt.v}
+                        onChange={() => setForm(prev => ({
+                          ...prev,
+                          custom_recurrence: { ...prev.custom_recurrence, ends: opt.v }
+                        }))}
+                        className="accent-[#6366f1]"
+                      />
+                      <span className={`text-sm ${textPrimary} w-16`}>{opt.label}</span>
+                      {opt.v === 'on_date' && (
+                        <Input
+                          type="date"
+                          value={form.custom_recurrence.end_date}
+                          disabled={form.custom_recurrence.ends !== 'on_date'}
+                          onChange={(e) => setForm(prev => ({
+                            ...prev,
+                            custom_recurrence: { ...prev.custom_recurrence, end_date: e.target.value, ends: 'on_date' }
+                          }))}
+                          className={`flex-1 h-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        />
+                      )}
+                      {opt.v === 'after_occurrences' && (
+                        <div className="flex items-center gap-2 flex-1">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={form.custom_recurrence.occurrences}
+                            disabled={form.custom_recurrence.ends !== 'after_occurrences'}
+                            onChange={(e) => setForm(prev => ({
+                              ...prev,
+                              custom_recurrence: { ...prev.custom_recurrence, occurrences: parseInt(e.target.value) || 1, ends: 'after_occurrences' }
+                            }))}
+                            className={`w-20 h-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          />
+                          <span className={`text-xs ${textSecondary}`}>occurrences</span>
+                        </div>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" onClick={() => setShowCustomRecurrence(false)}>Cancel</Button>
+                <Button
+                  onClick={() => setShowCustomRecurrence(false)}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  data-testid="cr-done"
+                >
+                  Done
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
