@@ -60,6 +60,12 @@ class TimeEditPayload(BaseModel):
     end_time: Optional[str] = None    # "HH:MM" or full ISO
     date: Optional[str] = None        # "YYYY-MM-DD" — defaults to today
 
+class ApprovalRequestPayload(BaseModel):
+    approver_role: str  # 'operations' | 'pm' | 'ceo' | 'marketing_head' | 'hr'
+    approver_user_id: Optional[str] = None
+    department: Optional[str] = None
+    note: Optional[str] = None
+
 
 # Helper function to check if a task should appear on a specific date based on recurrence
 def task_occurs_on_date(task: dict, check_date: str) -> bool:
@@ -670,3 +676,92 @@ async def edit_time_tracking(task_id: str, payload: TimeEditPayload, request: Re
 
     updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
     return updated
+
+# ============== TASK APPROVAL REQUESTS ==============
+# Allows a task assignee to request approval from a specific role
+# (operations / pm / ceo / marketing_head / hr). Stored on the task itself
+# and surfaced in the Approvals page.
+
+VALID_APPROVER_ROLES = {"operations", "pm", "ceo", "marketing_head", "hr"}
+
+@our_tasks_router.post("/tasks/{task_id}/request-approval")
+async def request_task_approval(task_id: str, payload: ApprovalRequestPayload, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    if payload.approver_role not in VALID_APPROVER_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid approver_role. Allowed: {sorted(VALID_APPROVER_ROLES)}")
+
+    task = await db.our_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    approval_request = {
+        "approver_role": payload.approver_role,
+        "approver_user_id": payload.approver_user_id,
+        "department": payload.department,
+        "note": payload.note,
+        "status": "pending",  # pending | approved | rejected
+        "requested_by": user.user_id,
+        "requested_by_name": user.name,
+        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "decided_by": None,
+        "decided_at": None,
+        "decision_remarks": None,
+    }
+
+    await db.our_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": {
+            "approval_request": approval_request,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    return {"message": "Approval requested", "approval_request": approval_request}
+
+
+@our_tasks_router.get("/approvals/pending")
+async def list_pending_task_approvals(request: Request, approver_role: Optional[str] = None, department: Optional[str] = None):
+    """Return tasks with pending approval_request, optionally filtered by approver_role and department.
+    The Approvals page calls this to show pending task approval requests."""
+    from server import get_current_user, db
+    await get_current_user(request)
+
+    query: dict = {"approval_request.status": "pending"}
+    if approver_role:
+        query["approval_request.approver_role"] = approver_role
+    if department:
+        query["approval_request.department"] = department
+
+    tasks = await db.our_tasks.find(query, {"_id": 0}).sort("approval_request.requested_at", -1).to_list(200)
+    return tasks
+
+
+@our_tasks_router.post("/tasks/{task_id}/approval-decision")
+async def decide_task_approval(task_id: str, payload: dict, request: Request):
+    """Approve or reject a task approval request. payload: { decision: 'approve'|'reject', remarks?: str }"""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    decision = (payload or {}).get("decision")
+    if decision not in {"approve", "reject"}:
+        raise HTTPException(status_code=400, detail="decision must be 'approve' or 'reject'")
+
+    task = await db.our_tasks.find_one({"task_id": task_id})
+    if not task or not task.get("approval_request"):
+        raise HTTPException(status_code=404, detail="Task or pending approval not found")
+
+    status = "approved" if decision == "approve" else "rejected"
+    await db.our_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": {
+            "approval_request.status": status,
+            "approval_request.decided_by": user.user_id,
+            "approval_request.decided_at": datetime.now(timezone.utc).isoformat(),
+            "approval_request.decision_remarks": (payload or {}).get("remarks"),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+    updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    return updated
+

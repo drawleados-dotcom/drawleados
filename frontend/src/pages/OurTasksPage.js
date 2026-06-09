@@ -49,6 +49,10 @@ export default function OurTasksPage() {
   const [runningTimers, setRunningTimers] = useState({});
   const [editingTimeRow, setEditingTimeRow] = useState(null); // task_id currently in row-edit mode
   const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}}
+  // Approval request popup
+  const [approvalTask, setApprovalTask] = useState(null); // task currently being submitted for approval
+  const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', department: '', note: '' });
+  const [approvalSubmitting, setApprovalSubmitting] = useState(false);
   const [showFilters, setShowFilters] = useState(true); // Show filters by default
   
   // Advanced filters
@@ -1171,6 +1175,37 @@ export default function OurTasksPage() {
                           <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.task_id); }}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
+                          {mainTab === 'assigned_to_me' && (
+                            <Button
+                              size="sm"
+                              className={
+                                task.approval_request?.status === 'pending'
+                                  ? 'bg-[#f59e0b] hover:bg-[#d97706] text-white h-8 px-3'
+                                  : task.approval_request?.status === 'approved'
+                                    ? 'bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3'
+                                    : task.approval_request?.status === 'rejected'
+                                      ? 'bg-[#ef4444] hover:bg-[#dc2626] text-white h-8 px-3'
+                                      : 'bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3'
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setApprovalTask(task);
+                                setApprovalDraft({
+                                  approver_role: task.approval_request?.approver_role || '',
+                                  department: task.approval_request?.department || '',
+                                  note: '',
+                                });
+                              }}
+                              data-testid={`approve-btn-${task.task_id}`}
+                              title={task.approval_request?.status ? `Approval ${task.approval_request.status}` : 'Send for approval'}
+                            >
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              {task.approval_request?.status === 'pending' ? 'Pending'
+                                : task.approval_request?.status === 'approved' ? 'Approved'
+                                : task.approval_request?.status === 'rejected' ? 'Rejected'
+                                : 'Approve'}
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1747,6 +1782,122 @@ export default function OurTasksPage() {
                   </Button>
                 </div>
               </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Approval Request Popup */}
+        {approvalTask && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !approvalSubmitting && setApprovalTask(null)}>
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                    <CheckCircle2 className="h-5 w-5 text-[#6366f1]" />
+                    Send for Approval
+                  </CardTitle>
+                  <button onClick={() => !approvalSubmitting && setApprovalTask(null)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-sm ${textSecondary}`}>Task: <span className={textPrimary}>{approvalTask.task_name}</span></p>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Approver role */}
+                <div>
+                  <Label className={`${textPrimary} mb-2 block`}>Approve By</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {[
+                      { value: 'operations', label: 'Operations', color: 'bg-blue-500' },
+                      { value: 'pm', label: 'PM', color: 'bg-purple-500' },
+                      { value: 'ceo', label: 'CEO', color: 'bg-orange-500' },
+                      { value: 'marketing_head', label: 'Marketing Head', color: 'bg-pink-500' },
+                      { value: 'hr', label: 'HR', color: 'bg-green-500' },
+                    ].map(opt => {
+                      const selected = approvalDraft.approver_role === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setApprovalDraft(prev => ({ ...prev, approver_role: opt.value }))}
+                          className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                            selected ? `${opt.color} text-white` : `${bgSecondary} ${textSecondary} hover:opacity-80`
+                          }`}
+                          data-testid={`approval-role-${opt.value}`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Department */}
+                <div>
+                  <Label className={`${textPrimary} mb-2 block`}>Department <span className={`text-xs font-normal ${textSecondary}`}>(optional)</span></Label>
+                  <select
+                    value={approvalDraft.department}
+                    onChange={(e) => setApprovalDraft(prev => ({ ...prev, department: e.target.value }))}
+                    className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                    data-testid="approval-department"
+                  >
+                    <option value="">— None —</option>
+                    <option value="website">Website</option>
+                    <option value="social_media">Social Media</option>
+                    <option value="meta">Meta Ads</option>
+                    <option value="seo">SEO</option>
+                    <option value="finance">Finance</option>
+                    <option value="hr">HR</option>
+                    <option value="business_dev">Business Dev</option>
+                    <option value="erp">ERP</option>
+                  </select>
+                </div>
+
+                {/* Note */}
+                <div>
+                  <Label className={`${textPrimary} mb-2 block`}>Note <span className={`text-xs font-normal ${textSecondary}`}>(optional)</span></Label>
+                  <textarea
+                    value={approvalDraft.note}
+                    onChange={(e) => setApprovalDraft(prev => ({ ...prev, note: e.target.value }))}
+                    rows={3}
+                    placeholder="Any context for the approver…"
+                    className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="approval-note"
+                  />
+                </div>
+              </CardContent>
+              <div className="flex justify-end gap-2 px-6 pb-6">
+                <Button variant="ghost" onClick={() => setApprovalTask(null)} disabled={approvalSubmitting}>Cancel</Button>
+                <Button
+                  onClick={async () => {
+                    if (!approvalDraft.approver_role) {
+                      toast.error('Please select an approver');
+                      return;
+                    }
+                    setApprovalSubmitting(true);
+                    try {
+                      await axios.post(
+                        `${API}/api/our-tasks/tasks/${approvalTask.task_id}/request-approval`,
+                        approvalDraft,
+                        { headers }
+                      );
+                      toast.success('Approval request sent');
+                      setApprovalTask(null);
+                      setApprovalDraft({ approver_role: '', department: '', note: '' });
+                      loadTasks();
+                    } catch (error) {
+                      toast.error(error.response?.data?.detail || 'Failed to send for approval');
+                    } finally {
+                      setApprovalSubmitting(false);
+                    }
+                  }}
+                  disabled={approvalSubmitting}
+                  className="bg-[#10b981] hover:bg-[#059669] text-white"
+                  data-testid="approval-submit-btn"
+                >
+                  {approvalSubmitting ? 'Sending…' : 'Send for Approval'}
+                </Button>
+              </div>
             </Card>
           </div>
         )}

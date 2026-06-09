@@ -51,7 +51,8 @@ export default function ApprovalsPage({ embedded = false }) {
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState(''); // Empty = all dates
   const [searchTerm, setSearchTerm] = useState('');
-  const [approvalType, setApprovalType] = useState('pm'); // 'pm' or 'ops'
+  const [approvalType, setApprovalType] = useState('ops'); // unified to Operations queue (PM/Ops toggle removed)
+  const [taskApprovals, setTaskApprovals] = useState([]);
   
   // Department checkboxes - selected departments
   const [selectedDepartments, setSelectedDepartments] = useState(['all']);
@@ -124,6 +125,38 @@ export default function ApprovalsPage({ embedded = false }) {
   useEffect(() => {
     loadApprovals();
   }, [loadApprovals]);
+
+  // Load task approval requests (requests sent from Operations > My Tasks)
+  const loadTaskApprovals = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/our-tasks/approvals/pending`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setTaskApprovals(res.data || []);
+    } catch (error) {
+      console.error('Error loading task approvals:', error);
+      setTaskApprovals([]);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadTaskApprovals();
+  }, [loadTaskApprovals]);
+
+  // Approve / reject a task approval request
+  const handleTaskApprovalDecision = async (taskId, decision) => {
+    try {
+      await axios.post(
+        `${API}/api/our-tasks/tasks/${taskId}/approval-decision`,
+        { decision },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success(`Task ${decision === 'approve' ? 'approved' : 'rejected'}`);
+      loadTaskApprovals();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update approval');
+    }
+  };
 
   // Filter approvals by stage and search
   const filteredApprovals = approvals.filter(a => {
@@ -272,34 +305,7 @@ export default function ApprovalsPage({ embedded = false }) {
             </Button>
           </div>
           
-          {/* Approval Level Toggle */}
-          <div className="flex items-center gap-4 mb-4">
-            <span className={`text-sm font-medium ${textPrimary}`}>Approval Queue:</span>
-            <div className={`flex rounded-lg ${bgSecondary} p-1`}>
-              <button
-                onClick={() => setApprovalType('pm')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  approvalType === 'pm' 
-                    ? 'bg-purple-500 text-white' 
-                    : `${textSecondary} hover:${textPrimary}`
-                }`}
-              >
-                <User className="h-4 w-4 inline mr-2" />
-                PM Approvals
-              </button>
-              <button
-                onClick={() => setApprovalType('ops')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  approvalType === 'ops' 
-                    ? 'bg-amber-500 text-white' 
-                    : `${textSecondary} hover:${textPrimary}`
-                }`}
-              >
-                <Briefcase className="h-4 w-4 inline mr-2" />
-                Ops Approvals
-              </button>
-            </div>
-          </div>
+          {/* Approval Queue toggle removed — all approvals route to Operations */}
           
           {/* Filters */}
           <div className="flex items-center gap-4 flex-wrap">
@@ -425,7 +431,69 @@ export default function ApprovalsPage({ embedded = false }) {
         )}
 
         {/* Approvals List */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6 space-y-6">
+          {/* Task Approval Requests (from Operations > My Tasks) */}
+          {taskApprovals.length > 0 && (
+            <div>
+              <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
+                <CheckCircle2 className="h-4 w-4 text-[#6366f1]" />
+                Task Approval Requests
+                <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{taskApprovals.length}</Badge>
+              </h3>
+              <div className="space-y-3">
+                {taskApprovals.map(task => {
+                  const req = task.approval_request || {};
+                  return (
+                    <div
+                      key={task.task_id}
+                      className={`${bgCard} border ${borderColor} rounded-lg p-4`}
+                      data-testid={`task-approval-${task.task_id}`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className={`font-semibold ${textPrimary}`}>{task.task_name}</h4>
+                            <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">{req.approver_role}</Badge>
+                            {req.department && (
+                              <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{req.department}</Badge>
+                            )}
+                          </div>
+                          <p className={`text-sm ${textSecondary} mt-1`}>
+                            Requested by <span className={textPrimary}>{req.requested_by_name || '—'}</span>
+                            {req.requested_at && (
+                              <> · {new Date(req.requested_at).toLocaleString()}</>
+                            )}
+                          </p>
+                          {req.note && (
+                            <p className={`text-sm ${textPrimary} mt-2 italic`}>&ldquo;{req.note}&rdquo;</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleTaskApprovalDecision(task.task_id, 'approve')}
+                            className="bg-[#10b981] hover:bg-[#059669] text-white"
+                            data-testid={`task-approve-${task.task_id}`}
+                          >
+                            <Check className="h-3 w-3 mr-1" /> Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleTaskApprovalDecision(task.task_id, 'reject')}
+                            className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                            data-testid={`task-reject-${task.task_id}`}
+                          >
+                            <X className="h-3 w-3 mr-1" /> Reject
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {loading ? (
             <div className={`text-center py-16 ${textSecondary}`}>
               <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin" />
