@@ -390,11 +390,18 @@ export default function ApprovalsPage({ embedded = false }) {
                   </div>
                   <Icon className="h-4 w-4" />
                   <span className="text-sm font-medium">{dept.label}</span>
-                  {count > 0 && (
-                    <Badge className={`text-xs ${isSelected ? 'bg-[#6366f1] text-white' : 'bg-orange-500/20 text-orange-400'}`}>
-                      {count}
-                    </Badge>
-                  )}
+                  <Badge
+                    className={`text-xs ${
+                      isSelected
+                        ? 'bg-[#6366f1] text-white'
+                        : count > 0
+                          ? 'bg-[#6366f1]/15 text-[#6366f1]'
+                          : `${isDark ? 'bg-[#27272a] text-[#71717a]' : 'bg-gray-200 text-gray-500'}`
+                    }`}
+                    data-testid={`dept-count-${dept.id}`}
+                  >
+                    {count}
+                  </Badge>
                 </label>
               );
             })}
