@@ -4858,9 +4858,91 @@ function CalendarTab({ calendar, month, year, setMonth, setYear, onUpdate, onRef
 // ============== PAYSLIPS TAB ==============
 function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGenerate, onAction, onRefresh, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState('');
-  
+  const [existsStatus, setExistsStatus] = useState({ exists: false, mode: null });
+  const [manualForm, setManualForm] = useState({
+    user_id: '', employee_name: '', employee_id: '', designation: '', joining_date: '',
+    total_working_days: 26, days_absent: 0, paid_leaves: 0, extra_days: 0,
+    gross_salary: 0, per_day_salary: 0, net_salary: 0,
+    salary_date: '', authorized_by: 'Vinoth Kumar Babu', authorized_title: 'CEO & FOUNDER',
+  });
+  const [busy, setBusy] = useState(false);
+  const API = process.env.REACT_APP_BACKEND_URL;
+  const authHeaders = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Check existence whenever selected employee/month/year changes
+  useEffect(() => {
+    if (!selectedEmployee) { setExistsStatus({ exists: false, mode: null }); return; }
+    axios.get(`${API}/api/hr/admin/payslip/exists/${selectedEmployee}/${year}/${month}`, { headers: authHeaders })
+      .then(r => setExistsStatus(r.data || { exists: false, mode: null }))
+      .catch(() => setExistsStatus({ exists: false, mode: null }));
+  }, [selectedEmployee, month, year]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When opening manual modal with an employee, pre-fill from /users + /profiles
+  const openManualForEmployee = async (uid) => {
+    const emp = employees.find(e => e.user_id === uid);
+    let prof = {};
+    try {
+      const r = await axios.get(`${API}/api/hr/admin/employees/${uid}/full`, { headers: authHeaders });
+      prof = r.data?.profile || {};
+    } catch { /* ignore */ }
+    const today = new Date();
+    const salaryDate = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+    setManualForm({
+      user_id: uid,
+      employee_name: emp?.name || '',
+      employee_id: prof.employee_id || '',
+      designation: prof.designation || emp?.role || '',
+      joining_date: prof.joining_date || '',
+      total_working_days: 26, days_absent: 0, paid_leaves: 0, extra_days: 0,
+      gross_salary: 0, per_day_salary: 0, net_salary: 0,
+      salary_date: salaryDate,
+      authorized_by: 'Vinoth Kumar Babu', authorized_title: 'CEO & FOUNDER',
+    });
+    setShowCreateModal(true);
+  };
+
+  // Auto-compute per-day and net when working days / gross / leaves change
+  useEffect(() => {
+    setManualForm(prev => {
+      const wd = Number(prev.total_working_days) || 0;
+      const gross = Number(prev.gross_salary) || 0;
+      const per_day = wd > 0 ? +(gross / wd).toFixed(2) : 0;
+      const effective = wd - Number(prev.days_absent || 0);
+      const net = +(per_day * effective).toFixed(2);
+      return { ...prev, per_day_salary: per_day, net_salary: net };
+    });
+  }, [manualForm.gross_salary, manualForm.total_working_days, manualForm.days_absent]);
+
+  const handleSubmitManual = async () => {
+    if (!manualForm.user_id) { toast.error('Employee required'); return; }
+    setBusy(true);
+    try {
+      await axios.post(`${API}/api/hr/admin/payslip/manual`, { ...manualForm, month, year }, { headers: authHeaders });
+      toast.success('Payslip created');
+      setShowCreateModal(false);
+      onRefresh && onRefresh();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to create payslip');
+    } finally { setBusy(false); }
+  };
+
+  const handleDownloadPdf = async (payslip) => {
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/payslip/${payslip.payslip_id}/pdf`, { headers: authHeaders, responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `payslip_${payslip.employee_name?.replace(/\s+/g, '_') || 'employee'}_${months[month - 1]}_${year}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error('Failed to download PDF');
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -4928,6 +5010,10 @@ function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGe
                 Load
               </Button>
             </div>
+            <Button onClick={() => { setShowCreateModal(true); setSelectedEmployee(''); }} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white">
+              <Edit2 className="h-4 w-4 mr-2" />
+              Create Payslip
+            </Button>
             <Button onClick={() => setShowGenerateModal(true)} className="bg-[#10b981] hover:bg-[#059669] text-white">
               <FileText className="h-4 w-4 mr-2" />
               Generate Payslip
@@ -4985,14 +5071,29 @@ function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGe
                         </Badge>
                       </td>
                       <td className="p-3">
-                        {nextAction && (
-                          <Button 
-                            onClick={() => onAction(payslip.payslip_id, nextAction.action)}
-                            className={`${nextAction.color} hover:opacity-80 text-white text-xs`}
+                        <div className="flex gap-2 items-center">
+                          {nextAction && (
+                            <Button 
+                              onClick={() => onAction(payslip.payslip_id, nextAction.action)}
+                              className={`${nextAction.color} hover:opacity-80 text-white text-xs`}
+                            >
+                              {nextAction.label}
+                            </Button>
+                          )}
+                          <Button
+                            onClick={() => handleDownloadPdf(payslip)}
+                            variant="outline"
+                            className="text-xs"
+                            data-testid={`payslip-pdf-${payslip.payslip_id}`}
                           >
-                            {nextAction.label}
+                            <FileText className="h-3 w-3 mr-1" /> PDF
                           </Button>
-                        )}
+                          {payslip.creation_mode && (
+                            <Badge className={payslip.creation_mode === 'manual' ? 'bg-[#6366f1]/20 text-[#6366f1] text-xs' : 'bg-[#10b981]/20 text-[#10b981] text-xs'}>
+                              {payslip.creation_mode}
+                            </Badge>
+                          )}
+                        </div>
                         {payslip.status === 'approved' && (
                           <span className={`text-xs ${textSecondary}`}>Waiting for employee</span>
                         )}
@@ -5030,6 +5131,7 @@ function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGe
                   value={selectedEmployee}
                   onChange={(e) => setSelectedEmployee(e.target.value)}
                   className={`w-full p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="generate-select-emp"
                 >
                   <option value="">Select an employee</option>
                   {employees.map((emp) => (
@@ -5042,12 +5144,156 @@ function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGe
               <p className={textSecondary}>
                 Generate payslip for <strong>{months[month - 1]} {year}</strong>
               </p>
+              {selectedEmployee && existsStatus.exists && (
+                <div className="p-3 rounded-lg bg-[#ef4444]/15 text-[#ef4444] text-sm" data-testid="generate-blocked">
+                  A <strong>{existsStatus.mode}</strong> payslip already exists for this employee in {months[month - 1]} {year}. Auto-generate is disabled.
+                </div>
+              )}
               <div className="flex gap-3 pt-4">
                 <Button onClick={() => setShowGenerateModal(false)} className={`flex-1 ${bgSecondary} ${textPrimary}`}>
                   Cancel
                 </Button>
-                <Button onClick={handleGenerate} className="flex-1 bg-[#10b981] hover:bg-[#059669] text-white" disabled={!selectedEmployee}>
+                <Button
+                  onClick={handleGenerate}
+                  className="flex-1 bg-[#10b981] hover:bg-[#059669] text-white"
+                  disabled={!selectedEmployee || existsStatus.exists}
+                  data-testid="generate-confirm-btn"
+                >
                   Generate
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Create Payslip (Manual) Modal — matches the Drawlead payslip PDF design */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" data-testid="create-payslip-modal">
+          <Card className={`w-full max-w-3xl max-h-[90vh] overflow-y-auto ${bgCard} border ${borderColor}`}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className={textPrimary}>Create Payslip — Manual</CardTitle>
+                <button onClick={() => setShowCreateModal(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+              </div>
+              <p className={`text-xs ${textSecondary}`}>For {months[month - 1]} {year} — every field is editable</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Employee picker */}
+              {!manualForm.user_id ? (
+                <div>
+                  <Label className={textSecondary}>Select Employee</Label>
+                  <select
+                    value=""
+                    onChange={(e) => openManualForEmployee(e.target.value)}
+                    className={`w-full p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="manual-select-emp"
+                  >
+                    <option value="">Choose an employee…</option>
+                    {employees.map(emp => (
+                      <option key={emp.user_id} value={emp.user_id}>{emp.name} — {emp.email}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <>
+                  {/* Existence warning */}
+                  {(() => {
+                    const e = payslips.find(p => p.user_id === manualForm.user_id);
+                    if (!e) return null;
+                    return (
+                      <div className="p-3 rounded-lg bg-[#ef4444]/15 text-[#ef4444] text-sm">
+                        A <strong>{e.creation_mode || 'generated'}</strong> payslip already exists for {months[month - 1]} {year}. Submitting will fail until you delete that one.
+                      </div>
+                    );
+                  })()}
+
+                  {/* Employee info row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label className={textSecondary}>Employee Name</Label>
+                      <Input value={manualForm.employee_name} onChange={(e) => setManualForm(prev => ({ ...prev, employee_name: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Employee ID</Label>
+                      <Input value={manualForm.employee_id} onChange={(e) => setManualForm(prev => ({ ...prev, employee_id: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Designation</Label>
+                      <Input value={manualForm.designation} onChange={(e) => setManualForm(prev => ({ ...prev, designation: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Joining Month / Year</Label>
+                      <Input placeholder="25th Aug 2025" value={manualForm.joining_date || ''} onChange={(e) => setManualForm(prev => ({ ...prev, joining_date: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Salary Date</Label>
+                      <Input placeholder="10/06/2026" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Total Salary (Gross)</Label>
+                      <Input type="number" value={manualForm.gross_salary} onChange={(e) => setManualForm(prev => ({ ...prev, gross_salary: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                  </div>
+
+                  {/* Monthly summary */}
+                  <div>
+                    <h4 className={`text-sm font-semibold ${textPrimary} mb-2`}>Monthly Summary</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <Label className={textSecondary}>Total Working Days</Label>
+                        <Input type="number" value={manualForm.total_working_days} onChange={(e) => setManualForm(prev => ({ ...prev, total_working_days: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                      </div>
+                      <div>
+                        <Label className={textSecondary}>Absent</Label>
+                        <Input type="number" value={manualForm.days_absent} onChange={(e) => setManualForm(prev => ({ ...prev, days_absent: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                      </div>
+                      <div>
+                        <Label className={textSecondary}>Paid Leave</Label>
+                        <Input type="number" value={manualForm.paid_leaves} onChange={(e) => setManualForm(prev => ({ ...prev, paid_leaves: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                      </div>
+                      <div>
+                        <Label className={textSecondary}>Extra Days</Label>
+                        <Input type="number" value={manualForm.extra_days} onChange={(e) => setManualForm(prev => ({ ...prev, extra_days: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Per-day / Net (auto-computed but editable) */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className={textSecondary}>Per Day Salary</Label>
+                      <Input type="number" value={manualForm.per_day_salary} onChange={(e) => setManualForm(prev => ({ ...prev, per_day_salary: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Total Net Pay</Label>
+                      <Input type="number" value={manualForm.net_salary} onChange={(e) => setManualForm(prev => ({ ...prev, net_salary: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                  </div>
+
+                  {/* Authorized by */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className={textSecondary}>Authorized By</Label>
+                      <Input value={manualForm.authorized_by} onChange={(e) => setManualForm(prev => ({ ...prev, authorized_by: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                    <div>
+                      <Label className={textSecondary}>Authorizer Title</Label>
+                      <Input value={manualForm.authorized_title} onChange={(e) => setManualForm(prev => ({ ...prev, authorized_title: e.target.value }))} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <Button onClick={() => setShowCreateModal(false)} className={`flex-1 ${bgSecondary} ${textPrimary}`}>Cancel</Button>
+                <Button
+                  onClick={handleSubmitManual}
+                  className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  disabled={!manualForm.user_id || busy}
+                  data-testid="manual-create-submit"
+                >
+                  {busy ? 'Creating…' : 'Create Payslip'}
                 </Button>
               </div>
             </CardContent>

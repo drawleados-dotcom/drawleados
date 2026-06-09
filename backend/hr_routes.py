@@ -1612,7 +1612,8 @@ async def generate_payslip(request: Request, payslip_data: dict):
         "year": year
     })
     if existing:
-        raise HTTPException(status_code=400, detail="Payslip already exists for this month")
+        mode = existing.get("creation_mode", "generated")
+        raise HTTPException(status_code=400, detail=f"Payslip already exists ({mode}) for this month")
     
     # Get employee details
     employee = await db.users.find_one({"user_id": user_id}, {"_id": 0})
@@ -1726,6 +1727,7 @@ async def generate_payslip(request: Request, payslip_data: dict):
         "net_salary": round(net_salary, 2),
         # Workflow
         "status": "draft",
+        "creation_mode": "generated",
         "created_by": user.user_id,
         "created_at": datetime.now(timezone.utc),
         "comments": payslip_data.get("comments", "")
@@ -1734,6 +1736,274 @@ async def generate_payslip(request: Request, payslip_data: dict):
     await db.payslips.insert_one(payslip_doc)
     
     return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
+
+
+# -----------------------------------------------------------------------------
+# Manual payslip creation (HR types every field) — keeps the same Drawlead PDF
+# -----------------------------------------------------------------------------
+@hr_router.post("/admin/payslip/manual")
+async def create_manual_payslip(request: Request, payload: dict):
+    """Create a fully manual payslip — HR Admin enters every field."""
+    from server import get_current_user
+    user = await get_current_user(request)
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    user_id = payload.get("user_id")
+    month = int(payload.get("month") or 0)
+    year = int(payload.get("year") or 0)
+    if not user_id or not month or not year:
+        raise HTTPException(status_code=400, detail="user_id, month and year are required")
+    # Reject duplicate month/year/employee combinations
+    existing = await db.payslips.find_one({"user_id": user_id, "month": month, "year": year})
+    if existing:
+        mode = existing.get("creation_mode", "manual")
+        raise HTTPException(status_code=400, detail=f"Payslip already exists ({mode}) for this month")
+    employee = await db.users.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    profile = await db.employee_profiles.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    payslip_id = f"pay_{uuid.uuid4().hex[:12]}"
+    total_working_days = float(payload.get("total_working_days") or 0)
+    days_absent = float(payload.get("days_absent") or 0)
+    paid_leaves = float(payload.get("paid_leaves") or 0)
+    extra_days = float(payload.get("extra_days") or 0)
+    per_day = float(payload.get("per_day_salary") or 0)
+    gross = float(payload.get("gross_salary") or (per_day * total_working_days))
+    net_salary = float(payload.get("net_salary") or gross)
+    doc = {
+        "payslip_id": payslip_id,
+        "user_id": user_id,
+        "employee_name": payload.get("employee_name") or employee.get("name", ""),
+        "employee_id": payload.get("employee_id") or profile.get("employee_id", ""),
+        "designation": payload.get("designation") or profile.get("designation", ""),
+        "department": payload.get("department") or profile.get("department", ""),
+        "joining_date": payload.get("joining_date") or profile.get("joining_date"),
+        "month": month,
+        "year": year,
+        # Salary
+        "basic_salary": float(payload.get("basic_salary") or 0),
+        "hra": float(payload.get("hra") or 0),
+        "conveyance": float(payload.get("conveyance") or 0),
+        "medical": float(payload.get("medical") or 0),
+        "special_allowance": float(payload.get("special_allowance") or 0),
+        "gross_salary": gross,
+        # Deductions
+        "pf_deduction": float(payload.get("pf_deduction") or 0),
+        "esi_deduction": float(payload.get("esi_deduction") or 0),
+        "professional_tax": float(payload.get("professional_tax") or 0),
+        "other_deductions": float(payload.get("other_deductions") or 0),
+        "bonus": float(payload.get("bonus") or 0),
+        # Attendance
+        "total_working_days": total_working_days,
+        "days_present": float(payload.get("days_present") or (total_working_days - days_absent - paid_leaves)),
+        "days_absent": days_absent,
+        "paid_leaves": paid_leaves,
+        "extra_days": extra_days,
+        "per_day_salary": round(per_day, 2),
+        # Net & metadata
+        "net_salary": round(net_salary, 2),
+        "salary_date": payload.get("salary_date"),
+        "authorized_by": payload.get("authorized_by", "Vinoth Kumar Babu"),
+        "authorized_title": payload.get("authorized_title", "CEO & FOUNDER"),
+        "status": "draft",
+        "creation_mode": "manual",
+        "created_by": user.user_id,
+        "created_at": datetime.now(timezone.utc),
+        "comments": payload.get("comments", ""),
+    }
+    await db.payslips.insert_one(doc)
+    return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
+
+
+@hr_router.get("/admin/payslip/exists/{user_id}/{year}/{month}")
+async def payslip_exists(user_id: str, year: int, month: int, request: Request):
+    """Check whether a payslip exists for {user, year, month} and return its mode."""
+    from server import get_current_user
+    await get_current_user(request)
+    p = await db.payslips.find_one(
+        {"user_id": user_id, "month": month, "year": year},
+        {"_id": 0, "payslip_id": 1, "creation_mode": 1, "status": 1},
+    )
+    if not p:
+        return {"exists": False, "mode": None}
+    return {"exists": True, "mode": p.get("creation_mode", "generated"), "payslip_id": p.get("payslip_id"), "status": p.get("status")}
+
+
+@hr_router.get("/admin/payslip/{payslip_id}/pdf")
+async def download_payslip_pdf(payslip_id: str, request: Request):
+    """Generate a Drawlead-styled PDF for a payslip."""
+    from server import get_current_user
+    from fastapi.responses import StreamingResponse
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.pdfgen import canvas as pdf_canvas
+
+    await get_current_user(request)
+    p = await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+
+    months = ["January", "February", "March", "April", "May", "June",
+              "July", "August", "September", "October", "November", "December"]
+    month_label = f"{months[(p.get('month') or 1) - 1]} {p.get('year') or ''}"
+
+    buf = io.BytesIO()
+    c = pdf_canvas.Canvas(buf, pagesize=A4)
+    W, H = A4
+    GREEN = colors.HexColor("#10b981")
+    DARK = colors.HexColor("#0f172a")
+    GREY = colors.HexColor("#475569")
+    LIGHT = colors.HexColor("#e2e8f0")
+
+    # ---------------- Header ----------------
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawString(20 * mm, H - 22 * mm, "Drawlead")
+    c.setFillColor(GREEN)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(20 * mm, H - 27 * mm, "Digital Transformation Company")
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 8)
+    c.drawString(20 * mm, H - 33 * mm, "96, Canal Bank Rd, CIT Nagar West,")
+    c.drawString(20 * mm, H - 37 * mm, "CIT Nagar, Chennai, Tamil Nadu 600035, India")
+
+    # Center: month
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawCentredString(W / 2, H - 25 * mm, month_label)
+
+    # Right: Payslip + contact
+    c.setFillColor(GREEN)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawRightString(W - 20 * mm, H - 22 * mm, "Payslip")
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 8)
+    c.drawRightString(W - 20 * mm, H - 28 * mm, "vinoth@drawlead.com | 6383145061")
+
+    # Divider
+    c.setStrokeColor(LIGHT)
+    c.setLineWidth(0.8)
+    c.line(20 * mm, H - 42 * mm, W - 20 * mm, H - 42 * mm)
+
+    # ---------------- Body — left employee block ----------------
+    def kv_table(x, y, rows, label_w=42 * mm, val_w=48 * mm, row_h=8 * mm):
+        c.setStrokeColor(LIGHT)
+        c.setLineWidth(0.5)
+        for i, (lbl, val) in enumerate(rows):
+            yy = y - i * row_h
+            c.rect(x, yy - row_h, label_w, row_h, stroke=1, fill=0)
+            c.rect(x + label_w, yy - row_h, val_w, row_h, stroke=1, fill=0)
+            c.setFillColor(GREY)
+            c.setFont("Helvetica", 8.5)
+            c.drawString(x + 2 * mm, yy - row_h + 2.8 * mm, str(lbl))
+            c.setFillColor(DARK)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(x + label_w + 2 * mm, yy - row_h + 2.8 * mm, str(val))
+        return y - len(rows) * row_h
+
+    joining = p.get("joining_date") or ""
+    if isinstance(joining, str) and len(joining) >= 10:
+        try:
+            d = datetime.fromisoformat(joining.replace("Z", "")).date()
+            joining = d.strftime("%d %b %Y")
+        except Exception:
+            joining = joining[:10]
+    elif joining:
+        joining = str(joining)
+
+    left_y = H - 50 * mm
+    left_y_after = kv_table(20 * mm, left_y, [
+        ("Employee Name", p.get("employee_name", "")),
+        ("Joining Month/ Year", joining or "-"),
+        ("Employee ID", p.get("employee_id", "")),
+    ])
+
+    # Right: Designation / Salary Date / Total Salary
+    right_y_after = kv_table(W / 2 + 5 * mm, left_y, [
+        ("Designation", p.get("designation", "")),
+        ("Salary Date", p.get("salary_date") or ""),
+        ("Total Salary", f"{int(p.get('gross_salary') or 0):,}"),
+    ], label_w=35 * mm, val_w=45 * mm)
+
+    # Monthly summary (left, below employee)
+    monthly_y_start = left_y_after - 5 * mm
+    monthly_rows = [
+        ("Month", month_label),
+        ("Total No.of Working Day", f"{int(p.get('total_working_days') or 0)}"),
+        ("Absent", f"{int(p.get('days_absent') or 0)}"),
+        ("Paid leave", f"{int(p.get('paid_leaves') or 0):02d}"),
+        ("Total Net Working days", f"{int((p.get('total_working_days') or 0) - (p.get('days_absent') or 0))}"),
+        ("Extra Days", f"{int(p.get('extra_days') or 0)}"),
+    ]
+    monthly_y_after = kv_table(20 * mm, monthly_y_start, monthly_rows)
+
+    # Right: Days / Per day / Total table
+    right_table_y = right_y_after - 5 * mm
+    row_h = 8 * mm
+    col_widths = [25 * mm, 20 * mm, 25 * mm, 25 * mm]
+    rx = W / 2 + 5 * mm
+    headers = ["", "Day", "Per day", "Total"]
+    # header
+    c.setFillColor(LIGHT)
+    c.rect(rx, right_table_y - row_h, sum(col_widths), row_h, stroke=1, fill=1)
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 8.5)
+    cx = rx
+    for h, w in zip(headers, col_widths):
+        c.drawString(cx + 2 * mm, right_table_y - row_h + 2.8 * mm, h)
+        cx += w
+    c.setStrokeColor(LIGHT)
+    # rows
+    per_day = p.get("per_day_salary") or (p.get("gross_salary", 0) / max(p.get("total_working_days") or 1, 1))
+    rows_t = [
+        ("Working Days", int(p.get("total_working_days") or 0), f"{per_day:,.2f}", f"{int(p.get('gross_salary') or 0):,}"),
+        ("Extra", int(p.get("extra_days") or 0), 0, 0),
+    ]
+    for i, r in enumerate(rows_t):
+        yy = right_table_y - (i + 2) * row_h
+        cx = rx
+        for w in col_widths:
+            c.rect(cx, yy, w, row_h, stroke=1, fill=0)
+            cx += w
+        cx = rx
+        for v, w in zip(r, col_widths):
+            c.setFillColor(DARK)
+            c.setFont("Helvetica", 9)
+            c.drawString(cx + 2 * mm, yy + 2.8 * mm, str(v))
+            cx += w
+
+    # Total Net Pay box (right, prominent)
+    tnp_y = right_table_y - (2 + 2) * row_h - 6 * mm
+    c.setStrokeColor(LIGHT)
+    c.setFillColor(colors.HexColor("#f0fdf4"))
+    c.rect(rx, tnp_y - 18 * mm, sum(col_widths), 18 * mm, stroke=1, fill=1)
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(rx + 3 * mm, tnp_y - 6 * mm, "Total Net Pay:")
+    c.setFillColor(colors.HexColor("#065f46"))
+    c.setFont("Helvetica-Bold", 22)
+    c.drawRightString(rx + sum(col_widths) - 3 * mm, tnp_y - 14 * mm, f"{int(p.get('net_salary') or 0):,}/-")
+
+    # Authorized By
+    auth_y = tnp_y - 30 * mm
+    c.setFillColor(DARK)
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(rx, auth_y, "Authorized By")
+    c.setFont("Helvetica", 10)
+    c.drawString(rx, auth_y - 5 * mm, p.get("authorized_by") or "Vinoth Kumar Babu")
+    c.setFillColor(GREY)
+    c.setFont("Helvetica", 8)
+    c.drawString(rx, auth_y - 9 * mm, p.get("authorized_title") or "CEO & FOUNDER")
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    filename = f"payslip_{p.get('employee_name', 'employee').replace(' ', '_')}_{month_label.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 @hr_router.get("/admin/payslips")
 async def get_all_payslips(
