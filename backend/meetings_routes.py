@@ -62,8 +62,10 @@ class MeetingCreate(BaseModel):
     title: str
     description: Optional[str] = None
     date: str  # YYYY-MM-DD
-    start_time: str  # HH:MM
+    start_time: Optional[str] = None  # HH:MM (optional when all_day)
     end_time: Optional[str] = None  # HH:MM
+    all_day: Optional[bool] = False
+    recurrence: Optional[str] = "none"  # none | daily | weekly | monthly | yearly | weekdays
     meeting_type: str = "video"  # video, audio, in-person
     category: Optional[str] = "team"  # 'client' | 'team' (for filtering)
     meeting_link: Optional[str] = None  # Google Meet, Zoom, etc.
@@ -154,6 +156,8 @@ async def create_meeting(request: Request, meeting_data: MeetingCreate):
         "date": meeting_data.date,
         "start_time": meeting_data.start_time,
         "end_time": meeting_data.end_time,
+        "all_day": bool(meeting_data.all_day),
+        "recurrence": meeting_data.recurrence or "none",
         "meeting_type": meeting_data.meeting_type,
         "category": meeting_data.category or "team",
         "meeting_link": meeting_data.meeting_link,

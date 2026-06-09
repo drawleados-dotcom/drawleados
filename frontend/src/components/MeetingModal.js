@@ -35,6 +35,8 @@ export default function MeetingModal({
     date: '',
     start_time: '',
     end_time: '',
+    all_day: false,
+    recurrence: 'none',
     meeting_link: '',
     agenda: '',
     attendees: [],
@@ -46,6 +48,7 @@ export default function MeetingModal({
     setForm({
       title: '', category: 'team', client_name: '',
       date: '', start_time: '', end_time: '',
+      all_day: false, recurrence: 'none',
       meeting_link: '', agenda: '', attendees: [],
     });
   }, [open]);
@@ -64,7 +67,7 @@ export default function MeetingModal({
   const handleSchedule = async () => {
     if (!form.title.trim()) { toast.error('Meeting name is required'); return; }
     if (!form.date) { toast.error('Date is required'); return; }
-    if (!form.start_time) { toast.error('Start time is required'); return; }
+    if (!form.all_day && !form.start_time) { toast.error('Time is required (or check All day)'); return; }
     if (form.attendees.length === 0) { toast.error('Select at least one attendee'); return; }
 
     const attendees = form.attendees.map(uid => {
@@ -74,8 +77,10 @@ export default function MeetingModal({
     const payload = {
       title: form.title.trim(),
       date: form.date,
-      start_time: form.start_time,
-      end_time: form.end_time || null,
+      start_time: form.all_day ? null : form.start_time,
+      end_time: form.all_day ? null : (form.end_time || null),
+      all_day: form.all_day,
+      recurrence: form.recurrence,
       meeting_type: 'video',
       category: form.category,
       meeting_link: form.meeting_link.trim() || null,
@@ -168,37 +173,56 @@ export default function MeetingModal({
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <Label className={`${textPrimary} flex items-center gap-1`}><Calendar className="h-3 w-3" /> Date *</Label>
+          {/* Date & Time card */}
+          <div className={`rounded-xl border ${borderColor} ${bgSecondary} p-4 space-y-3`}>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-[#6366f1]" />
+              <span className={`text-sm font-semibold ${textPrimary}`}>Date & Time</span>
+            </div>
+
+            <div className="flex items-center gap-2">
               <Input
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm(prev => ({ ...prev, date: e.target.value }))}
-                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                className={`flex-1 h-11 ${bgCard} border ${borderColor} ${textPrimary}`}
                 data-testid="mtg-date"
               />
+              {!form.all_day && (
+                <Input
+                  type="time"
+                  value={form.start_time}
+                  onChange={(e) => setForm(prev => ({ ...prev, start_time: e.target.value }))}
+                  className={`w-[120px] h-11 ${bgCard} border ${borderColor} ${textPrimary}`}
+                  data-testid="mtg-start"
+                />
+              )}
             </div>
-            <div>
-              <Label className={`${textPrimary} flex items-center gap-1`}><Clock className="h-3 w-3" /> Start *</Label>
-              <Input
-                type="time"
-                value={form.start_time}
-                onChange={(e) => setForm(prev => ({ ...prev, start_time: e.target.value }))}
-                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                data-testid="mtg-start"
+
+            <label className="flex items-center gap-2 cursor-pointer w-fit">
+              <input
+                type="checkbox"
+                checked={form.all_day}
+                onChange={(e) => setForm(prev => ({ ...prev, all_day: e.target.checked }))}
+                className="h-4 w-4 accent-[#6366f1]"
+                data-testid="mtg-all-day"
               />
-            </div>
-            <div>
-              <Label className={`${textPrimary} flex items-center gap-1`}><Clock className="h-3 w-3" /> End</Label>
-              <Input
-                type="time"
-                value={form.end_time}
-                onChange={(e) => setForm(prev => ({ ...prev, end_time: e.target.value }))}
-                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                data-testid="mtg-end"
-              />
-            </div>
+              <span className={`text-sm ${textPrimary}`}>All day</span>
+            </label>
+
+            <select
+              value={form.recurrence}
+              onChange={(e) => setForm(prev => ({ ...prev, recurrence: e.target.value }))}
+              className={`w-full h-11 px-3 rounded-lg border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+              data-testid="mtg-recurrence"
+            >
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekdays">Every weekday (Mon–Fri)</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
           </div>
 
           <div>
