@@ -5,7 +5,7 @@ import DrawleadAI from './DrawleadAI';
 import ThemeToggle from './ThemeToggle';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Clock, LogIn, LogOut, Coffee, Play, Building, Home, X, Calendar, ClipboardList } from 'lucide-react';
+import { Clock, LogIn, LogOut, Coffee, Play, Building, Home, X, Calendar, ClipboardList, User as UserIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -36,8 +36,15 @@ const Layout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const currentModule = routeToContext[location.pathname] || 'general';
+
+  // Users assigned ONLY to Operations should see a streamlined header (no sidebar).
+  // Rule: not an admin/super_admin AND module_access contains 'our_tasks'.
+  const role = (user?.role || '').toLowerCase();
+  const isPrivileged = role === 'super_admin' || role === 'admin';
+  const moduleAccess = Array.isArray(user?.module_access) ? user.module_access : [];
+  const isOperationsOnlyUser = !isPrivileged && moduleAccess.includes('our_tasks');
   
   const [todayAttendance, setTodayAttendance] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -433,7 +440,7 @@ const Layout = ({ children }) => {
 
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
-      <Sidebar />
+      {!isOperationsOnlyUser && <Sidebar />}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with Attendance & Theme Toggle */}
         <header className={`h-14 flex items-center justify-between px-6 border-b ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}>
@@ -519,6 +526,27 @@ const Layout = ({ children }) => {
           
           {/* Right: Task Manager & Theme Toggle */}
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Operations-only user gets a header nav (Operations / My Profile) instead of sidebar */}
+            {isOperationsOnlyUser && (
+              <nav className="flex items-center gap-1 mr-2">
+                <Button
+                  size="sm"
+                  onClick={() => navigate('/our-tasks')}
+                  className={`h-8 px-3 text-xs ${location.pathname === '/our-tasks' ? 'bg-[#6366f1] text-white' : isDark ? 'bg-[#27272a] text-[#fafafa] hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  data-testid="header-nav-operations"
+                >
+                  <ClipboardList className="h-3 w-3 mr-1" /> Operations
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => navigate('/hr')}
+                  className={`h-8 px-3 text-xs ${location.pathname === '/hr' ? 'bg-[#6366f1] text-white' : isDark ? 'bg-[#27272a] text-[#fafafa] hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  data-testid="header-nav-my-profile"
+                >
+                  <UserIcon className="h-3 w-3 mr-1" /> My Profile
+                </Button>
+              </nav>
+            )}
             <Button
               size="sm"
               onClick={() => navigate('/bde-tasks')}
@@ -529,6 +557,16 @@ const Layout = ({ children }) => {
               <span className="hidden sm:inline">Task Manager</span>
             </Button>
             <ThemeToggle />
+            {isOperationsOnlyUser && (
+              <Button
+                size="sm"
+                onClick={async () => { try { await logout(); } finally { navigate('/login'); } }}
+                className="h-8 px-3 text-xs bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                data-testid="header-logout-btn"
+              >
+                <LogOut className="h-3 w-3 mr-1" /> Logout
+              </Button>
+            )}
           </div>
         </header>
         
@@ -760,3 +798,4 @@ const Layout = ({ children }) => {
 };
 
 export default Layout;
+ Layout;

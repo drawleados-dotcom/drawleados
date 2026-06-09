@@ -6,4 +6,5 @@
 - `lmrxspace@gmail.com` / `VinothCEO567` — Vinoth DL CEO (created 2026-06-09)
 
 ## Other Test Users
+- `ops-user@drawlead.com` / `ops123` — Operations-only employee (no sidebar, header nav)
 - (employees use their respective designation-based access)
