@@ -1390,6 +1390,60 @@ async def get_work_settings(request: Request):
         "grace_period_minutes": settings.get("grace_period_minutes", 15)
     }
 
+
+# ============== MY PROFILE TAB CONFIG ==============
+# Controls which tabs are visible on the /hr (My Profile) page for all employees.
+# Stored as a single document in collection `my_profile_tab_config`.
+
+DEFAULT_MY_PROFILE_TABS = {
+    "attendance": True,
+    "profile": True,
+    "requests": True,
+    "payroll": True,
+    "reviews": True,
+    "security": True,
+}
+
+@hr_router.get("/admin/my-profile-config")
+async def get_my_profile_config(request: Request):
+    """Get visibility config for My Profile tabs. Accessible to ALL authenticated users
+    so the My Profile page itself can honour the config."""
+    from server import get_current_user
+    await get_current_user(request)
+    doc = await db.my_profile_tab_config.find_one({"config_id": "default"}, {"_id": 0})
+    if not doc:
+        return {"config_id": "default", "tabs": DEFAULT_MY_PROFILE_TABS}
+    # Merge with defaults so new tabs introduced later are visible by default
+    merged = {**DEFAULT_MY_PROFILE_TABS, **(doc.get("tabs") or {})}
+    return {"config_id": "default", "tabs": merged}
+
+@hr_router.put("/admin/my-profile-config")
+async def update_my_profile_config(request: Request, payload: dict):
+    """Update visibility config for My Profile tabs. HR Admin / Super Admin only."""
+    from server import get_current_user
+    user = await get_current_user(request)
+    if user.role not in ["admin", "super_admin", "hr_manager"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    incoming = (payload or {}).get("tabs") or {}
+    # Only persist known tab keys, coerce values to bool
+    cleaned = {k: bool(v) for k, v in incoming.items() if k in DEFAULT_MY_PROFILE_TABS}
+    # Backfill missing keys with defaults to keep doc complete
+    for k, v in DEFAULT_MY_PROFILE_TABS.items():
+        cleaned.setdefault(k, v)
+
+    await db.my_profile_tab_config.update_one(
+        {"config_id": "default"},
+        {"$set": {
+            "tabs": cleaned,
+            "updated_by": user.user_id,
+            "updated_at": datetime.now(timezone.utc),
+        }},
+        upsert=True,
+    )
+    return {"config_id": "default", "tabs": cleaned}
+
+
 # ============== CALENDAR ROUTES ==============
 
 @hr_router.get("/admin/calendar/{year}/{month}")

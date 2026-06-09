@@ -188,6 +188,14 @@ export default function HRAdminPage() {
   
   // HR Settings state
   const [hrSettings, setHrSettings] = useState(null);
+
+  // My Profile Tab Visibility Config
+  const [myProfileConfig, setMyProfileConfig] = useState({
+    attendance: true, profile: true, requests: true,
+    payroll: true, reviews: true, security: true,
+  });
+  const [myProfileConfigDraft, setMyProfileConfigDraft] = useState(null);
+  const [myProfileConfigSaving, setMyProfileConfigSaving] = useState(false);
   
   // Designations and Departments state
   const [designations, setDesignations] = useState([]);
@@ -370,6 +378,38 @@ export default function HRAdminPage() {
       console.error('Error loading HR settings:', error);
     }
   }, [token]);
+
+  const loadMyProfileConfig = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/my-profile-config`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const tabs = res.data?.tabs || {};
+      setMyProfileConfig(tabs);
+      setMyProfileConfigDraft(tabs);
+    } catch (error) {
+      console.error('Error loading my profile config:', error);
+    }
+  }, [token]);
+
+  const handleSaveMyProfileConfig = useCallback(async () => {
+    setMyProfileConfigSaving(true);
+    try {
+      const res = await axios.put(
+        `${API}/api/hr/admin/my-profile-config`,
+        { tabs: myProfileConfigDraft },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const tabs = res.data?.tabs || {};
+      setMyProfileConfig(tabs);
+      setMyProfileConfigDraft(tabs);
+      toast.success('My Profile tabs configuration saved');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save configuration');
+    } finally {
+      setMyProfileConfigSaving(false);
+    }
+  }, [token, myProfileConfigDraft]);
 
   const loadDesignations = useCallback(async () => {
     try {
@@ -771,8 +811,10 @@ export default function HRAdminPage() {
       loadQuotes();
     } else if (activeTab === 'reviews') {
       loadReviewEmployees();
+    } else if (activeTab === 'my-profile-config') {
+      loadMyProfileConfig();
     }
-  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadWfhRequests, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments, loadQuotes]);
+  }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadWfhRequests, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments, loadQuotes, loadMyProfileConfig]);
 
   useEffect(() => {
     if (activeTab === 'approvals') {
@@ -1160,6 +1202,7 @@ export default function HRAdminPage() {
     { id: 'reviews', label: 'Reviews', icon: ClipboardList, hrManagerAccess: true, hrManagerCanWrite: true },
     { id: 'calendar', label: 'Calendar', icon: Calendar, hrManagerAccess: true },
     { id: 'quotes', label: 'Quotes', icon: FileText, hrManagerAccess: false },
+    { id: 'my-profile-config', label: 'My Profile Config', icon: Settings, hrManagerAccess: false },
   ];
 
   // Filter tabs based on role - HR Manager only sees specific tabs
@@ -1538,6 +1581,93 @@ export default function HRAdminPage() {
                 <p className={`text-sm ${textSecondary}`}>Inactive</p>
                 <p className="text-2xl font-bold text-[#f59e0b]">{quotes.filter(q => !q.active).length}</p>
               </Card>
+            </div>
+          </div>
+        )}
+
+        {/* My Profile Tab Configuration */}
+        {activeTab === 'my-profile-config' && (
+          <div className="space-y-6" data-testid="my-profile-config-tab">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className={`text-xl font-bold ${textPrimary}`}>My Profile — Tab Configuration</h2>
+                <p className={textSecondary}>
+                  Toggle which tabs are visible on every employee's My Profile page. Disabled tabs are hidden across the company.
+                </p>
+              </div>
+              <Button
+                onClick={handleSaveMyProfileConfig}
+                disabled={myProfileConfigSaving || !myProfileConfigDraft}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                data-testid="my-profile-config-save-btn"
+              >
+                {myProfileConfigSaving ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
+                ) : (
+                  <><Check className="h-4 w-4 mr-2" /> Save Changes</>
+                )}
+              </Button>
+            </div>
+
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardHeader>
+                <CardTitle className={textPrimary}>Visible Tabs in My Profile</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                {[
+                  { id: 'attendance', label: 'Attendance', icon: Clock, desc: 'Clock-in / clock-out & monthly attendance history' },
+                  { id: 'profile', label: 'My Profile', icon: User, desc: 'Personal details & documents' },
+                  { id: 'requests', label: 'Requests', icon: Send, desc: 'Leave, permission and remote-work requests' },
+                  { id: 'payroll', label: 'Payroll', icon: FileText, desc: 'Salary breakdown and payslips' },
+                  { id: 'reviews', label: 'Reviews', icon: Star, desc: 'Performance reviews and feedback' },
+                  { id: 'security', label: 'Security', icon: Shield, desc: 'Password & 2-factor authentication' },
+                ].map(item => {
+                  const Icon = item.icon;
+                  const draft = myProfileConfigDraft || myProfileConfig;
+                  const enabled = !!draft[item.id];
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center justify-between py-4 px-3 rounded-lg ${hoverBg} transition-colors`}
+                      data-testid={`my-profile-config-row-${item.id}`}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className={`h-10 w-10 rounded-lg ${bgSecondary} flex items-center justify-center`}>
+                          <Icon className={`h-5 w-5 ${enabled ? 'text-[#6366f1]' : textSecondary}`} />
+                        </div>
+                        <div>
+                          <p className={`font-semibold ${textPrimary}`}>{item.label}</p>
+                          <p className={`text-xs ${textSecondary}`}>{item.desc}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={enabled}
+                        onClick={() => setMyProfileConfigDraft(prev => ({
+                          ...(prev || myProfileConfig),
+                          [item.id]: !enabled,
+                        }))}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[#6366f1] focus:ring-offset-2 ${
+                          enabled ? 'bg-[#10b981]' : isDark ? 'bg-[#3f3f46]' : 'bg-gray-300'
+                        }`}
+                        data-testid={`my-profile-config-toggle-${item.id}`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            enabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            <div className={`text-xs ${textSecondary}`}>
+              <AlertCircle className="h-3 w-3 inline mr-1" />
+              Changes apply to every user's My Profile page after refresh.
             </div>
           </div>
         )}

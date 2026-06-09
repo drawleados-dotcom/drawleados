@@ -24,6 +24,10 @@ export default function HRPage() {
   const { isDark } = useTheme();
   const { user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
+  const [tabVisibility, setTabVisibility] = useState({
+    attendance: true, profile: true, requests: true,
+    payroll: true, reviews: true, security: true,
+  });
   
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -206,6 +210,23 @@ export default function HRPage() {
     }
   }, [activeTab, loadTodayAttendance, loadAttendanceHistory, loadCalendarData, loadProfile, loadLeaveRequests, loadLeaveBalance, loadPermissionRequests, loadWfhRequests, loadPayslips, loadReviews]);
 
+  // Load My Profile tab visibility config (set by HR Admin)
+  useEffect(() => {
+    const loadVisibility = async () => {
+      try {
+        const res = await axios.get(`${API}/api/hr/admin/my-profile-config`, { headers: { Authorization: `Bearer ${token}` } });
+        const tabs = res.data?.tabs;
+        if (tabs && typeof tabs === 'object') {
+          setTabVisibility(prev => ({ ...prev, ...tabs }));
+        }
+      } catch (error) {
+        // Non-fatal — keep all tabs visible if config fails to load
+        console.error('Failed to load My Profile tab config:', error);
+      }
+    };
+    loadVisibility();
+  }, [token]);
+
   // Load tab counts on mount
   useEffect(() => {
     const loadCounts = async () => {
@@ -301,7 +322,15 @@ export default function HRPage() {
     { id: 'payroll', label: 'Payroll', icon: FileText },
     { id: 'reviews', label: 'Reviews', icon: Award },
     { id: 'security', label: 'Security', icon: Shield },
-  ];
+  ].filter(t => tabVisibility[t.id] !== false);
+
+  // If the currently active tab gets hidden, switch to the first visible one
+  useEffect(() => {
+    if (tabVisibility[activeTab] === false) {
+      const firstVisible = ['attendance','profile','requests','payroll','reviews','security'].find(id => tabVisibility[id] !== false);
+      if (firstVisible) setActiveTab(firstVisible);
+    }
+  }, [tabVisibility, activeTab]);
 
   // Request sub-tabs with counts
   const requestSubTabs = [
