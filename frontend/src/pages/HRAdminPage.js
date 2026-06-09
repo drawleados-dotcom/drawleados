@@ -47,7 +47,6 @@ const MODULES = [
   // Core Modules
   { value: 'calendar', label: 'Calendar', icon: Calendar },
   { value: 'my_tasks', label: 'My Tasks', icon: ClipboardList },
-  { value: 'our_tasks', label: 'Operations', icon: ClipboardList },
   { value: 'my_profile', label: 'My Profile', icon: User },
   
   // Sales
@@ -5667,7 +5666,6 @@ function DesignationsDeptsTab({
     // Core Modules
     { value: 'calendar', label: 'Calendar' },
     { value: 'my_tasks', label: 'My Tasks' },
-    { value: 'our_tasks', label: 'Operations', hasSubOptions: true },
     { value: 'my_profile', label: 'My Profile' },
     
     // Sales
@@ -5677,7 +5675,7 @@ function DesignationsDeptsTab({
     
     // Operations / Web Dev
     { value: 'web_dev', label: 'Web Dev' },
-    { value: 'operations', label: 'Operations' },
+    { value: 'operations', label: 'Operations', hasSubOptions: true },
     { value: 'tasks', label: 'Tasks' },
     { value: 'website_projects', label: 'Website Projects' },
     { value: 'seo_works', label: 'SEO Works' },
@@ -5989,7 +5987,7 @@ function DesignationsDeptsTab({
                             type="button"
                             onClick={() => {
                               // Special handling for Operations - open config popup
-                              if (m.value === 'our_tasks') {
+                              if (m.value === 'operations') {
                                 // ensure the module is added so the popup is meaningful
                                 setNewDesignation(prev => ({
                                   ...prev,
@@ -6246,7 +6244,7 @@ function DesignationsDeptsTab({
                       // Remove Operations module entirely and close
                       setNewDesignation(prev => ({
                         ...prev,
-                        module_access: prev.module_access.filter(x => x !== 'our_tasks'),
+                        module_access: prev.module_access.filter(x => x !== 'operations'),
                         operations_my_tasks: true,
                         operations_assign_to_team: false,
                         operations_departments: [],
