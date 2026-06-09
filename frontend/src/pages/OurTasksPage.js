@@ -778,7 +778,7 @@ export default function OurTasksPage() {
               return (
                 <Button
                   key={tab.id}
-                  onClick={() => { setMainTab(tab.id); if (tab.id !== 'approvals') setFilter('all'); }}
+                  onClick={() => { setMainTab(tab.id); if (tab.id !== 'approvals') setFilter('all'); setFilters(prev => ({ ...prev, assignedTo: 'all' })); }}
                   data-testid={`ops-tab-${tab.id.replace(/_/g, '-')}`}
                   className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
                     isActive
@@ -912,6 +912,33 @@ export default function OurTasksPage() {
                   ))}
               </SelectContent>
             </Select>
+
+            {/* Team filter — only on Assign to Team tab; shows people the current user has assigned tasks to */}
+            {mainTab === 'assign_to_team' && (() => {
+              const teamMemberIds = Array.from(new Set(
+                assignedToTeamTasks.map(t => t.assigned_to).filter(Boolean)
+              ));
+              const teamMembers = teamMemberIds
+                .map(id => {
+                  const u = users.find(x => x.user_id === id);
+                  return u ? { user_id: id, name: u.name } : { user_id: id, name: id };
+                })
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+              return (
+                <Select value={filters.assignedTo} onValueChange={(v) => setFilters({...filters, assignedTo: v})}>
+                  <SelectTrigger className={`h-9 w-[160px] ${bgSecondary} border ${borderColor}`} data-testid="filter-team">
+                    <Users className="h-3.5 w-3.5 mr-1 opacity-60" />
+                    <SelectValue placeholder="All Team" />
+                  </SelectTrigger>
+                  <SelectContent className={bgCard}>
+                    <SelectItem value="all">All Team</SelectItem>
+                    {teamMembers.map(m => (
+                      <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            })()}
 
             {/* Category filter — categories of the selected department (from Operations → Departments) */}
             {(() => {
