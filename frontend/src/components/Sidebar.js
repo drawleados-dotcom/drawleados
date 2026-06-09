@@ -499,10 +499,10 @@ const Sidebar = () => {
           to="/our-tasks"
           data-testid="nav-our-tasks"
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/our-tasks' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'Our Tasks' : ''}
+          title={isCollapsed ? 'Operations' : ''}
         >
           <ClipboardList className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'Our Tasks'}
+          {!isCollapsed && 'Operations'}
         </Link>
         )}
 
