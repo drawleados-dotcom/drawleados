@@ -711,7 +711,7 @@ export default function OurTasksPage() {
             }`}
           >
             <User className="h-4 w-4 inline mr-2" />
-            Assigned to Me ({assignedToMeTasks.length + myOwnTasks.length})
+            My Tasks ({assignedToMeTasks.length + myOwnTasks.length})
           </button>
           <button
             onClick={() => { setMainTab('assign_to_team'); setFilter('all'); }}
