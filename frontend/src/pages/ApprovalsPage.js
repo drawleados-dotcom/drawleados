@@ -309,9 +309,6 @@ export default function ApprovalsPage({ embedded = false }) {
                   Review and approve pending requests from all departments
                 </p>
               </div>
-              <Badge className="bg-orange-500/20 text-orange-400 text-lg px-3 py-1">
-                {stats.total} Pending
-              </Badge>
             </div>
             <Button onClick={loadApprovals} variant="outline" className="gap-2">
               <RefreshCw className="h-4 w-4" /> Refresh
