@@ -65,10 +65,12 @@ class MeetingCreate(BaseModel):
     start_time: str  # HH:MM
     end_time: Optional[str] = None  # HH:MM
     meeting_type: str = "video"  # video, audio, in-person
+    category: Optional[str] = "team"  # 'client' | 'team' (for filtering)
     meeting_link: Optional[str] = None  # Google Meet, Zoom, etc.
     location: Optional[str] = None  # For in-person meetings
     attendees: Optional[List[dict]] = []  # [{name, email, user_id}]
     project_id: Optional[str] = None  # Link to project
+    client_name: Optional[str] = None  # for client meetings
     agenda: Optional[str] = None
     notes: Optional[str] = None
     reminder: Optional[int] = 15  # minutes before
@@ -153,10 +155,12 @@ async def create_meeting(request: Request, meeting_data: MeetingCreate):
         "start_time": meeting_data.start_time,
         "end_time": meeting_data.end_time,
         "meeting_type": meeting_data.meeting_type,
+        "category": meeting_data.category or "team",
         "meeting_link": meeting_data.meeting_link,
         "location": meeting_data.location,
         "attendees": meeting_data.attendees or [],
         "project_id": meeting_data.project_id,
+        "client_name": meeting_data.client_name,
         "agenda": meeting_data.agenda,
         "notes": meeting_data.notes,
         "reminder": meeting_data.reminder,
@@ -169,6 +173,46 @@ async def create_meeting(request: Request, meeting_data: MeetingCreate):
     }
     
     await db.meetings.insert_one(meeting)
+    
+    # Auto-create a "Meeting" task for each attendee with a user_id
+    project_name = None
+    if meeting_data.project_id:
+        proj = await db.projects.find_one({"project_id": meeting_data.project_id}, {"_id": 0, "name": 1})
+        project_name = proj.get("name") if proj else None
+    task_ids = []
+    for att in (meeting_data.attendees or []):
+        uid = att.get("user_id") if isinstance(att, dict) else None
+        if not uid:
+            continue
+        task = {
+            "task_id": f"tsk_{uuid.uuid4().hex[:12]}",
+            "task_name": meeting_data.title,
+            "description": meeting_data.agenda or meeting_data.description or "",
+            "priority": "medium",
+            "type": "meeting",
+            "category": "Meeting",
+            "department": None,
+            "project_id": meeting_data.project_id,
+            "project_name": project_name,
+            "assigned_to": uid,
+            "assigned_by": user["user_id"],
+            "created_by": user["user_id"],
+            "due_date": meeting_data.date,
+            "due_time": meeting_data.start_time,
+            "all_day": False,
+            "status": "pending",
+            "work_link": meeting_data.meeting_link,
+            "meeting_id": meeting_id,
+            "meeting_category": meeting_data.category or "team",
+            "created_at": now,
+            "updated_at": now,
+            "time_tracking": {"sessions": [], "total_seconds": 0},
+        }
+        await db.our_tasks.insert_one(task)
+        task_ids.append(task["task_id"])
+    if task_ids:
+        await db.meetings.update_one({"meeting_id": meeting_id}, {"$set": {"task_ids": task_ids}})
+        meeting["task_ids"] = task_ids
     
     # Return without _id
     meeting.pop("_id", None)

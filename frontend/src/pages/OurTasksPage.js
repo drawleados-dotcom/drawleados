@@ -13,13 +13,14 @@ import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat
+  Repeat, Video
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import ApprovalsPage from './ApprovalsPage';
 import ProjectsPanel from '../components/ProjectsPanel';
 import DepartmentsPanel from '../components/DepartmentsPanel';
+import MeetingsPanel from '../components/MeetingsPanel';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -140,22 +141,25 @@ export default function OurTasksPage() {
   const [projectsCount, setProjectsCount] = useState(0);
   const [departmentsCount, setDepartmentsCount] = useState(0);
   const [approvalsCount, setApprovalsCount] = useState(0);
+  const [meetingsCount, setMeetingsCount] = useState(0);
   // Current user's designation config (for Assign-to-Team monitoring scope)
   const [myDesignation, setMyDesignation] = useState(null);
 
   const loadProjectsAndCategories = useCallback(async () => {
     try {
-      const [pRes, dRes, aRes, desRes] = await Promise.all([
+      const [pRes, dRes, aRes, desRes, mRes] = await Promise.all([
         axios.get(`${API}/api/projects`, { headers }),
         axios.get(`${API}/api/department-categories`, { headers }),
         axios.get(`${API}/api/our-tasks/approvals/pending`, { headers }).catch(() => ({ data: [] })),
         axios.get(`${API}/api/designations/`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/api/meetings/my-meetings`, { headers }).catch(() => ({ data: [] })),
       ]);
       setProjectsForTask(pRes.data || []);
       setDeptCategoriesForTask(dRes.data || []);
       setProjectsCount((pRes.data || []).length);
       setDepartmentsCount((dRes.data || []).length);
       setApprovalsCount((aRes.data || []).length);
+      setMeetingsCount((mRes.data || []).length);
       // Find my designation
       const userDesg = (user?.designation || '').toLowerCase().trim();
       const found = (desRes.data || []).find(
@@ -797,12 +801,13 @@ export default function OurTasksPage() {
               { id: 'projects', label: 'Projects', icon: Briefcase, count: projectsCount },
               { id: 'departments', label: 'Departments', icon: Building2, count: departmentsCount },
               { id: 'approvals', label: 'Approvals', icon: CheckCircle2, count: approvalsCount },
+              { id: 'meetings', label: 'Meetings', icon: Video, count: meetingsCount },
             ];
             // Operation Head sees a different order
             const desg = (user?.designation || '').toLowerCase().trim();
             const isOpHead = desg === 'operation head';
             const tabs = isOpHead
-              ? ['assign_to_team', 'approvals', 'assigned_to_me', 'projects', 'departments'].map(id => allTabs.find(t => t.id === id))
+              ? ['assign_to_team', 'approvals', 'assigned_to_me', 'projects', 'departments', 'meetings'].map(id => allTabs.find(t => t.id === id))
               : allTabs;
             return tabs.map((tab) => {
               const Icon = tab.icon;
@@ -868,7 +873,21 @@ export default function OurTasksPage() {
           />
         )}
 
-        {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && (
+        {/* Meetings tab */}
+        {mainTab === 'meetings' && (
+          <MeetingsPanel
+            isDark={isDark}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            borderColor={borderColor}
+            headers={headers}
+            users={users}
+          />
+        )}
+
+        {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
         <>
         {/* Compact Filter Toolbar */}
         <div className={`${bgCard} border ${borderColor} rounded-xl p-3`}>

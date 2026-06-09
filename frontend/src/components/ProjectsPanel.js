@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
+import MeetingModal from './MeetingModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -49,6 +50,10 @@ export default function ProjectsPanel({
   const [docsTab, setDocsTab] = useState('sheets'); // 'sheets' | 'docs' | 'drive'
   const [editingDocId, setEditingDocId] = useState(null);
   const [docDraft, setDocDraft] = useState({ name: '', link: '' });
+  // Meetings
+  const [showMeetingModal, setShowMeetingModal] = useState(false);
+  const [projectMeetings, setProjectMeetings] = useState([]);
+  const [showMeetingsList, setShowMeetingsList] = useState(false);
   // Task filters inside project detail
   const [taskMemberFilter, setTaskMemberFilter] = useState('all');
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all, today, single, range
@@ -108,6 +113,14 @@ export default function ProjectsPanel({
       setSelectedProject(res.data);
     } catch { /* ignore */ }
   };
+
+  // Load meetings for selected project
+  useEffect(() => {
+    if (!selectedProject?.project_id) { setProjectMeetings([]); return; }
+    axios.get(`${API}/api/meetings/`, { headers })
+      .then(r => setProjectMeetings((r.data || []).filter(m => m.project_id === selectedProject.project_id)))
+      .catch(() => setProjectMeetings([]));
+  }, [selectedProject?.project_id, showMeetingModal]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const openTeamModal = () => {
     setTeamDraft([...(selectedProject?.members || [])]);
@@ -300,6 +313,21 @@ export default function ProjectsPanel({
               data-testid="project-docs-btn"
             >
               <FileText className="h-4 w-4" /> Documents ({(selectedProject.documents || []).length})
+            </Button>
+            <Button
+              onClick={() => setShowMeetingsList(true)}
+              variant="outline"
+              className="gap-2"
+              data-testid="project-meetings-list-btn"
+            >
+              <Video className="h-4 w-4" /> Meetings ({projectMeetings.length})
+            </Button>
+            <Button
+              onClick={() => setShowMeetingModal(true)}
+              className="gap-2 bg-[#10b981] hover:bg-[#059669] text-white"
+              data-testid="project-schedule-meeting-btn"
+            >
+              <Video className="h-4 w-4" /> Schedule Meeting
             </Button>
             <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
               <Plus className="h-4 w-4 mr-1" /> Add Task
@@ -735,6 +763,80 @@ export default function ProjectsPanel({
                       </div>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })()}
+
+        {/* Schedule Meeting Modal */}
+        <MeetingModal
+          open={showMeetingModal}
+          onClose={() => setShowMeetingModal(false)}
+          onCreated={() => { /* meetings re-fetched by effect */ }}
+          projectId={selectedProject.project_id}
+          allowCategoryToggle
+          users={users}
+          headers={headers}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+        />
+
+        {/* Meetings list popup (past + upcoming) */}
+        {showMeetingsList && (() => {
+          const today = new Date().toISOString().slice(0, 10);
+          const upcoming = projectMeetings.filter(m => (m.date || '') >= today).sort((a, b) => `${a.date}${a.start_time || ''}`.localeCompare(`${b.date}${b.start_time || ''}`));
+          const past = projectMeetings.filter(m => (m.date || '') < today).sort((a, b) => `${b.date}${b.start_time || ''}`.localeCompare(`${a.date}${a.start_time || ''}`));
+          const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
+          const MList = ({ list, label }) => (
+            <div>
+              <p className={`text-xs uppercase font-semibold ${textSecondary} mb-2`}>{label} ({list.length})</p>
+              {list.length === 0 ? (
+                <p className={`text-sm ${textSecondary} mb-3`}>None</p>
+              ) : list.map(m => (
+                <div
+                  key={m.meeting_id}
+                  className={`p-3 rounded-lg border ${borderColor} ${bgSecondary} mb-2 flex items-center justify-between gap-3`}
+                  data-testid={`proj-mtg-${m.meeting_id}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-medium ${textPrimary} truncate`}>{m.title}</span>
+                      <Badge className={
+                        (m.category || 'team') === 'client'
+                          ? 'bg-[#f59e0b]/20 text-[#f59e0b] text-xs'
+                          : 'bg-[#3b82f6]/20 text-[#3b82f6] text-xs'
+                      }>{(m.category || 'team') === 'client' ? 'Client' : 'Team'}</Badge>
+                    </div>
+                    <p className={`text-xs ${textSecondary}`}>{fmtDate(m.date)} · {m.start_time || '—'} · {(m.attendees || []).length} attendees</p>
+                  </div>
+                  {m.meeting_link && (
+                    <a
+                      href={m.meeting_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#6366f1] text-sm hover:underline flex items-center gap-1 flex-none"
+                    >
+                      <ExternalLink className="h-3 w-3" /> Join
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+          return (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => setShowMeetingsList(false)}>
+              <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[85vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+                <CardContent className="p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>Project Meetings — {selectedProject.name}</h3>
+                    <button onClick={() => setShowMeetingsList(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+                  </div>
+                  <MList list={upcoming} label="Upcoming" />
+                  <MList list={past} label="Past" />
                 </CardContent>
               </Card>
             </div>
