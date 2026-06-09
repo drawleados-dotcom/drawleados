@@ -133,14 +133,23 @@ export default function OurTasksPage() {
     }
   }, []);
 
+  // Load counts for tab badges
+  const [projectsCount, setProjectsCount] = useState(0);
+  const [departmentsCount, setDepartmentsCount] = useState(0);
+  const [approvalsCount, setApprovalsCount] = useState(0);
+
   const loadProjectsAndCategories = useCallback(async () => {
     try {
-      const [pRes, dRes] = await Promise.all([
+      const [pRes, dRes, aRes] = await Promise.all([
         axios.get(`${API}/api/projects`, { headers }),
         axios.get(`${API}/api/department-categories`, { headers }),
+        axios.get(`${API}/api/our-tasks/approvals/pending`, { headers }).catch(() => ({ data: [] })),
       ]);
       setProjectsForTask(pRes.data || []);
       setDeptCategoriesForTask(dRes.data || []);
+      setProjectsCount((pRes.data || []).length);
+      setDepartmentsCount((dRes.data || []).length);
+      setApprovalsCount((aRes.data || []).length);
     } catch (error) {
       console.error('Error loading projects/categories:', error);
     }
@@ -738,31 +747,47 @@ export default function OurTasksPage() {
 
         {/* Main Tabs — pill style matching My Profile */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {[
-            { id: 'assigned_to_me', label: `My Tasks (${assignedToMeTasks.length + myOwnTasks.length})`, icon: User },
-            { id: 'assign_to_team', label: `Assign to Team (${assignedToTeamTasks.length})`, icon: Users },
-            { id: 'projects', label: 'Projects', icon: Briefcase },
-            { id: 'departments', label: 'Departments', icon: Building2 },
-            { id: 'approvals', label: 'Approvals', icon: CheckCircle2 },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = mainTab === tab.id;
-            return (
-              <Button
-                key={tab.id}
-                onClick={() => { setMainTab(tab.id); if (tab.id !== 'approvals') setFilter('all'); }}
-                data-testid={`ops-tab-${tab.id.replace('_', '-')}`}
-                className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
-                  isActive
-                    ? 'bg-[#6366f1] text-white shadow-lg'
-                    : `${bgCard} ${textSecondary} ${hoverBg} border ${borderColor}`
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </Button>
-            );
-          })}
+          {(() => {
+            const allTabs = [
+              { id: 'assigned_to_me', label: 'My Tasks', icon: User, count: assignedToMeTasks.length + myOwnTasks.length },
+              { id: 'assign_to_team', label: 'Assign to Team', icon: Users, count: assignedToTeamTasks.length },
+              { id: 'projects', label: 'Projects', icon: Briefcase, count: projectsCount },
+              { id: 'departments', label: 'Departments', icon: Building2, count: departmentsCount },
+              { id: 'approvals', label: 'Approvals', icon: CheckCircle2, count: approvalsCount },
+            ];
+            // Operation Head sees a different order
+            const desg = (user?.designation || '').toLowerCase().trim();
+            const isOpHead = desg === 'operation head';
+            const tabs = isOpHead
+              ? ['assign_to_team', 'approvals', 'assigned_to_me', 'projects', 'departments'].map(id => allTabs.find(t => t.id === id))
+              : allTabs;
+            return tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = mainTab === tab.id;
+              return (
+                <Button
+                  key={tab.id}
+                  onClick={() => { setMainTab(tab.id); if (tab.id !== 'approvals') setFilter('all'); }}
+                  data-testid={`ops-tab-${tab.id.replace(/_/g, '-')}`}
+                  className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
+                    isActive
+                      ? 'bg-[#6366f1] text-white shadow-lg'
+                      : `${bgCard} ${textSecondary} ${hoverBg} border ${borderColor}`
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                  <span
+                    className={`ml-1 inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full text-xs font-semibold px-1.5 ${
+                      isActive ? 'bg-white/25 text-white' : 'bg-[#6366f1]/15 text-[#6366f1]'
+                    }`}
+                  >
+                    {tab.count ?? 0}
+                  </span>
+                </Button>
+              );
+            });
+          })()}
         </div>
 
         {/* Approvals tab — embed the dedicated page */}
