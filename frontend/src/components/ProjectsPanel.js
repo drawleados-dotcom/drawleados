@@ -33,7 +33,8 @@ export default function ProjectsPanel({
   const [deptFilter, setDeptFilter] = useState('all');
 
   const [projectDraft, setProjectDraft] = useState({ name: '', description: '', due_date: '', departments: [], members: [] });
-  const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '' });
+  const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
+  const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
 
   const loadProjects = useCallback(async () => {
     try {
@@ -56,7 +57,16 @@ export default function ProjectsPanel({
     }
   }, [headers]);
 
-  useEffect(() => { loadProjects(); loadUsers(); }, [loadProjects, loadUsers]);
+  const loadDeptCategories = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/department-categories`, { headers });
+      setDeptCategories(res.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [headers]);
+
+  useEffect(() => { loadProjects(); loadUsers(); loadDeptCategories(); }, [loadProjects, loadUsers, loadDeptCategories]);
 
   const handleCreateProject = async () => {
     if (!projectDraft.name.trim()) { toast.error('Project name is required'); return; }
@@ -86,7 +96,7 @@ export default function ProjectsPanel({
     try {
       await axios.post(`${API}/api/projects/${selectedProject.project_id}/tasks`, taskDraft, { headers });
       toast.success('Task added — appears in assignee\'s My Tasks');
-      setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '' });
+      setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
       setShowAddTask(false);
       refreshSelectedProject();
       loadProjects();
@@ -196,6 +206,43 @@ export default function ProjectsPanel({
                   </div>
                 </div>
                 <div><Label className={textPrimary}>Work Link</Label><Input value={taskDraft.work_link} onChange={(e) => setTaskDraft({ ...taskDraft, work_link: e.target.value })} placeholder="https://..." /></div>
+
+                {/* Department + Category — restricted to project's departments */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className={textPrimary}>Department *</Label>
+                    <select
+                      value={taskDraft.department}
+                      onChange={(e) => setTaskDraft({ ...taskDraft, department: e.target.value, category: '' })}
+                      className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                      data-testid="project-task-department"
+                    >
+                      <option value="">— Select dept —</option>
+                      {(selectedProject.departments || []).map(dKey => {
+                        const dept = deptCategories.find(d => d.dept_key === dKey);
+                        return <option key={dKey} value={dKey}>{dept?.label || dKey}</option>;
+                      })}
+                      {(selectedProject.departments || []).length === 0 && deptCategories.map(d => (
+                        <option key={d.dept_key} value={d.dept_key}>{d.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Category</Label>
+                    <select
+                      value={taskDraft.category}
+                      onChange={(e) => setTaskDraft({ ...taskDraft, category: e.target.value })}
+                      disabled={!taskDraft.department}
+                      className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} disabled:opacity-50`}
+                      data-testid="project-task-category"
+                    >
+                      <option value="">— Select category —</option>
+                      {(deptCategories.find(d => d.dept_key === taskDraft.department)?.categories || []).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="ghost" onClick={() => setShowAddTask(false)}>Cancel</Button>
                   <Button onClick={handleAddTask} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="project-task-save">

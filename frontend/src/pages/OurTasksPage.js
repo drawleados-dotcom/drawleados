@@ -11,7 +11,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
-  MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase,
+  MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
   Repeat
 } from 'lucide-react';
@@ -19,6 +19,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import ApprovalsPage from './ApprovalsPage';
 import ProjectsPanel from '../components/ProjectsPanel';
+import DepartmentsPanel from '../components/DepartmentsPanel';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -716,6 +717,7 @@ export default function OurTasksPage() {
             { id: 'assigned_to_me', label: `My Tasks (${assignedToMeTasks.length + myOwnTasks.length})`, icon: User },
             { id: 'assign_to_team', label: `Assign to Team (${assignedToTeamTasks.length})`, icon: Users },
             { id: 'projects', label: 'Projects', icon: Briefcase },
+            { id: 'departments', label: 'Departments', icon: Building2 },
             { id: 'approvals', label: 'Approvals', icon: CheckCircle2 },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -759,7 +761,20 @@ export default function OurTasksPage() {
           />
         )}
 
-        {mainTab !== 'approvals' && mainTab !== 'projects' && (
+        {/* Departments tab */}
+        {mainTab === 'departments' && (
+          <DepartmentsPanel
+            isDark={isDark}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            borderColor={borderColor}
+            headers={headers}
+          />
+        )}
+
+        {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && (
         <>
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">

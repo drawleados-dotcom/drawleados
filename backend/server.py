@@ -48,6 +48,7 @@ from department_routes import department_router
 from approvals_routes import approvals_router, set_db as set_approvals_db
 from additional_tasks_routes import additional_tasks_router, init_additional_tasks_db
 from projects_routes import projects_router
+from dept_categories_routes import dept_categories_router
 from meetings_routes import meetings_router, init_meetings_db
 
 ROOT_DIR = Path(__file__).parent
@@ -2456,6 +2457,7 @@ api_router.include_router(approvals_router)
 api_router.include_router(additional_tasks_router)
 api_router.include_router(meetings_router)
 api_router.include_router(projects_router)
+api_router.include_router(dept_categories_router)
 
 # Include router in main app
 app.include_router(api_router)

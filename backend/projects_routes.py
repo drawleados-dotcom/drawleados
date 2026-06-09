@@ -40,6 +40,8 @@ class ProjectTaskCreate(BaseModel):
     due_date: Optional[str] = None
     priority: Optional[str] = "medium"
     work_link: Optional[str] = None
+    department: Optional[str] = None
+    category: Optional[str] = None
 
 
 @projects_router.get("")
@@ -172,6 +174,8 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         "created_by_name": user.name,
         "due_date": payload.due_date,
         "work_link": payload.work_link,
+        "department": payload.department,
+        "category": payload.category,
         "project_id": project_id,
         "project_name": project.get("name"),
         "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
