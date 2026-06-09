@@ -68,7 +68,8 @@ export default function OurTasksPage() {
     status: 'all', // all, pending, in_progress, completed, on_hold
     singleDate: '', // for single date filter
     department: 'all', // all or dept_key
-    project: 'all' // all or project_id
+    project: 'all', // all or project_id
+    category: 'all' // all or category name (depends on selected department)
   });
   
   const token = localStorage.getItem('session_token');
@@ -642,6 +643,9 @@ export default function OurTasksPage() {
     // Project filter
     if (filters.project !== 'all' && task.project_id !== filters.project) return false;
     
+    // Category filter (per-department categories from Operations → Departments)
+    if (filters.category !== 'all' && task.category !== filters.category) return false;
+    
     // Type filter
     if (filters.taskType !== 'all' && task.type !== filters.taskType) return false;
     
@@ -663,7 +667,8 @@ export default function OurTasksPage() {
       taskType: 'all',
       status: 'all',
       department: 'all',
-      project: 'all'
+      project: 'all',
+      category: 'all'
     });
   };
 
@@ -879,7 +884,7 @@ export default function OurTasksPage() {
             )}
 
             {/* Department filter */}
-            <Select value={filters.department} onValueChange={(v) => setFilters({...filters, department: v, project: 'all'})}>
+            <Select value={filters.department} onValueChange={(v) => setFilters({...filters, department: v, project: 'all', category: 'all'})}>
               <SelectTrigger className={`h-9 w-[150px] ${bgSecondary} border ${borderColor}`} data-testid="filter-department">
                 <Building2 className="h-3.5 w-3.5 mr-1 opacity-60" />
                 <SelectValue placeholder="All Depts" />
@@ -908,20 +913,33 @@ export default function OurTasksPage() {
               </SelectContent>
             </Select>
 
-            {/* Type */}
-            <Select value={filters.taskType} onValueChange={(v) => setFilters({...filters, taskType: v})}>
-              <SelectTrigger className={`h-9 w-[130px] ${bgSecondary} border ${borderColor}`} data-testid="filter-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className={bgCard}>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="general">General</SelectItem>
-                <SelectItem value="meeting">Meeting</SelectItem>
-                <SelectItem value="follow_up">Follow Up</SelectItem>
-                <SelectItem value="proposal">Proposal</SelectItem>
-                <SelectItem value="call">Call</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Category filter — categories of the selected department (from Operations → Departments) */}
+            {(() => {
+              const deptObj = deptCategoriesForTask.find(d => d.dept_key === filters.department);
+              const cats = deptObj?.categories || [];
+              const disabled = filters.department === 'all';
+              return (
+                <Select
+                  value={filters.category}
+                  onValueChange={(v) => setFilters({...filters, category: v})}
+                  disabled={disabled}
+                >
+                  <SelectTrigger
+                    className={`h-9 w-[160px] ${bgSecondary} border ${borderColor} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    data-testid="filter-category"
+                  >
+                    <Tag className="h-3.5 w-3.5 mr-1 opacity-60" />
+                    <SelectValue placeholder={disabled ? 'Pick dept first' : 'All Categories'} />
+                  </SelectTrigger>
+                  <SelectContent className={bgCard}>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {cats.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            })()}
 
             {/* Status */}
             <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
