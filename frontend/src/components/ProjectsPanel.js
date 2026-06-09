@@ -40,6 +40,16 @@ export default function ProjectsPanel({
   const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [activeCategoryTab, setActiveCategoryTab] = useState('all');
+  // Team management for selected project
+  const [showTeamModal, setShowTeamModal] = useState(false);
+  const [teamDraft, setTeamDraft] = useState([]);
+  const [teamSaving, setTeamSaving] = useState(false);
+  // Task filters inside project detail
+  const [taskMemberFilter, setTaskMemberFilter] = useState('all');
+  const [taskDateFilter, setTaskDateFilter] = useState('all'); // all, today, single, range
+  const [taskSingleDate, setTaskSingleDate] = useState('');
+  const [taskDateFrom, setTaskDateFrom] = useState('');
+  const [taskDateTo, setTaskDateTo] = useState('');
 
   const loadProjects = useCallback(async () => {
     try {
@@ -94,6 +104,31 @@ export default function ProjectsPanel({
     } catch { /* ignore */ }
   };
 
+  const openTeamModal = () => {
+    setTeamDraft([...(selectedProject?.members || [])]);
+    setShowTeamModal(true);
+  };
+
+  const handleSaveTeam = async () => {
+    if (!selectedProject) return;
+    setTeamSaving(true);
+    try {
+      await axios.patch(
+        `${API}/api/projects/${selectedProject.project_id}`,
+        { members: teamDraft },
+        { headers }
+      );
+      toast.success('Team updated');
+      setShowTeamModal(false);
+      refreshSelectedProject();
+      loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update team');
+    } finally {
+      setTeamSaving(false);
+    }
+  };
+
   const handleAddTask = async () => {
     if (!selectedProject) return;
     if (!taskDraft.task_name.trim()) { toast.error('Task name is required'); return; }
@@ -128,11 +163,28 @@ export default function ProjectsPanel({
       }));
     });
     const projectTasks = selectedProject.tasks || [];
-    const filteredTasks = activeCategoryTab === 'all'
-      ? projectTasks
-      : projectTasks.filter(t => `${t.department}::${t.category}` === activeCategoryTab);
+    // Apply member + date filters on top of category sub-tab filter
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const filteredTasks = projectTasks
+      .filter(t => activeCategoryTab === 'all' || `${t.department}::${t.category}` === activeCategoryTab)
+      .filter(t => taskMemberFilter === 'all' || t.assigned_to === taskMemberFilter)
+      .filter(t => {
+        const td = (t.due_date || t.created_at || '').slice(0, 10);
+        if (taskDateFilter === 'today') return td === todayStr;
+        if (taskDateFilter === 'single') return taskSingleDate ? td === taskSingleDate : true;
+        if (taskDateFilter === 'range') {
+          if (taskDateFrom && td < taskDateFrom) return false;
+          if (taskDateTo && td > taskDateTo) return false;
+          return true;
+        }
+        return true;
+      });
 
     const countFor = (tab) => projectTasks.filter(t => `${t.department}::${t.category}` === tab.id).length;
+
+    // Members of the project (resolved against user list)
+    const projectMembers = (selectedProject.members || [])
+      .map(uid => users.find(u => u.user_id === uid) || { user_id: uid, name: uid });
 
     return (
       <div className="space-y-4" data-testid="project-detail-view">
@@ -144,9 +196,19 @@ export default function ProjectsPanel({
             <h2 className={`text-2xl font-bold ${textPrimary}`}>{selectedProject.name}</h2>
             <p className={textSecondary}>{selectedProject.description}</p>
           </div>
-          <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
-            <Plus className="h-4 w-4 mr-1" /> Add Task
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={openTeamModal}
+              variant="outline"
+              className={`gap-2 ${!canManageProjects ? 'hidden' : ''}`}
+              data-testid="project-team-btn"
+            >
+              <Users className="h-4 w-4" /> Team ({selectedProject.members?.length || 0})
+            </Button>
+            <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
+              <Plus className="h-4 w-4 mr-1" /> Add Task
+            </Button>
+          </div>
         </div>
 
         <Card className={`${bgCard} border ${borderColor}`}>
@@ -161,6 +223,77 @@ export default function ProjectsPanel({
 
         <div className="space-y-2">
           <h3 className={`text-base font-semibold ${textPrimary}`}>Tasks</h3>
+
+          {/* Task filters: Team Member + Date */}
+          <div className="flex flex-wrap items-center gap-2 mb-2" data-testid="project-task-filters">
+            <select
+              value={taskMemberFilter}
+              onChange={(e) => setTaskMemberFilter(e.target.value)}
+              className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+              data-testid="project-filter-member"
+            >
+              <option value="all">All Team Members</option>
+              {projectMembers.map(m => (
+                <option key={m.user_id} value={m.user_id}>{m.name}</option>
+              ))}
+            </select>
+
+            <select
+              value={taskDateFilter}
+              onChange={(e) => setTaskDateFilter(e.target.value)}
+              className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+              data-testid="project-filter-date"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="single">Single Date</option>
+              <option value="range">Date Range</option>
+            </select>
+
+            {taskDateFilter === 'single' && (
+              <Input
+                type="date"
+                value={taskSingleDate}
+                onChange={(e) => setTaskSingleDate(e.target.value)}
+                className={`h-9 w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="project-filter-single-date"
+              />
+            )}
+            {taskDateFilter === 'range' && (
+              <>
+                <Input
+                  type="date"
+                  value={taskDateFrom}
+                  onChange={(e) => setTaskDateFrom(e.target.value)}
+                  className={`h-9 w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="project-filter-date-from"
+                />
+                <Input
+                  type="date"
+                  value={taskDateTo}
+                  onChange={(e) => setTaskDateTo(e.target.value)}
+                  className={`h-9 w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="project-filter-date-to"
+                />
+              </>
+            )}
+
+            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setTaskMemberFilter('all');
+                  setTaskDateFilter('all');
+                  setTaskSingleDate('');
+                  setTaskDateFrom('');
+                  setTaskDateTo('');
+                }}
+                className={`text-xs ${textSecondary} hover:underline`}
+                data-testid="project-filter-reset"
+              >
+                Reset
+              </button>
+            )}
+          </div>
 
           {/* Category sub-tabs */}
           {categoryTabs.length > 0 && (
@@ -228,6 +361,66 @@ export default function ProjectsPanel({
             })
           )}
         </div>
+
+        {/* Team Management Modal */}
+        {showTeamModal && (
+          <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]"
+            onClick={() => setShowTeamModal(false)}
+            data-testid="project-team-modal"
+          >
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>Manage Team</h3>
+                    <p className={`text-xs ${textSecondary}`}>Add or remove members from {selectedProject.name}</p>
+                  </div>
+                  <button onClick={() => setShowTeamModal(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+                </div>
+                <div className={`max-h-72 overflow-y-auto border ${borderColor} rounded-lg p-2 space-y-1`}>
+                  {users.length === 0 ? (
+                    <p className={`text-sm ${textSecondary} p-2`}>No users available.</p>
+                  ) : users.map(u => {
+                    const checked = teamDraft.includes(u.user_id);
+                    return (
+                      <label
+                        key={u.user_id}
+                        className={`flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-[#6366f1]/10`}
+                        data-testid={`project-team-member-${u.user_id}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setTeamDraft(prev =>
+                            checked ? prev.filter(x => x !== u.user_id) : [...prev, u.user_id]
+                          )}
+                          className="h-4 w-4 accent-[#6366f1]"
+                        />
+                        <span className={`text-sm ${textPrimary} flex-1`}>{u.name}</span>
+                        <span className={`text-xs ${textSecondary}`}>{u.email}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className={`text-xs ${textSecondary}`}>{teamDraft.length} member{teamDraft.length !== 1 ? 's' : ''} selected</span>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => setShowTeamModal(false)}>Cancel</Button>
+                    <Button
+                      onClick={handleSaveTeam}
+                      disabled={teamSaving}
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      data-testid="project-team-save"
+                    >
+                      <Check className="h-3 w-3 mr-1" /> {teamSaving ? 'Saving…' : 'Save Team'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Add Task Modal */}
         {showAddTask && (
