@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -44,6 +44,11 @@ export default function ProjectsPanel({
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [teamDraft, setTeamDraft] = useState([]);
   const [teamSaving, setTeamSaving] = useState(false);
+  // Documents (Sheets / Docs / Drive) modal
+  const [showDocsModal, setShowDocsModal] = useState(false);
+  const [docsTab, setDocsTab] = useState('sheets'); // 'sheets' | 'docs' | 'drive'
+  const [editingDocId, setEditingDocId] = useState(null);
+  const [docDraft, setDocDraft] = useState({ name: '', link: '' });
   // Task filters inside project detail
   const [taskMemberFilter, setTaskMemberFilter] = useState('all');
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all, today, single, range
@@ -145,6 +150,73 @@ export default function ProjectsPanel({
     }
   };
 
+  // Persist the full documents array on the project
+  const saveDocuments = async (newDocs) => {
+    if (!selectedProject) return;
+    try {
+      await axios.patch(
+        `${API}/api/projects/${selectedProject.project_id}`,
+        { documents: newDocs },
+        { headers }
+      );
+      setSelectedProject(prev => prev ? { ...prev, documents: newDocs } : prev);
+      loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save document');
+      throw e;
+    }
+  };
+
+  const handleSaveDoc = async () => {
+    if (!docDraft.name.trim()) { toast.error('Name is required'); return; }
+    if (!docDraft.link.trim()) { toast.error('Link is required'); return; }
+    const existing = selectedProject?.documents || [];
+    let nextDocs;
+    if (editingDocId) {
+      nextDocs = existing.map(d =>
+        d.doc_id === editingDocId
+          ? { ...d, name: docDraft.name.trim(), link: docDraft.link.trim() }
+          : d
+      );
+    } else {
+      const newDoc = {
+        doc_id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        kind: docsTab, // 'sheets' | 'docs' | 'drive'
+        name: docDraft.name.trim(),
+        link: docDraft.link.trim(),
+        added_by: currentUser?.user_id || null,
+        added_by_name: currentUser?.name || null,
+        added_at: new Date().toISOString(),
+      };
+      nextDocs = [...existing, newDoc];
+    }
+    try {
+      await saveDocuments(nextDocs);
+      toast.success(editingDocId ? 'Document updated' : 'Document added');
+      setDocDraft({ name: '', link: '' });
+      setEditingDocId(null);
+    } catch { /* toast already shown */ }
+  };
+
+  const handleEditDoc = (doc) => {
+    setEditingDocId(doc.doc_id);
+    setDocDraft({ name: doc.name || '', link: doc.link || '' });
+    setDocsTab(doc.kind || 'sheets');
+  };
+
+  const handleDeleteDoc = async (docId) => {
+    const existing = selectedProject?.documents || [];
+    const nextDocs = existing.filter(d => d.doc_id !== docId);
+    try {
+      await saveDocuments(nextDocs);
+      toast.success('Document removed');
+      if (editingDocId === docId) {
+        setEditingDocId(null);
+        setDocDraft({ name: '', link: '' });
+      }
+    } catch { /* toast already shown */ }
+  };
+
   const handleAddTask = async () => {
     if (!selectedProject) return;
     if (!taskDraft.task_name.trim()) { toast.error('Task name is required'); return; }
@@ -220,6 +292,14 @@ export default function ProjectsPanel({
               data-testid="project-team-btn"
             >
               <Users className="h-4 w-4" /> Team ({selectedProject.members?.length || 0})
+            </Button>
+            <Button
+              onClick={() => { setShowDocsModal(true); setEditingDocId(null); setDocDraft({ name: '', link: '' }); }}
+              variant="outline"
+              className="gap-2"
+              data-testid="project-docs-btn"
+            >
+              <FileText className="h-4 w-4" /> Documents ({(selectedProject.documents || []).length})
             </Button>
             <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
               <Plus className="h-4 w-4 mr-1" /> Add Task
@@ -495,6 +575,171 @@ export default function ProjectsPanel({
             </Card>
           </div>
         )}
+
+        {/* Documents Modal — Sheets / Docs / Drive */}
+        {showDocsModal && (() => {
+          const allDocs = selectedProject?.documents || [];
+          const tabsConfig = [
+            { id: 'sheets', label: 'Sheets', icon: FileSpreadsheet, color: 'text-[#10b981]' },
+            { id: 'docs', label: 'Docs', icon: FileText, color: 'text-[#3b82f6]' },
+            { id: 'drive', label: 'Drive', icon: FolderOpen, color: 'text-[#f59e0b]' },
+          ];
+          const docsForTab = allDocs.filter(d => (d.kind || 'sheets') === docsTab);
+          const tabPlural = { sheets: 'Sheets', docs: 'Docs', drive: 'Files' }[docsTab];
+
+          return (
+            <div
+              className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4"
+              onClick={() => { setShowDocsModal(false); setEditingDocId(null); setDocDraft({ name: '', link: '' }); }}
+              data-testid="project-docs-modal"
+            >
+              <Card className={`${bgCard} border ${borderColor} w-full max-w-3xl`} onClick={(e) => e.stopPropagation()}>
+                <CardContent className="p-6 space-y-4">
+                  {/* Header */}
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        {tabsConfig.map(t => {
+                          const c = allDocs.filter(d => (d.kind || 'sheets') === t.id).length;
+                          const isActive = docsTab === t.id;
+                          return (
+                            <span
+                              key={t.id}
+                              className={`px-2.5 py-1 rounded-md text-xs font-medium ${
+                                isActive ? 'bg-[#6366f1]/15 text-[#6366f1]' : `${bgSecondary} ${textSecondary}`
+                              }`}
+                            >
+                              {c} {t.label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                      <h3 className={`text-lg font-semibold ${textPrimary}`}>Project Documents</h3>
+                      <p className={`text-xs ${textSecondary}`}>Attach Google Sheets / Docs / Drive links for {selectedProject.name}</p>
+                    </div>
+                    <button
+                      onClick={() => { setShowDocsModal(false); setEditingDocId(null); setDocDraft({ name: '', link: '' }); }}
+                      className={textSecondary}
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex gap-2 border-b border-transparent">
+                    {tabsConfig.map(t => {
+                      const Icon = t.icon;
+                      const isActive = docsTab === t.id;
+                      const c = allDocs.filter(d => (d.kind || 'sheets') === t.id).length;
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => { setDocsTab(t.id); setEditingDocId(null); setDocDraft({ name: '', link: '' }); }}
+                          data-testid={`docs-tab-${t.id}`}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+                            isActive
+                              ? `bg-[#6366f1] text-white`
+                              : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/10`
+                          }`}
+                        >
+                          <Icon className={`h-4 w-4 ${isActive ? 'text-white' : t.color}`} />
+                          {t.label} ({c})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add / Edit row */}
+                  <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                    <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2">
+                      <Input
+                        value={docDraft.name}
+                        onChange={(e) => setDocDraft(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder={`${tabPlural.slice(0, -1)} name`}
+                        className={`${bgCard} ${textPrimary}`}
+                        data-testid="doc-input-name"
+                      />
+                      <Input
+                        value={docDraft.link}
+                        onChange={(e) => setDocDraft(prev => ({ ...prev, link: e.target.value }))}
+                        placeholder="https://..."
+                        className={`${bgCard} ${textPrimary}`}
+                        data-testid="doc-input-link"
+                      />
+                      <div className="flex gap-2">
+                        {editingDocId && (
+                          <Button
+                            variant="ghost"
+                            onClick={() => { setEditingDocId(null); setDocDraft({ name: '', link: '' }); }}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        <Button
+                          onClick={handleSaveDoc}
+                          className="bg-[#10b981] hover:bg-[#059669] text-white"
+                          data-testid="doc-save-btn"
+                        >
+                          {editingDocId ? 'Update' : 'Add'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* List table */}
+                  <div className={`rounded-lg border ${borderColor} overflow-hidden`}>
+                    <div className={`grid grid-cols-[60px_1fr_2fr_180px_120px] gap-3 px-4 py-2 text-xs font-medium uppercase ${bgSecondary} ${textSecondary}`}>
+                      <div>S.No</div>
+                      <div>{tabPlural.slice(0, -1)} Name</div>
+                      <div>Link</div>
+                      <div>Added By</div>
+                      <div className="text-right">Actions</div>
+                    </div>
+                    {docsForTab.length === 0 ? (
+                      <div className={`px-4 py-10 text-center text-sm ${textSecondary}`}>
+                        No {tabPlural.toLowerCase()} added yet
+                      </div>
+                    ) : docsForTab.map((d, idx) => (
+                      <div
+                        key={d.doc_id}
+                        className={`grid grid-cols-[60px_1fr_2fr_180px_120px] gap-3 px-4 py-3 items-center border-t ${borderColor}`}
+                        data-testid={`doc-row-${d.doc_id}`}
+                      >
+                        <div className={`text-sm ${textSecondary}`}>{idx + 1}</div>
+                        <div className={`text-sm font-medium ${textPrimary} truncate`}>{d.name}</div>
+                        <a
+                          href={d.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-[#6366f1] hover:underline truncate flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3 flex-none" /> {d.link}
+                        </a>
+                        <div className={`text-xs ${textSecondary} truncate`}>{d.added_by_name || '—'}</div>
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => handleEditDoc(d)}
+                            className={`p-1.5 rounded hover:bg-[#6366f1]/10 ${textSecondary}`}
+                            data-testid={`doc-edit-${d.doc_id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDoc(d.doc_id)}
+                            className="p-1.5 rounded hover:bg-[#ef4444]/10 text-[#ef4444]"
+                            data-testid={`doc-delete-${d.doc_id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })()}
 
         {/* Add Task Modal */}
         {showAddTask && (

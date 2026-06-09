@@ -33,6 +33,7 @@ class ProjectUpdate(BaseModel):
     members: Optional[List[str]] = None
     departments: Optional[List[str]] = None
     status: Optional[str] = None
+    documents: Optional[List[dict]] = None
 
 
 class ProjectTaskCreate(BaseModel):
