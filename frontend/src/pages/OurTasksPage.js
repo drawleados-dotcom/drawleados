@@ -18,6 +18,7 @@ import {
 import axios from 'axios';
 import { toast } from 'sonner';
 import ApprovalsPage from './ApprovalsPage';
+import ProjectsPanel from '../components/ProjectsPanel';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -714,6 +715,7 @@ export default function OurTasksPage() {
           {[
             { id: 'assigned_to_me', label: `My Tasks (${assignedToMeTasks.length + myOwnTasks.length})`, icon: User },
             { id: 'assign_to_team', label: `Assign to Team (${assignedToTeamTasks.length})`, icon: Users },
+            { id: 'projects', label: 'Projects', icon: Briefcase },
             { id: 'approvals', label: 'Approvals', icon: CheckCircle2 },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -743,7 +745,21 @@ export default function OurTasksPage() {
           </div>
         )}
 
-        {mainTab !== 'approvals' && (
+        {/* Projects tab */}
+        {mainTab === 'projects' && (
+          <ProjectsPanel
+            isDark={isDark}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            borderColor={borderColor}
+            headers={headers}
+            onTaskCreated={loadTasks}
+          />
+        )}
+
+        {mainTab !== 'approvals' && mainTab !== 'projects' && (
         <>
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -1016,8 +1032,13 @@ export default function OurTasksPage() {
                         {task.description && (
                           <div className={`text-xs ${textSecondary} truncate max-w-xs`}>{task.description}</div>
                         )}
-                        <div className={`text-xs ${textSecondary} mt-1`}>
+                        <div className={`text-xs ${textSecondary} mt-1 flex flex-wrap gap-1`}>
                           <Badge className="text-xs" variant="outline">{task.type || 'General'}</Badge>
+                          {task.project_name && (
+                            <Badge className="text-xs bg-[#6366f1]/20 text-[#6366f1]" data-testid={`project-badge-${task.task_id}`}>
+                              <Briefcase className="h-3 w-3 mr-1" />{task.project_name}
+                            </Badge>
+                          )}
                         </div>
                       </td>
                       <td className="px-4 py-3">
