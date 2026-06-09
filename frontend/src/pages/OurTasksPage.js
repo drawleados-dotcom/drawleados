@@ -1289,8 +1289,8 @@ export default function OurTasksPage() {
 
         {/* Create/Edit Task Modal */}
         {(showCreateModal || editingTask) && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-4xl max-h-[90vh] overflow-y-auto`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
@@ -1302,8 +1302,8 @@ export default function OurTasksPage() {
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
                   <Label className={textPrimary}>Task Name *</Label>
                   <Input
                     value={formData.task_name}
@@ -1312,78 +1312,74 @@ export default function OurTasksPage() {
                     className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                   />
                 </div>
-                <div>
+                <div className="md:col-span-2">
                   <Label className={textPrimary}>Description</Label>
                   <Textarea
                     value={formData.description}
                     onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                     placeholder="Task description"
-                    rows={3}
+                    rows={2}
                     className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className={textPrimary}>Priority</Label>
-                    <Select value={formData.priority} onValueChange={(v) => setFormData(prev => ({ ...prev, priority: v }))}>
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="low">Low</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className={textPrimary}>Type</Label>
-                    <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v }))}>
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="general">General</SelectItem>
-                        <SelectItem value="follow_up">Follow Up</SelectItem>
-                        <SelectItem value="meeting">Meeting</SelectItem>
-                        <SelectItem value="proposal">Proposal</SelectItem>
-                        <SelectItem value="call">Call</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label className={textPrimary}>Priority</Label>
+                  <Select value={formData.priority} onValueChange={(v) => setFormData(prev => ({ ...prev, priority: v }))}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={bgCard}>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className={textPrimary}>Assign To</Label>
-                    <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        {users.map(u => (
-                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className={textPrimary}>Status</Label>
-                    <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="on_hold">On Hold</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label className={textPrimary}>Type</Label>
+                  <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v }))}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={bgCard}>
+                      <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="follow_up">Follow Up</SelectItem>
+                      <SelectItem value="meeting">Meeting</SelectItem>
+                      <SelectItem value="proposal">Proposal</SelectItem>
+                      <SelectItem value="call">Call</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Assign To</Label>
+                  <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent className={bgCard}>
+                      {users.map(u => (
+                        <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Status</Label>
+                  <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className={bgCard}>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="in_progress">In Progress</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="on_hold">On Hold</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Google Calendar Style Date & Time */}
-                <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary} space-y-4`}>
+                <div className={`md:col-span-2 p-4 rounded-lg border ${borderColor} ${bgSecondary} space-y-4`}>
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-[#6366f1]" />
                     <span className={`text-sm font-medium ${textPrimary}`}>Date & Time</span>
@@ -1483,7 +1479,7 @@ export default function OurTasksPage() {
                   </div>
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <Label className={textPrimary}>Department</Label>
                   <Select
                     value={formData.department || 'none'}
@@ -1501,55 +1497,53 @@ export default function OurTasksPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className={textPrimary}>Project</Label>
-                    <Select
-                      value={formData.project_id || 'none'}
-                      onValueChange={(v) => {
-                        if (v === 'none') {
-                          setFormData(prev => ({ ...prev, project_id: '', project_name: '' }));
-                        } else {
-                          const proj = projectsForTask.find(p => p.project_id === v);
-                          setFormData(prev => ({ ...prev, project_id: v, project_name: proj?.name || '' }));
-                        }
-                      }}
-                      disabled={!formData.department}
-                    >
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-project">
-                        <SelectValue placeholder={formData.department ? 'Select project' : 'Pick dept first'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">— None —</SelectItem>
-                        {projectsForTask
-                          .filter(p => !formData.department || (p.departments || []).includes(formData.department))
-                          .map(p => (
-                            <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className={textPrimary}>Category</Label>
-                    <Select
-                      value={formData.category || 'none'}
-                      onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
-                      disabled={!formData.department}
-                    >
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-category">
-                        <SelectValue placeholder={formData.department ? 'Select category' : 'Pick dept first'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">— None —</SelectItem>
-                        {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.categories || []).map(c => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                <div>
+                  <Label className={textPrimary}>Project</Label>
+                  <Select
+                    value={formData.project_id || 'none'}
+                    onValueChange={(v) => {
+                      if (v === 'none') {
+                        setFormData(prev => ({ ...prev, project_id: '', project_name: '' }));
+                      } else {
+                        const proj = projectsForTask.find(p => p.project_id === v);
+                        setFormData(prev => ({ ...prev, project_id: v, project_name: proj?.name || '' }));
+                      }
+                    }}
+                    disabled={!formData.department}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-project">
+                      <SelectValue placeholder={formData.department ? 'Select project' : 'Pick dept first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— None —</SelectItem>
+                      {projectsForTask
+                        .filter(p => !formData.department || (p.departments || []).includes(formData.department))
+                        .map(p => (
+                          <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Category</Label>
+                  <Select
+                    value={formData.category || 'none'}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
+                    disabled={!formData.department}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-category">
+                      <SelectValue placeholder={formData.department ? 'Select category' : 'Pick dept first'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— None —</SelectItem>
+                      {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.categories || []).map(c => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div>
+                <div className="md:col-span-2">
                   <Label className={textPrimary}>Work Link (File/Project URL)</Label>
                   <Input
                     value={formData.work_link}
@@ -1558,7 +1552,7 @@ export default function OurTasksPage() {
                     className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                   />
                 </div>
-                <div className="flex gap-3 pt-4">
+                <div className="md:col-span-2 flex gap-3 pt-2">
                   <Button variant="outline" onClick={() => { setShowCreateModal(false); setEditingTask(null); resetForm(); }} className="flex-1">
                     Cancel
                   </Button>
