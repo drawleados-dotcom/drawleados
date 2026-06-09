@@ -914,19 +914,7 @@ export default function OurTasksPage() {
               </>
             )}
 
-            {/* Department filter */}
-            <Select value={filters.department} onValueChange={(v) => setFilters({...filters, department: v, project: 'all', category: 'all'})}>
-              <SelectTrigger className={`h-9 w-[150px] ${bgSecondary} border ${borderColor}`} data-testid="filter-department">
-                <Building2 className="h-3.5 w-3.5 mr-1 opacity-60" />
-                <SelectValue placeholder="All Depts" />
-              </SelectTrigger>
-              <SelectContent className={bgCard}>
-                <SelectItem value="all">All Depts</SelectItem>
-                {deptCategoriesForTask.map(d => (
-                  <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Department filter is now rendered as sub-tabs below the toolbar */}
 
             {/* Project filter */}
             <Select value={filters.project} onValueChange={(v) => setFilters({...filters, project: v})}>
@@ -1029,6 +1017,68 @@ export default function OurTasksPage() {
             </div>
           </div>
         </div>
+
+        {/* Department Sub-Tabs with red pending count badges */}
+        {(() => {
+          const sourceTasks = mainTab === 'assigned_to_me'
+            ? [...assignedToMeTasks, ...myOwnTasks]
+            : assignedToTeamTasks;
+          const pendingByDept = {};
+          let totalPending = 0;
+          sourceTasks.forEach(t => {
+            if ((t.status || 'pending') !== 'pending') return;
+            totalPending += 1;
+            const d = t.department || '_unassigned';
+            pendingByDept[d] = (pendingByDept[d] || 0) + 1;
+          });
+
+          return (
+            <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
+              <button
+                onClick={() => setFilters({...filters, department: 'all', project: 'all', category: 'all'})}
+                data-testid="dept-subtab-all"
+                className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
+                  filters.department === 'all'
+                    ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                    : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                }`}
+              >
+                All Depts
+                {totalPending > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a] dark:ring-[#0a0a0a]">
+                    {totalPending}
+                  </span>
+                )}
+              </button>
+              {deptCategoriesForTask.map(d => {
+                const count = pendingByDept[d.dept_key] || 0;
+                const isActive = filters.department === d.dept_key;
+                return (
+                  <button
+                    key={d.dept_key}
+                    onClick={() => setFilters({...filters, department: d.dept_key, project: 'all', category: 'all'})}
+                    data-testid={`dept-subtab-${d.dept_key}`}
+                    className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
+                      isActive
+                        ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                    }`}
+                  >
+                    {d.label}
+                    {count > 0 && (
+                      <span
+                        className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]"
+                        data-testid={`dept-pending-${d.dept_key}`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {/* Tasks Table */}
         <Card className={`${bgCard} border ${borderColor}`}>
