@@ -46,7 +46,8 @@ export default function OurTasksPage() {
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
-  const [editingTimeCell, setEditingTimeCell] = useState(null); // {taskId, field: 'start'|'end'}
+  const [editingTimeRow, setEditingTimeRow] = useState(null); // task_id currently in row-edit mode
+  const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}}
   const [showFilters, setShowFilters] = useState(true); // Show filters by default
   
   // Advanced filters
@@ -269,125 +270,120 @@ export default function OurTasksPage() {
     }
   };
 
-  // Save inline time edit
-  const handleTimeEdit = async (taskId, field, value) => {
-    if (!value) return;
+  // Save inline time edit (single field) — kept for potential future use
+  // Save BOTH start and end time for a row (triggered by row-level Save button)
+  const handleSaveTimeRow = async (taskId) => {
+    const draft = timeDrafts[taskId];
+    if (!draft || (!draft.start && !draft.end)) {
+      toast.error('Enter Start Time and End Time first');
+      return;
+    }
     try {
-      const payload = field === 'start' ? { start_time: value } : { end_time: value };
-      // include date so backend anchors HH:MM correctly
       const task = tasks.find(t => t.task_id === taskId);
       const { start, end } = getTaskStartEnd(task);
-      const anchorIso = (field === 'start' ? start : end) || start || end;
-      if (anchorIso) {
-        payload.date = anchorIso.slice(0, 10);
-      }
+      const anchorIso = start || end;
+      const payload = {};
+      if (draft.start) payload.start_time = draft.start;
+      if (draft.end) payload.end_time = draft.end;
+      if (anchorIso) payload.date = anchorIso.slice(0, 10);
+      else payload.date = new Date().toISOString().slice(0, 10);
       await axios.patch(`${API}/api/our-tasks/tasks/${taskId}/time-edit`, payload, { headers });
-      toast.success(`${field === 'start' ? 'Start' : 'End'} time updated`);
+      toast.success('Time saved');
+      setEditingTimeRow(null);
+      setTimeDrafts(prev => {
+        const { [taskId]: _, ...rest } = prev;
+        return rest;
+      });
       loadTasks();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to update time');
-    } finally {
-      setEditingTimeCell(null);
+      toast.error(error.response?.data?.detail || 'Failed to save time');
     }
   };
 
   // Get time tracking button based on status
   // For "Assign to Team" tab: only show status, no action buttons
+  // Replace play/pause/finish controls with a simple Edit ↔ Save toggle.
+  // Edit puts BOTH the Start Time and End Time cells of the row into edit mode.
+  // Save commits the times and recomputes total duration on the backend.
   const getTimeTrackingButton = (task, isTeamView = false) => {
     const tracking = task.time_tracking || { status: 'not_started', total_seconds: 0 };
     const status = tracking.status;
-    
-    // For team view (tasks assigned to others), only show status indicators
+
+    // Team view — read-only status pill, no edit
     if (isTeamView) {
-      switch (status) {
-        case 'not_started':
-          return (
-            <Badge className="bg-[#71717a]/20 text-[#71717a]">
-              <Circle className="h-3 w-3 mr-1" /> Not Started
-            </Badge>
-          );
-        case 'running':
-          return (
-            <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">
-              <Play className="h-3 w-3 mr-1" /> Running
-            </Badge>
-          );
-        case 'paused':
-          return (
-            <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">
-              <Pause className="h-3 w-3 mr-1" /> Paused
-            </Badge>
-          );
-        case 'finished':
-          return (
-            <Badge className="bg-[#10b981]/20 text-[#10b981]">
-              <CheckCircle2 className="h-3 w-3 mr-1" /> Done
-            </Badge>
-          );
-        default:
-          return null;
-      }
-    }
-    
-    // For "Assigned to Me" tab - show action buttons
-    switch (status) {
-      case 'not_started':
-        return (
-          <Button
-            size="sm"
-            onClick={() => handleTimeTracking(task.task_id, 'start')}
-            className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
-          >
-            <Play className="h-3 w-3 mr-1" /> Start
-          </Button>
-        );
-      case 'running':
-        return (
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              onClick={() => handleTimeTracking(task.task_id, 'pause')}
-              className="bg-[#f59e0b] hover:bg-[#d97706] text-white h-8 px-3"
-            >
-              <Pause className="h-3 w-3 mr-1" /> Pause
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => handleTimeTracking(task.task_id, 'finish')}
-              className="bg-[#ef4444] hover:bg-[#dc2626] text-white h-8 px-3"
-            >
-              <Square className="h-3 w-3 mr-1" /> Finish
-            </Button>
-          </div>
-        );
-      case 'paused':
-        return (
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              onClick={() => handleTimeTracking(task.task_id, 'resume')}
-              className="bg-[#3b82f6] hover:bg-[#2563eb] text-white h-8 px-3"
-            >
-              <Play className="h-3 w-3 mr-1" /> Resume
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => handleTimeTracking(task.task_id, 'finish')}
-              className="bg-[#ef4444] hover:bg-[#dc2626] text-white h-8 px-3"
-            >
-              <Square className="h-3 w-3 mr-1" /> Finish
-            </Button>
-          </div>
-        );
-      case 'finished':
+      if (status === 'finished') {
         return (
           <Badge className="bg-[#10b981]/20 text-[#10b981]">
             <CheckCircle2 className="h-3 w-3 mr-1" /> Done
           </Badge>
         );
-      default:
-        return null;
+      }
+      if (status === 'running' || status === 'paused') {
+        return (
+          <Badge className="bg-[#3b82f6]/20 text-[#3b82f6]">
+            <Timer className="h-3 w-3 mr-1" /> {formatDuration(tracking.total_seconds || 0)}
+          </Badge>
+        );
+      }
+      return (
+        <Badge className="bg-[#71717a]/20 text-[#71717a]">
+          <Circle className="h-3 w-3 mr-1" /> Not Started
+        </Badge>
+      );
     }
+
+    const isEditingRow = editingTimeRow === task.task_id;
+
+    if (isEditingRow) {
+      return (
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            onClick={() => handleSaveTimeRow(task.task_id)}
+            className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
+            data-testid={`time-save-btn-${task.task_id}`}
+          >
+            <CheckCircle2 className="h-3 w-3 mr-1" /> Save
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setEditingTimeRow(null);
+              setTimeDrafts(prev => {
+                const { [task.task_id]: _, ...rest } = prev;
+                return rest;
+              });
+            }}
+            className="h-8 px-3"
+            data-testid={`time-cancel-btn-${task.task_id}`}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <Button
+        size="sm"
+        onClick={() => {
+          const { start, end } = getTaskStartEnd(task);
+          setTimeDrafts(prev => ({
+            ...prev,
+            [task.task_id]: {
+              start: toTimeInputValue(start),
+              end: toTimeInputValue(end),
+            }
+          }));
+          setEditingTimeRow(task.task_id);
+        }}
+        className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3"
+        data-testid={`time-edit-btn-${task.task_id}`}
+      >
+        <Edit2 className="h-3 w-3 mr-1" /> Edit
+      </Button>
+    );
   };
 
   // Helper function to get recurrence label
@@ -1084,81 +1080,53 @@ export default function OurTasksPage() {
                       <td className={`px-4 py-3 text-sm`} data-testid={`start-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           const { start } = getTaskStartEnd(task);
-                          const isEditing = editingTimeCell && editingTimeCell.taskId === task.task_id && editingTimeCell.field === 'start';
-                          if (isEditing) {
+                          const isEditingRow = editingTimeRow === task.task_id;
+                          if (isEditingRow) {
                             return (
                               <input
                                 type="time"
-                                autoFocus
-                                defaultValue={toTimeInputValue(start)}
-                                onBlur={(e) => handleTimeEdit(task.task_id, 'start', e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') e.target.blur();
-                                  if (e.key === 'Escape') setEditingTimeCell(null);
-                                }}
+                                value={timeDrafts[task.task_id]?.start || ''}
+                                onChange={(e) => setTimeDrafts(prev => ({
+                                  ...prev,
+                                  [task.task_id]: { ...(prev[task.task_id] || {}), start: e.target.value }
+                                }))}
                                 className={`w-24 px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
                                 data-testid={`start-time-input-${task.task_id}`}
                               />
                             );
                           }
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => setEditingTimeCell({ taskId: task.task_id, field: 'start' })}
-                              className={`text-left hover:underline ${start ? textPrimary : textSecondary}`}
-                              title="Click to edit start time"
-                              data-testid={`start-time-btn-${task.task_id}`}
-                            >
-                              {start ? formatTimeOnly(start) : '—'}
-                            </button>
+                          return start ? (
+                            <span className={textPrimary}>{formatTimeOnly(start)}</span>
+                          ) : (
+                            <span className={textSecondary}>—</span>
                           );
                         })()}
                       </td>
                       <td className={`px-4 py-3 text-sm`} data-testid={`end-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
                         {(() => {
-                          const { start, end, running } = getTaskStartEnd(task);
-                          const isEditing = editingTimeCell && editingTimeCell.taskId === task.task_id && editingTimeCell.field === 'end';
-                          if (isEditing) {
+                          const { end, running } = getTaskStartEnd(task);
+                          const isEditingRow = editingTimeRow === task.task_id;
+                          if (isEditingRow) {
                             return (
                               <input
                                 type="time"
-                                autoFocus
-                                defaultValue={toTimeInputValue(end)}
-                                onBlur={(e) => handleTimeEdit(task.task_id, 'end', e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') e.target.blur();
-                                  if (e.key === 'Escape') setEditingTimeCell(null);
-                                }}
+                                value={timeDrafts[task.task_id]?.end || ''}
+                                onChange={(e) => setTimeDrafts(prev => ({
+                                  ...prev,
+                                  [task.task_id]: { ...(prev[task.task_id] || {}), end: e.target.value }
+                                }))}
                                 className={`w-24 px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
                                 data-testid={`end-time-input-${task.task_id}`}
                               />
                             );
                           }
-                          // Allow editing end time only if there is a start (otherwise meaningless)
                           if (running) {
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => start && setEditingTimeCell({ taskId: task.task_id, field: 'end' })}
-                                className="text-[#10b981] text-xs font-medium hover:underline"
-                                title="Click to set end time (will stop timer)"
-                                data-testid={`end-time-btn-${task.task_id}`}
-                              >
-                                Running
-                              </button>
-                            );
+                            return <span className="text-[#10b981] text-xs font-medium">Running</span>;
                           }
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => start && setEditingTimeCell({ taskId: task.task_id, field: 'end' })}
-                              className={`text-left hover:underline ${end ? textPrimary : textSecondary}`}
-                              title={start ? 'Click to edit end time' : 'Start the timer first'}
-                              disabled={!start}
-                              data-testid={`end-time-btn-${task.task_id}`}
-                            >
-                              {end ? formatTimeOnly(end) : '—'}
-                            </button>
+                          return end ? (
+                            <span className={textPrimary}>{formatTimeOnly(end)}</span>
+                          ) : (
+                            <span className={textSecondary}>—</span>
                           );
                         })()}
                       </td>
