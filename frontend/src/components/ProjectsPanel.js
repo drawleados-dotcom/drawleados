@@ -10,6 +10,17 @@ import { Badge } from './ui/badge';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+const DEPARTMENTS = [
+  { value: 'website', label: 'Website' },
+  { value: 'social_media', label: 'Social Media' },
+  { value: 'meta', label: 'Meta Ads' },
+  { value: 'seo', label: 'SEO' },
+  { value: 'finance', label: 'Finance' },
+  { value: 'hr', label: 'HR' },
+  { value: 'business_dev', label: 'Business Dev' },
+  { value: 'erp', label: 'ERP' },
+];
+
 export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated,
 }) {
@@ -19,8 +30,9 @@ export default function ProjectsPanel({
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null); // project being viewed
   const [showAddTask, setShowAddTask] = useState(false);
+  const [deptFilter, setDeptFilter] = useState('all');
 
-  const [projectDraft, setProjectDraft] = useState({ name: '', description: '', due_date: '' });
+  const [projectDraft, setProjectDraft] = useState({ name: '', description: '', due_date: '', departments: [], members: [] });
   const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '' });
 
   const loadProjects = useCallback(async () => {
@@ -51,7 +63,7 @@ export default function ProjectsPanel({
     try {
       await axios.post(`${API}/api/projects`, projectDraft, { headers });
       toast.success('Project created');
-      setProjectDraft({ name: '', description: '', due_date: '' });
+      setProjectDraft({ name: '', description: '', due_date: '', departments: [], members: [] });
       setShowCreateProject(false);
       loadProjects();
     } catch (e) {
@@ -219,29 +231,72 @@ export default function ProjectsPanel({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map(p => (
-            <Card
-              key={p.project_id}
-              className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#6366f1] transition-colors`}
-              onClick={() => setSelectedProject(p)}
-              data-testid={`project-card-${p.project_id}`}
+        <>
+          {/* Department filter tabs with counts */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={() => setDeptFilter('all')}
+              className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                deptFilter === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+              }`}
+              data-testid="dept-filter-all"
             >
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className={`font-semibold ${textPrimary}`}>{p.name}</h3>
-                  <Badge className="bg-[#10b981]/20 text-[#10b981]">{p.status || 'active'}</Badge>
-                </div>
-                <p className={`text-sm ${textSecondary} line-clamp-2 mb-3`}>{p.description || 'No description'}</p>
-                <div className={`flex items-center gap-4 text-xs ${textSecondary}`}>
-                  <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{fmtDate(p.due_date)}</span>
-                  <span className="flex items-center gap-1"><ListChecks className="h-3 w-3" />{p.task_count || 0} tasks</span>
-                  <span className="flex items-center gap-1"><Users className="h-3 w-3" />{p.members?.length || 0}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              All ({projects.length})
+            </button>
+            {DEPARTMENTS.map(d => {
+              const count = projects.filter(p => (p.departments || []).includes(d.value)).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={d.value}
+                  onClick={() => setDeptFilter(d.value)}
+                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                    deptFilter === d.value ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+                  }`}
+                  data-testid={`dept-filter-${d.value}`}
+                >
+                  {d.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects
+              .filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter))
+              .map(p => (
+              <Card
+                key={p.project_id}
+                className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#6366f1] transition-colors`}
+                onClick={() => setSelectedProject(p)}
+                data-testid={`project-card-${p.project_id}`}
+              >
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className={`font-semibold ${textPrimary}`}>{p.name}</h3>
+                    <Badge className="bg-[#10b981]/20 text-[#10b981]">{p.status || 'active'}</Badge>
+                  </div>
+                  <p className={`text-sm ${textSecondary} line-clamp-2 mb-3`}>{p.description || 'No description'}</p>
+                  {(p.departments || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {(p.departments || []).map(dv => {
+                        const d = DEPARTMENTS.find(x => x.value === dv);
+                        return d ? (
+                          <Badge key={dv} className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{d.label}</Badge>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+                  <div className={`flex items-center gap-4 text-xs ${textSecondary}`}>
+                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{fmtDate(p.due_date)}</span>
+                    <span className="flex items-center gap-1"><ListChecks className="h-3 w-3" />{p.task_count || 0} tasks</span>
+                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{p.members?.length || 0}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Create Project Modal */}
@@ -256,6 +311,64 @@ export default function ProjectsPanel({
               <div><Label className={textPrimary}>Project Name *</Label><Input value={projectDraft.name} onChange={(e) => setProjectDraft({ ...projectDraft, name: e.target.value })} placeholder="e.g. Website Revamp" data-testid="project-name-input" /></div>
               <div><Label className={textPrimary}>Description</Label><Input value={projectDraft.description} onChange={(e) => setProjectDraft({ ...projectDraft, description: e.target.value })} placeholder="What is this project about?" /></div>
               <div><Label className={textPrimary}>Due Date</Label><Input type="date" value={projectDraft.due_date} onChange={(e) => setProjectDraft({ ...projectDraft, due_date: e.target.value })} /></div>
+
+              {/* Departments */}
+              <div>
+                <Label className={textPrimary}>Departments</Label>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {DEPARTMENTS.map(d => {
+                    const selected = projectDraft.departments.includes(d.value);
+                    return (
+                      <button
+                        key={d.value}
+                        type="button"
+                        onClick={() => setProjectDraft(prev => ({
+                          ...prev,
+                          departments: selected
+                            ? prev.departments.filter(x => x !== d.value)
+                            : [...prev.departments, d.value],
+                        }))}
+                        className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                          selected ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+                        }`}
+                        data-testid={`project-dept-${d.value}`}
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Team Members */}
+              <div>
+                <Label className={textPrimary}>Team Members</Label>
+                <p className={`text-xs ${textSecondary} mb-2`}>Only selected members (and admins) will see this project.</p>
+                <div className={`max-h-48 overflow-y-auto border ${borderColor} rounded-lg p-2 space-y-1`}>
+                  {users.map(u => {
+                    const checked = projectDraft.members.includes(u.user_id);
+                    return (
+                      <label
+                        key={u.user_id}
+                        className={`flex items-center gap-3 p-2 rounded cursor-pointer ${bgSecondary}/40 hover:bg-[#6366f1]/10`}
+                        data-testid={`project-member-${u.user_id}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => setProjectDraft(prev => ({
+                            ...prev,
+                            members: checked ? prev.members.filter(x => x !== u.user_id) : [...prev.members, u.user_id],
+                          }))}
+                          className="h-4 w-4 accent-[#6366f1]"
+                        />
+                        <span className={`text-sm ${textPrimary}`}>{u.name}</span>
+                        <span className={`text-xs ${textSecondary}`}>{u.email}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" onClick={() => setShowCreateProject(false)}>Cancel</Button>
                 <Button onClick={handleCreateProject} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="project-save-btn">

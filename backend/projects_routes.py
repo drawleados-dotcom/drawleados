@@ -20,6 +20,7 @@ class ProjectCreate(BaseModel):
     description: Optional[str] = ""
     due_date: Optional[str] = None  # ISO date string
     members: Optional[List[str]] = []   # user_ids
+    departments: Optional[List[str]] = []  # department keys: website, social_media, meta, seo, finance, hr, business_dev, erp
     status: Optional[str] = "active"     # active | completed | on_hold
 
 
@@ -28,6 +29,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     due_date: Optional[str] = None
     members: Optional[List[str]] = None
+    departments: Optional[List[str]] = None
     status: Optional[str] = None
 
 
@@ -43,8 +45,19 @@ class ProjectTaskCreate(BaseModel):
 @projects_router.get("")
 async def list_projects(request: Request):
     from server import get_current_user, db
-    await get_current_user(request)
-    projects = await db.projects.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    user = await get_current_user(request)
+
+    role = (user.role or "").lower()
+    is_privileged = role in {"super_admin", "admin"}
+
+    # Non-privileged users only see projects they are a member of or created
+    query: dict = {} if is_privileged else {
+        "$or": [
+            {"members": user.user_id},
+            {"created_by": user.user_id},
+        ]
+    }
+    projects = await db.projects.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     # Attach task counts for each project
     for p in projects:
         pid = p.get("project_id")
@@ -62,12 +75,18 @@ async def create_project(payload: ProjectCreate, request: Request):
     from server import get_current_user, db
     user = await get_current_user(request)
 
+    members = list(payload.members or [])
+    # Ensure creator is always a member (so they can see their own project)
+    if user.user_id not in members:
+        members.append(user.user_id)
+
     project = {
         "project_id": f"prj_{uuid.uuid4().hex[:12]}",
         "name": payload.name.strip(),
         "description": (payload.description or "").strip(),
         "due_date": payload.due_date,
-        "members": payload.members or [],
+        "members": members,
+        "departments": payload.departments or [],
         "status": payload.status or "active",
         "created_by": user.user_id,
         "created_by_name": user.name,
