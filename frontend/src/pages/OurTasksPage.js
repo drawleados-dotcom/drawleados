@@ -46,6 +46,7 @@ export default function OurTasksPage() {
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
+  const [editingTimeCell, setEditingTimeCell] = useState(null); // {taskId, field: 'start'|'end'}
   const [showFilters, setShowFilters] = useState(true); // Show filters by default
   
   // Advanced filters
@@ -252,6 +253,42 @@ export default function OurTasksPage() {
     const last = list[list.length - 1];
     const running = !last.end;
     return { start: first.start, end: last.end, running };
+  };
+
+  // Extract HH:MM (24h) from an ISO timestamp for use in <input type="time">
+  const toTimeInputValue = (iso) => {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    } catch {
+      return '';
+    }
+  };
+
+  // Save inline time edit
+  const handleTimeEdit = async (taskId, field, value) => {
+    if (!value) return;
+    try {
+      const payload = field === 'start' ? { start_time: value } : { end_time: value };
+      // include date so backend anchors HH:MM correctly
+      const task = tasks.find(t => t.task_id === taskId);
+      const { start, end } = getTaskStartEnd(task);
+      const anchorIso = (field === 'start' ? start : end) || start || end;
+      if (anchorIso) {
+        payload.date = anchorIso.slice(0, 10);
+      }
+      await axios.patch(`${API}/api/our-tasks/tasks/${taskId}/time-edit`, payload, { headers });
+      toast.success(`${field === 'start' ? 'Start' : 'End'} time updated`);
+      loadTasks();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update time');
+    } finally {
+      setEditingTimeCell(null);
+    }
   };
 
   // Get time tracking button based on status
@@ -1044,26 +1081,84 @@ export default function OurTasksPage() {
                           <div className="text-xs text-[#10b981] mt-1">Running...</div>
                         )}
                       </td>
-                      <td className={`px-4 py-3 text-sm`} data-testid={`start-time-${task.task_id}`}>
+                      <td className={`px-4 py-3 text-sm`} data-testid={`start-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           const { start } = getTaskStartEnd(task);
-                          return start ? (
-                            <span className={textPrimary}>{formatTimeOnly(start)}</span>
-                          ) : (
-                            <span className={textSecondary}>-</span>
+                          const isEditing = editingTimeCell && editingTimeCell.taskId === task.task_id && editingTimeCell.field === 'start';
+                          if (isEditing) {
+                            return (
+                              <input
+                                type="time"
+                                autoFocus
+                                defaultValue={toTimeInputValue(start)}
+                                onBlur={(e) => handleTimeEdit(task.task_id, 'start', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.target.blur();
+                                  if (e.key === 'Escape') setEditingTimeCell(null);
+                                }}
+                                className={`w-24 px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                                data-testid={`start-time-input-${task.task_id}`}
+                              />
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => setEditingTimeCell({ taskId: task.task_id, field: 'start' })}
+                              className={`text-left hover:underline ${start ? textPrimary : textSecondary}`}
+                              title="Click to edit start time"
+                              data-testid={`start-time-btn-${task.task_id}`}
+                            >
+                              {start ? formatTimeOnly(start) : '—'}
+                            </button>
                           );
                         })()}
                       </td>
-                      <td className={`px-4 py-3 text-sm`} data-testid={`end-time-${task.task_id}`}>
+                      <td className={`px-4 py-3 text-sm`} data-testid={`end-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
                         {(() => {
-                          const { end, running } = getTaskStartEnd(task);
-                          if (running) {
-                            return <span className="text-[#10b981] text-xs font-medium">Running</span>;
+                          const { start, end, running } = getTaskStartEnd(task);
+                          const isEditing = editingTimeCell && editingTimeCell.taskId === task.task_id && editingTimeCell.field === 'end';
+                          if (isEditing) {
+                            return (
+                              <input
+                                type="time"
+                                autoFocus
+                                defaultValue={toTimeInputValue(end)}
+                                onBlur={(e) => handleTimeEdit(task.task_id, 'end', e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') e.target.blur();
+                                  if (e.key === 'Escape') setEditingTimeCell(null);
+                                }}
+                                className={`w-24 px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                                data-testid={`end-time-input-${task.task_id}`}
+                              />
+                            );
                           }
-                          return end ? (
-                            <span className={textPrimary}>{formatTimeOnly(end)}</span>
-                          ) : (
-                            <span className={textSecondary}>-</span>
+                          // Allow editing end time only if there is a start (otherwise meaningless)
+                          if (running) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => start && setEditingTimeCell({ taskId: task.task_id, field: 'end' })}
+                                className="text-[#10b981] text-xs font-medium hover:underline"
+                                title="Click to set end time (will stop timer)"
+                                data-testid={`end-time-btn-${task.task_id}`}
+                              >
+                                Running
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => start && setEditingTimeCell({ taskId: task.task_id, field: 'end' })}
+                              className={`text-left hover:underline ${end ? textPrimary : textSecondary}`}
+                              title={start ? 'Click to edit end time' : 'Start the timer first'}
+                              disabled={!start}
+                              data-testid={`end-time-btn-${task.task_id}`}
+                            >
+                              {end ? formatTimeOnly(end) : '—'}
+                            </button>
                           );
                         })()}
                       </td>

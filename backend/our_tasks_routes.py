@@ -55,6 +55,11 @@ class StatusUpdate(BaseModel):
 class TimeTrackingAction(BaseModel):
     action: str  # start, pause, resume, finish
 
+class TimeEditPayload(BaseModel):
+    start_time: Optional[str] = None  # "HH:MM" or full ISO
+    end_time: Optional[str] = None    # "HH:MM" or full ISO
+    date: Optional[str] = None        # "YYYY-MM-DD" — defaults to today
+
 
 # Helper function to check if a task should appear on a specific date based on recurrence
 def task_occurs_on_date(task: dict, check_date: str) -> bool:
@@ -564,3 +569,104 @@ async def get_tasks_by_date(date: str, request: Request):
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Inline-edit start/end time of a task's timer
+@our_tasks_router.patch("/tasks/{task_id}/time-edit")
+async def edit_time_tracking(task_id: str, payload: TimeEditPayload, request: Request):
+    """
+    Edit the Start Time and/or End Time of a task's timer.
+    Behaviour:
+      - If task has no sessions: create one session with the given start/end.
+      - If sessions exist: update the FIRST session's start and the LAST session's end.
+      - Recalculates total_seconds based on all sessions.
+      - Time values may be "HH:MM" (combined with `date` or today's date) or full ISO timestamps.
+    """
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    task = await db.our_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Determine base date — explicit, else first existing session date, else today
+    base_date = payload.date
+    if not base_date:
+        existing_sessions = task.get("time_tracking", {}).get("sessions", [])
+        if existing_sessions and existing_sessions[0].get("start"):
+            base_date = existing_sessions[0]["start"][:10]
+        else:
+            base_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    def to_iso(value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        # If already looks like ISO (has 'T'), return as-is
+        if "T" in value:
+            return value
+        # Otherwise treat as HH:MM and combine with base_date in UTC
+        try:
+            hh, mm = value.split(":")[:2]
+            dt = datetime.strptime(f"{base_date} {int(hh):02d}:{int(mm):02d}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            return dt.isoformat()
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid time format: {value}. Use HH:MM")
+
+    new_start_iso = to_iso(payload.start_time)
+    new_end_iso = to_iso(payload.end_time)
+
+    time_tracking = task.get("time_tracking") or {"total_seconds": 0, "status": "not_started", "sessions": []}
+    sessions = time_tracking.get("sessions", [])
+
+    if not sessions:
+        # Create a new session from start to end (both required for fresh edit)
+        if not new_start_iso and not new_end_iso:
+            raise HTTPException(status_code=400, detail="Provide at least start_time or end_time")
+        if not new_start_iso:
+            raise HTTPException(status_code=400, detail="start_time required when no existing sessions")
+        sessions = [{
+            "start": new_start_iso,
+            "end": new_end_iso,
+            "duration_seconds": 0,
+            "user_id": user.user_id,
+        }]
+    else:
+        if new_start_iso:
+            sessions[0]["start"] = new_start_iso
+        if new_end_iso:
+            sessions[-1]["end"] = new_end_iso
+
+    # Validate that end > start for each session that has both
+    for s in sessions:
+        if s.get("start") and s.get("end"):
+            try:
+                st = datetime.fromisoformat(s["start"].replace("Z", "+00:00"))
+                en = datetime.fromisoformat(s["end"].replace("Z", "+00:00"))
+                if en <= st:
+                    raise HTTPException(status_code=400, detail="End time must be after start time")
+                s["duration_seconds"] = int((en - st).total_seconds())
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
+    # Recalculate total_seconds across all sessions
+    total = sum(int(s.get("duration_seconds") or 0) for s in sessions)
+    time_tracking["sessions"] = sessions
+    time_tracking["total_seconds"] = total
+
+    # If finished (last session has end), keep/refresh status; running stays running
+    last = sessions[-1]
+    if last.get("end") and time_tracking.get("status") != "running":
+        time_tracking["status"] = time_tracking.get("status") or "paused"
+
+    await db.our_tasks.update_one(
+        {"task_id": task_id},
+        {"$set": {
+            "time_tracking": time_tracking,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    return updated
