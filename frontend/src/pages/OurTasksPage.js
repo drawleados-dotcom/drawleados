@@ -220,6 +220,40 @@ export default function OurTasksPage() {
     return `${secs}s`;
   };
 
+  // Format ISO datetime to short time string (e.g. "10:30 AM")
+  const formatTimeOnly = (iso) => {
+    if (!iso) return '-';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch (e) {
+      return '-';
+    }
+  };
+
+  // Pick the most relevant start/end from a task's timer sessions
+  // If a date is selected via the filter, restrict to sessions that started on that date.
+  const getTaskStartEnd = (task) => {
+    const sessions = task?.time_tracking?.sessions || [];
+    if (sessions.length === 0) return { start: null, end: null, running: false };
+
+    const targetDate = filters.dateFilter === 'single' && filters.singleDate ? filters.singleDate : null;
+    const matchesDate = (iso) => {
+      if (!targetDate) return true;
+      if (!iso) return false;
+      return iso.slice(0, 10) === targetDate;
+    };
+
+    const relevant = sessions.filter(s => matchesDate(s.start));
+    const list = relevant.length > 0 ? relevant : sessions;
+
+    const first = list[0];
+    const last = list[list.length - 1];
+    const running = !last.end;
+    return { start: first.start, end: last.end, running };
+  };
+
   // Get time tracking button based on status
   // For "Assign to Team" tab: only show status, no action buttons
   const getTimeTrackingButton = (task, isTeamView = false) => {
@@ -565,6 +599,59 @@ export default function OurTasksPage() {
     completed: currentTabTasks.filter(t => t.status === 'completed').length
   };
 
+  // Compute total work seconds for the currently selected date filter.
+  // - "single" date selected: sum session durations whose start matches that date
+  // - "today": sum sessions started today
+  // - "range": sum sessions started within [dateFrom, dateTo]
+  // - "all": fall back to sum of total_seconds across filtered tasks
+  const computeWorkSeconds = () => {
+    const sessionDate = (iso) => (iso ? iso.slice(0, 10) : '');
+    const today = new Date().toISOString().slice(0, 10);
+
+    const inRange = (iso) => {
+      const d = sessionDate(iso);
+      if (!d) return false;
+      if (filters.dateFilter === 'single') return d === filters.singleDate;
+      if (filters.dateFilter === 'today') return d === today;
+      if (filters.dateFilter === 'range') {
+        if (filters.dateFrom && d < filters.dateFrom) return false;
+        if (filters.dateTo && d > filters.dateTo) return false;
+        return true;
+      }
+      return true; // all time
+    };
+
+    let totalSeconds = 0;
+    filteredTasks.forEach(task => {
+      const sessions = task?.time_tracking?.sessions || [];
+      if (sessions.length === 0) {
+        if (filters.dateFilter === 'all') {
+          totalSeconds += task?.time_tracking?.total_seconds || 0;
+        }
+        return;
+      }
+      sessions.forEach(s => {
+        if (!inRange(s.start)) return;
+        if (s.duration_seconds) {
+          totalSeconds += s.duration_seconds;
+        } else if (s.start && !s.end) {
+          // running session — count time up to now
+          const startMs = new Date(s.start).getTime();
+          if (!isNaN(startMs)) totalSeconds += Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        }
+      });
+    });
+    return totalSeconds;
+  };
+  const totalWorkSeconds = computeWorkSeconds();
+  const workTimeLabel = filters.dateFilter === 'single' && filters.singleDate
+    ? `Work on ${filters.singleDate}`
+    : filters.dateFilter === 'today'
+      ? 'Work Today'
+      : filters.dateFilter === 'range'
+        ? 'Work in Range'
+        : 'Total Work Time';
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -607,7 +694,7 @@ export default function OurTasksPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card className={`${bgCard} border ${borderColor}`}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -649,6 +736,17 @@ export default function OurTasksPage() {
                   <p className={`text-2xl font-bold text-[#10b981]`}>{stats.completed}</p>
                 </div>
                 <CheckCircle2 className="h-8 w-8 text-[#10b981]" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={`${bgCard} border ${borderColor}`} data-testid="work-time-card">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm ${textSecondary}`}>{workTimeLabel}</p>
+                  <p className={`text-2xl font-bold text-[#8b5cf6]`}>{formatDuration(totalWorkSeconds)}</p>
+                </div>
+                <Timer className="h-8 w-8 text-[#8b5cf6]" />
               </div>
             </CardContent>
           </Card>
@@ -832,6 +930,8 @@ export default function OurTasksPage() {
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Due Date</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Link</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Time</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Start Time</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>End Time</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Timer</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Actions</th>
                   </tr>
@@ -839,11 +939,11 @@ export default function OurTasksPage() {
                 <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
+                      <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
                     </tr>
                   ) : filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
+                      <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                         <p>No tasks found</p>
                         <p className="text-sm">
@@ -943,6 +1043,29 @@ export default function OurTasksPage() {
                         {task.time_tracking?.status === 'running' && (
                           <div className="text-xs text-[#10b981] mt-1">Running...</div>
                         )}
+                      </td>
+                      <td className={`px-4 py-3 text-sm`} data-testid={`start-time-${task.task_id}`}>
+                        {(() => {
+                          const { start } = getTaskStartEnd(task);
+                          return start ? (
+                            <span className={textPrimary}>{formatTimeOnly(start)}</span>
+                          ) : (
+                            <span className={textSecondary}>-</span>
+                          );
+                        })()}
+                      </td>
+                      <td className={`px-4 py-3 text-sm`} data-testid={`end-time-${task.task_id}`}>
+                        {(() => {
+                          const { end, running } = getTaskStartEnd(task);
+                          if (running) {
+                            return <span className="text-[#10b981] text-xs font-medium">Running</span>;
+                          }
+                          return end ? (
+                            <span className={textPrimary}>{formatTimeOnly(end)}</span>
+                          ) : (
+                            <span className={textSecondary}>-</span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {getTimeTrackingButton(task, mainTab === 'assign_to_team')}
