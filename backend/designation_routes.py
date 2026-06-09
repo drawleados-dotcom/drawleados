@@ -17,6 +17,13 @@ class DesignationCreate(BaseModel):
     roles_responsibilities: Optional[str] = ""
     reporting_to: Optional[List[str]] = []
     module_access: Optional[List[str]] = []
+    approval_departments: Optional[List[str]] = []
+    approval_stages: Optional[List[str]] = []
+    # Operations module sub-options
+    operations_my_tasks: Optional[bool] = True
+    operations_assign_to_team: Optional[bool] = False
+    operations_departments: Optional[List[str]] = []
+    operations_approval_queue: Optional[str] = None  # 'pm' | 'operations' | 'ceo'
 
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
@@ -24,6 +31,12 @@ class DesignationUpdate(BaseModel):
     roles_responsibilities: Optional[str] = None
     reporting_to: Optional[List[str]] = None
     module_access: Optional[List[str]] = None
+    approval_departments: Optional[List[str]] = None
+    approval_stages: Optional[List[str]] = None
+    operations_my_tasks: Optional[bool] = None
+    operations_assign_to_team: Optional[bool] = None
+    operations_departments: Optional[List[str]] = None
+    operations_approval_queue: Optional[str] = None
 
 # Dependency to get DB
 async def get_db():
@@ -77,6 +90,12 @@ async def create_designation(data: DesignationCreate, db=Depends(get_db)):
             "roles_responsibilities": data.roles_responsibilities or "",
             "reporting_to": data.reporting_to or [],
             "module_access": data.module_access or [],
+            "approval_departments": data.approval_departments or [],
+            "approval_stages": data.approval_stages or [],
+            "operations_my_tasks": data.operations_my_tasks if data.operations_my_tasks is not None else True,
+            "operations_assign_to_team": bool(data.operations_assign_to_team),
+            "operations_departments": data.operations_departments or [],
+            "operations_approval_queue": data.operations_approval_queue,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
@@ -109,6 +128,18 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
             update_data["reporting_to"] = data.reporting_to
         if data.module_access is not None:
             update_data["module_access"] = data.module_access
+        if data.approval_departments is not None:
+            update_data["approval_departments"] = data.approval_departments
+        if data.approval_stages is not None:
+            update_data["approval_stages"] = data.approval_stages
+        if data.operations_my_tasks is not None:
+            update_data["operations_my_tasks"] = data.operations_my_tasks
+        if data.operations_assign_to_team is not None:
+            update_data["operations_assign_to_team"] = data.operations_assign_to_team
+        if data.operations_departments is not None:
+            update_data["operations_departments"] = data.operations_departments
+        if data.operations_approval_queue is not None:
+            update_data["operations_approval_queue"] = data.operations_approval_queue
         
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         

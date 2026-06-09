@@ -209,7 +209,12 @@ export default function HRAdminPage() {
     reporting_to: [], 
     module_access: [],
     approval_departments: [],  // Departments this designation can approve
-    approval_stages: []        // Website stages this designation can approve
+    approval_stages: [],       // Website stages this designation can approve
+    // Operations module sub-options
+    operations_my_tasks: true,
+    operations_assign_to_team: false,
+    operations_departments: [],
+    operations_approval_queue: null, // 'pm' | 'operations' | 'ceo'
   });
   const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
   const [editingDesignation, setEditingDesignation] = useState(null);
@@ -1117,7 +1122,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [] });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_approval_queue: null });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -5656,12 +5661,13 @@ function DesignationsDeptsTab({
   const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('designations');
   const [viewDesignation, setViewDesignation] = useState(null);
+  const [showOpsConfigModal, setShowOpsConfigModal] = useState(false);
 
   const MODULES = [
     // Core Modules
     { value: 'calendar', label: 'Calendar' },
     { value: 'my_tasks', label: 'My Tasks' },
-    { value: 'our_tasks', label: 'Operations' },
+    { value: 'our_tasks', label: 'Operations', hasSubOptions: true },
     { value: 'my_profile', label: 'My Profile' },
     
     // Sales
@@ -5982,6 +5988,18 @@ function DesignationsDeptsTab({
                             key={m.value}
                             type="button"
                             onClick={() => {
+                              // Special handling for Operations - open config popup
+                              if (m.value === 'our_tasks') {
+                                // ensure the module is added so the popup is meaningful
+                                setNewDesignation(prev => ({
+                                  ...prev,
+                                  module_access: prev.module_access.includes(m.value)
+                                    ? prev.module_access
+                                    : [...prev.module_access, m.value]
+                                }));
+                                setShowOpsConfigModal(true);
+                                return;
+                              }
                               setNewDesignation(prev => ({
                                 ...prev,
                                 module_access: prev.module_access.includes(m.value)
@@ -6095,6 +6113,163 @@ function DesignationsDeptsTab({
                     <Button onClick={onCreateDesignation} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create</Button>
                   </div>
                 </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Operations Module Configuration Popup */}
+          {showOpsConfigModal && (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]" onClick={() => setShowOpsConfigModal(false)}>
+              <Card className={`${bgCard} border ${borderColor} w-full max-w-xl mx-4`} onClick={(e) => e.stopPropagation()}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                      <ClipboardList className="h-5 w-5 text-[#6366f1]" />
+                      Operations Module — Configuration
+                    </CardTitle>
+                    <button onClick={() => setShowOpsConfigModal(false)} className={textSecondary}>
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {/* 1. Sub-permissions */}
+                  <div>
+                    <Label className={`${textPrimary} mb-2 block`}>Access</Label>
+                    <div className="space-y-2">
+                      <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
+                        <input
+                          type="checkbox"
+                          checked={!!newDesignation.operations_my_tasks}
+                          onChange={(e) => setNewDesignation(prev => ({ ...prev, operations_my_tasks: e.target.checked }))}
+                          className="h-4 w-4 accent-[#6366f1]"
+                          data-testid="ops-cfg-my-tasks"
+                        />
+                        <div>
+                          <div className={`font-medium ${textPrimary}`}>My Tasks</div>
+                          <div className={`text-xs ${textSecondary}`}>Can view only their own tasks</div>
+                        </div>
+                      </label>
+                      <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
+                        <input
+                          type="checkbox"
+                          checked={!!newDesignation.operations_assign_to_team}
+                          onChange={(e) => setNewDesignation(prev => ({ ...prev, operations_assign_to_team: e.target.checked }))}
+                          className="h-4 w-4 accent-[#6366f1]"
+                          data-testid="ops-cfg-assign-team"
+                        />
+                        <div>
+                          <div className={`font-medium ${textPrimary}`}>Assign to Team</div>
+                          <div className={`text-xs ${textSecondary}`}>Can assign tasks to others (department-scoped)</div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 2. Departments — show only when Assign to Team is checked */}
+                  {newDesignation.operations_assign_to_team && (
+                    <div>
+                      <Label className={`${textPrimary} mb-2 block`}>
+                        Allowed Departments
+                        <span className={`ml-2 text-xs font-normal ${textSecondary}`}>(can assign tasks to anyone within these)</span>
+                      </Label>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {APPROVAL_DEPARTMENTS.map(dept => {
+                          const selected = (newDesignation.operations_departments || []).includes(dept.value);
+                          return (
+                            <button
+                              key={dept.value}
+                              type="button"
+                              onClick={() => setNewDesignation(prev => ({
+                                ...prev,
+                                operations_departments: selected
+                                  ? (prev.operations_departments || []).filter(x => x !== dept.value)
+                                  : [...(prev.operations_departments || []), dept.value]
+                              }))}
+                              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border-2 transition-all ${
+                                selected
+                                  ? 'bg-[#6366f1]/20 border-[#6366f1] text-[#6366f1]'
+                                  : `${bgCard} border-transparent ${textSecondary} hover:border-[#6366f1]/50`
+                              }`}
+                              data-testid={`ops-cfg-dept-${dept.value}`}
+                            >
+                              <div className={`w-4 h-4 rounded flex items-center justify-center border-2 ${
+                                selected ? 'bg-[#6366f1] border-[#6366f1]' : (isDark ? 'border-gray-600' : 'border-gray-300')
+                              }`}>
+                                {selected && <Check className="h-3 w-3 text-white" />}
+                              </div>
+                              {dept.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Approval Queue */}
+                  <div>
+                    <Label className={`${textPrimary} mb-2 block`}>Approval Queue</Label>
+                    <p className={`text-xs ${textSecondary} mb-2`}>Tasks created or completed under this designation will route to:</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: 'pm', label: 'PM Approval', color: 'bg-purple-500' },
+                        { value: 'operations', label: 'Operations Approval', color: 'bg-blue-500' },
+                        { value: 'ceo', label: 'CEO Approval', color: 'bg-orange-500' },
+                      ].map(opt => {
+                        const selected = newDesignation.operations_approval_queue === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setNewDesignation(prev => ({
+                              ...prev,
+                              operations_approval_queue: selected ? null : opt.value
+                            }))}
+                            className={`px-3 py-2 rounded-lg text-sm border-2 transition-all ${
+                              selected
+                                ? `${opt.color} text-white border-transparent`
+                                : `${bgSecondary} border-transparent ${textSecondary} hover:opacity-80`
+                            }`}
+                            data-testid={`ops-cfg-approval-${opt.value}`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+                <div className="flex justify-between items-center px-6 pb-6">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      // Remove Operations module entirely and close
+                      setNewDesignation(prev => ({
+                        ...prev,
+                        module_access: prev.module_access.filter(x => x !== 'our_tasks'),
+                        operations_my_tasks: true,
+                        operations_assign_to_team: false,
+                        operations_departments: [],
+                        operations_approval_queue: null,
+                      }));
+                      setShowOpsConfigModal(false);
+                    }}
+                    className="text-[#ef4444]"
+                    data-testid="ops-cfg-remove"
+                  >
+                    Remove Operations Access
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => setShowOpsConfigModal(false)}>Cancel</Button>
+                    <Button
+                      onClick={() => setShowOpsConfigModal(false)}
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      data-testid="ops-cfg-save"
+                    >
+                      <Check className="h-4 w-4 mr-2" /> Save
+                    </Button>
+                  </div>
+                </div>
               </Card>
             </div>
           )}
