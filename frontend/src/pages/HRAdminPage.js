@@ -6422,6 +6422,56 @@ function EnhancedApprovalsTab({
   const leaveApprovals = pendingApprovals?.leaves || [];
   const wfhApprovals = wfhRequests || [];
 
+  // Leave allocation setup (per-month casual/sick)
+  const now = new Date();
+  const [leaveAllocMonth, setLeaveAllocMonth] = useState(now.getMonth() + 1);
+  const [leaveAllocYear, setLeaveAllocYear] = useState(now.getFullYear());
+  const [leaveAlloc, setLeaveAlloc] = useState({ monthly_casual_leave: 2, monthly_sick_leave: 2 });
+  const [leaveAllocSaving, setLeaveAllocSaving] = useState(false);
+
+  useEffect(() => {
+    if (activeSubTab !== 'leave') return;
+    const API = process.env.REACT_APP_BACKEND_URL;
+    const token = localStorage.getItem('token');
+    axios.get(`${API}/api/hr/admin/calendar/${leaveAllocYear}/${leaveAllocMonth}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(res => {
+      setLeaveAlloc({
+        monthly_casual_leave: res.data?.monthly_casual_leave ?? 2,
+        monthly_sick_leave: res.data?.monthly_sick_leave ?? 2,
+      });
+    }).catch(() => { /* defaults */ });
+  }, [activeSubTab, leaveAllocMonth, leaveAllocYear]);
+
+  const handleSaveLeaveAlloc = async () => {
+    const API = process.env.REACT_APP_BACKEND_URL;
+    const token = localStorage.getItem('token');
+    setLeaveAllocSaving(true);
+    try {
+      // Fetch existing calendar so we don't wipe other fields
+      let existing = {};
+      try {
+        const cur = await axios.get(`${API}/api/hr/admin/calendar/${leaveAllocYear}/${leaveAllocMonth}`, { headers: { Authorization: `Bearer ${token}` } });
+        existing = cur.data || {};
+      } catch { /* ignore */ }
+      const payload = {
+        holidays: existing.holidays || [],
+        working_days: existing.working_days || 22,
+        special_working_days: existing.special_working_days || [],
+        monthly_casual_leave: Number(leaveAlloc.monthly_casual_leave) || 0,
+        monthly_sick_leave: Number(leaveAlloc.monthly_sick_leave) || 0,
+      };
+      await axios.put(`${API}/api/hr/admin/calendar/${leaveAllocYear}/${leaveAllocMonth}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success('Leave allocation saved for the month');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save allocation');
+    } finally {
+      setLeaveAllocSaving(false);
+    }
+  };
+
   // Save attendance rules
   const handleSaveRules = () => {
     setAttendanceRules({ ...editingRules });
@@ -6874,6 +6924,76 @@ function EnhancedApprovalsTab({
       {/* Leave Approvals Tab */}
       {activeSubTab === 'leave' && (
         <div className="space-y-3">
+          {/* Monthly Leave Allocation Setup (HR Admin) */}
+          {canEdit && (
+            <Card className={`${bgCard} border ${borderColor}`} data-testid="leave-allocation-setup">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+                  <div>
+                    <h3 className={`text-sm font-semibold ${textPrimary}`}>Monthly Leave Allocation</h3>
+                    <p className={`text-xs ${textSecondary}`}>Set how many casual & sick leaves employees get for the selected month</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={leaveAllocMonth}
+                      onChange={(e) => setLeaveAllocMonth(Number(e.target.value))}
+                      className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                      data-testid="leave-alloc-month"
+                    >
+                      {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                        <option key={i} value={i + 1}>{m}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={leaveAllocYear}
+                      onChange={(e) => setLeaveAllocYear(Number(e.target.value))}
+                      className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                      data-testid="leave-alloc-year"
+                    >
+                      {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <Label className={`${textPrimary} text-xs`}>Casual Leave / month</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={leaveAlloc.monthly_casual_leave}
+                      onChange={(e) => setLeaveAlloc(prev => ({ ...prev, monthly_casual_leave: e.target.value }))}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      data-testid="leave-alloc-casual"
+                    />
+                  </div>
+                  <div>
+                    <Label className={`${textPrimary} text-xs`}>Sick Leave / month</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={leaveAlloc.monthly_sick_leave}
+                      onChange={(e) => setLeaveAlloc(prev => ({ ...prev, monthly_sick_leave: e.target.value }))}
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      data-testid="leave-alloc-sick"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      onClick={handleSaveLeaveAlloc}
+                      disabled={leaveAllocSaving}
+                      className="w-full bg-[#10b981] hover:bg-[#059669] text-white"
+                      data-testid="leave-alloc-save"
+                    >
+                      {leaveAllocSaving ? 'Saving…' : 'Save allocation'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Filter */}
           <div className="flex gap-2">
             {['all', 'pending', 'approved', 'rejected'].map(f => (
