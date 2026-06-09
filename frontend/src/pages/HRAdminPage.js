@@ -5661,6 +5661,7 @@ function DesignationsDeptsTab({
   const [activeSubTab, setActiveSubTab] = useState('designations');
   const [viewDesignation, setViewDesignation] = useState(null);
   const [showOpsConfigModal, setShowOpsConfigModal] = useState(false);
+  const [opsCfgMode, setOpsCfgMode] = useState('create'); // 'create' | 'edit' — which designation state OpsConfig modal writes to
 
   const MODULES = [
     // Core Modules
@@ -5909,6 +5910,18 @@ function DesignationsDeptsTab({
                             key={m.value}
                             type="button"
                             onClick={() => {
+                              // Operations module → open config popup (edit mode)
+                              if (m.value === 'operations') {
+                                setEditingDesignation(prev => ({
+                                  ...prev,
+                                  module_access: (prev.module_access || []).includes(m.value)
+                                    ? (prev.module_access || [])
+                                    : [...(prev.module_access || []), m.value]
+                                }));
+                                setOpsCfgMode('edit');
+                                setShowOpsConfigModal(true);
+                                return;
+                              }
                               const access = editingDesignation.module_access || [];
                               setEditingDesignation(prev => ({
                                 ...prev,
@@ -5917,12 +5930,13 @@ function DesignationsDeptsTab({
                                   : [...access, m.value]
                               }));
                             }}
-                            className={`px-3 py-1 rounded-full text-sm ${
+                            className={`px-3 py-1 rounded-full text-sm flex items-center gap-1.5 ${
                               (editingDesignation.module_access || []).includes(m.value)
                                 ? 'bg-[#6366f1] text-white'
                                 : `${bgSecondary} ${textSecondary}`
                             }`}
                           >
+                            {m.hasSubOptions && <ChevronDown className="h-3 w-3" />}
                             {m.label}
                           </button>
                         ))}
@@ -5995,6 +6009,7 @@ function DesignationsDeptsTab({
                                     ? prev.module_access
                                     : [...prev.module_access, m.value]
                                 }));
+                                setOpsCfgMode('create');
                                 setShowOpsConfigModal(true);
                                 return;
                               }
@@ -6116,7 +6131,10 @@ function DesignationsDeptsTab({
           )}
 
           {/* Operations Module Configuration Popup */}
-          {showOpsConfigModal && (
+          {showOpsConfigModal && (() => {
+            const opsState = opsCfgMode === 'edit' ? (editingDesignation || {}) : newDesignation;
+            const setOpsState = opsCfgMode === 'edit' ? setEditingDesignation : setNewDesignation;
+            return (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]" onClick={() => setShowOpsConfigModal(false)}>
               <Card className={`${bgCard} border ${borderColor} w-full max-w-xl mx-4`} onClick={(e) => e.stopPropagation()}>
                 <CardHeader>
@@ -6138,8 +6156,8 @@ function DesignationsDeptsTab({
                       <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
                         <input
                           type="checkbox"
-                          checked={!!newDesignation.operations_my_tasks}
-                          onChange={(e) => setNewDesignation(prev => ({ ...prev, operations_my_tasks: e.target.checked }))}
+                          checked={!!opsState.operations_my_tasks}
+                          onChange={(e) => setOpsState(prev => ({ ...prev, operations_my_tasks: e.target.checked }))}
                           className="h-4 w-4 accent-[#6366f1]"
                           data-testid="ops-cfg-my-tasks"
                         />
@@ -6151,8 +6169,8 @@ function DesignationsDeptsTab({
                       <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
                         <input
                           type="checkbox"
-                          checked={!!newDesignation.operations_assign_to_team}
-                          onChange={(e) => setNewDesignation(prev => ({ ...prev, operations_assign_to_team: e.target.checked }))}
+                          checked={!!opsState.operations_assign_to_team}
+                          onChange={(e) => setOpsState(prev => ({ ...prev, operations_assign_to_team: e.target.checked }))}
                           className="h-4 w-4 accent-[#6366f1]"
                           data-testid="ops-cfg-assign-team"
                         />
@@ -6165,7 +6183,7 @@ function DesignationsDeptsTab({
                   </div>
 
                   {/* 2. Departments — show only when Assign to Team is checked */}
-                  {newDesignation.operations_assign_to_team && (
+                  {opsState.operations_assign_to_team && (
                     <div>
                       <Label className={`${textPrimary} mb-2 block`}>
                         Allowed Departments
@@ -6173,12 +6191,12 @@ function DesignationsDeptsTab({
                       </Label>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                         {APPROVAL_DEPARTMENTS.map(dept => {
-                          const selected = (newDesignation.operations_departments || []).includes(dept.value);
+                          const selected = (opsState.operations_departments || []).includes(dept.value);
                           return (
                             <button
                               key={dept.value}
                               type="button"
-                              onClick={() => setNewDesignation(prev => ({
+                              onClick={() => setOpsState(prev => ({
                                 ...prev,
                                 operations_departments: selected
                                   ? (prev.operations_departments || []).filter(x => x !== dept.value)
@@ -6214,12 +6232,12 @@ function DesignationsDeptsTab({
                         { value: 'operations', label: 'Operations Approval', color: 'bg-blue-500' },
                         { value: 'ceo', label: 'CEO Approval', color: 'bg-orange-500' },
                       ].map(opt => {
-                        const selected = newDesignation.operations_approval_queue === opt.value;
+                        const selected = opsState.operations_approval_queue === opt.value;
                         return (
                           <button
                             key={opt.value}
                             type="button"
-                            onClick={() => setNewDesignation(prev => ({
+                            onClick={() => setOpsState(prev => ({
                               ...prev,
                               operations_approval_queue: selected ? null : opt.value
                             }))}
@@ -6242,9 +6260,9 @@ function DesignationsDeptsTab({
                     variant="ghost"
                     onClick={() => {
                       // Remove Operations module entirely and close
-                      setNewDesignation(prev => ({
+                      setOpsState(prev => ({
                         ...prev,
-                        module_access: prev.module_access.filter(x => x !== 'operations'),
+                        module_access: (prev.module_access || []).filter(x => x !== 'operations'),
                         operations_my_tasks: true,
                         operations_assign_to_team: false,
                         operations_departments: [],
@@ -6270,7 +6288,8 @@ function DesignationsDeptsTab({
                 </div>
               </Card>
             </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
