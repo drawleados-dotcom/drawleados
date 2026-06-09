@@ -47,7 +47,7 @@ const MODULES = [
   // Core Modules
   { value: 'calendar', label: 'Calendar', icon: Calendar },
   { value: 'my_tasks', label: 'My Tasks', icon: ClipboardList },
-  { value: 'our_tasks', label: 'Our Tasks', icon: ClipboardList },
+  { value: 'our_tasks', label: 'Operations', icon: ClipboardList },
   { value: 'my_profile', label: 'My Profile', icon: User },
   
   // Sales
@@ -5661,7 +5661,7 @@ function DesignationsDeptsTab({
     // Core Modules
     { value: 'calendar', label: 'Calendar' },
     { value: 'my_tasks', label: 'My Tasks' },
-    { value: 'our_tasks', label: 'Our Tasks' },
+    { value: 'our_tasks', label: 'Operations' },
     { value: 'my_profile', label: 'My Profile' },
     
     // Sales
