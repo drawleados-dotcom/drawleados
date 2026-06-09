@@ -33,6 +33,10 @@ class TaskCreate(BaseModel):
     custom_recurrence: Optional[CustomRecurrence] = None
     status: str = "pending"  # pending, in_progress, completed, on_hold
     work_link: Optional[str] = None  # Link to work file/project
+    department: Optional[str] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    category: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     task_name: Optional[str] = None
@@ -48,6 +52,10 @@ class TaskUpdate(BaseModel):
     custom_recurrence: Optional[Dict[str, Any]] = None
     status: Optional[str] = None
     work_link: Optional[str] = None
+    department: Optional[str] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    category: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -263,6 +271,10 @@ async def create_task(task_data: TaskCreate, request: Request):
             "custom_recurrence": task_data.custom_recurrence.dict() if task_data.custom_recurrence else None,
             "status": task_data.status,
             "work_link": task_data.work_link,
+            "department": task_data.department,
+            "project_id": task_data.project_id,
+            "project_name": task_data.project_name,
+            "category": task_data.category,
             "created_by": user.user_id,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),

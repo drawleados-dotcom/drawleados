@@ -100,8 +100,15 @@ export default function OurTasksPage() {
       occurrences: 13
     },
     status: 'pending',
-    work_link: ''
+    work_link: '',
+    department: '',
+    project_id: '',
+    project_name: '',
+    category: '',
   });
+
+  const [projectsForTask, setProjectsForTask] = useState([]);
+  const [deptCategoriesForTask, setDeptCategoriesForTask] = useState([]);
   
   const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
 
@@ -126,10 +133,24 @@ export default function OurTasksPage() {
     }
   }, []);
 
+  const loadProjectsAndCategories = useCallback(async () => {
+    try {
+      const [pRes, dRes] = await Promise.all([
+        axios.get(`${API}/api/projects`, { headers }),
+        axios.get(`${API}/api/department-categories`, { headers }),
+      ]);
+      setProjectsForTask(pRes.data || []);
+      setDeptCategoriesForTask(dRes.data || []);
+    } catch (error) {
+      console.error('Error loading projects/categories:', error);
+    }
+  }, []);
+
   useEffect(() => {
     loadTasks();
     loadUsers();
-  }, [loadTasks, loadUsers]);
+    loadProjectsAndCategories();
+  }, [loadTasks, loadUsers, loadProjectsAndCategories]);
 
   // Create task
   const handleCreateTask = async () => {
@@ -445,7 +466,11 @@ export default function OurTasksPage() {
         occurrences: 13
       },
       status: 'pending',
-      work_link: ''
+      work_link: '',
+      department: '',
+      project_id: '',
+      project_name: '',
+      category: '',
     });
     setShowCustomRecurrence(false);
   };
@@ -1455,6 +1480,72 @@ export default function OurTasksPage() {
                         {getRecurrenceLabel(formData)}
                       </p>
                     )}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className={textPrimary}>Department</Label>
+                  <Select
+                    value={formData.department || 'none'}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '' }))}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— None —</SelectItem>
+                      {deptCategoriesForTask.map(d => (
+                        <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className={textPrimary}>Project</Label>
+                    <Select
+                      value={formData.project_id || 'none'}
+                      onValueChange={(v) => {
+                        if (v === 'none') {
+                          setFormData(prev => ({ ...prev, project_id: '', project_name: '' }));
+                        } else {
+                          const proj = projectsForTask.find(p => p.project_id === v);
+                          setFormData(prev => ({ ...prev, project_id: v, project_name: proj?.name || '' }));
+                        }
+                      }}
+                      disabled={!formData.department}
+                    >
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-project">
+                        <SelectValue placeholder={formData.department ? 'Select project' : 'Pick dept first'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— None —</SelectItem>
+                        {projectsForTask
+                          .filter(p => !formData.department || (p.departments || []).includes(formData.department))
+                          .map(p => (
+                            <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Category</Label>
+                    <Select
+                      value={formData.category || 'none'}
+                      onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
+                      disabled={!formData.department}
+                    >
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-category">
+                        <SelectValue placeholder={formData.department ? 'Select category' : 'Pick dept first'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— None —</SelectItem>
+                        {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.categories || []).map(c => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
