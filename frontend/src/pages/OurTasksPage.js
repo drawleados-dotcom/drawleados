@@ -696,7 +696,11 @@ export default function OurTasksPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className={`text-2xl font-bold ${textPrimary}`}>Operations</h1>
+            <h1 className="text-4xl font-bold tracking-tight mb-1">
+              <span className="bg-gradient-to-r from-[#10b981] to-[#059669] bg-clip-text text-transparent">
+                Hi, {user?.name || 'User'}
+              </span>
+            </h1>
             <p className={textSecondary}>Team-wide task management for all users</p>
           </div>
           <Button onClick={() => setShowCreateModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
