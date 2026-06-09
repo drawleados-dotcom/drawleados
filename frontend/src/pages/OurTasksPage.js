@@ -782,6 +782,7 @@ export default function OurTasksPage() {
             bgSecondary={bgSecondary}
             borderColor={borderColor}
             headers={headers}
+            currentUser={user}
             onTaskCreated={loadTasks}
           />
         )}

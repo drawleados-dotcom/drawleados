@@ -22,8 +22,12 @@ const DEPARTMENTS = [
 ];
 
 export default function ProjectsPanel({
-  isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated,
+  isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
 }) {
+  // Permission: Super Admin / Admin / Operations dept users can create + edit projects
+  const role = (currentUser?.role || '').toLowerCase();
+  const dept = (currentUser?.department || '').toLowerCase();
+  const canManageProjects = role === 'super_admin' || role === 'admin' || dept === 'operations';
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -140,7 +144,7 @@ export default function ProjectsPanel({
             <h2 className={`text-2xl font-bold ${textPrimary}`}>{selectedProject.name}</h2>
             <p className={textSecondary}>{selectedProject.description}</p>
           </div>
-          <Button onClick={() => setShowAddTask(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white">
+          <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
             <Plus className="h-4 w-4 mr-1" /> Add Task
           </Button>
         </div>
@@ -316,9 +320,11 @@ export default function ProjectsPanel({
     <div className="space-y-4" data-testid="projects-panel">
       <div className="flex items-center justify-between">
         <h2 className={`text-xl font-semibold ${textPrimary}`}>Projects</h2>
-        <Button onClick={() => setShowCreateProject(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="create-project-btn">
-          <Plus className="h-4 w-4 mr-1" /> Create Project
-        </Button>
+        {canManageProjects && (
+          <Button onClick={() => setShowCreateProject(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="create-project-btn">
+            <Plus className="h-4 w-4 mr-1" /> Create Project
+          </Button>
+        )}
       </div>
 
       {loading ? (

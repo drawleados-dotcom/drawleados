@@ -876,7 +876,16 @@ async def google_session(session_id: str, response: Response):
 
 @api_router.get("/auth/me")
 async def get_me(user: User = Depends(get_current_user)):
-    return user.model_dump(exclude={"password_hash"})
+    data = user.model_dump(exclude={"password_hash"})
+    # Enrich with department + designation from the DB (not in the User Pydantic model)
+    extra = await db.users.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "department": 1, "designation": 1}
+    )
+    if extra:
+        data["department"] = extra.get("department", "")
+        data["designation"] = extra.get("designation", "")
+    return data
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
