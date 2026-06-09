@@ -1009,6 +1009,7 @@ export default function OurTasksPage() {
                   <tr>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Task</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Category</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Created / Assigned</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Due Date</th>
                     <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Link</th>
@@ -1022,11 +1023,11 @@ export default function OurTasksPage() {
                 <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
+                      <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
                     </tr>
                   ) : filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>
+                      <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                         <p>No tasks found</p>
                         <p className="text-sm">
@@ -1060,6 +1061,18 @@ export default function OurTasksPage() {
                         <Badge className={statusColors[task.status] || statusColors.pending}>
                           {task.status?.replace('_', ' ') || 'Pending'}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-sm" data-testid={`category-cell-${task.task_id}`}>
+                        {task.category ? (
+                          <div className="flex flex-col gap-1">
+                            <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs w-fit">{task.category}</Badge>
+                            {task.department && (
+                              <span className={`text-xs ${textSecondary}`}>{task.department}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={textSecondary}>—</span>
+                        )}
                       </td>
                       <td className={`px-4 py-3 text-sm`}>
                         <div className="space-y-1">
