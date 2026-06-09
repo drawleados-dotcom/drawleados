@@ -44,24 +44,21 @@ class ProjectTaskCreate(BaseModel):
     category: Optional[str] = None
 
 
-async def _is_operations_or_admin(user, db) -> bool:
-    """User can create/edit projects if they are super_admin, admin, or in Operations department.
-
-    The auth `User` model doesn't include `department`, so we look it up from the users
-    collection when needed.
+async def _is_operation_head_or_admin(user, db) -> bool:
+    """User can create/edit projects if they are super_admin, admin, or have
+    designation == 'Operation Head'.
     """
     role = (getattr(user, "role", "") or "").lower()
     if role in {"super_admin", "admin"}:
         return True
-    # Check department from DB
-    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "department": 1, "designation": 1, "module_access": 1})
+    user_doc = await db.users.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "designation": 1}
+    )
     if not user_doc:
         return False
-    dept = (user_doc.get("department") or "").lower()
-    desg = (user_doc.get("designation") or "").lower()
-    if dept == "operations" or "operations" in desg:
-        return True
-    return False
+    desg = (user_doc.get("designation") or "").strip().lower()
+    return desg == "operation head"
 
 
 @projects_router.get("")
@@ -70,7 +67,7 @@ async def list_projects(request: Request):
     user = await get_current_user(request)
 
     role = (user.role or "").lower()
-    is_admin_or_ops = await _is_operations_or_admin(user, db)
+    is_admin_or_ops = await _is_operation_head_or_admin(user, db)
 
     # Super Admin / Admin / Operations → see ALL projects
     # Everyone else → only projects they're a member of or created
@@ -98,8 +95,8 @@ async def create_project(payload: ProjectCreate, request: Request):
     from server import get_current_user, db
     user = await get_current_user(request)
 
-    if not await _is_operations_or_admin(user, db):
-        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operations can create projects")
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can create projects")
 
     members = list(payload.members or [])
     # Ensure creator is always a member (so they can see their own project)
@@ -142,8 +139,8 @@ async def get_project(project_id: str, request: Request):
 async def update_project(project_id: str, payload: ProjectUpdate, request: Request):
     from server import get_current_user, db
     user = await get_current_user(request)
-    if not await _is_operations_or_admin(user, db):
-        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operations can edit projects")
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can edit projects")
     update_data = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -159,8 +156,8 @@ async def update_project(project_id: str, payload: ProjectUpdate, request: Reque
 async def delete_project(project_id: str, request: Request):
     from server import get_current_user, db
     user = await get_current_user(request)
-    if not await _is_operations_or_admin(user, db):
-        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operations can delete projects")
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can delete projects")
     # Soft-detach tasks from the deleted project rather than deleting them
     await db.our_tasks.update_many(
         {"project_id": project_id},

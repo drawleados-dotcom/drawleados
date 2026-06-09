@@ -24,10 +24,10 @@ const DEPARTMENTS = [
 export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
 }) {
-  // Permission: Super Admin / Admin / Operations dept users can create + edit projects
+  // Permission: Super Admin / Admin / Operation Head designation can create + edit projects
   const role = (currentUser?.role || '').toLowerCase();
-  const dept = (currentUser?.department || '').toLowerCase();
-  const canManageProjects = role === 'super_admin' || role === 'admin' || dept === 'operations';
+  const desg = (currentUser?.designation || '').toLowerCase().trim();
+  const canManageProjects = role === 'super_admin' || role === 'admin' || desg === 'operation head';
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
