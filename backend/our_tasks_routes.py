@@ -65,6 +65,7 @@ class ApprovalRequestPayload(BaseModel):
     approver_user_id: Optional[str] = None
     department: Optional[str] = None
     note: Optional[str] = None
+    work_link: Optional[str] = None
 
 
 # Helper function to check if a task should appear on a specific date based on recurrence
@@ -692,6 +693,10 @@ async def request_task_approval(task_id: str, payload: ApprovalRequestPayload, r
     if payload.approver_role not in VALID_APPROVER_ROLES:
         raise HTTPException(status_code=400, detail=f"Invalid approver_role. Allowed: {sorted(VALID_APPROVER_ROLES)}")
 
+    work_link = (payload.work_link or "").strip()
+    if not work_link:
+        raise HTTPException(status_code=400, detail="Work link is required to send for approval")
+
     task = await db.our_tasks.find_one({"task_id": task_id})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -701,6 +706,7 @@ async def request_task_approval(task_id: str, payload: ApprovalRequestPayload, r
         "approver_user_id": payload.approver_user_id,
         "department": payload.department,
         "note": payload.note,
+        "work_link": work_link,
         "status": "pending",  # pending | approved | rejected
         "requested_by": user.user_id,
         "requested_by_name": user.name,
@@ -714,6 +720,7 @@ async def request_task_approval(task_id: str, payload: ApprovalRequestPayload, r
         {"task_id": task_id},
         {"$set": {
             "approval_request": approval_request,
+            "work_link": work_link,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }}
     )

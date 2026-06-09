@@ -51,7 +51,7 @@ export default function OurTasksPage() {
   const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}}
   // Approval request popup
   const [approvalTask, setApprovalTask] = useState(null); // task currently being submitted for approval
-  const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', department: '', note: '' });
+  const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', department: '', note: '', work_link: '' });
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
   const [showFilters, setShowFilters] = useState(true); // Show filters by default
   
@@ -1194,6 +1194,8 @@ export default function OurTasksPage() {
                                   approver_role: task.approval_request?.approver_role || '',
                                   department: task.approval_request?.department || '',
                                   note: '',
+                                  // Auto-fetch the existing work link from the task / previous request
+                                  work_link: task.approval_request?.work_link || task.work_link || '',
                                 });
                               }}
                               data-testid={`approve-btn-${task.task_id}`}
@@ -1832,6 +1834,24 @@ export default function OurTasksPage() {
                   </div>
                 </div>
 
+                {/* Work Link (mandatory) */}
+                <div>
+                  <Label className={`${textPrimary} mb-2 block`}>
+                    Work Link <span className="text-[#ef4444]">*</span>
+                    {approvalTask.work_link && (
+                      <span className={`ml-2 text-xs font-normal ${textSecondary}`}>(auto-fetched from task)</span>
+                    )}
+                  </Label>
+                  <input
+                    type="url"
+                    value={approvalDraft.work_link}
+                    onChange={(e) => setApprovalDraft(prev => ({ ...prev, work_link: e.target.value }))}
+                    placeholder="https://figma.com/... or drive.google.com/..."
+                    className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="approval-work-link"
+                  />
+                </div>
+
                 {/* Department */}
                 <div>
                   <Label className={`${textPrimary} mb-2 block`}>Department <span className={`text-xs font-normal ${textSecondary}`}>(optional)</span></Label>
@@ -1874,16 +1894,20 @@ export default function OurTasksPage() {
                       toast.error('Please select an approver');
                       return;
                     }
+                    if (!approvalDraft.work_link || !approvalDraft.work_link.trim()) {
+                      toast.error('Work link is required');
+                      return;
+                    }
                     setApprovalSubmitting(true);
                     try {
                       await axios.post(
                         `${API}/api/our-tasks/tasks/${approvalTask.task_id}/request-approval`,
-                        approvalDraft,
+                        { ...approvalDraft, work_link: approvalDraft.work_link.trim() },
                         { headers }
                       );
                       toast.success('Approval request sent');
                       setApprovalTask(null);
-                      setApprovalDraft({ approver_role: '', department: '', note: '' });
+                      setApprovalDraft({ approver_role: '', department: '', note: '', work_link: '' });
                       loadTasks();
                     } catch (error) {
                       toast.error(error.response?.data?.detail || 'Failed to send for approval');

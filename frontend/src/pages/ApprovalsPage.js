@@ -480,6 +480,18 @@ export default function ApprovalsPage({ embedded = false }) {
                           {req.note && (
                             <p className={`text-sm ${textPrimary} mt-2 italic`}>&ldquo;{req.note}&rdquo;</p>
                           )}
+                          {req.work_link && (
+                            <a
+                              href={req.work_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-[#6366f1] hover:underline mt-2 inline-flex items-center gap-1"
+                              data-testid={`task-work-link-${task.task_id}`}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View Work Link
+                            </a>
+                          )}
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -556,6 +568,18 @@ export default function ApprovalsPage({ embedded = false }) {
                   </p>
                   {decisionTask.approval_request?.note && (
                     <p className={`text-sm ${textPrimary} mt-2 italic`}>&ldquo;{decisionTask.approval_request.note}&rdquo;</p>
+                  )}
+                  {decisionTask.approval_request?.work_link && (
+                    <a
+                      href={decisionTask.approval_request.work_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-[#6366f1] hover:underline mt-2 inline-flex items-center gap-1"
+                      data-testid="decision-work-link"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      View Work Link
+                    </a>
                   )}
                 </div>
 
