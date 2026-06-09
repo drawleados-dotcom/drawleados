@@ -18,6 +18,7 @@ projects_router = APIRouter(prefix="/projects", tags=["projects"])
 class ProjectCreate(BaseModel):
     name: str
     description: Optional[str] = ""
+    start_date: Optional[str] = None  # ISO date string
     due_date: Optional[str] = None  # ISO date string
     members: Optional[List[str]] = []   # user_ids
     departments: Optional[List[str]] = []  # department keys: website, social_media, meta, seo, finance, hr, business_dev, erp
@@ -27,6 +28,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    start_date: Optional[str] = None
     due_date: Optional[str] = None
     members: Optional[List[str]] = None
     departments: Optional[List[str]] = None
@@ -107,6 +109,7 @@ async def create_project(payload: ProjectCreate, request: Request):
         "project_id": f"prj_{uuid.uuid4().hex[:12]}",
         "name": payload.name.strip(),
         "description": (payload.description or "").strip(),
+        "start_date": payload.start_date,
         "due_date": payload.due_date,
         "members": members,
         "departments": payload.departments or [],

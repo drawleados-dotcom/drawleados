@@ -36,7 +36,7 @@ export default function ProjectsPanel({
   const [showAddTask, setShowAddTask] = useState(false);
   const [deptFilter, setDeptFilter] = useState('all');
 
-  const [projectDraft, setProjectDraft] = useState({ name: '', description: '', due_date: '', departments: [], members: [] });
+  const [projectDraft, setProjectDraft] = useState({ name: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
   const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [activeCategoryTab, setActiveCategoryTab] = useState('all');
@@ -88,7 +88,7 @@ export default function ProjectsPanel({
     try {
       await axios.post(`${API}/api/projects`, projectDraft, { headers });
       toast.success('Project created');
-      setProjectDraft({ name: '', description: '', due_date: '', departments: [], members: [] });
+      setProjectDraft({ name: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
       setShowCreateProject(false);
       loadProjects();
     } catch (e) {
@@ -126,6 +126,22 @@ export default function ProjectsPanel({
       toast.error(e.response?.data?.detail || 'Failed to update team');
     } finally {
       setTeamSaving(false);
+    }
+  };
+
+  const updateProjectField = async (field, value) => {
+    if (!selectedProject) return;
+    try {
+      await axios.patch(
+        `${API}/api/projects/${selectedProject.project_id}`,
+        { [field]: value || null },
+        { headers }
+      );
+      setSelectedProject(prev => prev ? { ...prev, [field]: value || null } : prev);
+      loadProjects();
+      toast.success('Project updated');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update project');
     }
   };
 
@@ -212,11 +228,69 @@ export default function ProjectsPanel({
         </div>
 
         <Card className={`${bgCard} border ${borderColor}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-6 text-sm">
-              <div className="flex items-center gap-2"><Calendar className={`h-4 w-4 ${textSecondary}`} /><span className={textPrimary}>Due: {fmtDate(selectedProject.due_date)}</span></div>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-6 flex-wrap text-sm">
+              <div className="flex items-center gap-2">
+                <Calendar className={`h-4 w-4 ${textSecondary}`} />
+                <span className={textSecondary}>Start:</span>
+                {canManageProjects ? (
+                  <input
+                    type="date"
+                    value={(selectedProject.start_date || '').slice(0, 10)}
+                    onChange={(e) => updateProjectField('start_date', e.target.value)}
+                    className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="project-edit-start-date"
+                  />
+                ) : (
+                  <span className={textPrimary}>{fmtDate(selectedProject.start_date)}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className={`h-4 w-4 ${textSecondary}`} />
+                <span className={textSecondary}>Due:</span>
+                {canManageProjects ? (
+                  <input
+                    type="date"
+                    value={(selectedProject.due_date || '').slice(0, 10)}
+                    onChange={(e) => updateProjectField('due_date', e.target.value)}
+                    className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="project-edit-due-date"
+                  />
+                ) : (
+                  <span className={textPrimary}>{fmtDate(selectedProject.due_date)}</span>
+                )}
+              </div>
               <div className="flex items-center gap-2"><ListChecks className={`h-4 w-4 ${textSecondary}`} /><span className={textPrimary}>{selectedProject.tasks?.length || 0} tasks</span></div>
               <Badge className="bg-[#10b981]/20 text-[#10b981]">{selectedProject.status || 'active'}</Badge>
+            </div>
+
+            {/* Summary cards — counts respect the task Date filter above (filteredTasks) */}
+            <div className="grid grid-cols-3 gap-3 pt-1">
+              {(() => {
+                const todoCount = filteredTasks.filter(t => (t.status || 'pending') === 'pending').length;
+                const inProgCount = filteredTasks.filter(t => t.status === 'in_progress').length;
+                const doneCount = filteredTasks.filter(t => t.status === 'completed').length;
+                const cards = [
+                  { label: 'To Do', value: todoCount, color: 'text-[#71717a]', accent: 'bg-[#71717a]/15' },
+                  { label: 'Pending', value: inProgCount, color: 'text-[#3b82f6]', accent: 'bg-[#3b82f6]/15' },
+                  { label: 'Completed', value: doneCount, color: 'text-[#10b981]', accent: 'bg-[#10b981]/15' },
+                ];
+                return cards.map(c => (
+                  <div
+                    key={c.label}
+                    className={`rounded-lg border ${borderColor} ${bgSecondary} p-3 flex items-center justify-between`}
+                    data-testid={`project-summary-${c.label.toLowerCase().replace(' ', '-')}`}
+                  >
+                    <div>
+                      <p className={`text-xs ${textSecondary}`}>{c.label}</p>
+                      <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
+                    </div>
+                    <div className={`w-8 h-8 rounded-full ${c.accent} flex items-center justify-center`}>
+                      <ListChecks className={`h-4 w-4 ${c.color}`} />
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
           </CardContent>
         </Card>
@@ -610,7 +684,16 @@ export default function ProjectsPanel({
               </div>
               <div><Label className={textPrimary}>Project Name *</Label><Input value={projectDraft.name} onChange={(e) => setProjectDraft({ ...projectDraft, name: e.target.value })} placeholder="e.g. Website Revamp" data-testid="project-name-input" /></div>
               <div><Label className={textPrimary}>Description</Label><Input value={projectDraft.description} onChange={(e) => setProjectDraft({ ...projectDraft, description: e.target.value })} placeholder="What is this project about?" /></div>
-              <div><Label className={textPrimary}>Due Date</Label><Input type="date" value={projectDraft.due_date} onChange={(e) => setProjectDraft({ ...projectDraft, due_date: e.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Start Date</Label>
+                  <Input type="date" value={projectDraft.start_date} onChange={(e) => setProjectDraft({ ...projectDraft, start_date: e.target.value })} data-testid="project-start-date" />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Due Date</Label>
+                  <Input type="date" value={projectDraft.due_date} onChange={(e) => setProjectDraft({ ...projectDraft, due_date: e.target.value })} />
+                </div>
+              </div>
 
               {/* Departments */}
               <div>
