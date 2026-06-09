@@ -140,23 +140,32 @@ export default function OurTasksPage() {
   const [projectsCount, setProjectsCount] = useState(0);
   const [departmentsCount, setDepartmentsCount] = useState(0);
   const [approvalsCount, setApprovalsCount] = useState(0);
+  // Current user's designation config (for Assign-to-Team monitoring scope)
+  const [myDesignation, setMyDesignation] = useState(null);
 
   const loadProjectsAndCategories = useCallback(async () => {
     try {
-      const [pRes, dRes, aRes] = await Promise.all([
+      const [pRes, dRes, aRes, desRes] = await Promise.all([
         axios.get(`${API}/api/projects`, { headers }),
         axios.get(`${API}/api/department-categories`, { headers }),
         axios.get(`${API}/api/our-tasks/approvals/pending`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/api/designations/`, { headers }).catch(() => ({ data: [] })),
       ]);
       setProjectsForTask(pRes.data || []);
       setDeptCategoriesForTask(dRes.data || []);
       setProjectsCount((pRes.data || []).length);
       setDepartmentsCount((dRes.data || []).length);
       setApprovalsCount((aRes.data || []).length);
+      // Find my designation
+      const userDesg = (user?.designation || '').toLowerCase().trim();
+      const found = (desRes.data || []).find(
+        d => (d.title || '').toLowerCase().trim() === userDesg
+      );
+      setMyDesignation(found || null);
     } catch (error) {
       console.error('Error loading projects/categories:', error);
     }
-  }, []);
+  }, [user?.designation]);
 
   useEffect(() => {
     loadTasks();
@@ -602,8 +611,20 @@ export default function OurTasksPage() {
       // Tasks assigned to me (by others) OR tasks I created for myself
       if (!(task.assigned_to === user?.user_id)) return false;
     } else if (mainTab === 'assign_to_team') {
-      // Tasks I created and assigned to others (not myself)
-      if (!(task.created_by === user?.user_id && task.assigned_to !== user?.user_id)) return false;
+      // I can see this team task if any of:
+      //  - I created it and assigned to someone else (existing behaviour)
+      //  - I'm Super Admin / Admin / Operation Head (full visibility across team)
+      //  - The task's department is one of my designation's allowed Operations departments
+      //    (lets the Ops Head / dept lead monitor team tasks in their depts)
+      const role = (user?.role || '').toLowerCase();
+      const desg = (user?.designation || '').toLowerCase().trim();
+      const isPrivileged = role === 'super_admin' || role === 'admin' || desg === 'operation head';
+      const myDepts = (myDesignation?.operations_departments || []);
+      const createdByMe = task.created_by === user?.user_id && task.assigned_to !== user?.user_id;
+      const inMyDept = task.department && myDepts.includes(task.department) && task.assigned_to !== user?.user_id;
+      if (!(createdByMe || isPrivileged || inMyDept)) return false;
+      // For privileged users, still exclude tasks they themselves are doing — Assign to Team shouldn't list their own My Tasks
+      if (isPrivileged && task.assigned_to === user?.user_id) return false;
     }
     
     // Quick filter (tabs)
@@ -674,7 +695,17 @@ export default function OurTasksPage() {
 
   // Stats - based on main tab
   const assignedToMeTasks = tasks.filter(t => t.assigned_to === user?.user_id && t.created_by !== user?.user_id);
-  const assignedToTeamTasks = tasks.filter(t => t.created_by === user?.user_id && t.assigned_to !== user?.user_id);
+  const _role = (user?.role || '').toLowerCase();
+  const _desg = (user?.designation || '').toLowerCase().trim();
+  const _isPrivileged = _role === 'super_admin' || _role === 'admin' || _desg === 'operation head';
+  const _myDepts = (myDesignation?.operations_departments || []);
+  const assignedToTeamTasks = tasks.filter(t => {
+    if (t.assigned_to === user?.user_id) return false; // exclude my own
+    if (t.created_by === user?.user_id) return true; // tasks I created
+    if (_isPrivileged) return true; // privileged users see all
+    if (t.department && _myDepts.includes(t.department)) return true; // dept monitoring
+    return false;
+  });
   const myOwnTasks = tasks.filter(t => t.created_by === user?.user_id && t.assigned_to === user?.user_id);
   
   const currentTabTasks = mainTab === 'assigned_to_me' 
