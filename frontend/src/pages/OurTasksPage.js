@@ -66,7 +66,9 @@ export default function OurTasksPage() {
     assignedBy: 'all', // all or user_id
     taskType: 'all', // all, general, meeting, follow_up, proposal, call
     status: 'all', // all, pending, in_progress, completed, on_hold
-    singleDate: '' // for single date filter
+    singleDate: '', // for single date filter
+    department: 'all', // all or dept_key
+    project: 'all' // all or project_id
   });
   
   const token = localStorage.getItem('session_token');
@@ -634,6 +636,12 @@ export default function OurTasksPage() {
     // Assigned By filter
     if (filters.assignedBy !== 'all' && task.assigned_by !== filters.assignedBy) return false;
     
+    // Department filter
+    if (filters.department !== 'all' && task.department !== filters.department) return false;
+    
+    // Project filter
+    if (filters.project !== 'all' && task.project_id !== filters.project) return false;
+    
     // Type filter
     if (filters.taskType !== 'all' && task.type !== filters.taskType) return false;
     
@@ -653,7 +661,9 @@ export default function OurTasksPage() {
       assignedTo: 'all',
       assignedBy: 'all',
       taskType: 'all',
-      status: 'all'
+      status: 'all',
+      department: 'all',
+      project: 'all'
     });
   };
 
@@ -739,10 +749,6 @@ export default function OurTasksPage() {
             </h1>
             <p className={textSecondary}>Team-wide task management for all users</p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Task
-          </Button>
         </div>
 
         {/* Main Tabs — pill style matching My Profile */}
@@ -827,228 +833,125 @@ export default function OurTasksPage() {
 
         {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && (
         <>
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          <Card className={`${bgCard} border ${borderColor}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm ${textSecondary}`}>Total Tasks</p>
-                  <p className={`text-2xl font-bold ${textPrimary}`}>{stats.total}</p>
-                </div>
-                <Briefcase className="h-8 w-8 text-[#6366f1]" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className={`${bgCard} border ${borderColor}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm ${textSecondary}`}>Pending</p>
-                  <p className={`text-2xl font-bold text-[#71717a]`}>{stats.pending}</p>
-                </div>
-                <Circle className="h-8 w-8 text-[#71717a]" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className={`${bgCard} border ${borderColor}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm ${textSecondary}`}>In Progress</p>
-                  <p className={`text-2xl font-bold text-[#3b82f6]`}>{stats.in_progress}</p>
-                </div>
-                <Clock className="h-8 w-8 text-[#3b82f6]" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className={`${bgCard} border ${borderColor}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm ${textSecondary}`}>Completed</p>
-                  <p className={`text-2xl font-bold text-[#10b981]`}>{stats.completed}</p>
-                </div>
-                <CheckCircle2 className="h-8 w-8 text-[#10b981]" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className={`${bgCard} border ${borderColor}`} data-testid="work-time-card">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className={`text-sm ${textSecondary}`}>{workTimeLabel}</p>
-                  <p className={`text-2xl font-bold text-[#8b5cf6]`}>{formatDuration(totalWorkSeconds)}</p>
-                </div>
-                <Timer className="h-8 w-8 text-[#8b5cf6]" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Compact Filter Toolbar */}
+        <div className={`${bgCard} border ${borderColor} rounded-xl p-3`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Date filter */}
+            <Select value={filters.dateFilter} onValueChange={(v) => setFilters({...filters, dateFilter: v})}>
+              <SelectTrigger className={`h-9 w-[140px] ${bgSecondary} border ${borderColor}`} data-testid="filter-date">
+                <Calendar className="h-3.5 w-3.5 mr-1 opacity-60" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="single">Single Date</SelectItem>
+                <SelectItem value="range">Date Range</SelectItem>
+              </SelectContent>
+            </Select>
 
-        {/* Filter Tabs & Advanced Filters */}
-        <div className="space-y-4">
-          <div className="flex gap-2 justify-between items-center flex-wrap">
-            <div className="flex gap-2 flex-wrap">
-              {['all', 'my', 'pending', 'in_progress', 'completed'].map(f => (
-                <Button
-                  key={f}
-                  variant={filter === f ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter(f)}
-                  className={filter === f ? 'bg-[#6366f1]' : ''}
-                >
-                  {f === 'all' ? 'All' : f === 'my' ? 'My Tasks' : f.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                </Button>
-              ))}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className={showFilters ? 'bg-[#6366f1] text-white' : ''}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filters
+            {filters.dateFilter === 'single' && (
+              <Input
+                type="date"
+                value={filters.singleDate || ''}
+                onChange={(e) => setFilters({...filters, singleDate: e.target.value})}
+                className={`h-9 w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="filter-single-date"
+              />
+            )}
+            {filters.dateFilter === 'range' && (
+              <>
+                <Input
+                  type="date"
+                  value={filters.dateFrom}
+                  onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
+                  className={`h-9 w-[150px] ${bgSecondary} border ${borderColor}`}
+                  data-testid="filter-date-from"
+                />
+                <Input
+                  type="date"
+                  value={filters.dateTo}
+                  onChange={(e) => setFilters({...filters, dateTo: e.target.value})}
+                  className={`h-9 w-[150px] ${bgSecondary} border ${borderColor}`}
+                  data-testid="filter-date-to"
+                />
+              </>
+            )}
+
+            {/* Department filter */}
+            <Select value={filters.department} onValueChange={(v) => setFilters({...filters, department: v, project: 'all'})}>
+              <SelectTrigger className={`h-9 w-[150px] ${bgSecondary} border ${borderColor}`} data-testid="filter-department">
+                <Building2 className="h-3.5 w-3.5 mr-1 opacity-60" />
+                <SelectValue placeholder="All Depts" />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">All Depts</SelectItem>
+                {deptCategoriesForTask.map(d => (
+                  <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Project filter */}
+            <Select value={filters.project} onValueChange={(v) => setFilters({...filters, project: v})}>
+              <SelectTrigger className={`h-9 w-[160px] ${bgSecondary} border ${borderColor}`} data-testid="filter-project">
+                <Briefcase className="h-3.5 w-3.5 mr-1 opacity-60" />
+                <SelectValue placeholder="All Projects" />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">All Projects</SelectItem>
+                {projectsForTask
+                  .filter(p => filters.department === 'all' || (p.departments || []).includes(filters.department))
+                  .map(p => (
+                    <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+
+            {/* Type */}
+            <Select value={filters.taskType} onValueChange={(v) => setFilters({...filters, taskType: v})}>
+              <SelectTrigger className={`h-9 w-[130px] ${bgSecondary} border ${borderColor}`} data-testid="filter-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="general">General</SelectItem>
+                <SelectItem value="meeting">Meeting</SelectItem>
+                <SelectItem value="follow_up">Follow Up</SelectItem>
+                <SelectItem value="proposal">Proposal</SelectItem>
+                <SelectItem value="call">Call</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Status */}
+            <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
+              <SelectTrigger className={`h-9 w-[130px] ${bgSecondary} border ${borderColor}`} data-testid="filter-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="on_hold">On Hold</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button variant="ghost" size="sm" onClick={resetFilters} className="text-xs" data-testid="reset-filters">
+              Reset
             </Button>
+
+            <div className="ml-auto">
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] h-9"
+                data-testid="create-task-btn"
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                Create Task
+              </Button>
+            </div>
           </div>
-
-          {/* Advanced Filters Panel */}
-          {showFilters && (
-            <Card className={`${bgCard} border ${borderColor}`}>
-              <CardContent className="p-4">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {/* Date Filter */}
-                  <div>
-                    <Label className={`text-xs ${textSecondary}`}>Date</Label>
-                    <Select value={filters.dateFilter} onValueChange={(v) => setFilters({...filters, dateFilter: v})}>
-                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="today">Today</SelectItem>
-                        <SelectItem value="all">All Time</SelectItem>
-                        <SelectItem value="single">Single Date</SelectItem>
-                        <SelectItem value="range">Date Range</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Single Date Picker */}
-                  {filters.dateFilter === 'single' && (
-                    <div>
-                      <Label className={`text-xs ${textSecondary}`}>Select Date</Label>
-                      <Input
-                        type="date"
-                        value={filters.singleDate || ''}
-                        onChange={(e) => setFilters({...filters, singleDate: e.target.value})}
-                        className={`h-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      />
-                    </div>
-                  )}
-
-                  {/* Date Range */}
-                  {filters.dateFilter === 'range' && (
-                    <>
-                      <div>
-                        <Label className={`text-xs ${textSecondary}`}>From</Label>
-                        <Input
-                          type="date"
-                          value={filters.dateFrom}
-                          onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
-                          className={`h-9 ${bgSecondary} border ${borderColor}`}
-                        />
-                      </div>
-                      <div>
-                        <Label className={`text-xs ${textSecondary}`}>To</Label>
-                        <Input
-                          type="date"
-                          value={filters.dateTo}
-                          onChange={(e) => setFilters({...filters, dateTo: e.target.value})}
-                          className={`h-9 ${bgSecondary} border ${borderColor}`}
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Assigned To */}
-                  <div>
-                    <Label className={`text-xs ${textSecondary}`}>Assigned To</Label>
-                    <Select value={filters.assignedTo} onValueChange={(v) => setFilters({...filters, assignedTo: v})}>
-                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="all">All</SelectItem>
-                        <SelectItem value="myself">Myself</SelectItem>
-                        {users.map(u => (
-                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Assigned By */}
-                  <div>
-                    <Label className={`text-xs ${textSecondary}`}>Assigned By</Label>
-                    <Select value={filters.assignedBy} onValueChange={(v) => setFilters({...filters, assignedBy: v})}>
-                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="all">All</SelectItem>
-                        {users.map(u => (
-                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Task Type */}
-                  <div>
-                    <Label className={`text-xs ${textSecondary}`}>Type</Label>
-                    <Select value={filters.taskType} onValueChange={(v) => setFilters({...filters, taskType: v})}>
-                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="general">General</SelectItem>
-                        <SelectItem value="meeting">Meeting</SelectItem>
-                        <SelectItem value="follow_up">Follow Up</SelectItem>
-                        <SelectItem value="proposal">Proposal</SelectItem>
-                        <SelectItem value="call">Call</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <Label className={`text-xs ${textSecondary}`}>Status</Label>
-                    <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
-                      <SelectTrigger className={`h-9 ${bgSecondary} border ${borderColor}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                        <SelectItem value="on_hold">On Hold</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Reset Filters */}
-                <div className="flex justify-end mt-4">
-                  <Button variant="ghost" size="sm" onClick={resetFilters}>
-                    Reset Filters
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Tasks Table */}
