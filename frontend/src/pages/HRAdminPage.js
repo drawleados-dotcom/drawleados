@@ -2196,6 +2196,20 @@ export default function HRAdminPage() {
             employee={selectedEmployee}
             onClose={() => setShowEditModal(false)}
             onSave={handleSaveProfile}
+            onPermanentDelete={async (emp) => {
+              if (!window.confirm(`Permanently delete ${emp.name}? This removes the user, profile, attendance, leaves, payslips, salary history. Cannot be undone.`)) return;
+              try {
+                await axios.delete(`${API}/api/hr/admin/employee/${emp.user_id}/permanent`, {
+                  headers: { Authorization: `Bearer ${localStorage.getItem('session_token')}` }
+                });
+                toast.success('Employee permanently deleted');
+                setShowEditModal(false);
+                setSelectedEmployee(null);
+                loadEmployees();
+              } catch (e) {
+                toast.error(e.response?.data?.detail || 'Failed to permanently delete');
+              }
+            }}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
@@ -3260,16 +3274,6 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
-                            {emp.role !== 'super_admin' && (
-                              <Button
-                                size="sm"
-                                onClick={() => setDeleteConfirm(emp)}
-                                className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                                data-testid={`delete-employee-${emp.user_id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
                           </>
                         ) : (
                           <Button
@@ -3660,7 +3664,7 @@ function AttendanceTab({ overview, formatTime, bgCard, bgSecondary, textPrimary,
 }
 
 // ============== EDIT EMPLOYEE MODAL ==============
-function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark, designations = [], departments = [] }) {
+function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark, designations = [], departments = [] }) {
   const [activeTab, setActiveTab] = useState('basic');
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(employee.profile?.profile_picture || employee.picture || '');
   const [uploading, setUploading] = useState(false);
@@ -4334,18 +4338,30 @@ function EditEmployeeModal({ employee, onClose, onSave, bgCard, bgSecondary, tex
         </div>
 
         {/* Actions */}
-        <div className={`flex gap-3 p-6 border-t ${borderColor}`}>
+        <div className={`flex gap-3 p-6 border-t ${borderColor} items-center`}>
+          {employee?.role !== 'super_admin' && onPermanentDelete && (
+            <Button
+              type="button"
+              onClick={() => onPermanentDelete(employee)}
+              className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+              data-testid="permanent-delete-employee-btn"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Permanently Delete
+            </Button>
+          )}
+          <div className="flex-1" />
           <Button
             type="button"
             onClick={onClose}
-            className={`flex-1 ${bgSecondary} ${hoverBg} ${textPrimary}`}
+            className={`${bgSecondary} ${hoverBg} ${textPrimary}`}
           >
             Cancel
           </Button>
           <Button
             type="button"
             onClick={handleSubmit}
-            className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
             data-testid="save-employee-btn"
           >
             Save Changes
