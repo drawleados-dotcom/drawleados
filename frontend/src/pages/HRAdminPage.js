@@ -17,7 +17,7 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check
+  ChevronDown, Check, Network
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -1195,6 +1195,7 @@ export default function HRAdminPage() {
     { id: 'calendar', label: 'Calendar', icon: Calendar, hrManagerAccess: true },
     { id: 'quotes', label: 'Quotes', icon: FileText, hrManagerAccess: false },
     { id: 'my-profile-config', label: 'My Profile Config', icon: Settings, hrManagerAccess: false },
+    { id: 'org-structure', label: 'Org Structure', icon: Network, hrManagerAccess: true },
   ];
 
   // Filter tabs based on role - HR Manager only sees specific tabs
@@ -1288,7 +1289,13 @@ export default function HRAdminPage() {
             return (
               <Button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  if (tab.id === 'org-structure') {
+                    window.location.href = '/org-structure';
+                  } else {
+                    setActiveTab(tab.id);
+                  }
+                }}
                 data-testid={`hr-admin-tab-${tab.id}`}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all whitespace-nowrap ${
                   activeTab === tab.id
@@ -1663,6 +1670,8 @@ export default function HRAdminPage() {
             </div>
           </div>
         )}
+
+        {/* Org Structure Tab handled by separate route to keep this file lean — see /org-structure */}
 
         {/* Reviews Tab */}
         {activeTab === 'reviews' && (

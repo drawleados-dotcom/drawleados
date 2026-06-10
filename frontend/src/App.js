@@ -29,6 +29,7 @@ import MyDocumentsPage from './pages/MyDocumentsPage';
 import DLOperationsPage from './pages/DLOperationsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import ApprovalsPage from './pages/ApprovalsPage';
+import OrgStructurePage from './pages/OrgStructurePage';
 import './App.css';
 
 function AppRouter() {
@@ -179,6 +180,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <ApprovalsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/org-structure"
+        element={
+          <ProtectedRoute>
+            <OrgStructurePage />
           </ProtectedRoute>
         }
       />
