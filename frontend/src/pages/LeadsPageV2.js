@@ -75,6 +75,7 @@ const LeadsPageV2 = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
+  const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'today' | 'week' | 'month'
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showStagesModal, setShowStagesModal] = useState(false);
   const [showFieldsModal, setShowFieldsModal] = useState(false);
@@ -743,6 +744,21 @@ const LeadsPageV2 = () => {
     // Filter by lead owner if filterLeadOwner is set
     if (filterLeadOwner && lead.lead_owner !== filterLeadOwner) return false;
     
+    // Filter by date range
+    if (dateFilter !== 'all' && lead.created_at) {
+      const created = new Date(lead.created_at);
+      const now = new Date();
+      if (dateFilter === 'today') {
+        if (created.toDateString() !== now.toDateString()) return false;
+      } else if (dateFilter === 'week') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        if (created < weekAgo) return false;
+      } else if (dateFilter === 'month') {
+        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        if (created < monthAgo) return false;
+      }
+    }
+    
     // Filter by search term
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
@@ -753,6 +769,37 @@ const LeadsPageV2 = () => {
       lead.lead_owner_name?.toLowerCase().includes(term)
     );
   });
+
+  // ============== AMOUNT SUMMARY (Quotation / Negotiation / Deal Closed / Lost) ==============
+  const formatCurrency = (n) => {
+    const v = Number(n) || 0;
+    if (v >= 10000000) return `₹${(v / 10000000).toFixed(2)}Cr`;
+    if (v >= 100000) return `₹${(v / 100000).toFixed(2)}L`;
+    if (v >= 1000) return `₹${(v / 1000).toFixed(1)}K`;
+    return `₹${v.toLocaleString('en-IN')}`;
+  };
+
+  const stageNameById = (id) => stages.find(s => s.stage_id === id)?.name?.toLowerCase() || '';
+
+  // Buckets matched by stage NAME (works even with user-created custom stages)
+  const matchBucket = (lead, keywords) => {
+    const name = stageNameById(lead.stage_id);
+    return keywords.some(k => name.includes(k));
+  };
+
+  const sumAmount = (leadsArr) => leadsArr.reduce((acc, l) => acc + (Number(l.estimation) || 0), 0);
+
+  const quotationLeads = filteredLeads.filter(l => matchBucket(l, ['proposal', 'quotation', 'quote']));
+  const negotiationLeads = filteredLeads.filter(l => matchBucket(l, ['negotiation']));
+  const closedLeads = filteredLeads.filter(l => matchBucket(l, ['deal closed', 'closed', 'won', 'payment']));
+  const lostLeads = filteredLeads.filter(l => matchBucket(l, ['lost', 'rejected', 'cancel']));
+
+  const summaryAmounts = {
+    quotation: { count: quotationLeads.length, amount: sumAmount(quotationLeads) },
+    negotiation: { count: negotiationLeads.length, amount: sumAmount(negotiationLeads) },
+    closed: { count: closedLeads.length, amount: sumAmount(closedLeads) },
+    lost: { count: lostLeads.length, amount: sumAmount(lostLeads) },
+  };
 
   const getLeadsByStage = (stageId) => {
     return filteredLeads.filter(l => l.stage_id === stageId);
@@ -879,29 +926,97 @@ const LeadsPageV2 = () => {
           </div>
         </div>
 
+        {/* Date Range Filter */}
+        <div className={`px-4 pt-4 flex items-center gap-2 flex-wrap`} data-testid="date-filter-bar">
+          <span className={`text-xs ${textSecondary} uppercase tracking-wide mr-1`}>Range:</span>
+          {[
+            { key: 'all', label: 'All Time' },
+            { key: 'today', label: 'Today' },
+            { key: 'week', label: 'This Week' },
+            { key: 'month', label: 'This Month' },
+          ].map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => setDateFilter(opt.key)}
+              data-testid={`date-filter-${opt.key}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                dateFilter === opt.key
+                  ? 'bg-[#3b82f6] text-white border-[#3b82f6]'
+                  : `${bgSecondary} ${textSecondary} ${borderColor} hover:${textPrimary}`
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         {/* Stats Cards */}
         <div className={`p-4 border-b ${borderColor} flex gap-2 overflow-x-auto no-scrollbar`}>
           <div 
             onClick={() => { setViewMode('list'); setFilterStage(null); }}
             className={`p-2 sm:p-3 rounded-xl ${bgSecondary} min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0 cursor-pointer hover:scale-105 transition-transform`}
           >
-            <p className={`text-lg sm:text-2xl font-bold ${textPrimary}`}>{stats.total}</p>
+            <p className={`text-lg sm:text-2xl font-bold ${textPrimary}`}>{dateFilter === 'all' ? stats.total : filteredLeads.length}</p>
             <p className={`text-[10px] sm:text-xs ${textSecondary}`}>Total Leads</p>
           </div>
-          {stages.map(stage => (
-            <div
-              key={stage.stage_id}
-              onClick={() => { setViewMode('list'); setFilterStage(stage.stage_id); }}
-              className={`p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0 cursor-pointer hover:scale-105 transition-transform ${filterStage === stage.stage_id ? 'ring-2 ring-offset-2' : ''}`}
-              style={{ backgroundColor: `${stage.color}20`, ringColor: stage.color }}
-            >
-              <p className="text-lg sm:text-2xl font-bold" style={{ color: stage.color }}>
-                {stats.by_stage?.[stage.stage_id]?.count || 0}
-              </p>
-              <p className={`text-[10px] sm:text-xs ${textSecondary} truncate`}>{stage.name}</p>
-            </div>
-          ))}
+          {stages.map(stage => {
+            const count = dateFilter === 'all'
+              ? (stats.by_stage?.[stage.stage_id]?.count || 0)
+              : filteredLeads.filter(l => l.stage_id === stage.stage_id).length;
+            return (
+              <div
+                key={stage.stage_id}
+                onClick={() => { setViewMode('list'); setFilterStage(stage.stage_id); }}
+                className={`p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0 cursor-pointer hover:scale-105 transition-transform ${filterStage === stage.stage_id ? 'ring-2 ring-offset-2' : ''}`}
+                style={{ backgroundColor: `${stage.color}20`, ringColor: stage.color }}
+              >
+                <p className="text-lg sm:text-2xl font-bold" style={{ color: stage.color }}>
+                  {count}
+                </p>
+                <p className={`text-[10px] sm:text-xs ${textSecondary} truncate`}>{stage.name}</p>
+              </div>
+            );
+          })}
         </div>
+
+        {/* Amount Summary Cards (Quotation / Negotiation / Deal Closed / Lost) */}
+        <div className={`px-4 pt-4 grid grid-cols-2 md:grid-cols-4 gap-3`} data-testid="amount-summary-row">
+          {[
+            { key: 'quotation', label: 'Total Quotation', color: '#f59e0b', icon: '📄' },
+            { key: 'negotiation', label: 'Negotiation', color: '#ec4899', icon: '🤝' },
+            { key: 'closed', label: 'Deal Closed', color: '#22c55e', icon: '✅' },
+            { key: 'lost', label: 'Amount Lost', color: '#ef4444', icon: '❌' },
+          ].map(card => {
+            const data = summaryAmounts[card.key];
+            return (
+              <div
+                key={card.key}
+                data-testid={`amount-card-${card.key}`}
+                className={`p-4 rounded-xl border ${borderColor} ${bgSecondary} relative overflow-hidden`}
+                style={{ borderLeft: `4px solid ${card.color}` }}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className={`text-[11px] uppercase tracking-wide ${textSecondary} font-medium`}>{card.label}</p>
+                    <p className="text-xl sm:text-2xl font-bold mt-1" style={{ color: card.color }}>
+                      {formatCurrency(data.amount)}
+                    </p>
+                    <p className={`text-xs ${textSecondary} mt-0.5`}>
+                      {data.count} {data.count === 1 ? 'lead' : 'leads'}
+                    </p>
+                  </div>
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center text-lg"
+                    style={{ backgroundColor: `${card.color}20` }}
+                  >
+                    {card.icon}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
 
         {/* Search + Active Filter */}
         <div className={`p-4 border-b ${borderColor}`}>
