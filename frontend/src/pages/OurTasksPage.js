@@ -55,7 +55,7 @@ export default function OurTasksPage() {
   const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}}
   // Approval request popup
   const [approvalTask, setApprovalTask] = useState(null); // task currently being submitted for approval
-  const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', department: '', note: '', work_link: '' });
+  const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', note: '', work_link: '' });
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
   const [showFilters, setShowFilters] = useState(true); // Show filters by default
   
@@ -1394,7 +1394,6 @@ export default function OurTasksPage() {
                                 setApprovalTask(task);
                                 setApprovalDraft({
                                   approver_role: task.approval_request?.approver_role || '',
-                                  department: task.approval_request?.department || '',
                                   note: '',
                                   // Auto-fetch the existing work link from the task / previous request
                                   work_link: task.approval_request?.work_link || task.work_link || '',
@@ -2068,16 +2067,14 @@ export default function OurTasksPage() {
                 <p className={`text-sm ${textSecondary}`}>Task: <span className={textPrimary}>{approvalTask.task_name}</span></p>
               </CardHeader>
               <CardContent className="space-y-5">
-                {/* Approver role */}
+                {/* Approver role — restricted to PM / Operations / Marketing Head */}
                 <div>
                   <Label className={`${textPrimary} mb-2 block`}>Approve By</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     {[
-                      { value: 'operations', label: 'Operations', color: 'bg-blue-500' },
                       { value: 'pm', label: 'PM', color: 'bg-purple-500' },
-                      { value: 'ceo', label: 'CEO', color: 'bg-orange-500' },
+                      { value: 'operations', label: 'Operations', color: 'bg-blue-500' },
                       { value: 'marketing_head', label: 'Marketing Head', color: 'bg-pink-500' },
-                      { value: 'hr', label: 'HR', color: 'bg-green-500' },
                     ].map(opt => {
                       const selected = approvalDraft.approver_role === opt.value;
                       return (
@@ -2115,26 +2112,7 @@ export default function OurTasksPage() {
                   />
                 </div>
 
-                {/* Department */}
-                <div>
-                  <Label className={`${textPrimary} mb-2 block`}>Department <span className={`text-xs font-normal ${textSecondary}`}>(optional)</span></Label>
-                  <select
-                    value={approvalDraft.department}
-                    onChange={(e) => setApprovalDraft(prev => ({ ...prev, department: e.target.value }))}
-                    className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary}`}
-                    data-testid="approval-department"
-                  >
-                    <option value="">— None —</option>
-                    <option value="website">Website</option>
-                    <option value="social_media">Social Media</option>
-                    <option value="meta">Meta Ads</option>
-                    <option value="seo">SEO</option>
-                    <option value="finance">Finance</option>
-                    <option value="hr">HR</option>
-                    <option value="business_dev">Business Dev</option>
-                    <option value="erp">ERP</option>
-                  </select>
-                </div>
+                {/* Department selection removed — approval goes only to the selected approver role */}
 
                 {/* Note */}
                 <div>
@@ -2170,7 +2148,7 @@ export default function OurTasksPage() {
                       );
                       toast.success('Approval request sent');
                       setApprovalTask(null);
-                      setApprovalDraft({ approver_role: '', department: '', note: '', work_link: '' });
+                      setApprovalDraft({ approver_role: '', note: '', work_link: '' });
                       loadTasks();
                     } catch (error) {
                       toast.error(error.response?.data?.detail || 'Failed to send for approval');
