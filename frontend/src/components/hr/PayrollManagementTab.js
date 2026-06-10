@@ -854,6 +854,8 @@ function SalaryPayslipView({
   textSecondary,
   borderColor
 }) {
+  const API = process.env.REACT_APP_BACKEND_URL;
+  const token = localStorage.getItem('session_token');
   const [previousPayslips, setPreviousPayslips] = useState([]);
   const [showPreviousPayslips, setShowPreviousPayslips] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -871,7 +873,6 @@ function SalaryPayslipView({
   });
   
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  const token = localStorage.getItem('session_token');
   
   // Helper function to open create modal
   const openCreateModal = () => {
@@ -1034,6 +1035,61 @@ function SalaryPayslipView({
             </CardContent>
           </Card>
         )}
+
+        {/* Manual Payslip Modal — also needs to render in empty-state path */}
+        <Dialog open={showManualModal} onOpenChange={setShowManualModal}>
+          <DialogContent className={`${bgCard} border ${borderColor} max-w-3xl max-h-[90vh] overflow-y-auto`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Create Payslip — Manual</DialogTitle>
+              <DialogDescription className={textSecondary}>
+                For {months[payslipMonth - 1]} {payslipYear} — fields auto-fill where possible, every field is editable.
+              </DialogDescription>
+            </DialogHeader>
+            {existsCheck.exists && (
+              <div className="p-3 rounded-lg bg-[#ef4444]/15 text-[#ef4444] text-sm">
+                A <strong>{existsCheck.mode}</strong> payslip already exists for {months[payslipMonth - 1]} {payslipYear}. Submitting will fail until it is deleted.
+              </div>
+            )}
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div><Label className={textSecondary}>Employee Name</Label><Input value={manualForm.employee_name} onChange={(e) => setManualForm(prev => ({ ...prev, employee_name: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} onChange={(e) => setManualForm(prev => ({ ...prev, employee_id: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Designation</Label><Input value={manualForm.designation} onChange={(e) => setManualForm(prev => ({ ...prev, designation: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Joining Month / Year</Label><Input placeholder="25th Aug 2025" value={manualForm.joining_date || ''} onChange={(e) => setManualForm(prev => ({ ...prev, joining_date: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Salary Date</Label><Input placeholder="10/06/2026" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Total Salary (Gross)</Label><Input type="number" value={manualForm.gross_salary} onChange={(e) => setManualForm(prev => ({ ...prev, gross_salary: e.target.value }))} /></div>
+              </div>
+              <div>
+                <h4 className={`text-sm font-semibold ${textPrimary} mb-2`}>Monthly Summary</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div><Label className={textSecondary}>Working Days</Label><Input type="number" value={manualForm.total_working_days} onChange={(e) => setManualForm(prev => ({ ...prev, total_working_days: e.target.value }))} /></div>
+                  <div><Label className={textSecondary}>Absent</Label><Input type="number" value={manualForm.days_absent} onChange={(e) => setManualForm(prev => ({ ...prev, days_absent: e.target.value }))} /></div>
+                  <div><Label className={textSecondary}>Paid Leave</Label><Input type="number" value={manualForm.paid_leaves} onChange={(e) => setManualForm(prev => ({ ...prev, paid_leaves: e.target.value }))} /></div>
+                  <div><Label className={textSecondary}>Extra Days</Label><Input type="number" value={manualForm.extra_days} onChange={(e) => setManualForm(prev => ({ ...prev, extra_days: e.target.value }))} /></div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className={textSecondary}>Per Day Salary</Label><Input type="number" value={manualForm.per_day_salary} onChange={(e) => setManualForm(prev => ({ ...prev, per_day_salary: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Total Net Pay</Label><Input type="number" value={manualForm.net_salary} onChange={(e) => setManualForm(prev => ({ ...prev, net_salary: e.target.value }))} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label className={textSecondary}>Authorized By</Label><Input value={manualForm.authorized_by} onChange={(e) => setManualForm(prev => ({ ...prev, authorized_by: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Authorizer Title</Label><Input value={manualForm.authorized_title} onChange={(e) => setManualForm(prev => ({ ...prev, authorized_title: e.target.value }))} /></div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowManualModal(false)}>Cancel</Button>
+              <Button
+                onClick={submitManualPayslip}
+                disabled={manualBusy || existsCheck.exists}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                data-testid="manual-payslip-submit"
+              >
+                {manualBusy ? 'Creating…' : 'Create Payslip'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

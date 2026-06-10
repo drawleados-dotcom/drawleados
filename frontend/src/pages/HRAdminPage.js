@@ -4869,7 +4869,7 @@ function PayslipsTab({ payslips, employees, month, year, setMonth, setYear, onGe
   });
   const [busy, setBusy] = useState(false);
   const API = process.env.REACT_APP_BACKEND_URL;
-  const authHeaders = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+  const authHeaders = { Authorization: `Bearer ${localStorage.getItem('session_token')}` };
 
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -6678,7 +6678,7 @@ function EnhancedApprovalsTab({
   useEffect(() => {
     if (activeSubTab !== 'leave') return;
     const API = process.env.REACT_APP_BACKEND_URL;
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('session_token');
     axios.get(`${API}/api/hr/admin/calendar/${leaveAllocYear}/${leaveAllocMonth}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then(res => {
@@ -6691,7 +6691,7 @@ function EnhancedApprovalsTab({
 
   const handleSaveLeaveAlloc = async () => {
     const API = process.env.REACT_APP_BACKEND_URL;
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('session_token');
     setLeaveAllocSaving(true);
     try {
       // Fetch existing calendar so we don't wipe other fields
