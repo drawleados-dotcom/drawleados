@@ -71,7 +71,7 @@ const LeadsPageV2 = () => {
   const [teamMembers, setTeamMembers] = useState([]);
 
   // UI state
-  const [viewMode, setViewMode] = useState('kanban'); // 'list', 'kanban', 'preview'
+  const [viewMode, setViewMode] = useState('list'); // 'list' only
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
@@ -809,33 +809,7 @@ const LeadsPageV2 = () => {
                 {leadCfg?.sheet_id && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">Connected</Badge>}
               </Button>
 
-              {/* View Toggle */}
-              <div className={`flex items-center ${bgSecondary} rounded-lg p-1 border ${borderColor}`}>
-                <button
-                  onClick={() => setViewMode('list')}
-                  data-testid="view-list-btn"
-                  className={`p-2 rounded ${viewMode === 'list' ? `${isDark ? 'bg-[#3f3f46]' : 'bg-white shadow-sm'} ${textPrimary}` : textSecondary}`}
-                  title="List View"
-                >
-                  <Table2 className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('preview')}
-                  data-testid="view-preview-btn"
-                  className={`p-2 rounded ${viewMode === 'preview' ? `${isDark ? 'bg-[#3f3f46]' : 'bg-white shadow-sm'} ${textPrimary}` : textSecondary}`}
-                  title="Preview Board"
-                >
-                  <Columns3 className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => { setViewMode('kanban'); setFilterStage(null); }}
-                  data-testid="view-kanban-btn"
-                  className={`p-2 rounded ${viewMode === 'kanban' ? `${isDark ? 'bg-[#3f3f46]' : 'bg-white shadow-sm'} ${textPrimary}` : textSecondary}`}
-                  title="Kanban View"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
+              {/* View Toggle removed — List view is the only view */}
 
               <Button
                 onClick={() => setShowStagesModal(true)}
@@ -991,7 +965,7 @@ const LeadsPageV2 = () => {
         <div className="flex-1 overflow-auto p-4">
           {loading ? (
             <div className={`text-center py-12 ${textSecondary}`}>Loading...</div>
-          ) : viewMode === 'list' ? (
+          ) : (
             <ListView
               leads={filteredLeads}
               stages={stages}
@@ -999,39 +973,6 @@ const LeadsPageV2 = () => {
               onEdit={openEditLead}
               onDelete={deleteLead}
               onStageChange={updateLeadStage}
-              formatDate={formatDate}
-              isDark={isDark}
-              textPrimary={textPrimary}
-              textSecondary={textSecondary}
-              borderColor={borderColor}
-              bgSecondary={bgSecondary}
-            />
-          ) : viewMode === 'preview' ? (
-            <PreviewBoard
-              leads={filteredLeads}
-              stages={stages}
-              selectedLead={selectedLead}
-              setSelectedLead={setSelectedLead}
-              onEdit={openEditLead}
-              onDelete={deleteLead}
-              onStageChange={updateLeadStage}
-              onFollowUp={openFollowUpModal}
-              customFields={customFields}
-              formatDate={formatDate}
-              isDark={isDark}
-              textPrimary={textPrimary}
-              textSecondary={textSecondary}
-              borderColor={borderColor}
-              bgSecondary={bgSecondary}
-            />
-          ) : (
-            <KanbanView
-              stages={stages}
-              getLeadsByStage={getLeadsByStage}
-              onEdit={openEditLead}
-              onDelete={deleteLead}
-              onStageChange={updateLeadStage}
-              onFollowUp={openFollowUpModal}
               formatDate={formatDate}
               isDark={isDark}
               textPrimary={textPrimary}
@@ -1369,6 +1310,52 @@ const LeadsPageV2 = () => {
               </TabsContent>
             </Tabs>
             
+            {/* Stage Transition Tabs - visible only when editing existing lead */}
+            {editingLead && stages.length > 0 && (
+              <div className={`border-t ${borderColor} pt-3 mt-1`} data-testid="stage-transition-tabs">
+                <p className={`text-xs ${textSecondary} mb-2 uppercase tracking-wide`}>Move to Stage</p>
+                <div className="flex flex-wrap gap-2">
+                  {stages.map((stage) => {
+                    const isCurrent = leadForm.stage_id === stage.stage_id;
+                    return (
+                      <button
+                        key={stage.stage_id}
+                        type="button"
+                        data-testid={`stage-tab-${stage.stage_id}`}
+                        onClick={async () => {
+                          if (isCurrent) return;
+                          try {
+                            await axios.put(
+                              `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
+                              { stage_id: stage.stage_id },
+                              { headers }
+                            );
+                            setLeadForm({ ...leadForm, stage_id: stage.stage_id });
+                            setEditingLead({ ...editingLead, stage_id: stage.stage_id });
+                            toast.success(`Moved to ${stage.name}`);
+                            loadLeads();
+                            loadStats();
+                          } catch (e) {
+                            toast.error('Failed to change stage');
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${
+                          isCurrent ? 'text-white' : `${textSecondary} hover:opacity-80`
+                        }`}
+                        style={{
+                          borderColor: stage.color,
+                          backgroundColor: isCurrent ? stage.color : 'transparent',
+                          color: isCurrent ? '#fff' : stage.color,
+                        }}
+                      >
+                        {stage.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <DialogFooter className="flex sm:justify-between gap-2 w-full">
               <div>
                 {editingLead && (
@@ -1889,7 +1876,9 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                 return (
                   <tr 
                     key={lead.lead_id} 
-                    className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/30' : 'hover:bg-gray-50'} transition-colors`}
+                    onClick={() => onEdit(lead)}
+                    data-testid={`lead-row-${lead.lead_id}`}
+                    className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/30' : 'hover:bg-gray-50'} transition-colors cursor-pointer`}
                   >
                     {/* Lead Column - Avatar + Name + Location */}
                     <td className="px-4 py-4">
@@ -1950,12 +1939,12 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                     </td>
 
                     {/* Actions Column */}
-                    <td className="px-4 py-4 text-center">
+                    <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-center gap-1">
                         <Button 
                           size="sm" 
                           variant="ghost" 
-                          onClick={() => onEdit(lead)}
+                          onClick={(e) => { e.stopPropagation(); onEdit(lead); }}
                           className="h-8 w-8 p-0 rounded-full"
                         >
                           <Settings className="h-4 w-4" />

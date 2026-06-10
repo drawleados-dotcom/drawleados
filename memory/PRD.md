@@ -1940,3 +1940,22 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Add "My Tasks" view for individual team members
 
 ---
+
+## 2026-02-10 — Leads UI Refactor (List-Only + Clickable Rows + Stage Tabs in Popup)
+
+**Files Modified:**
+- `/app/frontend/src/pages/LeadsPageV2.js`
+
+**Changes:**
+1. Removed Kanban + Preview view modes — Leads page now shows only the List view.
+2. Removed the 3-icon view toggle from the toolbar (Table2/Columns3/LayoutGrid buttons).
+3. Default `viewMode` state changed from `'kanban'` to `'list'`.
+4. Stat cards' onClick handlers still set `viewMode('list')` (no-op safe).
+5. Lead rows in `ListView` are now fully clickable (`onClick={() => onEdit(lead)}`, `cursor-pointer`, `data-testid="lead-row-{id}"`). Actions cell uses `e.stopPropagation()` so settings button doesn't trigger the row click.
+6. Edit Lead popup now renders a "Move to Stage" pill bar above the footer with every pipeline stage as a clickable pill (`data-testid="stage-tab-{id}"`). Clicking calls `PUT /api/leads-v2/leads/{id}/stage`, refreshes stats/leads, and re-syncs the local form state. Current stage is highlighted in solid color.
+
+**Testing Status:** Smoke tested via Playwright. Login + Leads page + row click + popup with 8 stage tabs all verified. No lint errors.
+
+**Outstanding:**
+- Light/Dark theme inconsistencies on HR Admin / HR / Settings pages (P1, recurring).
+- Component refactoring for monolithic pages (P0 technical debt).
