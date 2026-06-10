@@ -270,7 +270,7 @@ async def preview_sheet(sheet_type: str, request: Request):
 
 @sheets_router.post("/sheets/sync/{sheet_type}")
 async def sync_sheet(sheet_type: str, request: Request):
-    """Read every row from the connected sheet and store them so the leads table can render."""
+    """Read every row from the connected sheet, store snapshot + push into leads_v2 under matching stage."""
     from server import db, get_current_user
     user = await get_current_user(request)
     if sheet_type not in SHEET_TYPES:
@@ -282,29 +282,87 @@ async def sync_sheet(sheet_type: str, request: Request):
     rows = await asyncio.to_thread(_read_sheet_rows, creds, cfg["sheet_id"])
     if not rows:
         return {"synced": 0, "note": "Sheet is empty"}
-    headers = [h.strip() for h in rows[0]]
+    headers_arr = [h.strip() for h in rows[0]]
     body_rows = rows[1:]
-    # Replace previous snapshot
+
+    # Replace previous snapshot of raw rows
     await db.leads_sheet_rows.delete_many({"user_id": user.user_id, "sheet_type": sheet_type})
-    docs = []
+
+    # Find matching stage_id for this sheet type ('lead' or 'prospect')
+    stage = await db.lead_stages.find_one(
+        {"name": {"$regex": f"^{sheet_type}$", "$options": "i"}, "is_deleted": {"$ne": True}},
+        {"_id": 0, "stage_id": 1, "name": 1},
+    )
+    stage_id = stage.get("stage_id") if stage else ""
+
+    # Remove previously sheet-imported leads for this sheet_type so re-sync is idempotent
+    await db.leads_v2.delete_many({
+        "imported_from_sheet": sheet_type,
+        "created_by": user.user_id,
+    })
+
+    sheet_docs = []
+    lead_docs = []
+    lower_headers = [h.lower() for h in headers_arr]
+
+    def _col(row, *candidates):
+        for c in candidates:
+            if c in lower_headers:
+                idx = lower_headers.index(c)
+                if idx < len(row):
+                    return row[idx]
+        return ""
+
+    now = datetime.now(timezone.utc)
     for r in body_rows:
-        record = {h: (r[i] if i < len(r) else "") for i, h in enumerate(headers)}
-        docs.append({
-            "row_id": f"row_{uuid.uuid4().hex[:12]}",
+        record = {h: (r[i] if i < len(r) else "") for i, h in enumerate(headers_arr)}
+        row_id = f"row_{uuid.uuid4().hex[:12]}"
+        sheet_docs.append({
+            "row_id": row_id,
             "user_id": user.user_id,
             "sheet_type": sheet_type,
             "source_type": cfg.get("source_type") or "website",
             "data": record,
-            "imported_at": datetime.now(timezone.utc),
+            "imported_at": now,
         })
-    if docs:
-        await db.leads_sheet_rows.insert_many(docs)
-    now = datetime.now(timezone.utc)
+        # Map common column names → lead_v2 fields
+        name = _col(r, "name", "lead_name", "full name", "contact name") or "—"
+        phone = _col(r, "phone", "mobile", "contact", "phone number")
+        email = _col(r, "email", "email id", "e-mail")
+        notes = _col(r, "notes", "remarks", "comments", "message")
+        lead_docs.append({
+            "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
+            "name": str(name).strip() or "—",
+            "phone": str(phone).strip(),
+            "email": str(email).strip(),
+            "source": cfg.get("source_type") or "website",
+            "stage_id": stage_id,
+            "lead_owner": user.user_id,
+            "notes": str(notes).strip(),
+            "imported_from_sheet": sheet_type,
+            "sheet_row_id": row_id,
+            "custom_fields": {k: v for k, v in record.items() if k.lower() not in ("name", "lead_name", "phone", "mobile", "email", "notes")},
+            "created_by": user.user_id,
+            "created_at": now,
+            "updated_at": now,
+            "is_deleted": False,
+        })
+
+    if sheet_docs:
+        await db.leads_sheet_rows.insert_many(sheet_docs)
+    if lead_docs:
+        await db.leads_v2.insert_many(lead_docs)
+
     await db.leads_sheet_configs.update_one(
         {"user_id": user.user_id, "sheet_type": sheet_type},
-        {"$set": {"last_synced_at": now, "last_synced_count": len(docs)}},
+        {"$set": {"last_synced_at": now, "last_synced_count": len(lead_docs)}},
     )
-    return {"synced": len(docs), "last_synced_at": now}
+    return {
+        "synced": len(lead_docs),
+        "stage_id": stage_id,
+        "stage_matched": bool(stage_id),
+        "last_synced_at": now,
+    }
 
 
 @sheets_router.get("/sheets/rows/{sheet_type}")
