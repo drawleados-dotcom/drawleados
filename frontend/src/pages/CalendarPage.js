@@ -363,44 +363,7 @@ export default function CalendarPage() {
             <p className={textSecondary}>View attendance, tasks, meetings, and leaves</p>
           </div>
           
-          {/* Google Calendar Connection */}
-          <div className="flex items-center gap-3">
-            {googleConnected ? (
-              <div className="flex items-center gap-2">
-                <Badge className="bg-[#10b981]/20 text-[#10b981] flex items-center gap-1">
-                  <Check className="h-3 w-3" />
-                  {googleEmail}
-                </Badge>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleDisconnectGoogle}
-                  className={borderColor}
-                >
-                  Disconnect
-                </Button>
-              </div>
-            ) : (
-              <Button
-                onClick={handleConnectGoogle}
-                className="bg-[#4285f4] hover:bg-[#3367d6] text-white"
-                data-testid="connect-google-calendar"
-              >
-                <CalendarIcon className="h-4 w-4 mr-2" />
-                Connect Google Calendar
-              </Button>
-            )}
-            
-            {isAdmin && (
-              <Button
-                onClick={() => setShowHolidayModal(true)}
-                className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Holiday
-              </Button>
-            )}
-          </div>
+          {/* Google Calendar Connect & Add Holiday buttons removed — Google Calendar to be wired up later; Holidays managed in HR Admin */}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -464,69 +427,37 @@ export default function CalendarPage() {
                             <span className={`text-sm font-medium ${dayObj.date === today ? 'bg-[#6366f1] text-white rounded-full w-6 h-6 flex items-center justify-center' : textPrimary}`}>
                               {dayObj.day}
                             </span>
-                            {dayObj.eventsCount > 0 && (
-                              <Badge className="bg-[#4285f4]/20 text-[#4285f4] text-xs px-1">
-                                {dayObj.eventsCount}
+                            {dayObj.tasks && dayObj.tasks.length > 0 && (
+                              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px] px-1.5 py-0">
+                                {dayObj.tasks.length} {dayObj.tasks.length === 1 ? 'task' : 'tasks'}
                               </Badge>
                             )}
                           </div>
                           
-                          {/* Tasks list - small colored text */}
-                          <div className="flex-1 overflow-hidden mt-1">
-                            {dayObj.tasks && dayObj.tasks.length > 0 ? (
-                              <div className="space-y-0.5">
-                                {dayObj.tasks.slice(0, 3).map((task, tIdx) => {
-                                  // Color based on priority or type
-                                  const taskColors = {
-                                    high: 'text-[#ef4444]',
-                                    urgent: 'text-[#ef4444]',
-                                    medium: 'text-[#f59e0b]',
-                                    normal: 'text-[#3b82f6]',
-                                    low: 'text-[#10b981]'
-                                  };
-                                  const colorClass = taskColors[task.priority?.toLowerCase()] || 'text-[#6366f1]';
-                                  
-                                  return (
-                                    <p 
-                                      key={task.task_id || tIdx} 
-                                      className={`text-[9px] leading-tight truncate ${colorClass}`}
-                                      title={task.task_name}
-                                    >
-                                      • {task.task_name}
-                                    </p>
-                                  );
-                                })}
-                                {dayObj.tasks.length > 3 && (
-                                  <p className={`text-[8px] ${textSecondary}`}>+{dayObj.tasks.length - 3} more</p>
+                          {/* Status indicators (no task list inside the box) */}
+                          <div className="flex flex-col justify-end h-full gap-0.5 mt-1">
+                            {dayObj.holiday && (
+                              <span className="text-[10px] text-[#ef4444] truncate">{dayObj.holiday.name}</span>
+                            )}
+                            {dayObj.leave && (
+                              <Badge className={`text-[10px] px-1 py-0 ${
+                                dayObj.leave.leave_type === 'casual' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
+                                dayObj.leave.leave_type === 'sick' ? 'bg-[#ec4899]/20 text-[#ec4899]' :
+                                'bg-[#8b5cf6]/20 text-[#8b5cf6]'
+                              }`}>
+                                {dayObj.leave.leave_type}
+                              </Badge>
+                            )}
+                            {dayObj.attendance && !dayObj.leave && (
+                              <div className="flex items-center gap-1">
+                                {dayObj.attendance.work_mode === 'remote' ? (
+                                  <Home className="h-3 w-3 text-[#10b981]" />
+                                ) : (
+                                  <Building className="h-3 w-3 text-[#6366f1]" />
                                 )}
-                              </div>
-                            ) : (
-                              /* Status indicators (only if no tasks) */
-                              <div className="flex flex-col justify-end h-full gap-0.5">
-                                {dayObj.holiday && (
-                                  <span className="text-[10px] text-[#ef4444] truncate">{dayObj.holiday.name}</span>
-                                )}
-                                {dayObj.leave && (
-                                  <Badge className={`text-[10px] px-1 py-0 ${
-                                    dayObj.leave.leave_type === 'casual' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
-                                    dayObj.leave.leave_type === 'sick' ? 'bg-[#ec4899]/20 text-[#ec4899]' :
-                                    'bg-[#8b5cf6]/20 text-[#8b5cf6]'
-                                  }`}>
-                                    {dayObj.leave.leave_type}
-                                  </Badge>
-                                )}
-                                {dayObj.attendance && !dayObj.leave && (
-                                  <div className="flex items-center gap-1">
-                                    {dayObj.attendance.work_mode === 'remote' ? (
-                                      <Home className="h-3 w-3 text-[#10b981]" />
-                                    ) : (
-                                      <Building className="h-3 w-3 text-[#6366f1]" />
-                                    )}
-                                    <span className="text-[10px] text-[#10b981]">
-                                      {dayObj.attendance.total_hours?.toFixed(1)}h
-                                    </span>
-                                  </div>
-                                )}
+                                <span className="text-[10px] text-[#10b981]">
+                                  {dayObj.attendance.total_hours?.toFixed(1)}h
+                                </span>
                               </div>
                             )}
                           </div>
@@ -561,20 +492,8 @@ export default function CalendarPage() {
                     <span className={`text-xs ${textSecondary}`}>Sick Leave</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className="bg-[#4285f4]/20 text-[#4285f4] text-xs">3</Badge>
-                    <span className={`text-xs ${textSecondary}`}>Google Events</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] text-[#ef4444]">• Task</span>
-                    <span className={`text-xs ${textSecondary}`}>High Priority</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] text-[#f59e0b]">• Task</span>
-                    <span className={`text-xs ${textSecondary}`}>Medium</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[9px] text-[#6366f1]">• Task</span>
-                    <span className={`text-xs ${textSecondary}`}>Normal</span>
+                    <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px] px-1.5 py-0">N tasks</Badge>
+                    <span className={`text-xs ${textSecondary}`}>Click day to view tasks</span>
                   </div>
                 </div>
               </CardContent>
@@ -656,167 +575,138 @@ export default function CalendarPage() {
               </CardContent>
             </Card>
 
-            {/* Selected Day Detail */}
-            {selectedDate && (
-              <Card className={`${bgCard} border ${borderColor}`}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className={`text-sm ${textPrimary}`}>
-                      {new Date(selectedDate).toLocaleDateString('en-IN', {
-                        weekday: 'short',
-                        day: '2-digit',
-                        month: 'short'
-                      })}
-                    </CardTitle>
-                    <Button
-                      size="sm"
-                      onClick={handleViewFullDetail}
-                      className="h-7 text-xs bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                    >
-                      View Full
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Attendance */}
-                  {dayDetail?.attendance && (
-                    <div className={`p-2 rounded-lg ${bgSecondary}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Clock className="h-3 w-3 text-[#6366f1]" />
-                        <span className={`text-xs font-medium ${textPrimary}`}>Attendance</span>
-                      </div>
-                      <div className={`text-xs ${textSecondary}`}>
-                        {dayDetail.attendance.clock_in && (
-                          <span>In: {new Date(dayDetail.attendance.clock_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
-                        )}
-                        {dayDetail.attendance.clock_out && (
-                          <span> | Out: {new Date(dayDetail.attendance.clock_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Tasks */}
-                  {dayTasks.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Briefcase className="h-3 w-3 text-[#f59e0b]" />
-                        <span className={`text-xs font-medium ${textPrimary}`}>Tasks ({dayTasks.length})</span>
-                      </div>
-                      <div className="space-y-1">
-                        {dayTasks.slice(0, 3).map(task => (
-                          <div key={task.task_id} className={`p-2 rounded ${bgSecondary}`}>
-                            <p className={`text-xs ${textPrimary} truncate`}>{task.task_name}</p>
-                          </div>
-                        ))}
-                        {dayTasks.length > 3 && (
-                          <p className={`text-xs ${textSecondary}`}>+{dayTasks.length - 3} more</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Meetings */}
-                  {dayMeetings.length > 0 && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Users className="h-3 w-3 text-[#4285f4]" />
-                        <span className={`text-xs font-medium ${textPrimary}`}>Meetings ({dayMeetings.length})</span>
-                      </div>
-                      <div className="space-y-1">
-                        {dayMeetings.slice(0, 3).map(meeting => (
-                          <div key={meeting.event_id} className={`p-2 rounded ${bgSecondary}`}>
-                            <p className={`text-xs ${textPrimary} truncate`}>{meeting.title}</p>
-                            {meeting.start && (
-                              <p className={`text-[10px] ${textSecondary}`}>
-                                {meeting.is_all_day ? 'All day' : new Date(meeting.start).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                        {dayMeetings.length > 3 && (
-                          <p className={`text-xs ${textSecondary}`}>+{dayMeetings.length - 3} more</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {!dayDetail?.attendance && dayTasks.length === 0 && dayMeetings.length === 0 && (
-                    <p className={`text-xs ${textSecondary} text-center py-4`}>No data for this day</p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            {/* 3rd sidebar card (Selected Day Detail) removed — replaced by day-click popup */}
           </div>
         </div>
 
-        {/* Add Holiday Modal */}
-        {showHolidayModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`}>
-              <CardHeader>
+        {/* Day Tasks Popup — opens when a day is clicked */}
+        {selectedDate && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setSelectedDate(null)}
+            data-testid="day-tasks-popup"
+          >
+            <Card
+              className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CardHeader className={`pb-3 border-b ${borderColor}`}>
                 <div className="flex items-center justify-between">
-                  <CardTitle className={textPrimary}>Add Holiday</CardTitle>
-                  <Button variant="ghost" onClick={() => setShowHolidayModal(false)}>
+                  <div>
+                    <CardTitle className={textPrimary}>
+                      {new Date(selectedDate).toLocaleDateString('en-IN', {
+                        weekday: 'long',
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric',
+                      })}
+                    </CardTitle>
+                    <p className={`text-xs ${textSecondary} mt-1`}>
+                      My Tasks (created or assigned to me)
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedDate(null)}
+                    className="h-8 w-8 p-0"
+                    data-testid="close-day-popup"
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
-                <form onSubmit={handleAddHoliday} className="space-y-4">
-                  <div>
-                    <Label className={textPrimary}>Holiday Name</Label>
-                    <Input
-                      value={holidayForm.name}
-                      onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })}
-                      placeholder="e.g., Republic Day"
-                      required
-                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                    />
+              <CardContent className="flex-1 overflow-y-auto p-4 space-y-2">
+                {dayTasks.length === 0 ? (
+                  <div className={`text-center py-12 ${textSecondary}`}>
+                    <Briefcase className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">No tasks for this day</p>
                   </div>
-                  <div>
-                    <Label className={textPrimary}>Date</Label>
-                    <Input
-                      type="date"
-                      value={holidayForm.date}
-                      onChange={(e) => setHolidayForm({ ...holidayForm, date: e.target.value })}
-                      required
-                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                    />
-                  </div>
-                  <div>
-                    <Label className={textPrimary}>Type</Label>
-                    <select
-                      value={holidayForm.type}
-                      onChange={(e) => setHolidayForm({ ...holidayForm, type: e.target.value })}
-                      className={`w-full p-2 rounded ${bgSecondary} border ${borderColor} ${textPrimary}`}
-                    >
-                      <option value="public">Public Holiday</option>
-                      <option value="optional">Optional Holiday</option>
-                      <option value="company">Company Holiday</option>
-                    </select>
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowHolidayModal(false)}
-                      className={`flex-1 ${borderColor}`}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                    >
-                      Add Holiday
-                    </Button>
-                  </div>
-                </form>
+                ) : (
+                  dayTasks.map((task) => {
+                    const isCreator = task.created_by === user?.user_id;
+                    const isAssigned = task.assigned_to === user?.user_id;
+                    const priorityColors = {
+                      high: 'bg-[#ef4444]/20 text-[#ef4444]',
+                      urgent: 'bg-[#ef4444]/20 text-[#ef4444]',
+                      medium: 'bg-[#f59e0b]/20 text-[#f59e0b]',
+                      normal: 'bg-[#3b82f6]/20 text-[#3b82f6]',
+                      low: 'bg-[#10b981]/20 text-[#10b981]',
+                    };
+                    const pColor = priorityColors[task.priority?.toLowerCase()] || 'bg-[#6366f1]/20 text-[#6366f1]';
+                    const statusColor = task.status === 'completed'
+                      ? 'bg-[#10b981]/20 text-[#10b981]'
+                      : task.status === 'in_progress'
+                      ? 'bg-[#f59e0b]/20 text-[#f59e0b]'
+                      : 'bg-[#6366f1]/20 text-[#6366f1]';
+                    return (
+                      <div
+                        key={task.task_id}
+                        data-testid={`day-task-${task.task_id}`}
+                        className={`p-3 rounded-lg border ${borderColor} ${bgSecondary} hover:opacity-90 transition`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium ${textPrimary} truncate`}>
+                              {task.task_name}
+                            </p>
+                            {task.description && (
+                              <p className={`text-xs ${textSecondary} mt-1 line-clamp-2`}>
+                                {task.description}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              {task.priority && (
+                                <Badge className={`${pColor} text-[10px] px-2 py-0`}>
+                                  {task.priority}
+                                </Badge>
+                              )}
+                              {task.status && (
+                                <Badge className={`${statusColor} text-[10px] px-2 py-0`}>
+                                  {task.status.replace('_', ' ')}
+                                </Badge>
+                              )}
+                              {isCreator && (
+                                <Badge className="bg-[#8b5cf6]/20 text-[#8b5cf6] text-[10px] px-2 py-0">
+                                  Created by me
+                                </Badge>
+                              )}
+                              {isAssigned && !isCreator && (
+                                <Badge className="bg-[#06b6d4]/20 text-[#06b6d4] text-[10px] px-2 py-0">
+                                  Assigned to me
+                                </Badge>
+                              )}
+                              {task.assigned_to_name && !isAssigned && (
+                                <span className={`text-[10px] ${textSecondary}`}>
+                                  → {task.assigned_to_name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </CardContent>
+              <div className={`p-3 border-t ${borderColor} flex justify-between items-center`}>
+                <span className={`text-xs ${textSecondary}`}>
+                  {dayTasks.length} {dayTasks.length === 1 ? 'task' : 'tasks'}
+                </span>
+                <Button
+                  size="sm"
+                  onClick={handleViewFullDetail}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  data-testid="view-full-day-detail"
+                >
+                  View Full Day Detail
+                </Button>
+              </div>
             </Card>
           </div>
         )}
+
+        {/* Add Holiday Modal removed — holidays are managed in HR Admin */}
       </div>
     </Layout>
   );
