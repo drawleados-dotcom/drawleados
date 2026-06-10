@@ -47,6 +47,7 @@ from projects_routes import projects_router
 from dept_categories_routes import dept_categories_router
 from meetings_routes import meetings_router, init_meetings_db
 from sheets_routes import sheets_router
+from org_tree_routes import org_tree_router, init_org_tree_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -72,6 +73,7 @@ init_calendar_db(db)
 set_approvals_db(db)
 init_additional_tasks_db(db)
 init_meetings_db(db)
+init_org_tree_db(db)
 
 # Create the main app
 app = FastAPI()
@@ -2456,6 +2458,7 @@ api_router.include_router(meetings_router)
 api_router.include_router(projects_router)
 api_router.include_router(dept_categories_router)
 api_router.include_router(sheets_router)
+api_router.include_router(org_tree_router)
 
 # Include router in main app
 app.include_router(api_router)

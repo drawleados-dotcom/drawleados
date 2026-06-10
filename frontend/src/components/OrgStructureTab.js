@@ -26,7 +26,7 @@ export default function OrgStructureTab({ isDark, bgCard, bgSecondary, textPrima
 
       <div className={`text-xs ${textSecondary}`}>
         <AlertCircle className="h-3 w-3 inline mr-1" />
-        Edit support coming soon — drag, add, rename, delete nodes inline.
+        Hover any node to reveal Add / Edit / Delete actions. Drag the ⋮ handle to reorder or nest nodes, then click Save.
       </div>
     </div>
   );
