@@ -106,6 +106,7 @@ async def sheets_login(request: Request, user_id: str, sheet_type: str = "prospe
             "state": state,
             "user_id": user_id,
             "sheet_type": sheet_type,
+            "code_verifier": getattr(flow, "code_verifier", None),
             "created_at": datetime.now(timezone.utc),
         }},
         upsert=True,
@@ -124,6 +125,8 @@ async def sheets_callback(code: str, state: str):
     sheet_type = rec.get("sheet_type", "prospect")
 
     flow = _flow()
+    if rec.get("code_verifier"):
+        flow.code_verifier = rec["code_verifier"]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         flow.fetch_token(code=code)
