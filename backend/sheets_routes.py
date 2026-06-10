@@ -131,46 +131,55 @@ async def sheets_login(request: Request, user_id: str, sheet_type: str = "prospe
 @sheets_router.get("/oauth/sheets/callback")
 async def sheets_callback(request: Request, code: str, state: str):
     """Handles the Google callback, stores tokens, redirects user back to /leads."""
+    import logging
+    logger = logging.getLogger("sheets_oauth")
     from server import db
-    rec = await db.google_oauth_states.find_one({"state": state})
-    if not rec:
-        raise HTTPException(status_code=400, detail="Invalid or expired state")
-    user_id = rec["user_id"]
-    sheet_type = rec.get("sheet_type", "prospect")
-    # Use the SAME redirect_uri that was used for login (required by Google)
-    redirect_uri = rec.get("redirect_uri") or _compute_redirect_uri(request)
+    try:
+        rec = await db.google_oauth_states.find_one({"state": state})
+        if not rec:
+            # User probably initiated on one env (preview) and finished on another (prod).
+            return RedirectResponse(url="/leads?sheets_error=invalid_state")
+        user_id = rec["user_id"]
+        sheet_type = rec.get("sheet_type", "prospect")
+        # Use the SAME redirect_uri that was used for login (required by Google)
+        redirect_uri = rec.get("redirect_uri") or _compute_redirect_uri(request)
 
-    flow = _flow(redirect_uri=redirect_uri)
-    if rec.get("code_verifier"):
-        flow.code_verifier = rec["code_verifier"]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        flow.fetch_token(code=code)
-    creds = flow.credentials
+        flow = _flow(redirect_uri=redirect_uri)
+        if rec.get("code_verifier"):
+            flow.code_verifier = rec["code_verifier"]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            flow.fetch_token(code=code)
+        creds = flow.credentials
 
-    required = {"https://www.googleapis.com/auth/spreadsheets.readonly"}
-    granted = set(creds.scopes or [])
-    if not required.issubset(granted):
-        missing = required - granted
-        raise HTTPException(status_code=400, detail=f"Missing Sheets scopes: {missing}")
+        required = {"https://www.googleapis.com/auth/spreadsheets.readonly"}
+        granted = set(creds.scopes or [])
+        if not required.issubset(granted):
+            missing = required - granted
+            return RedirectResponse(url=f"/leads?sheets_error=missing_scopes&detail={','.join(missing)}")
 
-    expires_at = creds.expiry.replace(tzinfo=timezone.utc) if creds.expiry else None
-    await db.google_sheets_tokens.update_one(
-        {"user_id": user_id},
-        {"$set": {
-            "user_id": user_id,
-            "access_token": creds.token,
-            "refresh_token": creds.refresh_token,
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "scopes": list(creds.scopes or []),
-            "expires_at": expires_at,
-            "updated_at": datetime.now(timezone.utc),
-        }},
-        upsert=True,
-    )
-    await db.google_oauth_states.delete_one({"state": state})
-    # Bounce back to the Leads page with a flag so frontend can refresh
-    return RedirectResponse(url=f"/leads?sheets_connected=1&sheet_type={sheet_type}")
+        expires_at = creds.expiry.replace(tzinfo=timezone.utc) if creds.expiry else None
+        await db.google_sheets_tokens.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "user_id": user_id,
+                "access_token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "scopes": list(creds.scopes or []),
+                "expires_at": expires_at,
+                "updated_at": datetime.now(timezone.utc),
+            }},
+            upsert=True,
+        )
+        await db.google_oauth_states.delete_one({"state": state})
+        # Bounce back to the Leads page with a flag so frontend can refresh
+        return RedirectResponse(url=f"/leads?sheets_connected=1&sheet_type={sheet_type}")
+    except Exception as e:
+        logger.exception("Sheets OAuth callback failed: %s", e)
+        # Show a readable message in the browser instead of blank 500
+        from urllib.parse import quote
+        return RedirectResponse(url=f"/leads?sheets_error=callback_failed&detail={quote(str(e)[:200])}")
 
 
 @sheets_router.get("/sheets/status")

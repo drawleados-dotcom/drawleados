@@ -241,6 +241,27 @@ const LeadsPageV2 = () => {
     loadAll();
   }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadTeamMembers]);
 
+  // Show OAuth callback results (success / error) returned via URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('sheets_connected') === '1') {
+      const t = params.get('sheet_type') || 'sheet';
+      toast.success(`Google ${t === 'lead' ? 'Lead' : 'Prospect'} Sheet connected!`);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    const err = params.get('sheets_error');
+    if (err) {
+      const detail = params.get('detail') || '';
+      const map = {
+        invalid_state: 'OAuth session expired. Please click Connect and finish in the same browser.',
+        missing_scopes: `Google Sheets permission missing: ${detail}. Please grant Sheets access.`,
+        callback_failed: `Sheets connection failed: ${detail || 'unknown error'}`,
+      };
+      toast.error(map[err] || `Sheets error: ${err}`);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   // ============== LEAD ACTIONS ==============
 
   const createLead = async () => {
