@@ -46,24 +46,15 @@ const ROLES = [
 const MODULES = [
   // Core Modules
   { value: 'calendar', label: 'Calendar', icon: Calendar },
-  { value: 'my_tasks', label: 'My Tasks', icon: ClipboardList },
   { value: 'my_profile', label: 'My Profile', icon: User },
-  
+
   // Sales
-  { value: 'sales', label: 'Sales', icon: Users },
   { value: 'leads', label: 'Leads', icon: Users },
-  { value: 'bde_tasks', label: 'BDE Tasks', icon: Briefcase },
-  
+
   // Operations / Web Dev
   { value: 'web_dev', label: 'Web Dev', icon: Globe },
   { value: 'operations', label: 'Operations', icon: Briefcase },
-  { value: 'tasks', label: 'Tasks', icon: Briefcase },
-  { value: 'website_projects', label: 'Website Projects', icon: Globe },
-  { value: 'seo_works', label: 'SEO Works', icon: Globe },
-  { value: 'social_media', label: 'Social Media', icon: Globe },
-  { value: 'creative_board', label: 'Creative Board', icon: FileText },
-  { value: 'meta_ads', label: 'Meta Ads', icon: Globe },
-  
+
   // Admin Modules
   { value: 'hr', label: 'HR', icon: Users },
   { value: 'hr_admin', label: 'HR Admin', icon: Shield },
@@ -72,9 +63,6 @@ const MODULES = [
   { value: 'settings', label: 'Settings', icon: Settings },
   { value: 'documentations', label: 'Documentations', icon: FileText },
   { value: 'approvals', label: 'Approvals', icon: CheckCircle, hasSubOptions: true },
-  
-  // Reports
-  { value: 'reports', label: 'Reports', icon: FileText },
 ];
 
 // Departments available for Approvals module
@@ -5928,24 +5916,15 @@ function DesignationsDeptsTab({
   const MODULES = [
     // Core Modules
     { value: 'calendar', label: 'Calendar' },
-    { value: 'my_tasks', label: 'My Tasks' },
     { value: 'my_profile', label: 'My Profile' },
-    
+
     // Sales
-    { value: 'sales', label: 'Sales' },
     { value: 'leads', label: 'Leads' },
-    { value: 'bde_tasks', label: 'BDE Tasks' },
-    
+
     // Operations / Web Dev
     { value: 'web_dev', label: 'Web Dev' },
     { value: 'operations', label: 'Operations', hasSubOptions: true },
-    { value: 'tasks', label: 'Tasks' },
-    { value: 'website_projects', label: 'Website Projects' },
-    { value: 'seo_works', label: 'SEO Works' },
-    { value: 'social_media', label: 'Social Media' },
-    { value: 'creative_board', label: 'Creative Board' },
-    { value: 'meta_ads', label: 'Meta Ads' },
-    
+
     // Admin Modules
     { value: 'hr', label: 'HR' },
     { value: 'hr_admin', label: 'HR Admin' },
@@ -5954,9 +5933,6 @@ function DesignationsDeptsTab({
     { value: 'settings', label: 'Settings' },
     { value: 'documentations', label: 'Documentations' },
     { value: 'approvals', label: 'Approvals', hasSubOptions: true },
-    
-    // Reports
-    { value: 'reports', label: 'Reports' },
   ];
   
   // Departments available for Approvals module

@@ -24,11 +24,10 @@ const routeToContext = {
   '/hr': 'general',
   '/hr-admin': 'general',
   '/dashboard': 'general',
-  '/reports': 'sales',
   '/services': 'general',
   '/settings': 'general',
   '/sop-works': 'operations',
-  '/website-projects': 'operations',
+  '/dl-operations': 'operations',
   '/profile': 'general'
 };
 

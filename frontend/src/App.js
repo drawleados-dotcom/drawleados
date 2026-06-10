@@ -9,7 +9,6 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import LeadsPageV2 from './pages/LeadsPageV2';
-import ReportsPage from './pages/ReportsPage';
 import FinancePage from './pages/FinancePage';
 import FinanceModule from './pages/FinanceModule';
 import ServicesPage from './pages/ServicesPage';
@@ -19,21 +18,13 @@ import HRPage from './pages/HRPage';
 import HRAdminPage from './pages/HRAdminPage';
 import MarketingModule from './pages/MarketingModule';
 import SOPWorksBoard from './pages/SOPWorksBoard';
-import WebsiteProjectsPage from './pages/WebsiteProjectsPage';
-import SocialMediaPage from './pages/SocialMediaPage';
-import CreativeDesignBoard from './pages/CreativeDesignBoard';
-import MetaAdsBoard from './pages/Operations/MetaAdsBoard';
 import DocumentationsPage from './pages/DocumentationsPage';
-import SEOBoardPage from './pages/SEOBoardPage';
 import AdminSignupPage from './pages/AdminSignupPage';
 import ProfilePage from './pages/ProfilePage';
-import BDETasksPage from './pages/BDETasksPage';
 import OurTasksPage from './pages/OurTasksPage';
 import CalendarDayDetailPage from './pages/CalendarDayDetailPage';
 import CalendarPage from './pages/CalendarPage';
 import LeaveVerificationPage from './pages/LeaveVerificationPage';
-import TasksModulePage from './pages/TasksModulePage';
-import MyTasksPage from './pages/MyTasksPage';
 import MyDocumentsPage from './pages/MyDocumentsPage';
 import DLOperationsPage from './pages/DLOperationsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
@@ -66,14 +57,6 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <LeadsPageV2 />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/reports"
-        element={
-          <ProtectedRoute>
-            <ReportsPage />
           </ProtectedRoute>
         }
       />
@@ -165,11 +148,16 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
-      {/* Old website-projects route redirects to Web Dev */}
-      <Route
-        path="/website-projects"
-        element={<Navigate to="/dl-operations" replace />}
-      />
+      {/* Legacy redirects → Web Dev */}
+      <Route path="/website-projects" element={<Navigate to="/dl-operations" replace />} />
+      <Route path="/social-media" element={<Navigate to="/dl-operations" replace />} />
+      <Route path="/creative-board" element={<Navigate to="/dl-operations" replace />} />
+      <Route path="/meta-ads" element={<Navigate to="/dl-operations" replace />} />
+      <Route path="/seo-board" element={<Navigate to="/dl-operations" replace />} />
+      <Route path="/bde-tasks" element={<Navigate to="/operations" replace />} />
+      <Route path="/tasks" element={<Navigate to="/operations" replace />} />
+      <Route path="/my-tasks" element={<Navigate to="/operations" replace />} />
+      <Route path="/reports" element={<Navigate to="/leads" replace />} />
       <Route
         path="/dl-operations"
         element={
@@ -195,42 +183,10 @@ function AppRouter() {
         }
       />
       <Route
-        path="/social-media"
-        element={
-          <ProtectedRoute>
-            <SocialMediaPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/creative-board"
-        element={
-          <ProtectedRoute>
-            <CreativeDesignBoard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/meta-ads"
-        element={
-          <ProtectedRoute>
-            <MetaAdsBoard />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/documentations"
         element={
           <ProtectedRoute>
             <DocumentationsPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/seo-board"
-        element={
-          <ProtectedRoute>
-            <SEOBoardPage />
           </ProtectedRoute>
         }
       />
@@ -243,34 +199,10 @@ function AppRouter() {
         }
       />
       <Route
-        path="/bde-tasks"
-        element={
-          <ProtectedRoute>
-            <BDETasksPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/our-tasks"
         element={
           <ProtectedRoute>
             <OurTasksPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/tasks"
-        element={
-          <ProtectedRoute>
-            <TasksModulePage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/my-tasks"
-        element={
-          <ProtectedRoute>
-            <MyTasksPage />
           </ProtectedRoute>
         }
       />

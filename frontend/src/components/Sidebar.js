@@ -9,12 +9,9 @@ import {
   Settings,
   LogOut,
   Package,
-  TrendingUp,
   DollarSign,
   UserCircle,
   Shield,
-  ChevronRight,
-  ChevronDown,
   ChevronLeft,
   Plus,
   Database,
@@ -31,7 +28,6 @@ import {
   Search,
   Calendar,
   Briefcase,
-  Layers,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -47,9 +43,9 @@ const Sidebar = () => {
   const { isDark } = useTheme();
   const [databases, setDatabases] = useState([]);
   const [operationsExpanded, setOperationsExpanded] = useState(false);
-  const [salesExpanded, setSalesExpanded] = useState(false);
+  const [salesExpanded] = useState(false);
   const [metaAdsExpanded, setMetaAdsExpanded] = useState(false);
-  const [websiteProjects, setWebsiteProjects] = useState([]);
+  // websiteProjects state removed — Web Dev now uses its own page (/dl-operations)
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   
@@ -175,57 +171,25 @@ const Sidebar = () => {
     }
   }, [token]);
 
-  // Load website projects for sidebar
-  const loadWebsiteProjects = useCallback(async () => {
-    if (!token) return;
-    try {
-      const res = await axios.get(`${API}/api/website-projects/projects`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setWebsiteProjects(res.data || []);
-    } catch (error) {
-      console.error('Error loading website projects:', error);
-    }
-  }, [token]);
+  // loadWebsiteProjects removed — Web Dev sidebar badge no longer shown
 
   useEffect(() => {
     loadDatabases();
     loadUnreadCount();
-    loadWebsiteProjects();
     
     // Poll for unread count every 10 seconds
     const interval = setInterval(loadUnreadCount, 10000);
     return () => clearInterval(interval);
-  }, [loadDatabases, loadUnreadCount, loadWebsiteProjects]);
+  }, [loadDatabases, loadUnreadCount]);
 
-  // Expand the relevant dropdown based on current page (accordion style - only one open)
-  useEffect(() => {
-    // Operations pages - open Operations, close Sales
-    if (location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works') || 
-        location.pathname.startsWith('/website-projects') || location.pathname === '/social-media' ||
-        location.pathname === '/creative-board' || location.pathname === '/meta-ads' ||
-        (location.pathname === '/tasks' && !location.search.includes('my-tasks'))) {
-      setOperationsExpanded(true);
-      setSalesExpanded(false);
-    }
-    // Sales pages - open Sales, close Operations
-    else if (location.pathname === '/leads' || location.pathname === '/bde-tasks') {
-      setSalesExpanded(true);
-      setOperationsExpanded(false);
-    }
-    // All other pages - close both dropdowns
-    else {
-      setSalesExpanded(false);
-      setOperationsExpanded(false);
-    }
-  }, [location.pathname, location.search]);
+  // Operations dropdown is toggled manually by clicking the Operations nav button
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  const isOperationsActive = location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works') || location.pathname.startsWith('/website-projects') || (location.pathname === '/tasks' && !location.search.includes('my-tasks')) || location.pathname === '/social-media' || location.pathname === '/creative-board' || location.pathname === '/meta-ads';
+  const isOperationsActive = location.pathname.startsWith('/operations') || location.pathname.startsWith('/sop-works');
 
   // Base styles for nav items
   const navItemBase = `flex items-center gap-3 px-4 py-2.5 text-sm font-semibold rounded-lg transition-all duration-300`;
@@ -278,28 +242,6 @@ const Sidebar = () => {
               {!isCollapsed && 'Calendar'}
             </Link>
 
-            {/* My Tasks (BDE-style for tasks assigned to current user) */}
-            <Link
-              to="/my-tasks"
-              data-testid="nav-my-tasks"
-              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/my-tasks' ? navItemActive : navItemInactive}`}
-              title={isCollapsed ? 'My Tasks' : ''}
-            >
-              <ClipboardList className="h-5 w-5" strokeWidth={2} />
-              {!isCollapsed && 'My Tasks'}
-            </Link>
-
-            {/* Tasks (All Departments) */}
-            <Link
-              to="/tasks"
-              data-testid="nav-tasks-all"
-              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/tasks' ? navItemActive : navItemInactive}`}
-              title={isCollapsed ? 'Tasks' : ''}
-            >
-              <Layers className="h-5 w-5" strokeWidth={2} />
-              {!isCollapsed && 'Tasks'}
-            </Link>
-
             {/* My Profile */}
             <Link
               to="/hr"
@@ -324,145 +266,7 @@ const Sidebar = () => {
           </>
         )}
 
-        {/* === PROJECT MANAGER VIEW (Website Department Only) === */}
-        {isProjectManager && !hasTasksModuleOnly && (
-          <>
-            {/* Calendar */}
-            <Link
-              to="/calendar"
-              data-testid="nav-pm-calendar"
-              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
-              title={isCollapsed ? 'Calendar' : ''}
-            >
-              <Calendar className="h-5 w-5" strokeWidth={2} />
-              {!isCollapsed && 'Calendar'}
-            </Link>
-
-            {/* Website Projects - Main Link */}
-            <Link
-              to="/website-projects"
-              data-testid="nav-pm-projects"
-              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/website-projects' && !location.search ? navItemActive : navItemInactive}`}
-              title={isCollapsed ? 'All Projects' : ''}
-            >
-              <Globe className="h-5 w-5" strokeWidth={2} />
-              {!isCollapsed && (
-                <>
-                  <span className="flex-1 text-left">All Projects</span>
-                  <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{websiteProjects.length}</Badge>
-                </>
-              )}
-            </Link>
-
-            {/* Project Stages Section */}
-            {!isCollapsed && (
-              <div className={`ml-2 mt-2 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#3f3f46]' : 'border-gray-200'}`}>
-                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>
-                  Workflow Stages
-                </p>
-                
-                {/* Project Creation */}
-                <Link
-                  to="/website-projects?stage=creation"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=creation') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                  <span>Project Creation</span>
-                </Link>
-
-                {/* Discovery Call */}
-                <Link
-                  to="/website-projects?stage=discovery"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=discovery') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-orange-500" />
-                  <span>Discovery Call</span>
-                </Link>
-
-                {/* Content */}
-                <Link
-                  to="/website-projects?stage=content"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=content') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span>Content</span>
-                </Link>
-
-                {/* Wireframe */}
-                <Link
-                  to="/website-projects?stage=wireframe"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=wireframe') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-purple-500" />
-                  <span>Wireframe</span>
-                </Link>
-
-                {/* UI Design */}
-                <Link
-                  to="/website-projects?stage=ui"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=ui') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-pink-500" />
-                  <span>UI Design</span>
-                </Link>
-
-                {/* Development */}
-                <Link
-                  to="/website-projects?stage=development"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=development') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <span>Development</span>
-                </Link>
-
-                {/* Testing */}
-                <Link
-                  to="/website-projects?stage=testing"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=testing') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-cyan-500" />
-                  <span>Testing</span>
-                </Link>
-
-                {/* Delivered */}
-                <Link
-                  to="/website-projects?stage=delivered"
-                  className={`flex items-center gap-2 px-2 py-1.5 text-sm rounded-md transition-all ${
-                    location.search.includes('stage=delivered') ? 'bg-[#6366f1]/10 text-[#6366f1]' : isDark ? 'text-[#a1a1aa] hover:text-[#e4e4e7] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>Delivered</span>
-                </Link>
-              </div>
-            )}
-
-            {/* HR - Limited access */}
-            <Link
-              to="/hr"
-              data-testid="nav-pm-hr"
-              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/hr') ? navItemActive : navItemInactive}`}
-              title={isCollapsed ? 'HR' : ''}
-            >
-              <Users className="h-5 w-5" strokeWidth={2} />
-              {!isCollapsed && 'HR'}
-            </Link>
-          </>
-        )}
+        {/* === PROJECT MANAGER VIEW removed (used deleted /website-projects module) === */}
 
         {/* === STANDARD VIEW (for non-tasks-only users and non-project-managers) === */}
         {!hasTasksModuleOnly && !isProjectManager && (
@@ -480,18 +284,7 @@ const Sidebar = () => {
         </Link>
         )}
 
-        {/* 2. My Tasks - only if user has my_tasks or tasks access */}
-        {hasAccess('my_tasks') && (
-        <Link
-          to="/tasks?view=my-tasks"
-          data-testid="nav-my-tasks"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/tasks' && location.search.includes('my-tasks') ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'My Tasks' : ''}
-        >
-          <User className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'My Tasks'}
-        </Link>
-        )}
+        {/* 2. My Tasks removed — use Operations instead */}
 
         {/* Our Tasks - only if user has our_tasks access */}
         {hasAccess('our_tasks') && (
@@ -506,83 +299,17 @@ const Sidebar = () => {
         </Link>
         )}
 
-        {/* 3. Leads - Direct link for Super Admin, expandable for others */}
+        {/* 3. Leads - direct top-level link (Sales group removed) */}
         {hasAccess('leads') && (
-        <>
-          {/* Super Admin sees only direct Leads link, no Sales dropdown */}
-          {userRole === 'super_admin' ? (
-            <Link
-              to="/leads"
-              data-testid="nav-leads"
-              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
-              title={isCollapsed ? 'Leads' : ''}
-            >
-              <Users className="h-5 w-5" strokeWidth={2} />
-              {!isCollapsed && 'Leads'}
-            </Link>
-          ) : (
-            /* Others see Sales expandable menu */
-            (isBDE || canSeeDepartment('bde') || userRole === 'admin') && (
-            <div>
-              <button
-                onClick={() => {
-                  if (isCollapsed) {
-                    setIsCollapsed(false);
-                    setSalesExpanded(true);
-                    setOperationsExpanded(false);
-                  } else {
-                    setSalesExpanded(!salesExpanded);
-                    if (!salesExpanded) setOperationsExpanded(false);
-                  }
-                }}
-                data-testid="nav-sales"
-                className={`w-full ${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${(location.pathname === '/leads' || location.pathname === '/bde-tasks') ? navItemActive : navItemInactive}`}
-                title={isCollapsed ? 'Sales' : ''}
-              >
-                {!isCollapsed && (salesExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                ))}
-                <TrendingUp className="h-5 w-5" strokeWidth={2} />
-                {!isCollapsed && <span className="flex-1 text-left">Sales</span>}
-              </button>
-
-              {!isCollapsed && salesExpanded && (
-                <div className={`ml-4 mt-1 space-y-0.5 border-l pl-3 ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-                  <Link
-                    to="/leads"
-                    data-testid="nav-leads"
-                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                      location.pathname === '/leads'
-                        ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                        : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                  >
-                    <Users className="h-4 w-4" />
-                    <span>Leads</span>
-                  </Link>
-                  
-                  {(isBDE || canSeeDepartment('bde') || userRole === 'admin') && (
-                  <Link
-                    to="/bde-tasks"
-                    data-testid="nav-bde-tasks"
-                    className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                      location.pathname === '/bde-tasks'
-                        ? isDark ? 'bg-[#27272a] text-[#fafafa]' : 'bg-gray-100 text-gray-900'
-                        : isDark ? 'text-[#a1a1aa] hover:bg-[#27272a]/50 hover:text-[#e4e4e7]' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                  >
-                    <Briefcase className="h-4 w-4" />
-                    <span>Business Development Tasks</span>
-                  </Link>
-                  )}
-                </div>
-              )}
-            </div>
-            )
-          )}
-        </>
+          <Link
+            to="/leads"
+            data-testid="nav-leads"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Leads' : ''}
+          >
+            <Users className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'Leads'}
+          </Link>
         )}
 
         {/* 3.5 Web Dev - Website Development Projects */}
@@ -595,9 +322,6 @@ const Sidebar = () => {
           >
             <Globe className="h-5 w-5" strokeWidth={2} />
             {!isCollapsed && 'Web Dev'}
-            {!isCollapsed && websiteProjects.length > 0 && (
-              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs ml-auto">{websiteProjects.length}</Badge>
-            )}
           </Link>
         )}
 

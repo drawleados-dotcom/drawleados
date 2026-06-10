@@ -29,16 +29,12 @@ from operations_routes import operations_router, init_operations_db
 from hr_routes import hr_router, init_hr_db
 from notion_routes import notion_router, init_notion_db
 from chat_routes import chat_router, init_chat_db
-from marketing_routes import marketing_router, init_marketing_db
 from ai_routes import ai_router, init_ai_db
 from sop_routes import sop_router, init_sop_db
 from website_projects_routes import website_projects_router, init_website_projects_db
 from expense_routes import expense_router, set_expense_db
-from social_creative_routes import social_media_router, creative_router, init_social_creative_db
-from meta_ads_routes import meta_ads_router, init_meta_ads_db
 from leads_v2_routes import leads_v2_router, init_leads_v2_db
 from documentation_routes import documentation_router, init_documentation_db
-from seo_board_routes import seo_board_router, init_seo_board_db
 from designation_routes import designation_router
 from bde_routes import bde_router
 from our_tasks_routes import our_tasks_router
@@ -66,16 +62,12 @@ init_operations_db(db)
 init_hr_db(db)
 init_notion_db(db)
 init_chat_db(db)
-init_marketing_db(db)
 init_ai_db(db)
 init_sop_db(db)
 init_website_projects_db(db)
 set_expense_db(db)
-init_social_creative_db(db)
-init_meta_ads_db(db)
 init_leads_v2_db(db)
 init_documentation_db(db)
-init_seo_board_db(db)
 init_calendar_db(db)
 set_approvals_db(db)
 init_additional_tasks_db(db)
@@ -1271,7 +1263,7 @@ async def seed_demo_users():
             "role": "project_manager",
             "designation": "Project Manager",
             "department": "Website",
-            "module_access": ["website_projects", "tasks", "operations"]
+            "module_access": ["web_dev", "operations"]
         },
         {
             "email": "hr@drawlead.com",
@@ -2446,17 +2438,12 @@ api_router.include_router(operations_router)
 api_router.include_router(hr_router)
 api_router.include_router(notion_router)
 api_router.include_router(chat_router)
-api_router.include_router(marketing_router)
 api_router.include_router(ai_router)
 api_router.include_router(sop_router)
 api_router.include_router(website_projects_router)
 api_router.include_router(expense_router)
-api_router.include_router(social_media_router)
-api_router.include_router(creative_router)
-api_router.include_router(meta_ads_router)
 api_router.include_router(leads_v2_router)
 api_router.include_router(documentation_router)
-api_router.include_router(seo_board_router)
 api_router.include_router(designation_router)
 api_router.include_router(bde_router)
 api_router.include_router(our_tasks_router)
