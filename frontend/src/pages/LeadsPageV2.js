@@ -1369,15 +1369,40 @@ const LeadsPageV2 = () => {
               </TabsContent>
             </Tabs>
             
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => { setShowAddLeadModal(false); setEditingLead(null); }}>Cancel</Button>
-              <Button
-                onClick={editingLead ? updateLead : createLead}
-                data-testid="save-lead-btn"
-                className="bg-[#3b82f6] hover:bg-[#2563eb]"
-              >
-                {editingLead ? 'Update Lead' : 'Create Lead'}
-              </Button>
+            <DialogFooter className="flex sm:justify-between gap-2 w-full">
+              <div>
+                {editingLead && (
+                  <Button
+                    onClick={async () => {
+                      if (!window.confirm(`Permanently delete "${editingLead.name}"? This cannot be undone.`)) return;
+                      try {
+                        await axios.delete(`${API}/api/leads-v2/leads/${editingLead.lead_id}/permanent`, { headers });
+                        toast.success('Lead permanently deleted');
+                        setShowAddLeadModal(false);
+                        setEditingLead(null);
+                        loadLeads();
+                        loadStats();
+                      } catch (e) {
+                        toast.error(e.response?.data?.detail || 'Failed to permanently delete');
+                      }
+                    }}
+                    className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                    data-testid="permanent-delete-lead-btn"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" /> Permanently Delete
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => { setShowAddLeadModal(false); setEditingLead(null); }}>Cancel</Button>
+                <Button
+                  onClick={editingLead ? updateLead : createLead}
+                  data-testid="save-lead-btn"
+                  className="bg-[#3b82f6] hover:bg-[#2563eb]"
+                >
+                  {editingLead ? 'Update Lead' : 'Create Lead'}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>

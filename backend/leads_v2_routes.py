@@ -405,7 +405,7 @@ async def update_lead(lead_id: str, update_data: Dict[str, Any], request: Reques
 
 @leads_v2_router.delete("/leads/{lead_id}")
 async def delete_lead(lead_id: str, request: Request):
-    """Delete a lead"""
+    """Soft-delete a lead"""
     await get_current_user_from_request(request)
     
     await db.leads_v2.update_one(
@@ -414,6 +414,21 @@ async def delete_lead(lead_id: str, request: Request):
     )
     
     return {"message": "Lead deleted"}
+
+
+@leads_v2_router.delete("/leads/{lead_id}/permanent")
+async def permanent_delete_lead(lead_id: str, request: Request):
+    """Permanently remove a lead from the database (irreversible)."""
+    user = await get_current_user_from_request(request)
+    role = (user.get("role") if isinstance(user, dict) else getattr(user, "role", "")) or ""
+    if role.lower() not in ("super_admin", "admin"):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin can permanently delete")
+    result = await db.leads_v2.delete_one({"lead_id": lead_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    # Also remove any sheet-row link
+    await db.leads_sheet_rows.delete_many({"row_id": lead_id})
+    return {"message": "Lead permanently deleted", "lead_id": lead_id}
 
 @leads_v2_router.put("/leads/{lead_id}/stage")
 async def update_lead_stage(lead_id: str, stage_data: Dict[str, str], request: Request):
