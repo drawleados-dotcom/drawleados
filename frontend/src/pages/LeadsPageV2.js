@@ -8,6 +8,8 @@ import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
+import { Calendar as CalendarPicker } from '../components/ui/calendar';
 import { toast } from 'sonner';
 import axios from 'axios';
 import SheetConnectModal from '../components/SheetConnectModal';
@@ -75,7 +77,8 @@ const LeadsPageV2 = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
-  const [dateFilter, setDateFilter] = useState('all'); // 'all' | 'today' | 'week' | 'month'
+  const [dateRange, setDateRange] = useState({ from: undefined, to: undefined }); // Custom date range filter
+  const [showDatePopover, setShowDatePopover] = useState(false);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showStagesModal, setShowStagesModal] = useState(false);
   const [showFieldsModal, setShowFieldsModal] = useState(false);
@@ -745,17 +748,18 @@ const LeadsPageV2 = () => {
     if (filterLeadOwner && lead.lead_owner !== filterLeadOwner) return false;
     
     // Filter by date range
-    if (dateFilter !== 'all' && lead.created_at) {
+    if ((dateRange.from || dateRange.to) && lead.created_at) {
       const created = new Date(lead.created_at);
-      const now = new Date();
-      if (dateFilter === 'today') {
-        if (created.toDateString() !== now.toDateString()) return false;
-      } else if (dateFilter === 'week') {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        if (created < weekAgo) return false;
-      } else if (dateFilter === 'month') {
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        if (created < monthAgo) return false;
+      created.setHours(0, 0, 0, 0);
+      if (dateRange.from) {
+        const from = new Date(dateRange.from);
+        from.setHours(0, 0, 0, 0);
+        if (created < from) return false;
+      }
+      if (dateRange.to) {
+        const to = new Date(dateRange.to);
+        to.setHours(23, 59, 59, 999);
+        if (created > to) return false;
       }
     }
     
@@ -928,56 +932,101 @@ const LeadsPageV2 = () => {
 
         {/* Date Range Filter */}
         <div className={`px-4 pt-4 flex items-center gap-2 flex-wrap`} data-testid="date-filter-bar">
-          <span className={`text-xs ${textSecondary} uppercase tracking-wide mr-1`}>Range:</span>
-          {[
-            { key: 'all', label: 'All Time' },
-            { key: 'today', label: 'Today' },
-            { key: 'week', label: 'This Week' },
-            { key: 'month', label: 'This Month' },
-          ].map(opt => (
-            <button
-              key={opt.key}
-              onClick={() => setDateFilter(opt.key)}
-              data-testid={`date-filter-${opt.key}`}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                dateFilter === opt.key
-                  ? 'bg-[#3b82f6] text-white border-[#3b82f6]'
-                  : `${bgSecondary} ${textSecondary} ${borderColor} hover:${textPrimary}`
-              }`}
+          <span className={`text-xs ${textSecondary} uppercase tracking-wide mr-1`}>Date Range:</span>
+          <Popover open={showDatePopover} onOpenChange={setShowDatePopover}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="date-range-trigger"
+                className={`${bgSecondary} ${borderColor} ${textPrimary} gap-2`}
+              >
+                <Calendar className="h-4 w-4" />
+                {dateRange.from && dateRange.to ? (
+                  <span>
+                    {new Date(dateRange.from).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {' — '}
+                    {new Date(dateRange.to).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </span>
+                ) : dateRange.from ? (
+                  <span>
+                    From {new Date(dateRange.from).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </span>
+                ) : (
+                  <span>All Time</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <CalendarPicker
+                mode="range"
+                numberOfMonths={2}
+                selected={dateRange}
+                onSelect={(range) => setDateRange(range || { from: undefined, to: undefined })}
+                initialFocus
+                data-testid="date-range-calendar"
+              />
+              <div className={`flex items-center justify-between gap-2 p-3 border-t ${borderColor}`}>
+                <div className="flex gap-1 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="date-preset-today"
+                    onClick={() => {
+                      const t = new Date();
+                      setDateRange({ from: t, to: t });
+                    }}
+                  >Today</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="date-preset-week"
+                    onClick={() => {
+                      const t = new Date();
+                      const w = new Date(t.getTime() - 6 * 24 * 60 * 60 * 1000);
+                      setDateRange({ from: w, to: t });
+                    }}
+                  >Last 7 Days</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="date-preset-month"
+                    onClick={() => {
+                      const t = new Date();
+                      const m = new Date(t.getFullYear(), t.getMonth(), 1);
+                      setDateRange({ from: m, to: t });
+                    }}
+                  >This Month</Button>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="date-clear"
+                    onClick={() => setDateRange({ from: undefined, to: undefined })}
+                  >Clear</Button>
+                  <Button
+                    size="sm"
+                    data-testid="date-apply"
+                    className="bg-[#3b82f6] hover:bg-[#2563eb]"
+                    onClick={() => setShowDatePopover(false)}
+                  >Apply</Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          {(dateRange.from || dateRange.to) && (
+            <Badge
+              className="bg-[#3b82f6]/20 text-[#3b82f6] cursor-pointer gap-1"
+              onClick={() => setDateRange({ from: undefined, to: undefined })}
             >
-              {opt.label}
-            </button>
-          ))}
+              {filteredLeads.length} in range <X className="h-3 w-3" />
+            </Badge>
+          )}
         </div>
 
-        {/* Stats Cards */}
-        <div className={`p-4 border-b ${borderColor} flex gap-2 overflow-x-auto no-scrollbar`}>
-          <div 
-            onClick={() => { setViewMode('list'); setFilterStage(null); }}
-            className={`p-2 sm:p-3 rounded-xl ${bgSecondary} min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0 cursor-pointer hover:scale-105 transition-transform`}
-          >
-            <p className={`text-lg sm:text-2xl font-bold ${textPrimary}`}>{dateFilter === 'all' ? stats.total : filteredLeads.length}</p>
-            <p className={`text-[10px] sm:text-xs ${textSecondary}`}>Total Leads</p>
-          </div>
-          {stages.map(stage => {
-            const count = dateFilter === 'all'
-              ? (stats.by_stage?.[stage.stage_id]?.count || 0)
-              : filteredLeads.filter(l => l.stage_id === stage.stage_id).length;
-            return (
-              <div
-                key={stage.stage_id}
-                onClick={() => { setViewMode('list'); setFilterStage(stage.stage_id); }}
-                className={`p-2 sm:p-3 rounded-xl min-w-[80px] sm:min-w-[100px] text-center flex-shrink-0 cursor-pointer hover:scale-105 transition-transform ${filterStage === stage.stage_id ? 'ring-2 ring-offset-2' : ''}`}
-                style={{ backgroundColor: `${stage.color}20`, ringColor: stage.color }}
-              >
-                <p className="text-lg sm:text-2xl font-bold" style={{ color: stage.color }}>
-                  {count}
-                </p>
-                <p className={`text-[10px] sm:text-xs ${textSecondary} truncate`}>{stage.name}</p>
-              </div>
-            );
-          })}
-        </div>
+        {/* Stage Stats Cards row removed — stage filtering available via List View tabs */}
+
 
         {/* Amount Summary Cards (Quotation / Negotiation / Deal Closed / Lost) */}
         <div className={`px-4 pt-4 grid grid-cols-2 md:grid-cols-4 gap-3`} data-testid="amount-summary-row">
