@@ -774,8 +774,8 @@ async def decide_task_approval(task_id: str, payload: dict, request: Request):
     user = await get_current_user(request)
 
     decision = (payload or {}).get("decision")
-    if decision not in {"approve", "reject", "forward_ceo"}:
-        raise HTTPException(status_code=400, detail="decision must be 'approve', 'reject', or 'forward_ceo'")
+    if decision not in {"approve", "reject", "forward_ceo", "forward_operations"}:
+        raise HTTPException(status_code=400, detail="decision must be 'approve', 'reject', 'forward_ceo', or 'forward_operations'")
 
     task = await db.our_tasks.find_one({"task_id": task_id})
     if not task or not task.get("approval_request"):
@@ -808,6 +808,21 @@ async def decide_task_approval(task_id: str, payload: dict, request: Request):
                 "approval_request.forwarded_by": user.user_id,
                 "approval_request.forwarded_from": req.get("approver_role"),
                 "approval_request.forwarded_at": now_iso,
+                "updated_at": now_iso,
+            }}
+        )
+
+    elif decision == "forward_operations":
+        # PM / Marketing Head approves at their level and forwards to Operations for final approval
+        await db.our_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {
+                "approval_request.approver_role": "operations",
+                "approval_request.forwarded_by": user.user_id,
+                "approval_request.forwarded_from": req.get("approver_role"),
+                "approval_request.forwarded_at": now_iso,
+                "approval_request.intermediate_approved_by_role": req.get("approver_role"),
+                "approval_request.intermediate_approved_at": now_iso,
                 "updated_at": now_iso,
             }}
         )

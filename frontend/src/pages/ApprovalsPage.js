@@ -159,6 +159,7 @@ export default function ApprovalsPage({ embedded = false }) {
       toast.success(
         body.decision === 'approve' ? 'Task approved' :
         body.decision === 'forward_ceo' ? 'Forwarded to CEO' :
+        body.decision === 'forward_operations' ? 'Approved & forwarded to Operations' :
         'Task rejected and new task created'
       );
       setDecisionTask(null);
@@ -587,36 +588,36 @@ export default function ApprovalsPage({ embedded = false }) {
                   )}
                 </div>
 
-                {/* Approve By */}
-                <div>
-                  <p className={`text-sm font-medium ${textPrimary} mb-2`}>Approved By</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: 'operations' })}
-                      disabled={decisionSubmitting}
-                      className="bg-[#3b82f6] hover:bg-[#2563eb] text-white"
-                      data-testid="decision-approve-operations"
-                    >
-                      <Check className="h-3 w-3 mr-1" /> Operations
-                    </Button>
-                    <Button
-                      onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: 'client' })}
-                      disabled={decisionSubmitting}
-                      className="bg-[#10b981] hover:bg-[#059669] text-white"
-                      data-testid="decision-approve-client"
-                    >
-                      <Check className="h-3 w-3 mr-1" /> Client
-                    </Button>
-                    <Button
-                      onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'forward_ceo' })}
-                      disabled={decisionSubmitting}
-                      className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
-                      data-testid="decision-forward-ceo"
-                    >
-                      Send to CEO
-                    </Button>
-                  </div>
-                </div>
+                {/* Decision Buttons — role-aware */}
+                {(() => {
+                  const role = decisionTask.approval_request?.approver_role;
+                  const isMidApprover = role === 'pm' || role === 'marketing_head';
+                  return (
+                    <div>
+                      <p className={`text-sm font-medium ${textPrimary} mb-2`}>Decision</p>
+                      <div className={`grid ${isMidApprover ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                        <Button
+                          onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: role === 'operations' ? 'operations' : 'client' })}
+                          disabled={decisionSubmitting}
+                          className="bg-[#10b981] hover:bg-[#059669] text-white"
+                          data-testid="decision-approve"
+                        >
+                          <Check className="h-3 w-3 mr-1" /> Approve
+                        </Button>
+                        {isMidApprover && (
+                          <Button
+                            onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'forward_operations' })}
+                            disabled={decisionSubmitting}
+                            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white"
+                            data-testid="decision-forward-operations"
+                          >
+                            <Check className="h-3 w-3 mr-1" /> Approve & Send to Operations
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Reject */}
                 <div className={`border-t ${borderColor} pt-5`}>
