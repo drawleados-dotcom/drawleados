@@ -157,7 +157,7 @@ function AppRouter() {
       <Route path="/bde-tasks" element={<Navigate to="/operations" replace />} />
       <Route path="/tasks" element={<Navigate to="/operations" replace />} />
       <Route path="/my-tasks" element={<Navigate to="/operations" replace />} />
-      <Route path="/reports" element={<Navigate to="/leads" replace />} />
+      <Route path="/reports" element={<Navigate to="/our-tasks" replace />} />
       <Route
         path="/dl-operations"
         element={
@@ -214,7 +214,7 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/leads" replace />} />
+      <Route path="/" element={<Navigate to="/our-tasks" replace />} />
     </Routes>
   );
 }

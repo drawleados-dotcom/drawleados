@@ -46,7 +46,7 @@ export default function LoginPage() {
         // No 2FA, proceed with login
         setAuth(response.data.user, response.data.session_token);
         toast.success('Login successful!');
-        navigate('/leads');
+        navigate('/our-tasks');
       }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Login failed');
@@ -62,7 +62,7 @@ export default function LoginPage() {
       const response = await axios.post(`${API}/api/auth/2fa/verify?email=${encodeURIComponent(email)}&code=${twoFactorCode}`);
       setAuth(response.data.user, response.data.session_token);
       toast.success('Login successful!');
-      navigate('/leads');
+      navigate('/our-tasks');
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Invalid 2FA code');
     } finally {
