@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import axios from 'axios';
+import SheetConnectModal from '../components/SheetConnectModal';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Plus,
   Search,
@@ -55,6 +57,12 @@ const LeadsPageV2 = () => {
   const [customFields, setCustomFields] = useState([]);
   const [stats, setStats] = useState({ total: 0, by_stage: {} });
   const [sheetsConfig, setSheetsConfig] = useState(null);
+  // New: separate Prospect & Lead sheet configs
+  const [prospectCfg, setProspectCfg] = useState(null);
+  const [leadCfg, setLeadCfg] = useState(null);
+  const [showProspectSheetModal, setShowProspectSheetModal] = useState(false);
+  const [showLeadSheetModal, setShowLeadSheetModal] = useState(false);
+  const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   
   // Dropdown data
@@ -176,6 +184,12 @@ const LeadsPageV2 = () => {
     } catch (error) {
       console.error('Error loading sheets config:', error);
     }
+    // Also load the new dual-sheet (Prospect/Lead) configs
+    try {
+      const res2 = await axios.get(`${API}/api/sheets/configs`, { headers });
+      setProspectCfg(res2.data?.prospect || null);
+      setLeadCfg(res2.data?.lead || null);
+    } catch (e) { /* ignore */ }
   }, []);
 
   const loadServices = useCallback(async () => {
@@ -773,31 +787,27 @@ const LeadsPageV2 = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Google Sheets Connection */}
-              {sheetsConfig?.sheet_id ? (
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-green-500/20 text-green-400 flex items-center gap-1">
-                    <FileSpreadsheet className="h-3 w-3" />
-                    Connected
-                  </Badge>
-                  <Button variant="ghost" size="sm" onClick={syncSheets} title="Sync Now">
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={disconnectSheets} className="text-red-400">
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  onClick={() => setShowSheetsModal(true)}
-                  variant="outline"
-                  className={`${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary}`}
-                  data-testid="connect-sheets-btn"
-                >
-                  <Link2 className="h-4 w-4 mr-2" />
-                  Connect Sheets
-                </Button>
-              )}
+              {/* Two separate Google Sheets — Prospect & Lead */}
+              <Button
+                onClick={() => setShowProspectSheetModal(true)}
+                variant="outline"
+                className={`${borderColor} ${bgSecondary} ${textSecondary} gap-2`}
+                data-testid="prospect-sheet-btn"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Prospect Sheet
+                {prospectCfg?.sheet_id && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">Connected</Badge>}
+              </Button>
+              <Button
+                onClick={() => setShowLeadSheetModal(true)}
+                variant="outline"
+                className={`${borderColor} ${bgSecondary} ${textSecondary} gap-2`}
+                data-testid="lead-sheet-btn"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Lead Sheet
+                {leadCfg?.sheet_id && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">Connected</Badge>}
+              </Button>
 
               {/* View Toggle */}
               <div className={`flex items-center ${bgSecondary} rounded-lg p-1 border ${borderColor}`}>
@@ -1609,6 +1619,34 @@ const LeadsPageV2 = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* New Dual-Sheet Modals — Prospect & Lead */}
+        <SheetConnectModal
+          open={showProspectSheetModal}
+          onClose={() => setShowProspectSheetModal(false)}
+          onSaved={() => loadSheetsConfig()}
+          sheetType="prospect"
+          userId={currentUser?.user_id}
+          headers={headers}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+        />
+        <SheetConnectModal
+          open={showLeadSheetModal}
+          onClose={() => setShowLeadSheetModal(false)}
+          onSaved={() => loadSheetsConfig()}
+          sheetType="lead"
+          userId={currentUser?.user_id}
+          headers={headers}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+        />
 
         {/* Google Sheets Modal */}
         <Dialog open={showSheetsModal} onOpenChange={setShowSheetsModal}>
