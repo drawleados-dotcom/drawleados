@@ -47,6 +47,7 @@ export default function OurTasksPage() {
   const [editingTask, setEditingTask] = useState(null);
   const [filter, setFilter] = useState('all');
   const [mainTab, setMainTab] = useState('assigned_to_me'); // assigned_to_me, assign_to_team
+  const [meetingsSubActive, setMeetingsSubActive] = useState(false); // when true → render Meetings panel inside My Tasks / Assign-to-Team
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
@@ -838,7 +839,7 @@ export default function OurTasksPage() {
               return (
                 <Button
                   key={tab.id}
-                  onClick={() => { setMainTab(tab.id); if (tab.id !== 'approvals') setFilter('all'); setFilters(prev => ({ ...prev, assignedTo: 'all' })); }}
+                  onClick={() => { setMainTab(tab.id); setMeetingsSubActive(false); if (tab.id !== 'approvals') setFilter('all'); setFilters(prev => ({ ...prev, assignedTo: 'all' })); }}
                   data-testid={`ops-tab-${tab.id.replace(/_/g, '-')}`}
                   className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
                     isActive
@@ -1078,10 +1079,10 @@ export default function OurTasksPage() {
           return (
             <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
               <button
-                onClick={() => setFilters({...filters, department: 'all', project: 'all', category: 'all'})}
+                onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: 'all', project: 'all', category: 'all'}); }}
                 data-testid="dept-subtab-all"
                 className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
-                  filters.department === 'all'
+                  filters.department === 'all' && !meetingsSubActive
                     ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
                     : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
                 }`}
@@ -1095,11 +1096,11 @@ export default function OurTasksPage() {
               </button>
               {visibleDeptCategories.map(d => {
                 const count = pendingByDept[d.dept_key] || 0;
-                const isActive = filters.department === d.dept_key;
+                const isActive = filters.department === d.dept_key && !meetingsSubActive;
                 return (
                   <button
                     key={d.dept_key}
-                    onClick={() => setFilters({...filters, department: d.dept_key, project: 'all', category: 'all'})}
+                    onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: d.dept_key, project: 'all', category: 'all'}); }}
                     data-testid={`dept-subtab-${d.dept_key}`}
                     className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
                       isActive
@@ -1119,11 +1120,47 @@ export default function OurTasksPage() {
                   </button>
                 );
               })}
+
+              {/* Meetings sub-tab — distinct colored pill */}
+              <button
+                onClick={() => setMeetingsSubActive(true)}
+                data-testid="dept-subtab-meetings"
+                className={`relative px-4 py-2 rounded-xl text-sm transition-all border-2 ${
+                  meetingsSubActive
+                    ? 'bg-[#ec4899] text-white border-transparent shadow-sm'
+                    : `${bgCard} text-[#ec4899] border-[#ec4899]/40 hover:bg-[#ec4899]/10`
+                }`}
+              >
+                <Video className="h-3.5 w-3.5 inline -mt-0.5 mr-1" />
+                Meetings
+                {meetingsCount > 0 && !meetingsSubActive && (
+                  <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ec4899] text-white text-[10px] font-bold px-1">
+                    {meetingsCount}
+                  </span>
+                )}
+              </button>
             </div>
           );
         })()}
 
-        {/* Tasks Table */}
+        {/* Render Meetings panel when the Meetings sub-tab is selected */}
+        {meetingsSubActive ? (
+          <Card className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-4" data-testid="dept-meetings-panel">
+              <MeetingsPanel
+                isDark={isDark}
+                bgCard={bgCard}
+                bgSecondary={bgSecondary}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+                headers={headers}
+                users={users}
+              />
+            </CardContent>
+          </Card>
+        ) : (
+        /* Tasks Table */
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -1382,6 +1419,7 @@ export default function OurTasksPage() {
             </div>
           </CardContent>
         </Card>
+        )}
         </>
         )}
 
