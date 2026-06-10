@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -170,6 +170,29 @@ export default function OurTasksPage() {
       console.error('Error loading projects/categories:', error);
     }
   }, [user?.designation]);
+
+  // Filter dept categories visible to the current user based on their designation's
+  // operations_departments. If the designation explicitly defines operations_departments,
+  // we always honor that list (even for Operation Head). Super Admin / Admin without
+  // a designation config see ALL departments.
+  const visibleDeptCategories = useMemo(() => {
+    // Normalize aliases between designation config and dept_key (e.g., meta_ads ↔ meta)
+    const aliasMap = { meta_ads: 'meta', meta: 'meta_ads' };
+    const normalize = (s) => String(s || '').toLowerCase().trim();
+    const allowedRaw = (myDesignation?.operations_departments || []).map(normalize);
+    const allowed = new Set();
+    allowedRaw.forEach(k => {
+      allowed.add(k);
+      if (aliasMap[k]) allowed.add(aliasMap[k]);
+    });
+    if (allowed.size > 0) {
+      return deptCategoriesForTask.filter(d => allowed.has(normalize(d.dept_key)));
+    }
+    // No designation-level restriction → fall back to role check
+    const role = (user?.role || '').toLowerCase();
+    if (role === 'super_admin' || role === 'admin') return deptCategoriesForTask;
+    return deptCategoriesForTask;
+  }, [deptCategoriesForTask, myDesignation, user?.role]);
 
   useEffect(() => {
     loadTasks();
@@ -1070,7 +1093,7 @@ export default function OurTasksPage() {
                   </span>
                 )}
               </button>
-              {deptCategoriesForTask.map(d => {
+              {visibleDeptCategories.map(d => {
                 const count = pendingByDept[d.dept_key] || 0;
                 const isActive = filters.department === d.dept_key;
                 return (
@@ -1565,7 +1588,7 @@ export default function OurTasksPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— None —</SelectItem>
-                      {deptCategoriesForTask.map(d => (
+                      {visibleDeptCategories.map(d => (
                         <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
                       ))}
                     </SelectContent>
