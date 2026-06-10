@@ -592,29 +592,59 @@ export default function ApprovalsPage({ embedded = false }) {
                 {(() => {
                   const role = decisionTask.approval_request?.approver_role;
                   const isMidApprover = role === 'pm' || role === 'marketing_head';
+                  const isOperations = role === 'operations';
                   return (
                     <div>
                       <p className={`text-sm font-medium ${textPrimary} mb-2`}>Decision</p>
-                      <div className={`grid ${isMidApprover ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-                        <Button
-                          onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: role === 'operations' ? 'operations' : 'client' })}
-                          disabled={decisionSubmitting}
-                          className="bg-[#10b981] hover:bg-[#059669] text-white"
-                          data-testid="decision-approve"
-                        >
-                          <Check className="h-3 w-3 mr-1" /> Approve
-                        </Button>
-                        {isMidApprover && (
+                      {isOperations ? (
+                        <div className="grid grid-cols-3 gap-2">
                           <Button
-                            onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'forward_operations' })}
+                            onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: 'operations' })}
                             disabled={decisionSubmitting}
-                            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white"
-                            data-testid="decision-forward-operations"
+                            className="bg-[#10b981] hover:bg-[#059669] text-white"
+                            data-testid="decision-approve-operations"
                           >
-                            <Check className="h-3 w-3 mr-1" /> Approve & Send to Operations
+                            <Check className="h-3 w-3 mr-1" /> Approve by Operations
                           </Button>
-                        )}
-                      </div>
+                          <Button
+                            onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: 'client' })}
+                            disabled={decisionSubmitting}
+                            className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white"
+                            data-testid="decision-approve-client"
+                          >
+                            <Check className="h-3 w-3 mr-1" /> Approve by Client
+                          </Button>
+                          <Button
+                            onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'forward_ceo' })}
+                            disabled={decisionSubmitting}
+                            className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                            data-testid="decision-forward-ceo"
+                          >
+                            Send to CEO
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className={`grid ${isMidApprover ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                          <Button
+                            onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'approve', approved_by: 'client' })}
+                            disabled={decisionSubmitting}
+                            className="bg-[#10b981] hover:bg-[#059669] text-white"
+                            data-testid="decision-approve"
+                          >
+                            <Check className="h-3 w-3 mr-1" /> Approve
+                          </Button>
+                          {isMidApprover && (
+                            <Button
+                              onClick={() => submitTaskDecision(decisionTask.task_id, { decision: 'forward_operations' })}
+                              disabled={decisionSubmitting}
+                              className="bg-[#3b82f6] hover:bg-[#2563eb] text-white"
+                              data-testid="decision-forward-operations"
+                            >
+                              <Check className="h-3 w-3 mr-1" /> Approve & Send to Operations
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })()}
