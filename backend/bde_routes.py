@@ -269,28 +269,16 @@ async def get_tasks_by_date(date: str, request: Request):
                 ]
             }
         
-        # Filter by user access
-        if user.role not in ["super_admin", "admin", "hr_manager"]:
-            base_query = {
-                "$and": [
-                    base_query,
-                    {"$or": [
-                        {"created_by": user.user_id},
-                        {"assigned_to": user.user_id}
-                    ]}
-                ]
-            }
-        else:
-            # Admin can see all tasks, but we're showing user's own tasks
-            base_query = {
-                "$and": [
-                    base_query,
-                    {"$or": [
-                        {"created_by": user.user_id},
-                        {"assigned_to": user.user_id}
-                    ]}
-                ]
-            }
+        # Filter by user access — Calendar is ALWAYS personal (My Tasks)
+        base_query = {
+            "$and": [
+                base_query,
+                {"$or": [
+                    {"created_by": user.user_id},
+                    {"assigned_to": user.user_id}
+                ]}
+            ]
+        }
         
         tasks = await db.bde_tasks.find(base_query, {"_id": 0}).sort("created_at", -1).to_list(100)
         
@@ -325,7 +313,35 @@ async def get_tasks_by_date(date: str, request: Request):
                     if session_start.startswith(date):
                         day_seconds += session.get("duration_seconds", 0)
             task["day_seconds"] = day_seconds
-        
+
+        # ---------- ALSO PULL FROM additional_tasks ----------
+        # Match by due_date == this date AND user is creator or assignee
+        add_query = {
+            "due_date": date,
+            "$or": [
+                {"assignee_id": user.user_id},
+                {"created_by": user.user_id},
+            ],
+        }
+        add_tasks = await db.additional_tasks.find(add_query, {"_id": 0}).to_list(100)
+        for t in add_tasks:
+            normalized = {
+                "task_id": t.get("task_id"),
+                "task_name": t.get("title") or "Untitled",
+                "description": t.get("description", ""),
+                "priority": t.get("priority", "medium"),
+                "status": t.get("status", "pending"),
+                "due_date": t.get("due_date"),
+                "type": t.get("type", "general"),
+                "assigned_to": t.get("assignee_id"),
+                "assigned_to_name": t.get("assignee"),
+                "created_by": t.get("created_by"),
+                "created_by_name": t.get("created_by_name"),
+                "day_seconds": 0,
+                "source": "additional_tasks",
+            }
+            tasks.append(normalized)
+
         return {"date": date, "is_future": is_future, "tasks": tasks}
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
@@ -345,15 +361,14 @@ async def get_tasks_for_month(year: int, month: int, request: Request):
         start_date = f"{year}-{str(month).zfill(2)}-01"
         end_date = f"{year}-{str(month).zfill(2)}-{str(last_day).zfill(2)}"
         
-        # Build base access filter
-        access_filter = {}
-        if user.role not in ["super_admin", "admin", "hr_manager"]:
-            access_filter = {
-                "$or": [
-                    {"created_by": user.user_id},
-                    {"assigned_to": user.user_id}
-                ]
-            }
+        # Build base access filter — Calendar is ALWAYS personal (My Tasks),
+        # so filter by current user regardless of role
+        access_filter = {
+            "$or": [
+                {"created_by": user.user_id},
+                {"assigned_to": user.user_id}
+            ]
+        }
         
         # Get non-recurring tasks with due_date in this month
         non_recurring_query = {
@@ -443,7 +458,39 @@ async def get_tasks_for_month(year: int, month: int, request: Request):
         
         # Count total tasks
         total_tasks = sum(len(tasks) for tasks in tasks_by_date.values())
-        
+
+        # ---------- ALSO PULL FROM additional_tasks COLLECTION ----------
+        # additional_tasks uses a different schema: title, assignee_id, due_date
+        add_query = {
+            "due_date": {"$gte": start_date, "$lte": end_date},
+            "$or": [
+                {"assignee_id": user.user_id},
+                {"created_by": user.user_id},
+            ],
+        }
+        add_tasks = await db.additional_tasks.find(add_query, {"_id": 0}).to_list(500)
+        for t in add_tasks:
+            date = t.get("due_date")
+            if not date:
+                continue
+            # Normalize to the shape calendar expects
+            normalized = {
+                "task_id": t.get("task_id"),
+                "task_name": t.get("title") or "Untitled",
+                "priority": t.get("priority", "medium"),
+                "status": t.get("status", "pending"),
+                "due_date": date,
+                "type": t.get("type", "general"),
+                "recurrence": "none",
+                "recurrence_label": "One-time",
+                "source": "additional_tasks",
+            }
+            tasks_by_date.setdefault(date, [])
+            existing_ids = [x.get("task_id") for x in tasks_by_date[date]]
+            if normalized["task_id"] not in existing_ids:
+                tasks_by_date[date].append(normalized)
+                total_tasks += 1
+
         return {
             "year": year,
             "month": month,
