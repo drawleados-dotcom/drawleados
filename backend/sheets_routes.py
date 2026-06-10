@@ -25,6 +25,18 @@ def _env():
         "client_secret": os.environ.get("GOOGLE_SHEETS_CLIENT_SECRET"),
         "redirect_uri": os.environ.get("GOOGLE_SHEETS_REDIRECT_URI"),
     }
+
+
+def _compute_redirect_uri(request: Optional[Request]) -> str:
+    """Derive callback URL from the incoming request so the same code works
+    on preview & production. Falls back to GOOGLE_SHEETS_REDIRECT_URI env var."""
+    cfg_uri = os.environ.get("GOOGLE_SHEETS_REDIRECT_URI")
+    if request is not None:
+        scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if host:
+            return f"{scheme}://{host}/api/oauth/sheets/callback"
+    return cfg_uri
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
     "openid",
@@ -35,7 +47,7 @@ SCOPES = [
 SHEET_TYPES = ("prospect", "lead")
 
 
-def _flow():
+def _flow(redirect_uri: Optional[str] = None):
     cfg = _env()
     return Flow.from_client_config(
         {
@@ -47,7 +59,7 @@ def _flow():
             }
         },
         scopes=SCOPES,
-        redirect_uri=cfg["redirect_uri"],
+        redirect_uri=redirect_uri or cfg["redirect_uri"],
     )
 
 
@@ -94,7 +106,8 @@ async def sheets_login(request: Request, user_id: str, sheet_type: str = "prospe
     from server import db
     if sheet_type not in SHEET_TYPES:
         raise HTTPException(status_code=400, detail="sheet_type must be 'prospect' or 'lead'")
-    flow = _flow()
+    redirect_uri = _compute_redirect_uri(request)
+    flow = _flow(redirect_uri=redirect_uri)
     url, state = flow.authorization_url(
         access_type="offline",
         prompt="consent",
@@ -107,6 +120,7 @@ async def sheets_login(request: Request, user_id: str, sheet_type: str = "prospe
             "user_id": user_id,
             "sheet_type": sheet_type,
             "code_verifier": getattr(flow, "code_verifier", None),
+            "redirect_uri": redirect_uri,
             "created_at": datetime.now(timezone.utc),
         }},
         upsert=True,
@@ -115,7 +129,7 @@ async def sheets_login(request: Request, user_id: str, sheet_type: str = "prospe
 
 
 @sheets_router.get("/oauth/sheets/callback")
-async def sheets_callback(code: str, state: str):
+async def sheets_callback(request: Request, code: str, state: str):
     """Handles the Google callback, stores tokens, redirects user back to /leads."""
     from server import db
     rec = await db.google_oauth_states.find_one({"state": state})
@@ -123,8 +137,10 @@ async def sheets_callback(code: str, state: str):
         raise HTTPException(status_code=400, detail="Invalid or expired state")
     user_id = rec["user_id"]
     sheet_type = rec.get("sheet_type", "prospect")
+    # Use the SAME redirect_uri that was used for login (required by Google)
+    redirect_uri = rec.get("redirect_uri") or _compute_redirect_uri(request)
 
-    flow = _flow()
+    flow = _flow(redirect_uri=redirect_uri)
     if rec.get("code_verifier"):
         flow.code_verifier = rec["code_verifier"]
     with warnings.catch_warnings():
