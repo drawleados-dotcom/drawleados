@@ -204,7 +204,7 @@ export default function PayrollManagementTab({
   const getStatusLabel = (status) => {
     const labels = {
       'draft': 'Draft',
-      'operations_review': 'Operations Review',
+      'operations_review': 'CEO Review',
       'ceo_review': 'CEO Review',
       'approved': 'Approved',
       'generated': 'Generated'
@@ -1278,9 +1278,10 @@ function SalaryPayslipView({
               <Button 
                 onClick={() => onSubmitForOperations(payslip.payslip_id)}
                 className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                data-testid="submit-for-ceo-review-btn"
               >
                 <Send className="h-4 w-4 mr-2" />
-                Submit for Operations Review
+                Submit for CEO Review
               </Button>
             )}
             {payslip.status === 'operations_review' && (

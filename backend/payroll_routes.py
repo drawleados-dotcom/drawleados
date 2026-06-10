@@ -383,7 +383,7 @@ async def get_payslip(payslip_id: str, request: Request):
 
 @payroll_router.put("/payslip/{payslip_id}/submit-for-operations")
 async def submit_for_operations_review(payslip_id: str, request: Request):
-    """HR submits payslip for Operations review"""
+    """HR submits payslip → goes directly to CEO Review (Operations step removed per business rule)."""
     from server import get_current_user
     current_user = await get_current_user(request)
     
@@ -392,13 +392,13 @@ async def submit_for_operations_review(payslip_id: str, request: Request):
     
     result = await db.payslips.update_one(
         {"payslip_id": payslip_id, "status": "draft"},
-        {"$set": {"status": "operations_review", "updated_at": datetime.now(timezone.utc)}}
+        {"$set": {"status": "ceo_review", "updated_at": datetime.now(timezone.utc)}}
     )
     
     if result.modified_count == 0:
         raise HTTPException(status_code=400, detail="Payslip not found or already submitted")
     
-    return {"message": "Submitted for Operations review"}
+    return {"message": "Submitted for CEO review"}
 
 
 @payroll_router.put("/payslip/{payslip_id}/operations-review")
@@ -543,10 +543,10 @@ async def bulk_submit_for_operations(month: int, year: int, request: Request):
     
     result = await db.payslips.update_many(
         {"month": month, "year": year, "status": "draft"},
-        {"$set": {"status": "operations_review", "updated_at": datetime.now(timezone.utc)}}
+        {"$set": {"status": "ceo_review", "updated_at": datetime.now(timezone.utc)}}
     )
     
-    return {"message": f"Submitted {result.modified_count} payslips for Operations review"}
+    return {"message": f"Submitted {result.modified_count} payslips for CEO review"}
 
 
 # ========== SALARY MANAGEMENT ==========

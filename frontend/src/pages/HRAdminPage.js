@@ -725,7 +725,7 @@ export default function HRAdminPage() {
       await axios.put(`${API}/api/payroll/payslip/${payslipId}/submit-for-operations`, {}, { 
         headers: { Authorization: `Bearer ${token}` }
       });
-      toast.success('Submitted for Operations review!');
+      toast.success('Submitted for CEO review!');
       loadPayslips(payslipMonth, payslipYear);
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to submit');
