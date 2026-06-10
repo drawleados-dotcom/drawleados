@@ -35,6 +35,7 @@ export default function ProjectsPanel({
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null); // project being viewed
   const [showAddTask, setShowAddTask] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
 
   const [projectDraft, setProjectDraft] = useState({ name: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
@@ -235,15 +236,49 @@ export default function ProjectsPanel({
     if (!taskDraft.task_name.trim()) { toast.error('Task name is required'); return; }
     if (!taskDraft.assigned_to) { toast.error('Please assign to a user'); return; }
     try {
-      await axios.post(`${API}/api/projects/${selectedProject.project_id}/tasks`, taskDraft, { headers });
-      toast.success('Task added — appears in assignee\'s My Tasks');
+      if (editingTaskId) {
+        await axios.put(`${API}/api/our-tasks/tasks/${editingTaskId}`, taskDraft, { headers });
+        toast.success('Task updated');
+      } else {
+        await axios.post(`${API}/api/projects/${selectedProject.project_id}/tasks`, taskDraft, { headers });
+        toast.success('Task added — appears in assignee\'s My Tasks');
+      }
       setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
       setShowAddTask(false);
+      setEditingTaskId(null);
       refreshSelectedProject();
       loadProjects();
       if (onTaskCreated) onTaskCreated();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to add task');
+      toast.error(e.response?.data?.detail || 'Failed to save task');
+    }
+  };
+
+  const handleEditTask = (task) => {
+    setEditingTaskId(task.task_id);
+    setTaskDraft({
+      task_name: task.task_name || '',
+      description: task.description || '',
+      assigned_to: task.assigned_to || '',
+      due_date: task.due_date ? task.due_date.split('T')[0] : '',
+      priority: task.priority || 'medium',
+      work_link: task.work_link || '',
+      department: task.department || '',
+      category: task.category || '',
+    });
+    setShowAddTask(true);
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm('Delete this task? This cannot be undone.')) return;
+    try {
+      await axios.delete(`${API}/api/our-tasks/tasks/${taskId}`, { headers });
+      toast.success('Task deleted');
+      refreshSelectedProject();
+      loadProjects();
+      if (onTaskCreated) onTaskCreated();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to delete task');
     }
   };
 
@@ -514,7 +549,7 @@ export default function ProjectsPanel({
               const user = users.find(u => u.user_id === task.assigned_to);
               return (
                 <Card key={task.task_id} className={`${bgCard} border ${borderColor}`} data-testid={`project-task-${task.task_id}`}>
-                  <CardContent className="p-4 flex items-center justify-between">
+                  <CardContent className="p-4 flex items-center justify-between gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-medium ${textPrimary}`}>{task.task_name}</span>
@@ -532,11 +567,37 @@ export default function ProjectsPanel({
                         {task.due_date && <> · Due {fmtDate(task.due_date)}</>}
                       </p>
                     </div>
-                    {task.work_link && (
-                      <a href={task.work_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] text-sm hover:underline flex items-center gap-1">
-                        <ExternalLink className="h-3 w-3" /> Link
-                      </a>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {task.work_link && (
+                        <a href={task.work_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] text-sm hover:underline flex items-center gap-1 px-2" data-testid={`project-task-link-${task.task_id}`}>
+                          <ExternalLink className="h-3 w-3" /> Link
+                        </a>
+                      )}
+                      {canManageProjects && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleEditTask(task)}
+                            className="h-8 w-8 p-0 text-[#3b82f6] hover:bg-[#3b82f6]/10"
+                            data-testid={`project-task-edit-${task.task_id}`}
+                            title="Edit task"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteTask(task.task_id)}
+                            className="h-8 w-8 p-0 text-[#ef4444] hover:bg-[#ef4444]/10"
+                            data-testid={`project-task-delete-${task.task_id}`}
+                            title="Delete task"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               );
@@ -843,14 +904,14 @@ export default function ProjectsPanel({
           );
         })()}
 
-        {/* Add Task Modal */}
+        {/* Add / Edit Task Modal */}
         {showAddTask && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => setShowAddTask(false)}>
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => { setShowAddTask(false); setEditingTaskId(null); }}>
             <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className={`text-lg font-semibold ${textPrimary}`}>Add Task to {selectedProject.name}</h3>
-                  <button onClick={() => setShowAddTask(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>{editingTaskId ? 'Edit Task' : 'Add Task'} — {selectedProject.name}</h3>
+                  <button onClick={() => { setShowAddTask(false); setEditingTaskId(null); }} className={textSecondary}><X className="h-5 w-5" /></button>
                 </div>
                 <div><Label className={textPrimary}>Task Name *</Label><Input value={taskDraft.task_name} onChange={(e) => setTaskDraft({ ...taskDraft, task_name: e.target.value })} placeholder="Task name" data-testid="project-task-name" /></div>
                 <div><Label className={textPrimary}>Description</Label><Input value={taskDraft.description} onChange={(e) => setTaskDraft({ ...taskDraft, description: e.target.value })} placeholder="Optional description" /></div>
@@ -916,9 +977,9 @@ export default function ProjectsPanel({
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="ghost" onClick={() => setShowAddTask(false)}>Cancel</Button>
+                  <Button variant="ghost" onClick={() => { setShowAddTask(false); setEditingTaskId(null); }}>Cancel</Button>
                   <Button onClick={handleAddTask} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="project-task-save">
-                    <Check className="h-3 w-3 mr-1" /> Add Task
+                    <Check className="h-3 w-3 mr-1" /> {editingTaskId ? 'Update Task' : 'Add Task'}
                   </Button>
                 </div>
               </CardContent>
