@@ -13,16 +13,20 @@ import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { 
   Users, Shield, Building2, Plus, Search, Edit, Trash2, 
-  Layers, Tag, Layout as LayoutIcon, Database
+  Layers, Tag, Layout as LayoutIcon, Database, Plug
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../contexts/AuthContext';
 import CompanyProfileTab from '../components/settings/CompanyProfileTab';
 import WorkspacesTab from '../components/settings/WorkspacesTab';
 import StatusManagementTab from '../components/settings/StatusManagementTab';
 import DatabaseToolsTab from '../components/hr/DatabaseToolsTab';
+import IntegrationsTab from '../components/settings/IntegrationsTab';
 
 const SettingsPage = () => {
   const { isDark } = useTheme();
+  const { user } = useAuth();
+  const isSuperAdmin = (user?.role || '').toLowerCase() === 'super_admin';
   const [users, setUsers] = useState([]);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -253,6 +257,16 @@ const SettingsPage = () => {
               <Database className="h-4 w-4 mr-2" />
               Database Tools
             </TabsTrigger>
+            {isSuperAdmin && (
+              <TabsTrigger
+                value="integrations"
+                data-testid="settings-integrations-tab"
+                className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+              >
+                <Plug className="h-4 w-4 mr-2" />
+                Integrations
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Company Tab Content */}
@@ -278,6 +292,20 @@ const SettingsPage = () => {
               borderColor={borderColor}
             />
           </TabsContent>
+
+          {/* Integrations Tab Content (super_admin only) */}
+          {isSuperAdmin && (
+            <TabsContent value="integrations" className="mt-6">
+              <IntegrationsTab
+                bgCard={bgCard}
+                bgSecondary={bgSecondary}
+                bgInput={bgInput}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </Layout>

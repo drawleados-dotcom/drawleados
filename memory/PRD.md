@@ -30,6 +30,26 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Self-Service Google Sheets OAuth Credentials (DONE — Feb 2026)
+**Purpose:** Super admins can manage Google Sheets OAuth credentials directly from the UI — no more support tickets to update production env vars.
+
+- **Backend** (`sheets_routes.py`):
+  - New `_load_oauth_cfg()` reads from MongoDB **`system_settings`** doc (`key: "sheets_oauth"`) first, with **env-var fallback** for back-compat. 30s in-memory cache to avoid hot-path DB reads.
+  - 3 new endpoints (super_admin only):
+    - `GET /api/sheets/oauth-config` → returns client_id, MASKED client_secret, redirect_uri, and per-field `source` (`db | env | none`)
+    - `PUT /api/sheets/oauth-config` → persists overrides; secret field accepts the masked placeholder as "no change"
+    - `DELETE /api/sheets/oauth-config` → clears overrides, reverts to env
+  - All existing OAuth callsites (`_flow`, `_compute_redirect_uri`, `_get_creds`, login/callback handlers) refactored to use the new async loader.
+- **Frontend** (`components/settings/IntegrationsTab.js` — new):
+  - Lives under **Settings → Integrations** tab (super_admin only).
+  - Shows the **exact redirect URI** the admin must add to Google Cloud Console, with one-click Copy + "Open Google Console" deeplink.
+  - Inputs: Client ID, Client Secret (eye-toggle, masked when saved), Redirect URI.
+  - Each field carries a badge showing its current source: `Saved in app` / `Env var` / `Not set`.
+  - **Revert to env vars** button restores fallback. Last-updated timestamp is displayed.
+- **Net effect:** Admin rotates Sheets keys in 10 seconds from inside the app. Updates take effect within 30 seconds (cache TTL) — no redeploy, no Emergent Support ticket.
+
+
+
 ### Per-Designation Operations Sub-Tab Access Control (DONE — Feb 2026)
 **Purpose:** Admins now control, per designation, **which** Operations sub-tabs a user sees and **whether they can edit Projects**.
 

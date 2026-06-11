@@ -18,19 +18,51 @@ from googleapiclient.discovery import build
 
 sheets_router = APIRouter(tags=["google-sheets"])
 
-# Env values read lazily (server.py loads dotenv after importing this module)
-def _env():
-    return {
+# OAuth config — read from MongoDB first (admin-managed via Settings UI),
+# fall back to env vars for back-compat. Cached briefly to avoid hammering Mongo.
+_CFG_CACHE = {"value": None, "fetched_at": None}
+_CFG_TTL_SECONDS = 30
+
+
+async def _load_oauth_cfg():
+    """Returns dict {client_id, client_secret, redirect_uri}. DB > env."""
+    now = datetime.now(timezone.utc)
+    cached = _CFG_CACHE.get("value")
+    fetched = _CFG_CACHE.get("fetched_at")
+    if cached and fetched and (now - fetched).total_seconds() < _CFG_TTL_SECONDS:
+        return cached
+    cfg = {
         "client_id": os.environ.get("GOOGLE_SHEETS_CLIENT_ID"),
         "client_secret": os.environ.get("GOOGLE_SHEETS_CLIENT_SECRET"),
         "redirect_uri": os.environ.get("GOOGLE_SHEETS_REDIRECT_URI"),
     }
+    try:
+        from server import db
+        doc = await db.system_settings.find_one({"key": "sheets_oauth"})
+        if doc:
+            if doc.get("client_id"):
+                cfg["client_id"] = doc["client_id"]
+            if doc.get("client_secret"):
+                cfg["client_secret"] = doc["client_secret"]
+            if doc.get("redirect_uri"):
+                cfg["redirect_uri"] = doc["redirect_uri"]
+    except Exception:
+        pass  # DB unavailable — fall back to env
+    _CFG_CACHE["value"] = cfg
+    _CFG_CACHE["fetched_at"] = now
+    return cfg
 
 
-def _compute_redirect_uri(request: Optional[Request]) -> str:
+def _invalidate_cfg_cache():
+    _CFG_CACHE["value"] = None
+    _CFG_CACHE["fetched_at"] = None
+
+
+async def _compute_redirect_uri(request: Optional[Request]) -> str:
     """Derive callback URL from the incoming request so the same code works
-    on preview & production. Falls back to GOOGLE_SHEETS_REDIRECT_URI env var."""
-    cfg_uri = os.environ.get("GOOGLE_SHEETS_REDIRECT_URI")
+    on preview & production. Falls back to admin-saved redirect_uri (DB) or env."""
+    cfg = await _load_oauth_cfg()
+    cfg_uri = cfg.get("redirect_uri")
     if request is not None:
         scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
         host = request.headers.get("x-forwarded-host") or request.headers.get("host")
@@ -47,8 +79,8 @@ SCOPES = [
 SHEET_TYPES = ("prospect", "lead")
 
 
-def _flow(redirect_uri: Optional[str] = None):
-    cfg = _env()
+async def _flow(redirect_uri: Optional[str] = None):
+    cfg = await _load_oauth_cfg()
     return Flow.from_client_config(
         {
             "web": {
@@ -69,7 +101,7 @@ def _extract_sheet_id(url: str) -> Optional[str]:
 
 
 async def _get_creds(db, user_id: str) -> Credentials:
-    cfg = _env()
+    cfg = await _load_oauth_cfg()
     tok = await db.google_sheets_tokens.find_one({"user_id": user_id})
     if not tok:
         raise HTTPException(status_code=401, detail="Google Sheets not connected. Click Connect first.")
@@ -106,8 +138,8 @@ async def sheets_login(request: Request, user_id: str, sheet_type: str = "prospe
     from server import db
     if sheet_type not in SHEET_TYPES:
         raise HTTPException(status_code=400, detail="sheet_type must be 'prospect' or 'lead'")
-    redirect_uri = _compute_redirect_uri(request)
-    flow = _flow(redirect_uri=redirect_uri)
+    redirect_uri = await _compute_redirect_uri(request)
+    flow = await _flow(redirect_uri=redirect_uri)
     url, state = flow.authorization_url(
         access_type="offline",
         prompt="consent",
@@ -142,9 +174,9 @@ async def sheets_callback(request: Request, code: str, state: str):
         user_id = rec["user_id"]
         sheet_type = rec.get("sheet_type", "prospect")
         # Use the SAME redirect_uri that was used for login (required by Google)
-        redirect_uri = rec.get("redirect_uri") or _compute_redirect_uri(request)
+        redirect_uri = rec.get("redirect_uri") or (await _compute_redirect_uri(request))
 
-        flow = _flow(redirect_uri=redirect_uri)
+        flow = await _flow(redirect_uri=redirect_uri)
         if rec.get("code_verifier"):
             flow.code_verifier = rec["code_verifier"]
         with warnings.catch_warnings():
@@ -196,6 +228,90 @@ async def sheets_disconnect(request: Request):
     user = await get_current_user(request)
     await db.google_sheets_tokens.delete_many({"user_id": user.user_id})
     return {"message": "Disconnected"}
+
+
+# ---------- Admin OAuth credentials management ----------
+class SheetsOAuthConfig(BaseModel):
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    redirect_uri: Optional[str] = None
+
+
+def _mask_secret(s: Optional[str]) -> str:
+    if not s:
+        return ""
+    if len(s) <= 8:
+        return "*" * len(s)
+    return s[:4] + "*" * (len(s) - 8) + s[-4:]
+
+
+async def _require_super_admin(request: Request):
+    from server import get_current_user
+    user = await get_current_user(request)
+    role = (getattr(user, "role", "") or "").lower()
+    if role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super_admin can manage OAuth credentials")
+    return user
+
+
+@sheets_router.get("/sheets/oauth-config")
+async def get_oauth_config(request: Request):
+    """Returns the current OAuth config. Secret is MASKED for security."""
+    await _require_super_admin(request)
+    cfg = await _load_oauth_cfg()
+    # Determine source for each field — DB-saved doc takes priority
+    from server import db
+    db_doc = await db.system_settings.find_one({"key": "sheets_oauth"}) or {}
+    return {
+        "client_id": cfg.get("client_id") or "",
+        "client_secret_masked": _mask_secret(cfg.get("client_secret")),
+        "has_client_secret": bool(cfg.get("client_secret")),
+        "redirect_uri": cfg.get("redirect_uri") or "",
+        "source": {
+            "client_id": "db" if db_doc.get("client_id") else ("env" if os.environ.get("GOOGLE_SHEETS_CLIENT_ID") else "none"),
+            "client_secret": "db" if db_doc.get("client_secret") else ("env" if os.environ.get("GOOGLE_SHEETS_CLIENT_SECRET") else "none"),
+            "redirect_uri": "db" if db_doc.get("redirect_uri") else ("env" if os.environ.get("GOOGLE_SHEETS_REDIRECT_URI") else "none"),
+        },
+        "updated_at": db_doc.get("updated_at"),
+    }
+
+
+@sheets_router.put("/sheets/oauth-config")
+async def put_oauth_config(payload: SheetsOAuthConfig, request: Request):
+    """Save / update OAuth credentials. Empty / null fields are kept unchanged.
+    Sending an empty string explicitly clears the override (falls back to env)."""
+    user = await _require_super_admin(request)
+    from server import db
+    update_fields = {"updated_at": datetime.now(timezone.utc), "updated_by": user.user_id}
+    if payload.client_id is not None:
+        update_fields["client_id"] = payload.client_id.strip()
+    if payload.client_secret is not None:
+        # Treat "***" placeholder (from the masked GET) as "no change"
+        cs = payload.client_secret.strip()
+        if cs and "*" not in cs:
+            update_fields["client_secret"] = cs
+        elif cs == "":
+            update_fields["client_secret"] = ""
+    if payload.redirect_uri is not None:
+        update_fields["redirect_uri"] = payload.redirect_uri.strip()
+
+    await db.system_settings.update_one(
+        {"key": "sheets_oauth"},
+        {"$set": update_fields, "$setOnInsert": {"key": "sheets_oauth", "created_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    _invalidate_cfg_cache()
+    return {"ok": True, "message": "Google Sheets OAuth credentials updated"}
+
+
+@sheets_router.delete("/sheets/oauth-config")
+async def delete_oauth_config(request: Request):
+    """Clear all DB-saved overrides so the app falls back to env vars."""
+    await _require_super_admin(request)
+    from server import db
+    await db.system_settings.delete_one({"key": "sheets_oauth"})
+    _invalidate_cfg_cache()
+    return {"ok": True, "message": "OAuth overrides cleared — falling back to env vars"}
 
 
 # ---------- Sheet config CRUD ----------
