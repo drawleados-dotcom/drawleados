@@ -62,6 +62,67 @@ export default function WeekWiseTab({ isDark, bgCard, bgSecondary, bgInput, text
 
   return (
     <div className="space-y-4" data-testid="weekwise-tab">
+      {/* Total Week Summary — cumulative Week 01 → current week (ABOVE the navigator) */}
+      {data?.cumulative && (
+        <div data-testid="weekwise-cumulative">
+          <div className="flex items-center gap-2 mb-3">
+            <div className={`h-px flex-1 bg-gradient-to-r from-transparent via-${isDark ? '[#3f3f46]' : 'gray-300'} to-transparent`} />
+            <p className={`text-xs uppercase tracking-widest font-semibold ${textSecondary}`}>
+              Total Week Summary (Week {String(data.cumulative.from_week).padStart(2, '0')} → Week {String(data.cumulative.to_week).padStart(2, '0')})
+            </p>
+            <div className={`h-px flex-1 bg-gradient-to-r from-transparent via-${isDark ? '[#3f3f46]' : 'gray-300'} to-transparent`} />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div
+              className={`${bgCard} border ${borderColor} rounded-2xl p-5 relative overflow-hidden`}
+              data-testid="weekwise-cum-income"
+            >
+              <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-emerald-500/0" />
+              <div className="relative">
+                <div className="flex items-center justify-between mb-2">
+                  <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>Total Income</p>
+                  <TrendingUp className="h-4 w-4 text-emerald-500" />
+                </div>
+                <p className="text-3xl font-bold text-emerald-500">{INR(data.cumulative.income)}</p>
+                <p className={`text-[11px] ${textSecondary} mt-1`}>across all {data.cumulative.to_week} weeks</p>
+              </div>
+            </div>
+            <div
+              className={`${bgCard} border ${borderColor} rounded-2xl p-5 relative overflow-hidden`}
+              data-testid="weekwise-cum-expense"
+            >
+              <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-gradient-to-br from-rose-500/20 to-rose-500/0" />
+              <div className="relative">
+                <div className="flex items-center justify-between mb-2">
+                  <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>Total Expense</p>
+                  <TrendingDown className="h-4 w-4 text-rose-500" />
+                </div>
+                <p className="text-3xl font-bold text-rose-500">{INR(data.cumulative.expense)}</p>
+                <p className={`text-[11px] ${textSecondary} mt-1`}>across all {data.cumulative.to_week} weeks</p>
+              </div>
+            </div>
+            <div
+              className={`${bgCard} border ${borderColor} rounded-2xl p-5 relative overflow-hidden`}
+              data-testid="weekwise-cum-net"
+            >
+              <div className={`absolute -top-6 -right-6 h-24 w-24 rounded-full bg-gradient-to-br ${(data.cumulative.net >= 0) ? 'from-blue-500/20' : 'from-amber-500/20'} to-transparent`} />
+              <div className="relative">
+                <div className="flex items-center justify-between mb-2">
+                  <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>
+                    Excess Net ({(data.cumulative.net >= 0) ? 'Surplus' : 'Deficit'})
+                  </p>
+                  <Wallet className={`h-4 w-4 ${(data.cumulative.net >= 0) ? 'text-blue-500' : 'text-amber-500'}`} />
+                </div>
+                <p className={`text-3xl font-bold ${(data.cumulative.net >= 0) ? 'text-blue-500' : 'text-amber-500'}`}>
+                  {(data.cumulative.net >= 0) ? '+' : ''}{INR(data.cumulative.net)}
+                </p>
+                <p className={`text-[11px] ${textSecondary} mt-1`}>Total Income − Total Expense</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Navigator */}
       <div className={`${bgCard} border ${borderColor} rounded-2xl p-4`}>
         <div className="flex items-center justify-between gap-4 flex-wrap">
