@@ -15,20 +15,20 @@ const MODULE_ALIASES = {
 
 function userHasModule(user, isAdmin, module) {
   if (!module) return true;
-  // Super Admin ALWAYS has full access regardless of designation.module_access.
-  const role = String(user?.role || '').toLowerCase();
-  if (role === 'super_admin') return true;
-
   const moduleAccess = Array.isArray(user?.module_access) ? user.module_access : [];
 
-  // Designation-driven module_access has HIGHEST priority for non-super-admin roles.
+  // Designation-driven module_access has HIGHEST priority for ALL roles
+  // (including super_admin). This lets a super_admin self-restrict via
+  // their assigned designation. Only modules in the list are accessible.
   if (moduleAccess.length > 0) {
     const allowed = new Set(moduleAccess.map((m) => String(m).toLowerCase()));
     const aliases = MODULE_ALIASES[module] || [module];
     return aliases.some((a) => allowed.has(String(a).toLowerCase()));
   }
 
-  // Fallback for users without designation-defined module_access.
+  // Fallback when NO designation/module_access set: super_admin & admin see everything.
+  const role = String(user?.role || '').toLowerCase();
+  if (role === 'super_admin') return true;
   if (isAdmin) return true;
   if (module === 'profile') return true;
   return false;

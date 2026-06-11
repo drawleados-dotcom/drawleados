@@ -69,12 +69,11 @@ const Sidebar = () => {
   
   // Check access permissions
   const hasAccess = (module) => {
-    // Super Admin ALWAYS has full access, regardless of any module_access list on their designation.
-    if (userRole === 'super_admin') return true;
-
-    // Designation-driven module access has HIGHEST priority for non-super-admin roles.
-    // If a user has a non-empty module_access list (set via their designation),
-    // STRICTLY honor it — only modules present in the list are visible.
+    // Designation-driven module access has HIGHEST priority for ALL roles
+    // (including super_admin). If a user has a non-empty module_access list
+    // set via their designation, STRICTLY honor it — only modules in the
+    // list are visible. This lets a super_admin self-restrict (e.g., assign
+    // CEO designation with just 7 modules) without seeing everything.
     if (Array.isArray(moduleAccess) && moduleAccess.length > 0) {
       // Aliases between Sidebar module keys and stored module_access values
       const aliasMap = {
@@ -90,7 +89,8 @@ const Sidebar = () => {
       return aliases.some(a => allowed.has(String(a).toLowerCase()));
     }
 
-    // Fallback for users WITHOUT a designation-defined module_access:
+    // Fallback when NO designation/module_access has been assigned yet:
+    // super_admin / admin see everything (otherwise they'd be locked out).
     if (userRole === 'super_admin') return true;
     if (userRole === 'admin') return true;
     
@@ -133,8 +133,12 @@ const Sidebar = () => {
   const isEmployee = userRole === 'employee';
   const isBDE = userRole === 'business_development' || userRole === 'bde';
   const isProjectManager = userRole === 'project_manager';
-  // HR Admin access: Super Admin, HR Manager, or users with hr_admin/hr_manager module access
-  const canManageHR = isAdmin || userRole === 'hr_manager' || hasAccess('hr_admin') || moduleAccess.includes('hr_manager');
+  // HR Admin access: respects designation. Super Admin / Admin / HR Manager
+  // only bypass when no designation module_access has been assigned.
+  const canManageHR =
+    hasAccess('hr_admin') ||
+    moduleAccess.includes('hr_manager') ||
+    (moduleAccess.length === 0 && (isAdmin || userRole === 'hr_manager'));
   const canManageUsers = user?.can_manage_users || false;
 
   // User designation for department filtering
@@ -288,35 +292,7 @@ const Sidebar = () => {
         {/* === STANDARD VIEW (for non-tasks-only users and non-project-managers) === */}
         {!hasTasksModuleOnly && !isProjectManager && (
           <>
-        {/* 1. Calendar - only if user has calendar access */}
-        {hasAccess('calendar') && (
-        <Link
-          to="/calendar"
-          data-testid="nav-calendar"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'Calendar' : ''}
-        >
-          <Calendar className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'Calendar'}
-        </Link>
-        )}
-
-        {/* 2. My Tasks removed — use Operations instead */}
-
-        {/* Our Tasks - only if user has our_tasks access */}
-        {hasAccess('our_tasks') && (
-        <Link
-          to="/our-tasks"
-          data-testid="nav-our-tasks"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/our-tasks' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'Operations' : ''}
-        >
-          <ClipboardList className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'Operations'}
-        </Link>
-        )}
-
-        {/* 3. Leads - direct top-level link (Sales group removed) */}
+        {/* 1. Leads */}
         {hasAccess('leads') && (
           <Link
             to="/leads"
@@ -329,8 +305,34 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* 3.5 Web Dev - Website Development Projects (ONLY if web_dev explicitly granted) */}
-        {(hasAccess('web_dev') || (moduleAccess.length === 0 && (userRole === 'super_admin' || isAdmin || isProjectManager))) && (
+        {/* 2. Operations (Our Tasks) */}
+        {hasAccess('our_tasks') && (
+        <Link
+          to="/our-tasks"
+          data-testid="nav-our-tasks"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/our-tasks' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Operations' : ''}
+        >
+          <ClipboardList className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'Operations'}
+        </Link>
+        )}
+
+        {/* 2.5 Calendar */}
+        {hasAccess('calendar') && (
+        <Link
+          to="/calendar"
+          data-testid="nav-calendar"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Calendar' : ''}
+        >
+          <Calendar className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'Calendar'}
+        </Link>
+        )}
+
+        {/* Web Dev - Website Development Projects */}
+        {hasAccess('web_dev') && (
           <Link
             to="/dl-operations"
             data-testid="nav-web-dev"
@@ -375,33 +377,7 @@ const Sidebar = () => {
         })()}
 
 
-        {/* 5. My Profile (HR) - visible for all users */}
-        {hasAccess('hr') && (
-        <Link
-          to="/hr"
-          data-testid="nav-my-profile"
-          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
-          title={isCollapsed ? 'My Profile' : ''}
-        >
-          <UserCircle className="h-5 w-5" strokeWidth={2} />
-          {!isCollapsed && 'My Profile'}
-        </Link>
-        )}
-
-        {/* 6. HR Admin/Manager - Admin/Manager only */}
-        {canManageHR && (
-          <Link
-            to="/hr-admin"
-            data-testid="nav-hr-admin"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? (moduleAccess.includes('hr_manager') && !moduleAccess.includes('hr_admin') ? 'HR Manager' : 'HR Admin') : ''}
-          >
-            <Shield className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && (moduleAccess.includes('hr_manager') && !moduleAccess.includes('hr_admin') ? 'HR Manager' : 'HR Admin')}
-          </Link>
-        )}
-
-        {/* 7. Finance - visible if user has finance access */}
+        {/* 3. Finance */}
         {hasAccess('finance') && (
           <Link
             to="/finance"
@@ -414,7 +390,33 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* 8. Settings - visible only for admins */}
+        {/* 4. HR Admin / HR Manager */}
+        {canManageHR && (
+          <Link
+            to="/hr-admin"
+            data-testid="nav-hr-admin"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? (moduleAccess.includes('hr_manager') && !moduleAccess.includes('hr_admin') ? 'HR Manager' : 'HR Admin') : ''}
+          >
+            <Shield className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && (moduleAccess.includes('hr_manager') && !moduleAccess.includes('hr_admin') ? 'HR Manager' : 'HR Admin')}
+          </Link>
+        )}
+
+        {/* 5. My Profile (HR) */}
+        {hasAccess('hr') && (
+        <Link
+          to="/hr"
+          data-testid="nav-my-profile"
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'My Profile' : ''}
+        >
+          <UserCircle className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'My Profile'}
+        </Link>
+        )}
+
+        {/* 6. Settings */}
         {hasAccess('settings') && (
           <Link
             to="/settings"
@@ -427,7 +429,7 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* 9. Documentation - visible for business_development, admins, and super_admin */}
+        {/* 7. Documentation */}
         {(hasAccess('documentations') || (moduleAccess.length === 0 && (hasAccess('leads') || isBDE || isAdmin))) && (
           <Link
             to="/documentations"
