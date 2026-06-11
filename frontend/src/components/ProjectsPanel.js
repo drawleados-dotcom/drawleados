@@ -71,15 +71,15 @@ export default function ProjectsPanel({
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
 
-  const loadProjects = useCallback(async () => {
+  const loadProjects = useCallback(async (showSpinner = false) => {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const res = await axios.get(`${API}/api/projects`, { headers });
       setProjects(res.data || []);
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   }, [headers]);
 
@@ -101,7 +101,13 @@ export default function ProjectsPanel({
     }
   }, [headers]);
 
-  useEffect(() => { loadProjects(); loadUsers(); loadDeptCategories(); }, [loadProjects, loadUsers, loadDeptCategories]);
+  useEffect(() => {
+    // Show spinner ONLY on first mount. Auto-refresh ticks update silently
+    // so the list doesn't flicker every 15 seconds.
+    loadProjects(true);
+    loadUsers();
+    loadDeptCategories();
+  }, [loadProjects, loadUsers, loadDeptCategories]);
 
   // Background polling + focus refresh — pauses while a create/edit modal is open
   useAutoRefresh(
