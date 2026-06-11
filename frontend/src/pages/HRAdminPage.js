@@ -1020,6 +1020,24 @@ export default function HRAdminPage() {
     }
   };
 
+  const handleDemoteEmployee = async (emp) => {
+    const name = emp?.name || emp?.email || 'this user';
+    if (!window.confirm(`Demote ${name} from ${emp?.role} to employee?\n\nThey will lose admin/super_admin privileges immediately.`)) {
+      return;
+    }
+    try {
+      const res = await axios.put(
+        `${API}/api/users/${emp.user_id}/demote`,
+        {},
+        { headers }
+      );
+      toast.success(res.data?.message || 'Demoted to employee');
+      loadEmployees();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to demote user');
+    }
+  };
+
   const handleUpdateCalendar = async (calendarData) => {
     try {
       await axios.put(
@@ -1362,6 +1380,8 @@ export default function HRAdminPage() {
             setSearchQuery={setSearchQuery}
             onEdit={(emp) => { setSelectedEmployee(emp); setShowEditModal(true); }}
             onDelete={handleDeleteEmployee}
+            onDemote={handleDemoteEmployee}
+            currentUserEmail={user?.email}
             canEdit={canEditEmployees}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
@@ -3106,7 +3126,7 @@ function DashboardTab({ stats, attendanceOverview, bgCard, bgSecondary, textPrim
 }
 
 // ============== EMPLOYEES TAB ==============
-function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit, onDelete, canEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit, onDelete, onDemote, currentUserEmail, canEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   // Calculate employee stats - active employees only
   const activeEmployees = employees.filter(e => e.status !== 'inactive');
   const officeEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location !== 'home');
@@ -3288,6 +3308,21 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
+                            {/* Demote button — only visible when caller IS vinoth@drawlead.com
+                                AND target row is NOT vinoth@drawlead.com.
+                                Demotes super_admin/admin → employee. */}
+                            {(currentUserEmail || '').toLowerCase() === 'vinoth@drawlead.com' &&
+                              (emp.email || '').toLowerCase() !== 'vinoth@drawlead.com' && (
+                              <Button
+                                size="sm"
+                                onClick={() => onDemote && onDemote(emp)}
+                                className="bg-rose-500 hover:bg-rose-600 text-white"
+                                title={`Demote ${emp.name} to employee`}
+                                data-testid={`demote-employee-${emp.user_id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </>
                         ) : (
                           <Button

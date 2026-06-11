@@ -1071,6 +1071,40 @@ async def deactivate_user(user_id: str, current_user: User = Depends(get_current
     
     return {"message": "User deactivated"}
 
+
+@api_router.put("/users/{user_id}/demote")
+async def demote_user(user_id: str, current_user: User = Depends(get_current_user)):
+    """Demote a user to the 'employee' role.
+    Only the canonical Super Admin (vinoth@drawlead.com) can perform this action.
+    The canonical Super Admin's own account cannot be demoted.
+    """
+    caller_email = (current_user.email or "").lower()
+    if caller_email != "vinoth@drawlead.com":
+        raise HTTPException(status_code=403, detail="Only vinoth@drawlead.com can demote users")
+
+    target = await db.users.find_one({"user_id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if (target.get("email") or "").lower() == "vinoth@drawlead.com":
+        raise HTTPException(status_code=400, detail="The canonical Super Admin cannot be demoted")
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "role": "employee",
+            "can_manage_users": False,
+            "demoted_at": datetime.now(timezone.utc),
+            "demoted_by": current_user.user_id,
+        }}
+    )
+
+    return {
+        "message": f"{target.get('name') or target.get('email')} demoted to employee",
+        "user_id": user_id,
+        "new_role": "employee",
+    }
+
 @api_router.get("/users/{user_id}/permissions")
 async def get_user_permissions(user_id: str, current_user: User = Depends(get_current_user)):
     """Get user permissions"""
