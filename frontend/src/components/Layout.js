@@ -52,14 +52,14 @@ const Layout = ({ children }) => {
   // Modal states
   const [showClockInModal, setShowClockInModal] = useState(false);
   const [showClockOutModal, setShowClockOutModal] = useState(false);
-  const [showLunchOutModal, setShowLunchOutModal] = useState(false);
-  const [showLunchInModal, setShowLunchInModal] = useState(false);
+  const [showBreakOutModal, setShowBreakOutModal] = useState(false);
+  const [showBreakInModal, setShowBreakInModal] = useState(false);
   
   // Form data for modals - now with separate hour, minute, period
   const [clockInData, setClockInData] = useState({ hour: 9, minute: 0, period: 'AM', workMode: 'office', reason: '' });
   const [clockOutData, setClockOutData] = useState({ hour: 6, minute: 0, period: 'PM' });
-  const [lunchOutData, setLunchOutData] = useState({ hour: 1, minute: 0, period: 'PM' });
-  const [lunchInData, setLunchInData] = useState({ hour: 2, minute: 0, period: 'PM' });
+  const [breakOutData, setBreakOutData] = useState({ hour: 1, minute: 0, period: 'PM', category: '', reason: '' });
+  const [breakInData, setBreakInData] = useState({ hour: 2, minute: 0, period: 'PM' });
   
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -167,16 +167,16 @@ const Layout = ({ children }) => {
     setShowClockOutModal(true);
   };
 
-  const openLunchOutModal = () => {
+  const openBreakOutModal = () => {
     const { hour, minute, period } = getCurrentTimeParts();
-    setLunchOutData({ hour, minute, period });
-    setShowLunchOutModal(true);
+    setBreakOutData({ hour, minute, period, category: '', reason: '' });
+    setShowBreakOutModal(true);
   };
 
-  const openLunchInModal = () => {
+  const openBreakInModal = () => {
     const { hour, minute, period } = getCurrentTimeParts();
-    setLunchInData({ hour, minute, period });
-    setShowLunchInModal(true);
+    setBreakInData({ hour, minute, period });
+    setShowBreakInModal(true);
   };
 
   // Handle Clock In
@@ -219,34 +219,44 @@ const Layout = ({ children }) => {
     setLoading(false);
   };
 
-  // Handle Lunch Out (Start Lunch Break)
-  const handleLunchOut = async () => {
+  // Handle Break Out (Start any break: lunch / breakfast / tea / other)
+  const handleBreakOut = async () => {
+    if (!breakOutData.category) {
+      toast.error('Please pick a break category');
+      return;
+    }
+    if (breakOutData.category === 'other' && !(breakOutData.reason || '').trim()) {
+      toast.error('Please add a short reason for the break');
+      return;
+    }
     setLoading(true);
     try {
-      await axios.post(`${API}/api/hr/attendance/lunch-start`, {
-        time: formatTimeForAPI(lunchOutData.hour, lunchOutData.minute, lunchOutData.period)
+      await axios.post(`${API}/api/hr/attendance/break-out`, {
+        category: breakOutData.category,
+        reason: breakOutData.reason || '',
+        time: formatTimeForAPI(breakOutData.hour, breakOutData.minute, breakOutData.period),
       }, { headers });
-      toast.success('Lunch break started!');
-      setShowLunchOutModal(false);
+      toast.success('Break started');
+      setShowBreakOutModal(false);
       loadTodayAttendance();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to start lunch break');
+      toast.error(error.response?.data?.detail || 'Failed to start break');
     }
     setLoading(false);
   };
 
-  // Handle Lunch In (End Lunch Break)
-  const handleLunchIn = async () => {
+  // Handle Break In (End the currently open break)
+  const handleBreakIn = async () => {
     setLoading(true);
     try {
-      await axios.post(`${API}/api/hr/attendance/lunch-end`, {
-        time: formatTimeForAPI(lunchInData.hour, lunchInData.minute, lunchInData.period)
+      await axios.post(`${API}/api/hr/attendance/break-in`, {
+        time: formatTimeForAPI(breakInData.hour, breakInData.minute, breakInData.period),
       }, { headers });
-      toast.success('Back from lunch!');
-      setShowLunchInModal(false);
+      toast.success('Back from break');
+      setShowBreakInModal(false);
       loadTodayAttendance();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to end lunch break');
+      toast.error(error.response?.data?.detail || 'Failed to end break');
     }
     setLoading(false);
   };
@@ -303,22 +313,29 @@ const Layout = ({ children }) => {
     return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
   };
 
-  // Get formatted lunch-out time from today's attendance
-  const getLunchOutTime = () => {
-    if (!todayAttendance?.lunch_out) return null;
-    const date = new Date(todayAttendance.lunch_out);
-    return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+  // Get start time of the currently open break (for the Break In modal)
+  const getOpenBreakStartTime = () => {
+    const breaks = todayAttendance?.breaks || [];
+    const openBreak = breaks.find((b) => b.end_time == null);
+    if (!openBreak?.start_time) {
+      // Fallback to legacy lunch_start for back-compat
+      if (!todayAttendance?.lunch_start) return null;
+      const d = new Date(todayAttendance.lunch_start);
+      return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
+    }
+    const d = new Date(openBreak.start_time);
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase();
   };
 
-  // Calculate lunch duration for Lunch In modal
-  const getLunchDuration = () => {
-    const lunchOutTime = getLunchOutTime();
-    if (!lunchOutTime) return null;
-    const currentTime = formatTimeForAPI(lunchInData.hour, lunchInData.minute, lunchInData.period);
-    return calculateDuration(lunchOutTime, currentTime);
+  // Live duration of the currently open break (used inside Break In modal)
+  const getCurrentBreakDuration = () => {
+    const startTime = getOpenBreakStartTime();
+    if (!startTime) return null;
+    const currentTime = formatTimeForAPI(breakInData.hour, breakInData.minute, breakInData.period);
+    return calculateDuration(startTime, currentTime);
   };
 
-  // Calculate work duration for Clock Out modal (includes lunch deduction)
+  // Calculate work duration for Clock Out modal (includes break deduction)
   const getWorkDuration = () => {
     const clockInTime = getClockInTime();
     if (!clockInTime) return null;
@@ -327,21 +344,22 @@ const Layout = ({ children }) => {
     const totalDuration = calculateDuration(clockInTime, currentTime);
     if (!totalDuration) return null;
     
-    // Deduct lunch duration if lunch was taken
-    let lunchMinutes = todayAttendance?.lunch_duration || 0;
+    // Deduct ALL break minutes (lunch_duration is now the sum of all breaks)
+    let breakMinutes = todayAttendance?.lunch_duration || 0;
     
-    const workMinutes = totalDuration.totalMinutes - lunchMinutes;
+    const workMinutes = totalDuration.totalMinutes - breakMinutes;
     const hours = Math.floor(workMinutes / 60);
     const mins = Math.abs(workMinutes % 60);
     
-    return { hours, mins, totalMinutes: workMinutes, lunchMinutes };
+    return { hours, mins, totalMinutes: workMinutes, lunchMinutes: breakMinutes };
   };
 
   const isClockedIn = todayAttendance?.clock_in && !todayAttendance?.clock_out;
   const isClockedOut = todayAttendance?.clock_out;
-  // Single lunch break check
-  const isOnLunch = todayAttendance?.lunch_start && !todayAttendance?.lunch_end;
-  const lunchCompleted = todayAttendance?.lunch_end;
+  // Break state: open break = any break with no end_time. Fallback to legacy lunch fields.
+  const breaksList = Array.isArray(todayAttendance?.breaks) ? todayAttendance.breaks : [];
+  const isOnBreak = breaksList.some((b) => b.end_time == null) ||
+    (!breaksList.length && todayAttendance?.lunch_start && !todayAttendance?.lunch_end);
   // Multiple sessions support
   const sessions = todayAttendance?.sessions || [];
   const totalSessionHours = sessions.reduce((sum, s) => sum + (s.hours || 0), 0);
@@ -478,30 +496,32 @@ const Layout = ({ children }) => {
                 </Button>
               )}
               
-              {/* Lunch & Clock Out Buttons - Show if clocked in but not clocked out */}
+              {/* Break & Clock Out Buttons - Show if clocked in but not clocked out */}
               {isClockedIn && !isClockedOut && (
                 <>
-                  {/* Lunch Out button - only if lunch not started */}
-                  {!isOnLunch && !lunchCompleted && (
+                  {/* Break Out — start a new break (multiple per day allowed) */}
+                  {!isOnBreak && (
                     <Button
                       size="sm"
-                      onClick={openLunchOutModal}
+                      onClick={openBreakOutModal}
                       className="h-8 px-3 text-xs bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                      data-testid="break-out-btn"
                     >
                       <Coffee className="h-3 w-3 mr-1" />
-                      Lunch Out
+                      Break Out
                     </Button>
                   )}
                   
-                  {/* Lunch In button - show when on lunch */}
-                  {isOnLunch && (
+                  {/* Break In — end the open break */}
+                  {isOnBreak && (
                     <Button
                       size="sm"
-                      onClick={openLunchInModal}
+                      onClick={openBreakInModal}
                       className="h-8 px-3 text-xs bg-[#8b5cf6] hover:bg-[#7c3aed] text-white animate-pulse"
+                      data-testid="break-in-btn"
                     >
                       <Play className="h-3 w-3 mr-1" />
-                      Lunch In
+                      Break In
                     </Button>
                   )}
                   
@@ -715,17 +735,63 @@ const Layout = ({ children }) => {
         />
       </AttendanceModal>
 
-      {/* Lunch Out Modal */}
+      {/* Break Out Modal — pick category (Lunch, Breakfast, Tea Break, Other) */}
       <AttendanceModal
-        isOpen={showLunchOutModal}
-        onClose={() => setShowLunchOutModal(false)}
-        title="Start Lunch Break"
+        isOpen={showBreakOutModal}
+        onClose={() => setShowBreakOutModal(false)}
+        title="Start Break"
         icon={Coffee}
         iconColor="bg-[#f59e0b]"
-        onSubmit={handleLunchOut}
-        submitText="Start Lunch"
+        onSubmit={handleBreakOut}
+        submitText="Start Break"
         submitColor="bg-[#f59e0b] hover:bg-[#d97706]"
       >
+        {/* Category buttons */}
+        <div>
+          <Label className={textSecondary}>Break Type</Label>
+          <div className="grid grid-cols-2 gap-2 mt-2" data-testid="break-category-buttons">
+            {[
+              { id: 'lunch', label: 'Lunch' },
+              { id: 'breakfast', label: 'Breakfast' },
+              { id: 'tea', label: 'Tea Break' },
+              { id: 'other', label: 'Other' },
+            ].map((c) => {
+              const selected = breakOutData.category === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  data-testid={`break-category-${c.id}`}
+                  onClick={() => setBreakOutData({ ...breakOutData, category: c.id })}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition ${
+                    selected
+                      ? 'bg-[#f59e0b] border-[#f59e0b] text-white'
+                      : isDark
+                      ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa] hover:bg-[#3f3f46]'
+                      : 'bg-gray-100 border-gray-200 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Reason — required only for "Other", optional otherwise */}
+        <div>
+          <Label className={textSecondary}>
+            Reason {breakOutData.category === 'other' ? <span className="text-red-500">*</span> : <span className="text-xs">(optional)</span>}
+          </Label>
+          <Input
+            value={breakOutData.reason}
+            onChange={(e) => setBreakOutData({ ...breakOutData, reason: e.target.value })}
+            placeholder={breakOutData.category === 'other' ? 'Short reason (required)' : 'Short reason (optional)'}
+            className={`${isDark ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa]' : 'bg-white border-gray-200 text-gray-900'} mt-1`}
+            data-testid="break-reason-input"
+          />
+        </div>
+
         {/* Work Mode Display */}
         <div className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-3`}>
           {todayAttendance?.work_mode === 'remote' ? (
@@ -738,37 +804,37 @@ const Layout = ({ children }) => {
         
         {/* Read-Only Time Display */}
         <ReadOnlyTimeDisplay
-          hour={lunchOutData.hour}
-          minute={lunchOutData.minute}
-          period={lunchOutData.period}
-          label="Lunch Start Time"
+          hour={breakOutData.hour}
+          minute={breakOutData.minute}
+          period={breakOutData.period}
+          label="Break Start Time"
         />
       </AttendanceModal>
 
-      {/* Lunch In Modal */}
+      {/* Break In Modal — end the open break */}
       <AttendanceModal
-        isOpen={showLunchInModal}
-        onClose={() => setShowLunchInModal(false)}
-        title="End Lunch Break"
+        isOpen={showBreakInModal}
+        onClose={() => setShowBreakInModal(false)}
+        title="End Break"
         icon={Play}
         iconColor="bg-[#8b5cf6]"
-        onSubmit={handleLunchIn}
+        onSubmit={handleBreakIn}
         submitText="Resume Work"
         submitColor="bg-[#8b5cf6] hover:bg-[#7c3aed]"
       >
-        {/* Lunch Duration Display */}
+        {/* Current break duration */}
         {(() => {
-          const duration = getLunchDuration();
+          const duration = getCurrentBreakDuration();
           return duration ? (
             <div className={`p-4 rounded-lg ${isDark ? 'bg-[#f59e0b]/10' : 'bg-amber-50'} border ${isDark ? 'border-[#f59e0b]/30' : 'border-amber-200'}`}>
               <div className="flex items-center justify-between">
-                <span className={`text-sm ${isDark ? 'text-[#f59e0b]' : 'text-amber-700'}`}>Lunch Duration:</span>
+                <span className={`text-sm ${isDark ? 'text-[#f59e0b]' : 'text-amber-700'}`}>Current Break:</span>
                 <span className={`text-2xl font-bold ${isDark ? 'text-[#f59e0b]' : 'text-amber-700'}`}>
                   {duration.hours > 0 ? `${duration.hours}h ` : ''}{duration.mins}m
                 </span>
               </div>
               <p className={`text-xs mt-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>
-                Lunch started at {formatTime(todayAttendance?.lunch_start)}
+                Started at {getOpenBreakStartTime()}
               </p>
             </div>
           ) : null;
@@ -786,10 +852,10 @@ const Layout = ({ children }) => {
         
         {/* Read-Only Time Display */}
         <ReadOnlyTimeDisplay
-          hour={lunchInData.hour}
-          minute={lunchInData.minute}
-          period={lunchInData.period}
-          label="Lunch End Time"
+          hour={breakInData.hour}
+          minute={breakInData.minute}
+          period={breakInData.period}
+          label="Break End Time"
         />
       </AttendanceModal>
     </div>
@@ -797,4 +863,3 @@ const Layout = ({ children }) => {
 };
 
 export default Layout;
- Layout;

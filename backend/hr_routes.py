@@ -152,6 +152,17 @@ class LunchEndRequest(BaseModel):
     lunch_end_time: Optional[str] = None  # HH:MM format
     time: Optional[str] = None  # Alternative field name for lunch_end_time
 
+# New unified Break system (multiple breaks per day, with category)
+class BreakStartRequest(BaseModel):
+    category: str  # lunch | breakfast | tea | other
+    reason: Optional[str] = ""
+    time: Optional[str] = None  # HH:MM format
+
+class BreakEndRequest(BaseModel):
+    time: Optional[str] = None  # HH:MM format
+
+VALID_BREAK_CATEGORIES = {"lunch", "breakfast", "tea", "other"}
+
 class PermissionRequest(BaseModel):
     permission_id: str
     user_id: str
@@ -644,6 +655,106 @@ async def lunch_end(lunch_data: LunchEndRequest, request: Request):
     )
     
     return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
+
+@hr_router.post("/attendance/break-out")
+async def break_out(data: BreakStartRequest, request: Request):
+    """Start a new break. Multiple breaks per day are allowed.
+    Categories: lunch | breakfast | tea | other (Other requires a reason)."""
+    from server import get_current_user
+    user = await get_current_user(request)
+
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    existing = await db.attendance.find_one({
+        "user_id": user.user_id,
+        "date": {"$gte": today, "$lt": today + timedelta(days=1)},
+    })
+    if not existing:
+        raise HTTPException(status_code=400, detail="Please clock in first")
+
+    category = (data.category or "").lower().strip()
+    if category not in VALID_BREAK_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Invalid break category")
+    reason = (data.reason or "").strip()
+    if category == "other" and not reason:
+        raise HTTPException(status_code=400, detail="Reason is required for 'Other' break")
+
+    breaks = list(existing.get("breaks") or [])
+    if any(b.get("end_time") is None for b in breaks):
+        raise HTTPException(status_code=400, detail="A break is already in progress. End it first.")
+
+    start_time = parse_time_string(data.time, today) if data.time else datetime.now(timezone.utc)
+
+    new_break = {
+        "break_id": str(uuid.uuid4()),
+        "category": category,
+        "reason": reason,
+        "start_time": start_time,
+        "end_time": None,
+        "duration_minutes": 0,
+    }
+    breaks.append(new_break)
+
+    # Maintain legacy lunch_* fields for back-compat (mirror the currently open break).
+    await db.attendance.update_one(
+        {"attendance_id": existing["attendance_id"]},
+        {"$set": {
+            "breaks": breaks,
+            "lunch_start": start_time,
+            "lunch_out": start_time,
+            "lunch_end": None,
+            "lunch_in": None,
+        }},
+    )
+    return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
+
+
+@hr_router.post("/attendance/break-in")
+async def break_in(data: BreakEndRequest, request: Request):
+    """End the currently open break."""
+    from server import get_current_user
+    user = await get_current_user(request)
+
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    existing = await db.attendance.find_one({
+        "user_id": user.user_id,
+        "date": {"$gte": today, "$lt": today + timedelta(days=1)},
+    })
+    if not existing:
+        raise HTTPException(status_code=400, detail="Please clock in first")
+
+    breaks = list(existing.get("breaks") or [])
+    open_idx = next((i for i, b in enumerate(breaks) if b.get("end_time") is None), -1)
+    if open_idx < 0:
+        raise HTTPException(status_code=400, detail="No open break to end")
+
+    end_time = parse_time_string(data.time, today) if data.time else datetime.now(timezone.utc)
+
+    open_break = breaks[open_idx]
+    start = open_break.get("start_time")
+    if isinstance(start, str):
+        start = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    if start and start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    duration_min = max(0, round((end_time - start).total_seconds() / 60)) if start else 0
+
+    open_break["end_time"] = end_time
+    open_break["duration_minutes"] = duration_min
+    breaks[open_idx] = open_break
+
+    total_minutes = sum(int(b.get("duration_minutes") or 0) for b in breaks)
+
+    await db.attendance.update_one(
+        {"attendance_id": existing["attendance_id"]},
+        {"$set": {
+            "breaks": breaks,
+            "lunch_end": end_time,
+            "lunch_in": end_time,
+            "lunch_duration": total_minutes,
+        }},
+    )
+    return await db.attendance.find_one({"attendance_id": existing["attendance_id"]}, {"_id": 0})
+
+
 
 @hr_router.post("/attendance/clock-out")
 @hr_router.put("/attendance/clock-out")

@@ -1984,3 +1984,37 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Recurring Light/Dark theme inconsistencies on HR/HR Admin/Settings still pending (P1).
 - Monolithic page refactor (`OurTasksPage.js`, `HRAdminPage.js`, `HRPage.js` >3k lines) still pending (P1, technical debt).
 - Google Calendar real event push still MOCKED.
+
+
+---
+
+## 2026-02-11 — Multi-Break System (Lunch → Break In/Out with categories)
+
+**User Story:** "Lunch In / Out" renamed to "Break In / Out". Breaks can be taken multiple times per day. Break Out popup asks the user to pick a category (Lunch, Breakfast, Tea Break, Other) with optional reason (required for Other). The single "Lunch" summary card on HR Attendance is replaced with a clickable "Break" card showing total time + count. Clicking it opens a popup with totals + a list of every break (category, start/end, duration, reason).
+
+**Backend (`/app/backend/hr_routes.py`):**
+- New Pydantic models: `BreakStartRequest`, `BreakEndRequest`, constant `VALID_BREAK_CATEGORIES = {lunch, breakfast, tea, other}`.
+- New endpoint `POST /api/hr/attendance/break-out` — adds a new entry to `attendance.breaks[]` with `{break_id, category, reason, start_time, end_time=null, duration_minutes=0}`. Validates "Other" requires reason. Refuses to start a new break if one is already open.
+- New endpoint `POST /api/hr/attendance/break-in` — closes the currently open break and recomputes `lunch_duration` as the SUM of all break durations (kept for legacy back-compat with monthly stats / payroll).
+- Old `/lunch-start` and `/lunch-end` endpoints remain unchanged for any external callers.
+
+**Frontend (`/app/frontend/src/components/Layout.js`):**
+- Header buttons now show **Break Out** (yellow) and, when on a break, **Break In** (purple, pulse).
+- Removed: `showLunchOutModal`, `showLunchInModal`, `handleLunchOut`, `handleLunchIn`, `getLunchOutTime`, `getLunchDuration` (replaced).
+- Added: `showBreakOutModal`, `showBreakInModal`, `handleBreakOut`, `handleBreakIn`, `getOpenBreakStartTime`, `getCurrentBreakDuration`.
+- Break Out modal renders 4 category buttons + reason input (label switches to required `*` when "Other" is picked).
+- `isOnBreak` now derived from `attendance.breaks` array (open break = any entry with `end_time == null`), falls back to legacy `lunch_start && !lunch_end` if no breaks array.
+- Removed lunchCompleted gate — multiple breaks per day are allowed.
+
+**Frontend (`/app/frontend/src/pages/HRPage.js`):**
+- "Lunch" summary card replaced with clickable **Break** card (`data-testid="break-card"`) showing total formatted as `Xh Ym` and a count badge (`3×`).
+- Added Break Summary popup (`data-testid="break-summary-modal"`) with Total Time + Total Breaks header tiles and per-break list (category badge, start–end times, reason, duration).
+- Status badge now reads "On Break" instead of "On Lunch".
+- Imported `Coffee` icon from lucide-react.
+
+**Testing:** End-to-end curl flow validated against preview backend:
+- 3 sequential break-in/out cycles (lunch 1:00–1:30 PM, tea 3:00–3:30 PM, other 4:00–4:30 PM with reason "Family call") → `lunch_duration = 90 min`, `breaks` array has 3 entries with `duration_minutes=30` each.
+- `POST /break-out` with `category=other` and empty `reason` → 400 "Reason is required for 'Other' break". ✅
+- Frontend screenshots verify card displays "1h 30m" + "3×" badge, summary popup lists all 3 breaks with correct categories/times/reasons, Break Out modal shows the 4 category buttons.
+
+**data-testid added:** `break-out-btn`, `break-in-btn`, `break-category-buttons`, `break-category-lunch|breakfast|tea|other`, `break-reason-input`, `break-card`, `break-count-badge`, `break-total-display`, `break-summary-modal`, `break-summary-total`, `break-summary-count`, `break-summary-close`, `break-item-{idx}`, `break-item-{idx}-duration`.

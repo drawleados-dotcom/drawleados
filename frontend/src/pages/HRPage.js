@@ -12,7 +12,8 @@ import {
   User, Clock, Calendar, FileText, Award, Download, 
   Home, Building, Square, Send, Shield, Lock, Eye, EyeOff,
   CheckCircle, XCircle, AlertCircle, ChevronRight, Key, Play,
-  LayoutGrid, List, X, Trophy, TrendingUp, Target, MessageSquare
+  LayoutGrid, List, X, Trophy, TrendingUp, Target, MessageSquare,
+  Coffee
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -617,9 +618,15 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const isClockedIn = attendance?.clock_in && !attendance?.clock_out;
   const isClockedOut = attendance?.clock_out;
   const notClockedIn = !attendance?.clock_in;
-  // Single lunch break
-  const isOnLunch = attendance?.lunch_start && !attendance?.lunch_end;
-  const lunchCompleted = attendance?.lunch_end;
+  // Break state (multiple breaks per day). Falls back to legacy lunch fields.
+  const breaksList = Array.isArray(attendance?.breaks) ? attendance.breaks : [];
+  const isOnBreak = breaksList.some((b) => b.end_time == null) ||
+    (!breaksList.length && attendance?.lunch_start && !attendance?.lunch_end);
+  const totalBreakMinutes = breaksList.length > 0
+    ? breaksList.reduce((sum, b) => sum + (Number(b.duration_minutes) || 0), 0)
+    : (attendance?.lunch_duration || 0);
+  const breakCount = breaksList.length;
+  const [showBreakSummary, setShowBreakSummary] = useState(false);
   // Multiple sessions support
   const sessions = attendance?.sessions || [];
   
@@ -796,11 +803,11 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
             <div className="flex flex-wrap items-center gap-2" data-testid="attendance-header-tags">
               <Badge className={`${
                 isClockedOut ? 'bg-green-500/20 text-green-400' :
-                isOnLunch ? 'bg-yellow-500/20 text-yellow-400' :
+                isOnBreak ? 'bg-yellow-500/20 text-yellow-400' :
                 isClockedIn ? 'bg-blue-500/20 text-blue-400' :
                 'bg-gray-500/20 text-gray-400'
               } px-3 py-1 text-sm pointer-events-none`} data-testid="attendance-status-tag">
-                {isClockedOut ? 'Day Complete' : isOnLunch ? 'On Lunch' : isClockedIn ? 'Working' : 'Not Started'}
+                {isClockedOut ? 'Day Complete' : isOnBreak ? 'On Break' : isClockedIn ? 'Working' : 'Not Started'}
               </Badge>
               <Badge className={`${bgSecondary} ${textPrimary} border ${borderColor} px-3 py-1 text-sm flex items-center gap-1 pointer-events-none`} data-testid="attendance-work-mode-tag">
                 {attendance?.work_mode === 'home' || attendance?.work_location === 'home' ? (
@@ -828,10 +835,28 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
               <p className={`text-xs ${textSecondary} mb-1`}>Logout</p>
               <p className={`text-2xl font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_out)}</p>
             </div>
-            <div className={`p-4 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Lunch</p>
-              <p className={`text-2xl font-semibold ${textPrimary}`}>{attendance?.lunch_duration ? `${attendance.lunch_duration}m` : '-'}</p>
-            </div>
+            <button
+              type="button"
+              onClick={() => setShowBreakSummary(true)}
+              className={`p-4 ${bgSecondary} rounded-lg text-left transition hover:ring-2 hover:ring-[#f59e0b]`}
+              data-testid="break-card"
+            >
+              <p className={`text-xs ${textSecondary} mb-1 flex items-center justify-between`}>
+                <span>Break</span>
+                {breakCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-[#f59e0b]/20 text-[#f59e0b] text-[10px] font-semibold" data-testid="break-count-badge">
+                    {breakCount}×
+                  </span>
+                )}
+              </p>
+              <p className={`text-2xl font-semibold ${textPrimary}`} data-testid="break-total-display">
+                {totalBreakMinutes > 0
+                  ? (totalBreakMinutes >= 60
+                      ? `${Math.floor(totalBreakMinutes / 60)}h ${totalBreakMinutes % 60}m`
+                      : `${totalBreakMinutes}m`)
+                  : '-'}
+              </p>
+            </button>
             <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Sessions</p>
               <p className={`text-2xl font-semibold ${textPrimary}`}>{sessions.length > 0 ? sessions.length : (attendance?.clock_in ? 1 : 0)}</p>
@@ -1256,6 +1281,99 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                 <Button onClick={handleStartLunch} className="flex-1 bg-[#f59e0b] hover:bg-[#d97706] text-white">
                   Start Lunch
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Break Summary Popup */}
+      {showBreakSummary && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowBreakSummary(false)}
+          data-testid="break-summary-modal"
+        >
+          <Card
+            className={`w-full max-w-lg ${bgCard} border ${borderColor}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle className={`${textPrimary} flex items-center gap-2`}>
+                <Coffee className="h-5 w-5 text-[#f59e0b]" />
+                Today's Breaks
+              </CardTitle>
+              <button
+                onClick={() => setShowBreakSummary(false)}
+                className={`${textSecondary} hover:${textPrimary}`}
+                data-testid="break-summary-close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Totals header */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Total Time</p>
+                  <p className={`text-2xl font-semibold text-[#f59e0b]`} data-testid="break-summary-total">
+                    {totalBreakMinutes > 0
+                      ? (totalBreakMinutes >= 60
+                          ? `${Math.floor(totalBreakMinutes / 60)}h ${totalBreakMinutes % 60}m`
+                          : `${totalBreakMinutes}m`)
+                      : '0m'}
+                  </p>
+                </div>
+                <div className={`p-4 ${bgSecondary} rounded-lg`}>
+                  <p className={`text-xs ${textSecondary} mb-1`}>Total Breaks</p>
+                  <p className={`text-2xl font-semibold ${textPrimary}`} data-testid="break-summary-count">{breakCount}</p>
+                </div>
+              </div>
+
+              {/* Per-break list */}
+              <div className="space-y-2">
+                {breaksList.length === 0 ? (
+                  <p className={`text-sm ${textSecondary} text-center py-4`}>No breaks taken today.</p>
+                ) : (
+                  breaksList.map((b, idx) => {
+                    const labelMap = { lunch: 'Lunch', breakfast: 'Breakfast', tea: 'Tea Break', other: 'Other' };
+                    const colorMap = {
+                      lunch: 'bg-orange-500/20 text-orange-400',
+                      breakfast: 'bg-amber-500/20 text-amber-400',
+                      tea: 'bg-emerald-500/20 text-emerald-400',
+                      other: 'bg-purple-500/20 text-purple-400',
+                    };
+                    const cat = b.category || 'other';
+                    const dur = Number(b.duration_minutes) || 0;
+                    const durLabel = b.end_time
+                      ? (dur >= 60 ? `${Math.floor(dur / 60)}h ${dur % 60}m` : `${dur}m`)
+                      : 'In progress';
+                    return (
+                      <div
+                        key={b.break_id || idx}
+                        className={`p-3 ${bgSecondary} rounded-lg flex items-center justify-between gap-3`}
+                        data-testid={`break-item-${idx}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Badge className={`${colorMap[cat] || colorMap.other} pointer-events-none`}>
+                            {labelMap[cat] || cat}
+                          </Badge>
+                          <div className="min-w-0">
+                            <p className={`text-sm ${textPrimary} truncate`}>
+                              {formatTime(b.start_time)} — {b.end_time ? formatTime(b.end_time) : '...'}
+                            </p>
+                            {b.reason && (
+                              <p className={`text-xs ${textSecondary} truncate`}>{b.reason}</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`text-sm font-semibold ${textPrimary} flex-shrink-0`} data-testid={`break-item-${idx}-duration`}>
+                          {durLabel}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </CardContent>
           </Card>
