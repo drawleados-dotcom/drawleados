@@ -30,6 +30,7 @@ import DLOperationsPage from './pages/DLOperationsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import ApprovalsPage from './pages/ApprovalsPage';
 import OrgStructurePage from './pages/OrgStructurePage';
+import EmployeeAttendanceViewPage from './pages/EmployeeAttendanceViewPage';
 import './App.css';
 
 function AppRouter() {
@@ -188,6 +189,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <OrgStructurePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/hr-admin/attendance/:userId"
+        element={
+          <ProtectedRoute>
+            <EmployeeAttendanceViewPage />
           </ProtectedRoute>
         }
       />

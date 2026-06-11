@@ -5623,22 +5623,9 @@ function EnhancedAttendanceTab({
     });
   };
 
-  // Load detailed employee attendance records
+  // Open the full attendance view for an employee — dedicated page.
   const loadEmployeeDetails = async (emp) => {
-    setLoading(true);
-    try {
-      const res = await axios.get(`${API}/api/hr/attendance/employee/${emp.user_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { month, year }
-      });
-      setEmployeeRecords(res.data || []);
-      setSelectedEmployee(emp);
-      setShowDetailModal(true);
-    } catch (err) {
-      console.error('Failed to load employee records:', err);
-      toast.error('Failed to load attendance details');
-    }
-    setLoading(false);
+    window.open(`/hr-admin/attendance/${emp.user_id}`, '_blank', 'noopener');
   };
 
   const employeesWithStatus = getEmployeesWithStatus();
