@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet } from 'lucide-react';
+import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -51,6 +52,7 @@ export default function ProjectsPanel({
   const [showDeptsModal, setShowDeptsModal] = useState(false);
   const [deptsDraft, setDeptsDraft] = useState([]);
   const [deptsSaving, setDeptsSaving] = useState(false);
+  const [projectInnerTab, setProjectInnerTab] = useState('tasks'); // 'tasks' | 'payment'
   const [docsTab, setDocsTab] = useState('sheets'); // 'sheets' | 'docs' | 'drive'
   const [editingDocId, setEditingDocId] = useState(null);
   const [docDraft, setDocDraft] = useState({ name: '', link: '' });
@@ -498,6 +500,48 @@ export default function ProjectsPanel({
           </CardContent>
         </Card>
 
+        {/* Inner tabs: Tasks · Payment Schedule */}
+        <div className="flex gap-2 flex-wrap" data-testid="project-inner-tabs">
+          {[
+            { id: 'tasks', label: 'Tasks', icon: ListChecks },
+            { id: 'payment', label: 'Payment Schedule', icon: Wallet },
+          ].map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setProjectInnerTab(t.id)}
+                data-testid={`project-inner-tab-${t.id}`}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition border ${
+                  projectInnerTab === t.id
+                    ? 'bg-[#6366f1] border-[#6366f1] text-white'
+                    : isDark
+                      ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa] hover:bg-[#3f3f46]'
+                      : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {projectInnerTab === 'payment' && (
+          <PaymentScheduleTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            isSuperAdmin={(currentUser?.role || '').toLowerCase() === 'super_admin'}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'tasks' && (
         <div className="space-y-2">
           <h3 className={`text-base font-semibold ${textPrimary}`}>Tasks</h3>
 
@@ -664,6 +708,7 @@ export default function ProjectsPanel({
             })
           )}
         </div>
+        )}
 
         {/* Team Management Modal */}
         {showTeamModal && (

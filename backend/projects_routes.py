@@ -34,6 +34,7 @@ class ProjectUpdate(BaseModel):
     departments: Optional[List[str]] = None
     status: Optional[str] = None
     documents: Optional[List[dict]] = None
+    payment_schedule: Optional[dict] = None
 
 
 class ProjectTaskCreate(BaseModel):
@@ -148,6 +149,9 @@ async def update_project(project_id: str, payload: ProjectUpdate, request: Reque
     update_data = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
+    # Payment schedule is restricted to Super Admin only. Operation Head can view but not mutate.
+    if "payment_schedule" in update_data and (user.role or "").lower() != "super_admin":
+        raise HTTPException(status_code=403, detail="Only Super Admin can edit the payment schedule")
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = await db.projects.update_one({"project_id": project_id}, {"$set": update_data})
     if result.matched_count == 0:
