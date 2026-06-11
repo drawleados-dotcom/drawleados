@@ -90,7 +90,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   });
   
   const token = localStorage.getItem('session_token');
-  const headers = { Authorization: `Bearer ${token}` };
+  // CRITICAL: useMemo so the `headers` object identity is stable across renders.
+  // Without this, every child component (ProjectsPanel, DepartmentsPanel) receives
+  // a new `headers` prop on every render → their loadXyz useCallback identity
+  // changes → their useEffect fires constantly → "Loading…" blinks every frame.
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
