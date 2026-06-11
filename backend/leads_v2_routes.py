@@ -740,14 +740,24 @@ async def create_industry(request: Request):
 
 @leads_v2_router.get("/team-members")
 async def get_team_members(request: Request):
-    """Get all team members for Lead Owner dropdown"""
+    """Get team members for Lead Owner dropdown.
+    Only returns users who actually have access to the Leads module:
+      - super_admin / admin role  → always included
+      - any user whose module_access contains 'leads'
+    """
     await get_current_user_from_request(request)
-    
-    members = await db.users.find(
-        {"is_active": True},
+
+    cursor = db.users.find(
+        {
+            "is_active": True,
+            "$or": [
+                {"role": {"$in": ["super_admin", "admin"]}},
+                {"module_access": "leads"},
+            ],
+        },
         {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
-    ).to_list(100)
-    
+    )
+    members = await cursor.to_list(200)
     return members
 
 # ============== FOLLOW-UP ROUTES ==============
