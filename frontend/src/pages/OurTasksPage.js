@@ -51,8 +51,9 @@ export default function OurTasksPage() {
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
-  const [editingTimeRow, setEditingTimeRow] = useState(null); // task_id currently in row-edit mode
-  const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}}
+  const [editingTimeRow, setEditingTimeRow] = useState(null); // task_id currently in row-edit mode (legacy, no longer used for inline)
+  const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}} (legacy)
+  const [editTimeModal, setEditTimeModal] = useState(null); // { task, sH, sM, sP, eH, eM, eP }
   // Approval request popup
   const [approvalTask, setApprovalTask] = useState(null); // task currently being submitted for approval
   const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', note: '', work_link: '' });
@@ -401,10 +402,43 @@ export default function OurTasksPage() {
     }
   };
 
+  // Split a 24h "HH:MM" string into { hour12, minute, period }.
+  const splitHM = (hhmm) => {
+    if (!hhmm) return { h: 9, m: 0, p: 'AM' };
+    const [hStr, mStr] = String(hhmm).split(':');
+    let h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10) || 0;
+    const p = h >= 12 ? 'PM' : 'AM';
+    if (h === 0) h = 12;
+    else if (h > 12) h -= 12;
+    return { h, m, p };
+  };
+
+  // Join { h (12h), m, p } back to a 24h "HH:MM" string.
+  const joinHM = ({ h, m, p }) => {
+    let hh = parseInt(h, 10);
+    if (Number.isNaN(hh)) hh = 0;
+    const mm = parseInt(m, 10) || 0;
+    if (p === 'PM' && hh !== 12) hh += 12;
+    if (p === 'AM' && hh === 12) hh = 0;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  };
+
+  const openEditTimeModal = (task) => {
+    const { start, end } = getTaskStartEnd(task);
+    const sParts = splitHM(toTimeInputValue(start));
+    const eParts = splitHM(toTimeInputValue(end));
+    setEditTimeModal({
+      task,
+      sH: sParts.h, sM: sParts.m, sP: sParts.p,
+      eH: eParts.h, eM: eParts.m, eP: eParts.p,
+    });
+  };
+
   // Save inline time edit (single field) — kept for potential future use
   // Save BOTH start and end time for a row (triggered by row-level Save button)
-  const handleSaveTimeRow = async (taskId) => {
-    const draft = timeDrafts[taskId];
+  const handleSaveTimeRow = async (taskId, explicitDraft = null) => {
+    const draft = explicitDraft || timeDrafts[taskId];
     if (!draft || (!draft.start && !draft.end)) {
       toast.error('Enter Start Time and End Time first');
       return;
@@ -436,6 +470,7 @@ export default function OurTasksPage() {
       await axios.patch(`${API}/api/our-tasks/tasks/${taskId}/time-edit`, payload, { headers });
       toast.success('Time saved');
       setEditingTimeRow(null);
+      setEditTimeModal(null);
       setTimeDrafts(prev => {
         const { [taskId]: _, ...rest } = prev;
         return rest;
@@ -510,24 +545,23 @@ export default function OurTasksPage() {
       );
     }
 
+    const isApproved = task.approval_request?.status === 'approved';
+
     return (
       <Button
         size="sm"
-        onClick={() => {
-          const { start, end } = getTaskStartEnd(task);
-          setTimeDrafts(prev => ({
-            ...prev,
-            [task.task_id]: {
-              start: toTimeInputValue(start),
-              end: toTimeInputValue(end),
-            }
-          }));
-          setEditingTimeRow(task.task_id);
-        }}
-        className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3"
+        onClick={() => openEditTimeModal(task)}
+        disabled={isApproved}
+        className={
+          isApproved
+            ? 'bg-[#3f3f46] text-[#a1a1aa] h-8 px-3 cursor-not-allowed'
+            : 'bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3'
+        }
         data-testid={`time-edit-btn-${task.task_id}`}
+        title={isApproved ? 'Locked — approved by Operations' : 'Edit Start & End time'}
       >
-        <Edit2 className="h-3 w-3 mr-1" /> Edit
+        <Edit2 className="h-3 w-3 mr-1" />
+        {isApproved ? 'Locked' : 'Edit'}
       </Button>
     );
   };
@@ -2233,6 +2267,152 @@ export default function OurTasksPage() {
                 </Button>
               </div>
             </Card>
+          </div>
+        )}
+
+        {/* Edit Time mini popup — clean Hours / Minutes / AM-PM inputs */}
+        {editTimeModal && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setEditTimeModal(null)}
+            data-testid="edit-time-modal"
+          >
+            <div
+              className="w-full max-w-md bg-[#18181b] border border-[#27272a] rounded-xl shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 border-b border-[#27272a] flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-semibold text-[#fafafa]">Edit Task Time</h3>
+                  <p className="text-xs text-[#a1a1aa] mt-0.5 truncate max-w-[300px]">
+                    {editTimeModal.task?.task_name}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEditTimeModal(null)}
+                  className="text-[#a1a1aa] hover:text-[#fafafa]"
+                  data-testid="edit-time-close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-5">
+                {/* Start Time */}
+                <div>
+                  <Label className="text-xs text-[#a1a1aa] uppercase tracking-wide">Start Time</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="12"
+                      value={editTimeModal.sH}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, sH: e.target.value }))}
+                      className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
+                      data-testid="edit-time-start-hour"
+                    />
+                    <span className="text-2xl text-[#a1a1aa]">:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={String(editTimeModal.sM).padStart(2, '0')}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, sM: e.target.value }))}
+                      className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
+                      data-testid="edit-time-start-min"
+                    />
+                    <div className="ml-2 flex gap-1">
+                      {['AM', 'PM'].map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setEditTimeModal((m) => ({ ...m, sP: p }))}
+                          className={`px-3 py-2 text-sm rounded-lg border ${
+                            editTimeModal.sP === p
+                              ? 'bg-[#6366f1] border-[#6366f1] text-white'
+                              : 'bg-[#27272a] border-[#3f3f46] text-[#a1a1aa] hover:text-[#fafafa]'
+                          }`}
+                          data-testid={`edit-time-start-${p.toLowerCase()}`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* End Time */}
+                <div>
+                  <Label className="text-xs text-[#a1a1aa] uppercase tracking-wide">End Time</Label>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      max="12"
+                      value={editTimeModal.eH}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, eH: e.target.value }))}
+                      className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
+                      data-testid="edit-time-end-hour"
+                    />
+                    <span className="text-2xl text-[#a1a1aa]">:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={String(editTimeModal.eM).padStart(2, '0')}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, eM: e.target.value }))}
+                      className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
+                      data-testid="edit-time-end-min"
+                    />
+                    <div className="ml-2 flex gap-1">
+                      {['AM', 'PM'].map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setEditTimeModal((m) => ({ ...m, eP: p }))}
+                          className={`px-3 py-2 text-sm rounded-lg border ${
+                            editTimeModal.eP === p
+                              ? 'bg-[#6366f1] border-[#6366f1] text-white'
+                              : 'bg-[#27272a] border-[#3f3f46] text-[#a1a1aa] hover:text-[#fafafa]'
+                          }`}
+                          data-testid={`edit-time-end-${p.toLowerCase()}`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-[#71717a]">
+                  Tip: you can edit these times any number of times — they lock only after Operations approves the task.
+                </p>
+              </div>
+
+              <div className="p-4 border-t border-[#27272a] flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditTimeModal(null)}
+                  className="border-[#3f3f46] text-[#fafafa]"
+                  data-testid="edit-time-cancel"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    const draft = {
+                      start: joinHM({ h: editTimeModal.sH, m: editTimeModal.sM, p: editTimeModal.sP }),
+                      end: joinHM({ h: editTimeModal.eH, m: editTimeModal.eM, p: editTimeModal.eP }),
+                    };
+                    handleSaveTimeRow(editTimeModal.task.task_id, draft);
+                  }}
+                  className="bg-[#10b981] hover:bg-[#059669] text-white"
+                  data-testid="edit-time-save"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" /> Save
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 
