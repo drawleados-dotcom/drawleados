@@ -30,6 +30,22 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### `OurTasksPage.js` refactor — Phase 1 (DONE — Feb 2026)
+
+Reduced the monolithic file by extracting 2 large, self-contained chunks into reusable components. Step toward keeping the file under 2,500 lines and preventing future Babel/AST crashes.
+
+| File | Before | After | Delta |
+|------|-------:|------:|------:|
+| `pages/OurTasksPage.js` | 2,801 | **2,650** | −151 |
+| `components/operations/OperationsSummaryCards.js` | — | **102** | +102 (new) |
+| `components/operations/OperationsTabsBar.js` | — | **127** | +127 (new) |
+
+- `OperationsSummaryCards` — the 5 KPI cards + date picker that sits above the tabs.
+- `OperationsTabsBar` — the 6-tab pill strip with full RBAC visibility (designation_config + fallbacks + Operation Head reorder + auto-correct + no-access empty state).
+- Verified live on preview: all tabs, counts, summary values, and task list render identically; no console errors.
+
+
+
 ### CRITICAL FIX — Operations Module Config Save did not persist (Feb 2026)
 
 **Bug:** Admin checked all Operations sub-tabs (My Tasks, Assign to Team, Projects=Edit, Departments, Approvals, Meetings) in the Operations Module Configuration modal and clicked **Save**. The modal closed, but the changes were **NEVER persisted to the backend**. When the user logged back in, only "My Tasks" was visible. This was a recurring complaint.

@@ -22,6 +22,8 @@ import ProjectsPanel from '../components/ProjectsPanel';
 import DepartmentsPanel from '../components/DepartmentsPanel';
 import MeetingsPanel from '../components/MeetingsPanel';
 import useAutoRefresh from '../hooks/useAutoRefresh';
+import OperationsSummaryCards from '../components/operations/OperationsSummaryCards';
+import OperationsTabsBar from '../components/operations/OperationsTabsBar';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -992,191 +994,38 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
         {/* Operations Summary Cards — Feb 2026
             5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO */}
-        <div className="space-y-3 mb-6" data-testid="operations-summary">
-          {/* Date picker — drives the worked-hours calculation */}
-          <div className="flex items-center gap-2">
-            <Calendar className={`h-4 w-4 ${textSecondary}`} />
-            <span className={`text-xs ${textSecondary}`}>Summary for</span>
-            <input
-              type="date"
-              value={summaryDate}
-              onChange={(e) => setSummaryDate(e.target.value)}
-              className={`text-sm rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} px-2 py-1`}
-              data-testid="summary-date-picker"
-            />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {[
-              {
-                key: 'worked',
-                testid: 'summary-worked-hours',
-                label: 'Total Worked Hours',
-                sub: 'on selected date',
-                value: summary?.worked_hours?.formatted || '0h 0m',
-                icon: Clock,
-                ring: 'from-emerald-500/30 to-emerald-500/0',
-                text: 'text-emerald-500',
-              },
-              {
-                key: 'todo',
-                testid: 'summary-total-todo',
-                label: 'Total Works To-Do',
-                sub: 'open + in progress',
-                value: summary?.total_to_do ?? 0,
-                icon: ListChecks,
-                ring: 'from-indigo-500/30 to-indigo-500/0',
-                text: 'text-indigo-500',
-              },
-              {
-                key: 'pending',
-                testid: 'summary-pending',
-                label: 'Pending',
-                sub: 'awaiting start',
-                value: summary?.pending ?? 0,
-                icon: AlertCircle,
-                ring: 'from-amber-500/30 to-amber-500/0',
-                text: 'text-amber-500',
-              },
-              {
-                key: 'ops',
-                testid: 'summary-awaiting-ops',
-                label: 'Awaiting for Ops',
-                sub: 'Operations approval',
-                value: summary?.awaiting_ops ?? 0,
-                icon: ShieldCheck,
-                ring: 'from-blue-500/30 to-blue-500/0',
-                text: 'text-blue-500',
-              },
-              {
-                key: 'ceo',
-                testid: 'summary-awaiting-ceo',
-                label: 'Awaiting CEO',
-                sub: 'forwarded to CEO',
-                value: summary?.awaiting_ceo ?? 0,
-                icon: Crown,
-                ring: 'from-purple-500/30 to-purple-500/0',
-                text: 'text-purple-500',
-              },
-            ].map(card => {
-              const Icon = card.icon;
-              return (
-                <div
-                  key={card.key}
-                  data-testid={card.testid}
-                  className={`relative overflow-hidden rounded-xl border ${borderColor} ${bgCard} p-4`}
-                >
-                  <div className={`absolute -top-8 -right-8 h-24 w-24 rounded-full bg-gradient-to-br ${card.ring}`} />
-                  <div className="relative">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>{card.label}</p>
-                      <Icon className={`h-4 w-4 ${card.text}`} />
-                    </div>
-                    <p className={`text-2xl font-bold ${textPrimary}`}>{card.value}</p>
-                    <p className={`text-[11px] ${textSecondary} mt-0.5`}>{card.sub}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <OperationsSummaryCards
+          summary={summary}
+          summaryDate={summaryDate}
+          onDateChange={setSummaryDate}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+        />
 
         {/* Main Tabs — pill style matching My Profile */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {(() => {
-            const allTabs = [
-              { id: 'assigned_to_me', label: 'My Tasks', icon: User, count: assignedToMeTasks.length + myOwnTasks.length },
-              { id: 'assign_to_team', label: 'Assign to Team', icon: Users, count: assignedToTeamTasks.length },
-              { id: 'projects', label: 'Projects', icon: Briefcase, count: projectsCount },
-              { id: 'departments', label: 'Departments', icon: Building2, count: departmentsCount },
-              { id: 'approvals', label: 'Approvals', icon: CheckCircle2, count: approvalsCount },
-              { id: 'meetings', label: 'Meetings', icon: Video, count: meetingsCount },
-            ];
-            // RBAC: filter visible sub-tabs by user's designation_config.
-            // Super Admin / Admin always see everything.
-            const role = (user?.role || '').toLowerCase();
-            const isPrivileged = role === 'super_admin' || role === 'admin';
-            // Robust fallback: if designation_config is null/missing but user has
-            // 'operations' in module_access, treat My Tasks as granted by default.
-            // (Protects users on legacy designations that pre-date the per-sub-tab fields.)
-            const userModules = Array.isArray(user?.module_access) ? user.module_access : [];
-            const hasOpsModule = userModules.some(m => String(m).toLowerCase() === 'operations');
-            const cfg = (user?.designation_config) || (hasOpsModule ? { operations_my_tasks: true } : {});
-            const isVisible = (id) => {
-              if (isPrivileged) return true;
-              // My Tasks shows when the user has ANY operations sub-tab access
-              // (my_tasks / assign_to_team / projects). Guarantees a default
-              // landing tab whenever any Operations access is granted.
-              if (id === 'assigned_to_me') {
-                if (hasOpsModule && !cfg.operations_my_tasks && !cfg.operations_assign_to_team &&
-                    (!cfg.operations_projects || cfg.operations_projects === 'none')) {
-                  // Legacy / partial config — still let them in
-                  return true;
-                }
-                return !!(
-                  cfg.operations_my_tasks ||
-                  cfg.operations_assign_to_team ||
-                  (cfg.operations_projects && cfg.operations_projects !== 'none')
-                );
-              }
-              if (id === 'assign_to_team') return !!cfg.operations_assign_to_team;
-              if (id === 'projects') return (cfg.operations_projects || 'none') !== 'none';
-              if (id === 'departments') return !!cfg.operations_departments_tab;
-              if (id === 'approvals') return !!cfg.operations_approvals_tab;
-              if (id === 'meetings') return !!cfg.operations_meetings_tab;
-              return false;
-            };
-            const visibleTabs = allTabs.filter(t => isVisible(t.id));
-
-            // Operation Head sees a different order (only across visible tabs)
-            const desg = (user?.designation || '').toLowerCase().trim();
-            const isOpHead = desg === 'operation head';
-            const tabs = isOpHead
-              ? ['assign_to_team', 'approvals', 'assigned_to_me', 'projects', 'departments', 'meetings']
-                  .map(id => visibleTabs.find(t => t.id === id))
-                  .filter(Boolean)
-              : visibleTabs;
-
-            // Auto-correct: if mainTab is hidden for this user, switch to first visible
-            if (tabs.length > 0 && !tabs.find(t => t.id === mainTab)) {
-              setTimeout(() => setMainTab(tabs[0].id), 0);
-            }
-
-            if (tabs.length === 0) {
-              return (
-                <div className={`px-4 py-3 text-sm ${textSecondary}`} data-testid="ops-no-access">
-                  No Operations sub-tabs have been granted to your designation. Contact your admin.
-                </div>
-              );
-            }
-
-            return tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = mainTab === tab.id;
-              return (
-                <Button
-                  key={tab.id}
-                  onClick={() => { setMainTab(tab.id); setMeetingsSubActive(false); if (tab.id !== 'approvals') setFilter('all'); setFilters(prev => ({ ...prev, assignedTo: 'all' })); }}
-                  data-testid={`ops-tab-${tab.id.replace(/_/g, '-')}`}
-                  className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
-                    isActive
-                      ? 'bg-[#6366f1] text-white shadow-lg'
-                      : `${bgCard} ${textSecondary} ${hoverBg} border ${borderColor}`
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {tab.label}
-                  <span
-                    className={`ml-1 inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full text-xs font-semibold px-1.5 ${
-                      isActive ? 'bg-white/25 text-white' : 'bg-[#6366f1]/15 text-[#6366f1]'
-                    }`}
-                  >
-                    {tab.count ?? 0}
-                  </span>
-                </Button>
-              );
-            });
-          })()}
-        </div>
+        <OperationsTabsBar
+          user={user}
+          mainTab={mainTab}
+          setMainTab={setMainTab}
+          setMeetingsSubActive={setMeetingsSubActive}
+          setFilter={setFilter}
+          setFilters={setFilters}
+          counts={{
+            myTasks: assignedToMeTasks.length + myOwnTasks.length,
+            assignToTeam: assignedToTeamTasks.length,
+            projects: projectsCount,
+            departments: departmentsCount,
+            approvals: approvalsCount,
+            meetings: meetingsCount,
+          }}
+          bgCard={bgCard}
+          textSecondary={textSecondary}
+          hoverBg={hoverBg}
+          borderColor={borderColor}
+        />
 
         {/* Approvals tab — embed the dedicated page */}
         {mainTab === 'approvals' && (
