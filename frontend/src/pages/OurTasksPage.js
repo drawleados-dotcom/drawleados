@@ -1603,275 +1603,276 @@ export default function OurTasksPage() {
                   </button>
                 </div>
               </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <Label className={textPrimary}>Task Name *</Label>
-                  <Input
-                    value={formData.task_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, task_name: e.target.value }))}
-                    placeholder="Enter task name"
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <Label className={textPrimary}>Description</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Task description"
-                    rows={2}
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>Priority</Label>
-                  <Select value={formData.priority} onValueChange={(v) => setFormData(prev => ({ ...prev, priority: v }))}>
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className={bgCard}>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className={textPrimary}>Type <span className="text-red-500">*</span></Label>
-                  <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v }))}>
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`} data-testid="create-task-type">
-                      <SelectValue placeholder="Select type…" />
-                    </SelectTrigger>
-                    <SelectContent className={bgCard}>
-                      <SelectItem value="general">General</SelectItem>
-                      <SelectItem value="follow_up">Follow Up</SelectItem>
-                      <SelectItem value="meeting">Meeting</SelectItem>
-                      <SelectItem value="proposal">Proposal</SelectItem>
-                      <SelectItem value="call">Call</SelectItem>
-                      <SelectItem value="learning">Learning</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {/* Assign To — hidden when creating from My Tasks (assignee = current user) */}
-                {!(mainTab === 'assigned_to_me' && !editingTask) && (
-                  <div>
-                    <Label className={textPrimary}>Assign To</Label>
-                    <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
-                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                        <SelectValue placeholder="Select user" />
-                      </SelectTrigger>
-                      <SelectContent className={bgCard}>
-                        {users.map(u => (
-                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div>
-                  <Label className={textPrimary}>Status</Label>
-                  <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className={bgCard}>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="on_hold">On Hold</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Google Calendar Style Date & Time */}
-                <div className={`md:col-span-2 p-4 rounded-lg border ${borderColor} ${bgSecondary} space-y-4`}>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-[#6366f1]" />
-                    <span className={`text-sm font-medium ${textPrimary}`}>Date & Time</span>
-                  </div>
-                  
-                  <div className="flex flex-wrap items-center gap-3">
-                    {/* Date Picker */}
-                    <div className="flex-1 min-w-[140px]">
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* ─── Column 1 — Task details (till Status) ─── */}
+                  <div className="space-y-4" data-testid="create-task-col-1">
+                    <div>
+                      <Label className={textPrimary}>Task Name *</Label>
                       <Input
-                        type="date"
-                        value={formData.due_date}
-                        onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
-                        className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
+                        value={formData.task_name}
+                        onChange={(e) => setFormData(prev => ({ ...prev, task_name: e.target.value }))}
+                        placeholder="Enter task name"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                       />
                     </div>
-                    
-                    {/* Time Picker - Hidden if All Day */}
-                    {!formData.all_day && (
-                      <div className="w-[110px]">
-                        <Input
-                          type="time"
-                          value={formData.due_time}
-                          onChange={(e) => setFormData(prev => ({ ...prev, due_time: e.target.value }))}
-                          className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
-                        />
+                    <div>
+                      <Label className={textPrimary}>Description</Label>
+                      <Textarea
+                        value={formData.description}
+                        onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="Task description"
+                        rows={4}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className={textPrimary}>Priority</Label>
+                        <Select value={formData.priority} onValueChange={(v) => setFormData(prev => ({ ...prev, priority: v }))}>
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className={bgCard}>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="low">Low</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Type <span className="text-red-500">*</span></Label>
+                        <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v }))}>
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor}`} data-testid="create-task-type">
+                            <SelectValue placeholder="Select type…" />
+                          </SelectTrigger>
+                          <SelectContent className={bgCard}>
+                            <SelectItem value="general">General</SelectItem>
+                            <SelectItem value="follow_up">Follow Up</SelectItem>
+                            <SelectItem value="meeting">Meeting</SelectItem>
+                            <SelectItem value="proposal">Proposal</SelectItem>
+                            <SelectItem value="call">Call</SelectItem>
+                            <SelectItem value="learning">Learning</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    {/* Assign To — hidden when creating from My Tasks (assignee = current user) */}
+                    {!(mainTab === 'assigned_to_me' && !editingTask) && (
+                      <div>
+                        <Label className={textPrimary}>Assign To</Label>
+                        <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                            <SelectValue placeholder="Select user" />
+                          </SelectTrigger>
+                          <SelectContent className={bgCard}>
+                            {users.map(u => (
+                              <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
-                  </div>
-                  
-                  {/* All Day Checkbox */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="all_day"
-                      checked={formData.all_day}
-                      onChange={(e) => setFormData(prev => ({ ...prev, all_day: e.target.checked, due_time: '' }))}
-                      className="h-4 w-4 rounded border-gray-300 text-[#6366f1] focus:ring-[#6366f1]"
-                    />
-                    <Label htmlFor="all_day" className={`text-sm ${textSecondary} cursor-pointer`}>All day</Label>
-                  </div>
-
-                  {/* Recurrence Dropdown */}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Select 
-                        value={formData.recurrence} 
-                        onValueChange={(v) => {
-                          if (v === 'custom' || v === 'edit_custom') {
-                            setShowCustomRecurrence(true);
-                          } else {
-                            setFormData(prev => ({ ...prev, recurrence: v }));
-                          }
-                        }}
-                      >
-                        <SelectTrigger className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor}`}>
-                          <SelectValue placeholder="Does not repeat">
-                            {formData.recurrence === 'custom' ? getRecurrenceLabel(formData) : undefined}
-                          </SelectValue>
+                    <div>
+                      <Label className={textPrimary}>Status</Label>
+                      <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
+                        <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent className={bgCard}>
-                          <SelectItem value="none">Does not repeat</SelectItem>
-                          <SelectItem value="daily">Daily</SelectItem>
-                          <SelectItem value="weekly">
-                            Weekly on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { weekday: 'long' }) : 'selected day'}
-                          </SelectItem>
-                          <SelectItem value="monthly">
-                            Monthly on the {formData.due_date ? new Date(formData.due_date).getDate() : 'selected date'}
-                          </SelectItem>
-                          <SelectItem value="yearly">
-                            Annually on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'selected date'}
-                          </SelectItem>
-                          <SelectItem value="weekdays">Every weekday (Monday to Friday)</SelectItem>
-                          <SelectItem value="custom">Custom...</SelectItem>
+                          <SelectItem value="pending">Pending</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="completed">Completed</SelectItem>
+                          <SelectItem value="on_hold">On Hold</SelectItem>
                         </SelectContent>
                       </Select>
-                      
-                      {/* Edit Custom button when custom is selected */}
-                      {formData.recurrence === 'custom' && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowCustomRecurrence(true)}
-                          className={`${borderColor} text-[#6366f1]`}
-                        >
-                          Edit
-                        </Button>
-                      )}
                     </div>
-                    
-                    {/* Show current custom recurrence summary */}
-                    {formData.recurrence === 'custom' && formData.custom_recurrence && (
-                      <p className="text-xs text-[#6366f1] mt-1">
-                        {getRecurrenceLabel(formData)}
-                      </p>
-                    )}
+                  </div>
+
+                  {/* ─── Column 2 — Schedule + Categorization ─── */}
+                  <div className="space-y-4" data-testid="create-task-col-2">
+                    {/* Date & Time block */}
+                    <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary} space-y-3`}>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-[#6366f1]" />
+                        <span className={`text-sm font-medium ${textPrimary}`}>Date & Time</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex-1 min-w-[120px]">
+                          <Input
+                            type="date"
+                            value={formData.due_date}
+                            onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                            className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
+                          />
+                        </div>
+                        {!formData.all_day && (
+                          <div className="w-[110px]">
+                            <Input
+                              type="time"
+                              value={formData.due_time}
+                              onChange={(e) => setFormData(prev => ({ ...prev, due_time: e.target.value }))}
+                              className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="all_day"
+                          checked={formData.all_day}
+                          onChange={(e) => setFormData(prev => ({ ...prev, all_day: e.target.checked, due_time: '' }))}
+                          className="h-4 w-4 rounded border-gray-300 text-[#6366f1] focus:ring-[#6366f1]"
+                        />
+                        <Label htmlFor="all_day" className={`text-sm ${textSecondary} cursor-pointer`}>All day</Label>
+                      </div>
+                      {/* Recurrence */}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Select 
+                            value={formData.recurrence} 
+                            onValueChange={(v) => {
+                              if (v === 'custom' || v === 'edit_custom') {
+                                setShowCustomRecurrence(true);
+                              } else {
+                                setFormData(prev => ({ ...prev, recurrence: v }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className={`${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor}`}>
+                              <SelectValue placeholder="Does not repeat">
+                                {formData.recurrence === 'custom' ? getRecurrenceLabel(formData) : undefined}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent className={bgCard}>
+                              <SelectItem value="none">Does not repeat</SelectItem>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">
+                                Weekly on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { weekday: 'long' }) : 'selected day'}
+                              </SelectItem>
+                              <SelectItem value="monthly">
+                                Monthly on the {formData.due_date ? new Date(formData.due_date).getDate() : 'selected date'}
+                              </SelectItem>
+                              <SelectItem value="yearly">
+                                Annually on {formData.due_date ? new Date(formData.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' }) : 'selected date'}
+                              </SelectItem>
+                              <SelectItem value="weekdays">Every weekday (Monday to Friday)</SelectItem>
+                              <SelectItem value="custom">Custom...</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {formData.recurrence === 'custom' && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowCustomRecurrence(true)}
+                              className={`${borderColor} text-[#6366f1]`}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                        </div>
+                        {formData.recurrence === 'custom' && formData.custom_recurrence && (
+                          <p className="text-xs text-[#6366f1] mt-1">{getRecurrenceLabel(formData)}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className={textPrimary}>Department</Label>
+                      <Select
+                        value={formData.department || 'none'}
+                        onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '' }))}
+                      >
+                        <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">— None —</SelectItem>
+                          {visibleDeptCategories.map(d => (
+                            <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className={textPrimary}>Project</Label>
+                        <Select
+                          value={formData.project_id || 'none'}
+                          onValueChange={(v) => {
+                            if (v === 'none') {
+                              setFormData(prev => ({ ...prev, project_id: '', project_name: '' }));
+                            } else {
+                              const proj = projectsForTask.find(p => p.project_id === v);
+                              setFormData(prev => ({ ...prev, project_id: v, project_name: proj?.name || '' }));
+                            }
+                          }}
+                          disabled={!formData.department}
+                        >
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-project">
+                            <SelectValue placeholder={formData.department ? 'Select project' : 'Pick dept first'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">— None —</SelectItem>
+                            {(() => {
+                              const myProjects = projectsForTask.filter((p) => {
+                                if (formData.department && !(p.departments || []).includes(formData.department)) {
+                                  return false;
+                                }
+                                const members = Array.isArray(p.members) ? p.members : [];
+                                return members.includes(user?.user_id) || p.created_by === user?.user_id;
+                              });
+                              if (myProjects.length === 0) {
+                                return (
+                                  <div className={`px-3 py-2 text-xs ${textSecondary}`}>
+                                    No projects assigned to you{formData.department ? ` in this department` : ''}.
+                                  </div>
+                                );
+                              }
+                              return myProjects.map((p) => (
+                                <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
+                              ));
+                            })()}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Category</Label>
+                        <Select
+                          value={formData.category || 'none'}
+                          onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
+                          disabled={!formData.department}
+                        >
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-category">
+                            <SelectValue placeholder={formData.department ? 'Select category' : 'Pick dept first'} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">— None —</SelectItem>
+                            {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.categories || []).map(c => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className={textPrimary}>Work Link (File/Project URL)</Label>
+                      <Input
+                        value={formData.work_link}
+                        onChange={(e) => setFormData(prev => ({ ...prev, work_link: e.target.value }))}
+                        placeholder="https://docs.google.com/... or project URL"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="md:col-span-2">
-                  <Label className={textPrimary}>Department</Label>
-                  <Select
-                    value={formData.department || 'none'}
-                    onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '' }))}
-                  >
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— None —</SelectItem>
-                      {visibleDeptCategories.map(d => (
-                        <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label className={textPrimary}>Project</Label>
-                  <Select
-                    value={formData.project_id || 'none'}
-                    onValueChange={(v) => {
-                      if (v === 'none') {
-                        setFormData(prev => ({ ...prev, project_id: '', project_name: '' }));
-                      } else {
-                        const proj = projectsForTask.find(p => p.project_id === v);
-                        setFormData(prev => ({ ...prev, project_id: v, project_name: proj?.name || '' }));
-                      }
-                    }}
-                    disabled={!formData.department}
-                  >
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-project">
-                      <SelectValue placeholder={formData.department ? 'Select project' : 'Pick dept first'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— None —</SelectItem>
-                      {(() => {
-                        const myProjects = projectsForTask.filter((p) => {
-                          if (formData.department && !(p.departments || []).includes(formData.department)) {
-                            return false;
-                          }
-                          const members = Array.isArray(p.members) ? p.members : [];
-                          return members.includes(user?.user_id) || p.created_by === user?.user_id;
-                        });
-                        if (myProjects.length === 0) {
-                          return (
-                            <div className={`px-3 py-2 text-xs ${textSecondary}`}>
-                              No projects assigned to you{formData.department ? ` in this department` : ''}.
-                            </div>
-                          );
-                        }
-                        return myProjects.map((p) => (
-                          <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
-                        ));
-                      })()}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className={textPrimary}>Category</Label>
-                  <Select
-                    value={formData.category || 'none'}
-                    onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
-                    disabled={!formData.department}
-                  >
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-category">
-                      <SelectValue placeholder={formData.department ? 'Select category' : 'Pick dept first'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">— None —</SelectItem>
-                      {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.categories || []).map(c => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <Label className={textPrimary}>Work Link (File/Project URL)</Label>
-                  <Input
-                    value={formData.work_link}
-                    onChange={(e) => setFormData(prev => ({ ...prev, work_link: e.target.value }))}
-                    placeholder="https://docs.google.com/... or project URL"
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  />
-                </div>
-                <div className="md:col-span-2 flex gap-3 pt-2">
+                {/* Footer buttons — full width */}
+                <div className="flex gap-3 pt-5 mt-2 border-t border-[#27272a]">
                   <Button variant="outline" onClick={() => { setShowCreateModal(false); setEditingTask(null); resetForm(); }} className="flex-1" disabled={submitting}>
                     Cancel
                   </Button>
