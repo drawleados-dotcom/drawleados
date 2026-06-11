@@ -30,6 +30,14 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Safety fallback was overriding admin intent — FIXED (Feb 2026)
+
+**Bug:** When admin unchecked "My Tasks" (and other sub-tabs) in the Operations Module Configuration, Saranya could STILL see the My Tasks tab. Reason: my prior safety fallback in `/api/auth/me` automatically re-enabled `operations_my_tasks` whenever the saved config had zero sub-tabs enabled — silently undoing the admin's explicit choice.
+
+**Fix:** The safety fallback in `/api/auth/me` now only triggers when `designation_config` is fully **None** (legacy users whose designations pre-date the per-sub-tab fields). If the admin has SAVED a config — even with all sub-tabs unchecked — it is honored exactly. Removed the matching "auto-grant My Tasks" branch from `OperationsTabsBar.js`. The frontend now reflects exactly what the admin saves.
+
+
+
 ### Designation Title Whitespace Bug — FIXED (Feb 2026)
 
 **Bug:** Saranya was assigned the "Website Developer " designation (with a **trailing space** in the title). The user document stored `users.designation = "Website Developer "`. In `/api/auth/me`, the lookup code did `desg_title = data.get("designation").strip()` → "Website Developer", then queried `db.designations.find_one({"title": "Website Developer"})` → returned **None** because the saved title still had the trailing space. The fallback regex `^Website Developer$` also failed for the same reason. Result: `designation_config = None` → safety fallback kicked in showing **only My Tasks**. The `operations_projects: "view"` admin had set was silently invisible to the user.

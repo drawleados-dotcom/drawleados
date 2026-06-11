@@ -43,14 +43,6 @@ export default function OperationsTabsBar({
   const isVisible = (id) => {
     if (isPrivileged) return true;
     if (id === 'assigned_to_me') {
-      if (
-        hasOpsModule &&
-        !cfg.operations_my_tasks &&
-        !cfg.operations_assign_to_team &&
-        (!cfg.operations_projects || cfg.operations_projects === 'none')
-      ) {
-        return true;
-      }
       return !!(
         cfg.operations_my_tasks ||
         cfg.operations_assign_to_team ||
