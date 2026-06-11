@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import InvoiceModule from './InvoiceModule';
+import InvoicesTab from './InvoicesTab';
 import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
 import WeekWiseTab from './WeekWiseTab';
 import ClientsTab from './ClientsTab';
@@ -1559,7 +1560,7 @@ const ExpenseTab = () => {
   };
 
   // ============ RENDER INVOICE ============
-  const renderInvoice = () => <InvoiceModule />;
+  const renderInvoice = () => <InvoicesTab />;
 
   // ============ RENDER OUTSTANDING ============
   const renderOutstanding = () => (

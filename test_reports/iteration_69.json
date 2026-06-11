@@ -1,0 +1,56 @@
+{
+  "summary": "Retest of iteration 68's wiring fix passed: ExpenseTab.js now imports InvoicesTab and renderInvoice() returns <InvoicesTab />. The new InvoiceFormModal (with all expected data-testids) is now reachable and fully functional. Backend pytest re-run: 7/7 PASS. Frontend e2e flows: client selection + auto-populate ✓, Terms→Net 30 auto-updates Due Date ✓, item totals math (Sub Total ₹10,000 / Discount -₹1,000 / Taxable ₹9,000 / Tax +₹1,620 / Total ₹10,620) ✓ in UI, Save as Draft creates draft + toast ✓, Save and Send marks invoice as sent + dual toasts ✓, Clients tab cross-update ✓, View Summary modal shows last invoice date + invoice history ✓, Add Client INSIDE invoice modal works and new client appears in dropdown without modal reopen ✓. ONE NEW BACKEND BUG FOUND: when gst_type=='gst' (frontend default), backend ignores per-item discount and computes invoice-level GST on raw subtotal. Saved invoice total ₹11,800 (10,000*1.18) instead of the ₹10,620 shown in the UI total panel.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/finance/invoices",
+        "issue": "Per-item discount_percent is IGNORED when gst_type=='gst' (the frontend default). finance_routes.py lines 218-227: if invoice_data.gst_type == 'gst', backend recomputes total as `subtotal + cgst + sgst + igst` using full subtotal (no discount applied). For an item qty=2 rate=5000 disc=10 gst=18, the UI total panel correctly shows ₹10,620 but the persisted invoice total_amount is ₹11,800. Fix: use `(subtotal - total_discount)` as the base for invoice-level GST, OR drop the gst_type=='gst' branch and always use the per-item path (line 231: total = subtotal - total_discount + total_gst).",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Invoice total mismatch between UI and persisted invoice",
+        "issue": "UI's Total panel computes correctly (₹10,620) but the row saved in DB shows ₹11,800. This is a backend issue (see backend_issues.critical) but it surfaces to the user as inconsistency: they hit Save as Draft expecting ₹10,620 and see ₹11,800 in the Invoice List + Client Summary Invoice History. Save and Send with discount=0 works correctly (₹1,180 for qty=1 rate=1000 disc=0 gst=18).",
+        "affected_selectors": ["[data-testid='invoice-save-draft-btn']", "[data-testid='invoices-table']"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "InvoiceFormModal Dialog",
+        "issues": ["Console warning: Missing `Description` or `aria-describedby` for DialogContent (a11y, low priority)"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_clients_invoices.py",
+    "/app/test_reports/pytest/iter69_clients.xml"
+  ],
+  "action_items": [
+    "Fix backend invoice total calculation: in /app/backend/finance_routes.py around line 219-227, when gst_type=='gst', either (a) use (subtotal - total_discount) as the GST base, or (b) remove the gst_type=='gst' branch entirely and always use the per-item path on line 231 (total = subtotal - total_discount + total_gst). The frontend already sends discount_percent and gst_rate per item correctly.",
+    "After the backend fix, re-test: create a new invoice for Sample Check with qty=2/rate=5000/disc=10/gst=18 and verify invoice list shows ₹10,620 (matching the modal total panel).",
+    "Add `aria-describedby` (or DialogDescription) to InvoiceFormModal/AddClientModal/ClientSummaryModal to remove a11y console warnings.",
+    "Optional: clean up leftover TEST_ clients (TEST_AcmeUI_3256, TEST_FromInv_*) before production."
+  ],
+  "critical_code_review_comments": [
+    "Backend finance_routes.py has TWO different total-calculation code paths for the same invoice (lines 218-231): per-item discount/tax calc is done correctly but then thrown away when gst_type=='gst'. This is the root cause of the discount-ignored bug and is dead/confusing code.",
+    "InvoiceModule.js (1131 lines) still exists alongside InvoicesTab.js — only InvoicesTab is wired in. InvoiceModule.js should be removed or marked deprecated to avoid future drift.",
+    "ExpenseTab.js is still 2000+ lines and should be split per tab.",
+    "Payment Gateway toggle in InvoiceFormModal is still a non-functional placeholder labelled 'coming soon'. Hide it if not implementing, otherwise wire to backend."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (7/7 pytest pass, but discount bug not asserted by tests)",
+    "frontend": "95% (all UI flows work; only the persisted total mismatch is visible)"
+  },
+  "test_credentials": "vinoth@drawlead.com / Admin@123 (super_admin) — verified",
+  "seed_data_creation": "Created 2 new invoices for Sample Check (INV-2026-0007 draft ₹11,800 and INV-2026-0008 sent ₹1,180) and 1 new client TEST_FromInv_<ts> via the in-modal Add Client flow. These are real persisted records and may need cleanup if the test data is to be removed before production.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All UI wiring is now correct. ONLY remaining bug is in /app/backend/finance_routes.py around lines 218-227: gst_type=='gst' branch ignores per-item discount and adds GST on full subtotal. Frontend payload IS sending discount_percent and gst_rate per item correctly (verified in InvoiceFormModal.js line 213-220). The per-item path on line 231 (total = subtotal - total_discount + total_gst) gives the correct ₹10,620 result. Either change the gst-branch base from `subtotal` to `subtotal - total_discount`, or always use the per-item path. After fix, a quick UI retest: create invoice qty=2 rate=5000 disc=10 gst=18 for any client and verify list shows ₹10,620.",
+  "rca of the issue": "RCA of total-mismatch bug: finance_routes.py @create_invoice computes per-item discount and GST correctly into `total_discount` and `total_gst`, but at line 219-227 it branches on `gst_type == 'gst'` (default sent by frontend) and re-computes `total = subtotal + cgst + sgst + igst` where cgst/sgst/igst = (subtotal * invoice_data.gst_rate) / 100, completely discarding the per-item discount. Result: a 10% discount on a ₹10,000 subtotal with 18% GST is saved as ₹11,800 (= 10000 + 1800) instead of the correct ₹10,620 (= (10000-1000)*1.18). Reproduction: POST /api/finance/invoices with gst_type='gst', items=[{quantity:2, rate:5000, discount_percent:10, gst_rate:18}] → response total_amount=11800. Fix: change line 221 base to `(subtotal - total_discount)` or delete the gst_type branch and rely on line 231's per-item math which already produces the correct value."
+}
