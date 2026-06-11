@@ -30,6 +30,22 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### CRITICAL FIX — Operations Module Config Save did not persist (Feb 2026)
+
+**Bug:** Admin checked all Operations sub-tabs (My Tasks, Assign to Team, Projects=Edit, Departments, Approvals, Meetings) in the Operations Module Configuration modal and clicked **Save**. The modal closed, but the changes were **NEVER persisted to the backend**. When the user logged back in, only "My Tasks" was visible. This was a recurring complaint.
+
+**Root cause:** The Save button on the inner Operations Module Configuration modal was wired to `onClick={() => setShowOpsConfigModal(false)}` — it only closed the modal. The actual PUT to `/api/designations/{id}` only fired when admin ALSO clicked **Save Changes** on the OUTER edit-designation modal. Most admins only clicked Save on the inner modal and assumed changes were saved.
+
+**Fix:**
+- **Save button now actually persists** by invoking `onUpdateDesignation()` (same handler the outer modal uses). On success, toast shows and modal closes; on failure, modal stays open so admin can retry.
+- Updated `data-testid="ops-cfg-save"`.
+
+**Bonus fix — stale designation_config in user session:**
+- After login, `AuthContext` now calls `/api/auth/me` immediately to fetch the enriched profile (the bare login response doesn't include `designation_config`).
+- Added **60s background refresh** of `/auth/me` plus immediate refresh on tab focus / visibility return — so admin changes to module_access / designation propagate to logged-in users **without requiring a logout/login cycle**.
+
+
+
 ### Robust fallback for Operations sub-tab visibility (DONE — Feb 2026)
 **Bug:** Production users with `'operations'` in `module_access` were stuck on the empty-state ("No Operations sub-tabs have been granted to your designation") when:
 - The designation document pre-dated the new per-sub-tab fields (legacy data)

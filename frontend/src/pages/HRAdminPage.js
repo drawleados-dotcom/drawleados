@@ -6725,7 +6725,21 @@ function DesignationsDeptsTab({
                   <div className="flex gap-2">
                     <Button variant="ghost" onClick={() => setShowOpsConfigModal(false)}>Cancel</Button>
                     <Button
-                      onClick={() => setShowOpsConfigModal(false)}
+                      onClick={async () => {
+                        // CRITICAL FIX (Feb 2026): The Save button was previously only
+                        // closing the modal — changes were lost unless the admin also
+                        // clicked "Save Changes" on the outer edit modal. Now we
+                        // immediately persist on Save by invoking the same handler
+                        // the outer modal uses.
+                        if (opsCfgMode === 'edit' && editingDesignation?.designation_id && typeof onUpdateDesignation === 'function') {
+                          try {
+                            await onUpdateDesignation();
+                          } catch (_) {
+                            return; // keep modal open so admin can retry
+                          }
+                        }
+                        setShowOpsConfigModal(false);
+                      }}
                       className="bg-[#10b981] hover:bg-[#059669] text-white"
                       data-testid="ops-cfg-save"
                     >

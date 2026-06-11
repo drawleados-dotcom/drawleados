@@ -38,17 +38,61 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, []);
 
+  // Auto-refresh the logged-in user's profile (incl. designation_config) every
+  // 60s + on window focus / tab visibility return. This makes admin changes to
+  // module_access and Operations sub-tab grants visible to the user without
+  // requiring a logout/login cycle.
+  useEffect(() => {
+    if (!user) return;
+    const refreshMe = async () => {
+      try {
+        const token = localStorage.getItem('session_token');
+        if (!token) return;
+        const res = await api.get('/auth/me');
+        setUser((prev) => {
+          // Avoid unnecessary re-renders if nothing changed
+          if (prev && JSON.stringify(prev) === JSON.stringify(res.data)) return prev;
+          return res.data;
+        });
+      } catch (_) { /* silent */ }
+    };
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshMe();
+    }, 60000);
+    const onVisibility = () => { if (document.visibilityState === 'visible') refreshMe(); };
+    const onFocus = () => refreshMe();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [user?.user_id]);
+
   const login = async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
     localStorage.setItem('session_token', response.data.session_token);
-    setUser(response.data.user);
+    // Login response doesn't include `designation_config` — fetch the enriched
+    // profile from /auth/me so sub-tab access is correctly populated immediately.
+    try {
+      const me = await api.get('/auth/me');
+      setUser(me.data);
+    } catch (_) {
+      setUser(response.data.user);
+    }
     return response.data;
   };
 
   const register = async (email, name, password, role = 'bde') => {
     const response = await api.post('/auth/register', { email, name, password, role });
     localStorage.setItem('session_token', response.data.session_token);
-    setUser(response.data.user);
+    try {
+      const me = await api.get('/auth/me');
+      setUser(me.data);
+    } catch (_) {
+      setUser(response.data.user);
+    }
     return response.data;
   };
 
