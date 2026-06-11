@@ -9,6 +9,7 @@ import { Calendar } from '../components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover';
 import { format } from 'date-fns';
 import axios from 'axios';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 import {
   Users,
   TrendingUp,
@@ -268,6 +269,9 @@ const Dashboard = () => {
   useEffect(() => { fetchHRData(); }, [hrDateRange]);
   useEffect(() => { fetchWebsiteData(); }, [websiteDateRange]);
   useEffect(() => { fetchFinanceData(); }, [financeDateRange]);
+
+  // Background polling + focus refresh — keeps dashboard cards live
+  useAutoRefresh([fetchSalesData, fetchHRData, fetchWebsiteData, fetchOperationsData, fetchFinanceData]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {

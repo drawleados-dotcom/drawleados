@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { DollarSign } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const FinancePage = () => {
   const [sales, setSales] = useState([]);
@@ -12,6 +13,9 @@ const FinancePage = () => {
   useEffect(() => {
     fetchSales();
   }, []);
+
+  // Background polling + focus refresh
+  useAutoRefresh(fetchSales);
 
   const fetchSales = async () => {
     try {

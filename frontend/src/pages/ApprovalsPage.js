@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -192,6 +193,9 @@ export default function ApprovalsPage({ embedded = false }) {
   useEffect(() => {
     loadTaskApprovals();
   }, [loadTaskApprovals]);
+
+  // Background polling + focus refresh — keeps both queues live
+  useAutoRefresh([loadApprovals, loadTaskApprovals]);
 
   // Open the View Decision modal for a task approval
   const [decisionTask, setDecisionTask] = useState(null);

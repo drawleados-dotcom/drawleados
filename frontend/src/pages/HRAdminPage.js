@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import axios from 'axios';
 import PayrollManagementTab from '../components/hr/PayrollManagementTab';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -807,6 +808,18 @@ export default function HRAdminPage() {
       loadMyProfileConfig();
     }
   }, [activeTab, loadStats, loadEmployees, loadLeaveRequests, loadAttendanceOverview, loadPendingApprovals, loadWfhRequests, loadAllAttendance, loadCalendar, loadPayslips, loadHRSettings, loadPayrollEmployees, loadHikeReasons, loadCompanySettings, payslipMonth, payslipYear, loadDesignations, loadDepartments, loadQuotes, loadMyProfileConfig]);
+
+  // Background polling + tab-focus refresh — keeps active tab's data live
+  useAutoRefresh(() => {
+    if (activeTab === 'attendance') { loadAllAttendance(); loadEmployees(); loadStats(); }
+    else if (activeTab === 'employees') { loadEmployees(); }
+    else if (activeTab === 'approvals') { loadPendingApprovals(); loadLeaveRequests(); loadWfhRequests(); }
+    else if (activeTab === 'calendar') { loadCalendar(); loadHRSettings(); }
+    else if (activeTab === 'payroll') { loadPayrollEmployees(); loadPayslips(payslipMonth, payslipYear); loadEmployees(); }
+    else if (activeTab === 'designations-depts') { loadDesignations(); loadDepartments(); }
+    else if (activeTab === 'quotes') { loadQuotes(); }
+    else if (activeTab === 'reviews') { loadReviewEmployees && loadReviewEmployees(); }
+  });
 
   useEffect(() => {
     if (activeTab === 'approvals') {

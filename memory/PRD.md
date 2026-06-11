@@ -30,6 +30,23 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Live Data — Background Polling + Focus Refresh (DONE — Feb 2026)
+**Purpose:** Eliminate “need to manually refresh to see latest data” across the app.
+
+- New shared hook **`useAutoRefresh`** at `frontend/src/hooks/useAutoRefresh.js`:
+  - Polls passed refetcher(s) every **15 seconds** while the tab is **visible**
+  - **Pauses automatically** when the tab is hidden (saves bandwidth & battery)
+  - **Forces an immediate refetch** on `visibilitychange` (tab returns) and `window.focus` (window re-activated)
+  - Accepts an `enabled` flag so polling can be paused while a modal/form is open (prevents wiping user input)
+- Wired into every major data surface:
+  - Pages: `OurTasksPage`, `HRPage`, `HRAdminPage`, `ApprovalsPage`, `DLOperationsPage`, `CalendarPage`, `LeadsPage`, `LeadsPageV2`, `FinancePage`, `Dashboard`, `ProjectDetailPage`
+  - Panels: `ProjectsPanel`, `MeetingsPanel`, `DepartmentsPanel`, `components/finance/ExpenseTab`
+- Verified live in preview — network trace shows polling ticks at 15s and immediate refetch on focus.
+- **Note:** Action-triggered refetch (`load*()` after create/edit/delete) was already in place across the codebase; the new hook complements it for cross-tab and idle freshness.
+- **WebSocket realtime push** is intentionally deferred — polling at 15s + focus refresh delivers the same perceived liveness with no backend rework.
+
+
+
 ### Operations Modal & Approvals Restructure (DONE — Feb 2026)
 **Purpose:** Convert the centralised Approvals workflow into a unified modal-driven Operations Panel.
 

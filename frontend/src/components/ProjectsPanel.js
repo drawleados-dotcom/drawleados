@@ -9,6 +9,7 @@ import { Label } from './ui/label';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import MeetingModal from './MeetingModal';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -101,6 +102,12 @@ export default function ProjectsPanel({
   }, [headers]);
 
   useEffect(() => { loadProjects(); loadUsers(); loadDeptCategories(); }, [loadProjects, loadUsers, loadDeptCategories]);
+
+  // Background polling + focus refresh — pauses while a create/edit modal is open
+  useAutoRefresh(
+    [loadProjects, loadUsers, loadDeptCategories],
+    { enabled: !showCreateProject && !showAddTask && !showTeamModal && !showMeetingModal }
+  );
 
   const handleCreateProject = async () => {
     if (!projectDraft.name.trim()) { toast.error('Project name is required'); return; }

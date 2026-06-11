@@ -21,6 +21,7 @@ import ApprovalsPage from './ApprovalsPage';
 import ProjectsPanel from '../components/ProjectsPanel';
 import DepartmentsPanel from '../components/DepartmentsPanel';
 import MeetingsPanel from '../components/MeetingsPanel';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -258,6 +259,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     loadUsers();
     loadProjectsAndCategories();
   }, [loadTasks, loadUsers, loadProjectsAndCategories]);
+
+  // Auto-refresh: every 15s + immediate on tab focus / visibility change.
+  // Pause polling while the create/edit modal is open to avoid clobbering user input.
+  useAutoRefresh(
+    [loadTasks, loadUsers, loadProjectsAndCategories],
+    { enabled: !showCreateModal && !editingTask && !editTimeModal && !approvalTask }
+  );
 
   // Create task
   const handleCreateTask = async () => {

@@ -18,6 +18,7 @@ import { Progress } from '../components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import axios from 'axios';
 import { toast } from 'sonner';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -499,6 +500,9 @@ export default function DLOperationsPage() {
     loadAdditionalTasks();
     loadMeetings();
   }, [loadProjects, loadTeamMembers, loadAdditionalTasks, loadMeetings]);
+
+  // Background polling + focus refresh
+  useAutoRefresh([loadProjects, loadTeamMembers, loadAdditionalTasks, loadMeetings]);
   
   // Open create project modal
   const handleNewProject = () => {

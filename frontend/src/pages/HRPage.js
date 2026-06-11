@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import axios from 'axios';
 import TwoFactorSettings from '../components/TwoFactorSettings';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -220,6 +221,18 @@ export default function HRPage() {
       loadReviews();
     }
   }, [activeTab, loadTodayAttendance, loadAttendanceHistory, loadCalendarData, loadProfile, loadLeaveRequests, loadLeaveBalance, loadPermissionRequests, loadWfhRequests, loadPayslips, loadReviews]);
+
+  // Background polling + tab-focus refresh — only re-fetches data for the active tab
+  useAutoRefresh(() => {
+    if (activeTab === 'attendance') { loadTodayAttendance(); loadAttendanceHistory(); }
+    else if (activeTab === 'calendar') { loadCalendarData(); }
+    else if (activeTab === 'profile') { loadProfile(); }
+    else if (activeTab === 'leave') { loadLeaveRequests(); loadLeaveBalance(); }
+    else if (activeTab === 'permission') { loadPermissionRequests(); }
+    else if (activeTab === 'remote') { loadWfhRequests(); }
+    else if (activeTab === 'payroll') { loadPayslips(); }
+    else if (activeTab === 'reviews') { loadReviews(); }
+  });
 
   // Load My Profile tab visibility config (set by HR Admin)
   useEffect(() => {

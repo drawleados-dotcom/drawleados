@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import InvoiceModule from './InvoiceModule';
 import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
   SelectContent,
@@ -372,6 +373,15 @@ const ExpenseTab = () => {
     if (activeTab === 'outstanding') loadOutstanding();
     if (activeTab === 'invoice') loadInvoices();
   }, [activeTab, selectedMonth, selectedYear, loadDashboard, loadCashbook, loadBudget, loadOutstanding, loadInvoices]);
+
+  // Background polling + focus refresh — keeps the active finance tab live
+  useAutoRefresh(() => {
+    if (activeTab === 'dashboard') loadDashboard();
+    else if (activeTab === 'cashbook') loadCashbook();
+    else if (activeTab === 'budget') loadBudget();
+    else if (activeTab === 'outstanding') loadOutstanding();
+    else if (activeTab === 'invoice') loadInvoices();
+  });
 
   useEffect(() => {
     if (selectedCategory) loadBudget();

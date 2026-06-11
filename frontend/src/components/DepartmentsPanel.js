@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -31,6 +32,9 @@ export default function DepartmentsPanel({
   }, [headers]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Background polling + focus refresh — pauses while editing a department
+  useAutoRefresh(load, { enabled: !editingDept });
 
   const openEdit = (dept) => {
     setEditingDept({ ...dept, categories: [...(dept.categories || [])] });

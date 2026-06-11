@@ -19,6 +19,7 @@ import {
 import axios from 'axios';
 import { toast } from 'sonner';
 import AssignmentPopup from '../components/website/AssignmentPopup';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -175,6 +176,9 @@ export default function ProjectDetailPage() {
     loadStageTasks();
     loadUserAccess();
   }, [loadProject, loadTeamMembers, loadStageTasks, loadUserAccess]);
+
+  // Background polling + focus refresh
+  useAutoRefresh([loadProject, loadTeamMembers, loadStageTasks, loadUserAccess]);
 
   // Convert pages to tasks
   const handleConvertToTasks = async () => {

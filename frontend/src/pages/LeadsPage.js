@@ -11,6 +11,7 @@ import LeadsChartView from '../components/leads/LeadsChartView';
 import LeadFormModal from '../components/leads/LeadFormModal';
 import { toast } from 'sonner';
 import { useTheme } from '../contexts/ThemeContext';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const LeadsPage = () => {
   const { isDark } = useTheme();
@@ -27,6 +28,9 @@ const LeadsPage = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Background polling + focus refresh — keeps leads live
+  useAutoRefresh(fetchData, { enabled: !showLeadModal });
 
   const fetchData = async () => {
     try {

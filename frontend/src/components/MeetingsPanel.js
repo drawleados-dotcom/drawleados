@@ -6,6 +6,7 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import MeetingModal from './MeetingModal';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -32,6 +33,9 @@ export default function MeetingsPanel({
   }, [headers]);
 
   useEffect(() => { loadMeetings(); }, [loadMeetings]);
+
+  // Background polling + focus refresh
+  useAutoRefresh(loadMeetings, { enabled: !showCreate && !viewing });
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const filtered = meetings.filter(m => {

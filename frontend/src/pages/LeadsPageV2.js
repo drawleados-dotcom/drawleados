@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import axios from 'axios';
 import SheetConnectModal from '../components/SheetConnectModal';
 import { useAuth } from '../contexts/AuthContext';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 import {
   Plus,
   Search,
@@ -240,6 +241,9 @@ const LeadsPageV2 = () => {
     };
     loadAll();
   }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadTeamMembers]);
+
+  // Background polling + focus refresh — keeps leads + stats live
+  useAutoRefresh([loadLeads, loadStats]);
 
   // Show OAuth callback results (success / error) returned via URL params
   useEffect(() => {

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -161,6 +162,9 @@ export default function CalendarPage() {
     loadGoogleEvents();
     loadMonthTasks();
   }, [loadCompanyCalendar, loadCalendarData, loadMonthlyLeaveBalance, loadGoogleEvents, loadMonthTasks]);
+
+  // Background polling + focus refresh — keeps month data live
+  useAutoRefresh([loadCompanyCalendar, loadCalendarData, loadMonthlyLeaveBalance, loadGoogleEvents, loadMonthTasks]);
 
   // Load day detail when a date is selected
   const loadDayDetail = async (dateStr) => {
