@@ -30,6 +30,24 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Per-Designation Operations Sub-Tab Access Control (DONE — Feb 2026)
+**Purpose:** Admins now control, per designation, **which** Operations sub-tabs a user sees and **whether they can edit Projects**.
+
+- **Backend** (`backend/designation_routes.py`): Added 4 new fields on `Designation`:
+  - `operations_projects`: `'none' | 'view' | 'edit'` (default `'none'`)
+  - `operations_departments_tab`: bool (default `False`)
+  - `operations_approvals_tab`: bool (default `False`)
+  - `operations_meetings_tab`: bool (default `False`)
+  Existing rows stay locked-out — admin must explicitly grant.
+- **`/api/auth/me`** (`backend/server.py`) is now enriched with **`designation_config`** — the full sub-tab access config for the logged-in user, so the frontend can drive UI without extra round-trips.
+- **HR Admin → Designations → Operations Module Configuration** modal (`HRAdminPage.js`) now shows **6 toggles** (My Tasks, Assign to Team, Projects, Departments, Approvals, Meetings). When *Projects* is checked, an additional *View only / Edit* picker appears (defaults to **Edit** — full access).
+- **OurTasksPage** (`pages/OurTasksPage.js`) filters the 6 main tabs against `user.designation_config`. Super Admin / Admin **always** see everything. If a non-privileged user opens an unavailable tab, it auto-switches to the first available tab. If no tabs are granted, a clear empty-state is shown.
+- **ProjectsPanel viewOnly resolution**: Privileged users use the in-app View/Edit toggle; non-privileged users follow `operations_projects` (`view` → viewOnly=true; `edit` → viewOnly=false).
+- **Sidebar** (`components/Sidebar.js`): The *Approvals* link is **hidden entirely** when the user has zero Operations sub-tab access (per `designation_config`). Privileged users are unaffected.
+- **Bonus fix**: `LoginPage.js` was throwing `toast is not defined` (regression caught during test run). Added the missing `sonner` import — login flow now redirects cleanly with no React error overlay.
+
+
+
 ### Live Data — Background Polling + Focus Refresh (DONE — Feb 2026)
 **Purpose:** Eliminate “need to manually refresh to see latest data” across the app.
 
