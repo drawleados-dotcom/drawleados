@@ -5559,12 +5559,16 @@ function EnhancedAttendanceTab({
       let checkIn = null;
       let checkOut = null;
       let workedHours = null;
-      
+      let rawCheckIn = null;
+      let rawCheckOut = null;
+
       if (record) {
         // Check both field names (clock_in and clock_in_time)
-        checkIn = record.clock_in || record.clock_in_time;
-        checkOut = record.clock_out || record.clock_out_time;
-        
+        rawCheckIn = record.clock_in || record.clock_in_time;
+        rawCheckOut = record.clock_out || record.clock_out_time;
+        checkIn = rawCheckIn;
+        checkOut = rawCheckOut;
+
         // Format time if it's a datetime string
         if (checkIn && typeof checkIn === 'string' && checkIn.includes('T')) {
           checkIn = new Date(checkIn).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
@@ -5572,17 +5576,26 @@ function EnhancedAttendanceTab({
         if (checkOut && typeof checkOut === 'string' && checkOut.includes('T')) {
           checkOut = new Date(checkOut).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
         }
-        
-        if (checkOut) {
+
+        if (rawCheckOut) {
           status = 'present';
-          workedHours = record.total_hours?.toFixed(1) || record.worked_hours?.toFixed(1);
-        } else if (checkIn) {
+          // Prefer DB-stored total; fallback to compute
+          if (record.total_hours != null) workedHours = Number(record.total_hours).toFixed(1);
+          else if (record.worked_hours != null) workedHours = Number(record.worked_hours).toFixed(1);
+          else if (rawCheckIn) {
+            const ms = new Date(rawCheckOut) - new Date(rawCheckIn);
+            workedHours = (ms / 3600000).toFixed(1);
+          }
+        } else if (rawCheckIn) {
           status = 'working';
+          // Live worked hours so far today
+          const ms = new Date() - new Date(rawCheckIn);
+          if (ms > 0) workedHours = (ms / 3600000).toFixed(1);
         }
-        
+
         // Check for WFH
         if (record.work_location === 'home' || record.work_mode === 'wfh') {
-          status = checkOut ? 'present' : 'working';
+          status = rawCheckOut ? 'present' : 'working';
         }
       }
       

@@ -751,6 +751,36 @@ async def clock_out(clock_data: ClockOutRequest, request: Request):
     result["needs_approval"] = "pending" in approval_status
     return result
 
+@hr_router.get("/attendance/employee/{user_id}")
+async def get_employee_attendance(
+    user_id: str,
+    request: Request,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+):
+    """HR-Admin: fetch a specific employee's attendance history for the given month."""
+    from server import get_current_user
+    requester = await get_current_user(request)
+    if requester.role not in {"super_admin", "admin", "hr_manager"}:
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+
+    now = datetime.now(timezone.utc)
+    m = month or now.month
+    y = year or now.year
+    start = datetime(y, m, 1, tzinfo=timezone.utc)
+    if m == 12:
+        end = datetime(y + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end = datetime(y, m + 1, 1, tzinfo=timezone.utc)
+
+    records = await db.attendance.find(
+        {"user_id": user_id, "date": {"$gte": start, "$lt": end}},
+        {"_id": 0},
+    ).sort("date", -1).to_list(200)
+    return records
+
+
+
 @hr_router.get("/attendance/today")
 async def get_today_attendance(request: Request):
     """Get today's attendance status"""
