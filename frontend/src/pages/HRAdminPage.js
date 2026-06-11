@@ -2363,7 +2363,7 @@ function AddEmployeeModal({ onClose, onSave, isDark, bgCard, bgInput, bgSecondar
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-[#6366f1] text-[#6366f1]'
-                    : `border-transparent ${textSecondary} hover:text-[#fafafa]`
+                    : `border-transparent ${textSecondary} hover:${textPrimary}`
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -3856,7 +3856,7 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'border-[#6366f1] text-[#6366f1]'
-                    : `border-transparent ${textSecondary} hover:text-[#fafafa]`
+                    : `border-transparent ${textSecondary} hover:${textPrimary}`
                 }`}
                 data-testid={`edit-employee-tab-${tab.id}`}
               >
