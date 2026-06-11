@@ -15,9 +15,13 @@ const MODULE_ALIASES = {
 
 function userHasModule(user, isAdmin, module) {
   if (!module) return true;
+  // Super Admin ALWAYS has full access regardless of designation.module_access.
+  const role = String(user?.role || '').toLowerCase();
+  if (role === 'super_admin') return true;
+
   const moduleAccess = Array.isArray(user?.module_access) ? user.module_access : [];
 
-  // Designation-driven module_access has HIGHEST priority — even for super_admin.
+  // Designation-driven module_access has HIGHEST priority for non-super-admin roles.
   if (moduleAccess.length > 0) {
     const allowed = new Set(moduleAccess.map((m) => String(m).toLowerCase()));
     const aliases = MODULE_ALIASES[module] || [module];

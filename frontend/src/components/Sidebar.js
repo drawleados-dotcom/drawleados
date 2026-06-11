@@ -69,7 +69,10 @@ const Sidebar = () => {
   
   // Check access permissions
   const hasAccess = (module) => {
-    // Designation-driven module access has HIGHEST priority (applies to ALL roles, including super_admin).
+    // Super Admin ALWAYS has full access, regardless of any module_access list on their designation.
+    if (userRole === 'super_admin') return true;
+
+    // Designation-driven module access has HIGHEST priority for non-super-admin roles.
     // If a user has a non-empty module_access list (set via their designation),
     // STRICTLY honor it — only modules present in the list are visible.
     if (Array.isArray(moduleAccess) && moduleAccess.length > 0) {
