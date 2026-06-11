@@ -907,6 +907,36 @@ async def get_me(user: User = Depends(get_current_user)):
     if extra:
         data["department"] = extra.get("department", "")
         data["designation"] = extra.get("designation", "")
+    # Enrich with the designation's operations_* config (per-sub-tab access)
+    desg_title = (data.get("designation") or "").strip()
+    designation_config = None
+    if desg_title:
+        desg_doc = await db.designations.find_one(
+            {"title": desg_title},
+            {
+                "_id": 0,
+                "operations_my_tasks": 1,
+                "operations_assign_to_team": 1,
+                "operations_departments": 1,
+                "operations_approval_queue": 1,
+                "operations_projects": 1,
+                "operations_departments_tab": 1,
+                "operations_approvals_tab": 1,
+                "operations_meetings_tab": 1,
+            }
+        )
+        if desg_doc:
+            designation_config = {
+                "operations_my_tasks": bool(desg_doc.get("operations_my_tasks", False)),
+                "operations_assign_to_team": bool(desg_doc.get("operations_assign_to_team", False)),
+                "operations_departments": desg_doc.get("operations_departments", []) or [],
+                "operations_approval_queue": desg_doc.get("operations_approval_queue"),
+                "operations_projects": desg_doc.get("operations_projects", "none") or "none",
+                "operations_departments_tab": bool(desg_doc.get("operations_departments_tab", False)),
+                "operations_approvals_tab": bool(desg_doc.get("operations_approvals_tab", False)),
+                "operations_meetings_tab": bool(desg_doc.get("operations_meetings_tab", False)),
+            }
+    data["designation_config"] = designation_config
     return data
 
 @api_router.post("/auth/logout")

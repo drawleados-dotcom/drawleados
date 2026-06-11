@@ -202,7 +202,11 @@ export default function HRAdminPage() {
     operations_my_tasks: true,
     operations_assign_to_team: false,
     operations_departments: [],
-    operations_approval_queue: null, // 'pm' | 'operations' | 'ceo'
+    operations_approval_queue: null,
+    operations_projects: 'none',
+    operations_departments_tab: false,
+    operations_approvals_tab: false,
+    operations_meetings_tab: false,
   });
   const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
   const [editingDesignation, setEditingDesignation] = useState(null);
@@ -1122,7 +1126,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_approval_queue: null });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_approval_queue: null, operations_projects: 'none', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -6455,6 +6459,98 @@ function DesignationsDeptsTab({
                           <div className={`text-xs ${textSecondary}`}>Can assign tasks to others (department-scoped)</div>
                         </div>
                       </label>
+
+                      {/* Projects with View/Edit choice */}
+                      <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
+                        <input
+                          type="checkbox"
+                          checked={(opsState.operations_projects || 'none') !== 'none'}
+                          onChange={(e) => setOpsState(prev => ({
+                            ...prev,
+                            // Default to 'edit' when enabling (full access per user's choice)
+                            operations_projects: e.target.checked ? 'edit' : 'none'
+                          }))}
+                          className="h-4 w-4 accent-[#6366f1] mt-1"
+                          data-testid="ops-cfg-projects"
+                        />
+                        <div className="flex-1">
+                          <div className={`font-medium ${textPrimary}`}>Projects</div>
+                          <div className={`text-xs ${textSecondary} mb-2`}>Access to the Projects sub-tab</div>
+                          {(opsState.operations_projects || 'none') !== 'none' && (
+                            <div className="flex gap-2 mt-2">
+                              {[
+                                { value: 'view', label: 'View only' },
+                                { value: 'edit', label: 'Edit' },
+                              ].map(opt => {
+                                const selected = (opsState.operations_projects || 'edit') === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setOpsState(prev => ({ ...prev, operations_projects: opt.value }));
+                                    }}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium border-2 transition-all ${
+                                      selected
+                                        ? 'bg-[#10b981] border-[#10b981] text-white'
+                                        : `${bgCard} border-transparent ${textSecondary} hover:border-[#10b981]/50`
+                                    }`}
+                                    data-testid={`ops-cfg-projects-${opt.value}`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+
+                      {/* Departments tab */}
+                      <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
+                        <input
+                          type="checkbox"
+                          checked={!!opsState.operations_departments_tab}
+                          onChange={(e) => setOpsState(prev => ({ ...prev, operations_departments_tab: e.target.checked }))}
+                          className="h-4 w-4 accent-[#6366f1]"
+                          data-testid="ops-cfg-departments-tab"
+                        />
+                        <div>
+                          <div className={`font-medium ${textPrimary}`}>Departments</div>
+                          <div className={`text-xs ${textSecondary}`}>Access to Departments &amp; categories management</div>
+                        </div>
+                      </label>
+
+                      {/* Approvals tab */}
+                      <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
+                        <input
+                          type="checkbox"
+                          checked={!!opsState.operations_approvals_tab}
+                          onChange={(e) => setOpsState(prev => ({ ...prev, operations_approvals_tab: e.target.checked }))}
+                          className="h-4 w-4 accent-[#6366f1]"
+                          data-testid="ops-cfg-approvals-tab"
+                        />
+                        <div>
+                          <div className={`font-medium ${textPrimary}`}>Approvals</div>
+                          <div className={`text-xs ${textSecondary}`}>Can view the Approvals queue (PM / Operations / HR)</div>
+                        </div>
+                      </label>
+
+                      {/* Meetings tab */}
+                      <label className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer ${bgSecondary} border ${borderColor}`}>
+                        <input
+                          type="checkbox"
+                          checked={!!opsState.operations_meetings_tab}
+                          onChange={(e) => setOpsState(prev => ({ ...prev, operations_meetings_tab: e.target.checked }))}
+                          className="h-4 w-4 accent-[#6366f1]"
+                          data-testid="ops-cfg-meetings-tab"
+                        />
+                        <div>
+                          <div className={`font-medium ${textPrimary}`}>Meetings</div>
+                          <div className={`text-xs ${textSecondary}`}>Access to Meetings sub-tab</div>
+                        </div>
+                      </label>
                     </div>
                   </div>
 
@@ -6543,6 +6639,10 @@ function DesignationsDeptsTab({
                         operations_assign_to_team: false,
                         operations_departments: [],
                         operations_approval_queue: null,
+                        operations_projects: 'none',
+                        operations_departments_tab: false,
+                        operations_approvals_tab: false,
+                        operations_meetings_tab: false,
                       }));
                       setShowOpsConfigModal(false);
                     }}

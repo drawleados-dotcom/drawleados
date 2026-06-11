@@ -1,0 +1,44 @@
+{
+  "summary": "Verified per-designation Operations sub-tab access feature (Feb 2026). 5/5 backend tests pass (designation CRUD with new fields + /auth/me designation_config enrichment). 4/4 frontend tests pass (F3 modal with 6 toggles + Projects view/edit picker, F4 projects-view-edit-toggle visible for super_admin, F5 nav-approvals visible in sidebar, F6 auto-refresh fires initial + background poll at ~12s + on window focus). One unrelated UI bug detected on the Login page: `toast is not defined` ReferenceError in handleSubmit that surfaces a red 'Uncaught runtime errors' overlay on submit — login itself still completes server-side, but the overlay blocks the post-login redirect (we had to navigate manually to /approvals).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "LoginPage handleSubmit",
+        "issue": "Uncaught ReferenceError: 'toast is not defined' thrown from handleSubmit (bundle.js:271413:7). Triggers React error overlay (red full-screen 'Uncaught runtime errors:'). Login API call itself succeeds (cookie set), but the JS exception prevents the post-login navigate(); user is stuck on /login until they manually navigate. Likely a missing import { toast } from 'sonner' (or react-hot-toast) in /app/frontend/src/pages/LoginPage.js (or wherever handleSubmit lives).",
+        "selector": "form button[type='submit'] on /login",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_designation_subtab_config.py",
+    "/app/test_reports/pytest/test_designation_subtab_config.xml"
+  ],
+  "action_items": [
+    "Fix the `toast is not defined` ReferenceError on the Login page by importing toast (most likely `import { toast } from 'sonner'`) in the file that exports handleSubmit. After the fix, login should redirect automatically without the red overlay."
+  ],
+  "critical_code_review_comments": [
+    "Login page throws an uncaught ReferenceError on every submit; this also blocks any Playwright/E2E test that expects automatic post-login navigation. Should be treated as a regression — must be fixed before next release.",
+    "Designation update endpoint correctly persists only the new fields when others are omitted (None-checked) — good. Verified via dedicated update test.",
+    "/auth/me correctly returns `designation_config: null` if user's designation has no matching row, else returns the full key set. Type contract is solid (bool/string/list)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_designation_subtab_config.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5)",
+    "frontend": "100% (4/4) — all per-designation feature tests pass; separate Login JS bug noted"
+  },
+  "test_credentials": "vinoth@drawlead.com / Admin@123 (super_admin)",
+  "seed_data_creation": "Created and cleaned up two TEST_ prefixed designations during backend run (auto-deleted on teardown).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All requested per-designation sub-tab access tests (F1–F6) pass. The only outstanding issue is the Login page `toast is not defined` JS error (pre-existing? worth confirming git blame). To re-test E2E login flow after the fix, just remove the manual `page.goto('/approvals')` fallback in the frontend script and confirm post-login redirect happens automatically. Backend tests live in /app/backend/tests/test_designation_subtab_config.py and run cleanly via `pytest /app/backend/tests/test_designation_subtab_config.py -v`.",
+  "rca of the issue": "Login JS error RCA — `handleSubmit` calls `toast.error(...)` (or similar) without importing `toast`. The minified bundle line 271413:7 reveals 'toast is not defined'. Reproduction: open /login, fill any credentials, click Sign In — the dev-mode error overlay appears immediately. Mitigation: add the missing import (likely `import { toast } from 'sonner';` or `import toast from 'react-hot-toast';`) at the top of the LoginPage component file."
+}

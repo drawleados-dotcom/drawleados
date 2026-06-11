@@ -981,12 +981,45 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               { id: 'approvals', label: 'Approvals', icon: CheckCircle2, count: approvalsCount },
               { id: 'meetings', label: 'Meetings', icon: Video, count: meetingsCount },
             ];
-            // Operation Head sees a different order
+            // RBAC: filter visible sub-tabs by user's designation_config.
+            // Super Admin / Admin always see everything.
+            const role = (user?.role || '').toLowerCase();
+            const isPrivileged = role === 'super_admin' || role === 'admin';
+            const cfg = user?.designation_config || {};
+            const isVisible = (id) => {
+              if (isPrivileged) return true;
+              if (id === 'assigned_to_me') return !!cfg.operations_my_tasks;
+              if (id === 'assign_to_team') return !!cfg.operations_assign_to_team;
+              if (id === 'projects') return (cfg.operations_projects || 'none') !== 'none';
+              if (id === 'departments') return !!cfg.operations_departments_tab;
+              if (id === 'approvals') return !!cfg.operations_approvals_tab;
+              if (id === 'meetings') return !!cfg.operations_meetings_tab;
+              return false;
+            };
+            const visibleTabs = allTabs.filter(t => isVisible(t.id));
+
+            // Operation Head sees a different order (only across visible tabs)
             const desg = (user?.designation || '').toLowerCase().trim();
             const isOpHead = desg === 'operation head';
             const tabs = isOpHead
-              ? ['assign_to_team', 'approvals', 'assigned_to_me', 'projects', 'departments', 'meetings'].map(id => allTabs.find(t => t.id === id))
-              : allTabs;
+              ? ['assign_to_team', 'approvals', 'assigned_to_me', 'projects', 'departments', 'meetings']
+                  .map(id => visibleTabs.find(t => t.id === id))
+                  .filter(Boolean)
+              : visibleTabs;
+
+            // Auto-correct: if mainTab is hidden for this user, switch to first visible
+            if (tabs.length > 0 && !tabs.find(t => t.id === mainTab)) {
+              setTimeout(() => setMainTab(tabs[0].id), 0);
+            }
+
+            if (tabs.length === 0) {
+              return (
+                <div className={`px-4 py-3 text-sm ${textSecondary}`} data-testid="ops-no-access">
+                  No Operations sub-tabs have been granted to your designation. Contact your admin.
+                </div>
+              );
+            }
+
             return tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = mainTab === tab.id;
@@ -1024,56 +1057,65 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         )}
 
         {/* Projects tab */}
-        {mainTab === 'projects' && (
-          <>
-            {/* View / Edit toggle — visible only to super_admin */}
-            {(user?.role || '').toLowerCase() === 'super_admin' && (
-              <div className={`flex items-center justify-end gap-2 mb-3`} data-testid="projects-view-edit-toggle">
-                <span className={`text-xs ${textSecondary}`}>Mode:</span>
-                <div className={`inline-flex rounded-lg border ${borderColor} ${bgCard} p-1`}>
-                  <button
-                    onClick={() => setProjectsViewMode('view')}
-                    data-testid="projects-mode-view"
-                    className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                      projectsViewMode === 'view'
-                        ? 'bg-[#6366f1] text-white shadow'
-                        : `${textSecondary} hover:bg-[#6366f1]/10`
-                    }`}
-                  >
-                    View only
-                  </button>
-                  <button
-                    onClick={() => setProjectsViewMode('edit')}
-                    data-testid="projects-mode-edit"
-                    className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                      projectsViewMode === 'edit'
-                        ? 'bg-[#10b981] text-white shadow'
-                        : `${textSecondary} hover:bg-[#10b981]/10`
-                    }`}
-                  >
-                    Edit
-                  </button>
+        {mainTab === 'projects' && (() => {
+          const role = (user?.role || '').toLowerCase();
+          const isPrivileged = role === 'super_admin' || role === 'admin';
+          const cfg = user?.designation_config || {};
+          // Permission resolution: privileged users use the in-app toggle;
+          // regular users follow their designation's operations_projects setting.
+          const designationGrantsEdit = (cfg.operations_projects || 'none') === 'edit';
+          const designationGrantsView = (cfg.operations_projects || 'none') === 'view';
+          const showToggle = isPrivileged || designationGrantsEdit; // only edit-grantees can toggle
+          const effectiveViewOnly = isPrivileged
+            ? (projectsViewMode === 'view')
+            : designationGrantsView; // edit-grantees default to live edit (no forced view)
+          return (
+            <>
+              {/* View / Edit toggle — privileged users + designations granted Edit */}
+              {showToggle && (
+                <div className={`flex items-center justify-end gap-2 mb-3`} data-testid="projects-view-edit-toggle">
+                  <span className={`text-xs ${textSecondary}`}>Mode:</span>
+                  <div className={`inline-flex rounded-lg border ${borderColor} ${bgCard} p-1`}>
+                    <button
+                      onClick={() => setProjectsViewMode('view')}
+                      data-testid="projects-mode-view"
+                      className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                        projectsViewMode === 'view'
+                          ? 'bg-[#6366f1] text-white shadow'
+                          : `${textSecondary} hover:bg-[#6366f1]/10`
+                      }`}
+                    >
+                      View only
+                    </button>
+                    <button
+                      onClick={() => setProjectsViewMode('edit')}
+                      data-testid="projects-mode-edit"
+                      className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                        projectsViewMode === 'edit'
+                          ? 'bg-[#10b981] text-white shadow'
+                          : `${textSecondary} hover:bg-[#10b981]/10`
+                      }`}
+                    >
+                      Edit
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-            <ProjectsPanel
-              isDark={isDark}
-              textPrimary={textPrimary}
-              textSecondary={textSecondary}
-              bgCard={bgCard}
-              bgSecondary={bgSecondary}
-              borderColor={borderColor}
-              headers={headers}
-              currentUser={user}
-              onTaskCreated={loadTasks}
-              viewOnly={
-                (user?.role || '').toLowerCase() === 'super_admin'
-                  ? projectsViewMode === 'view'
-                  : false
-              }
-            />
-          </>
-        )}
+              )}
+              <ProjectsPanel
+                isDark={isDark}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                bgCard={bgCard}
+                bgSecondary={bgSecondary}
+                borderColor={borderColor}
+                headers={headers}
+                currentUser={user}
+                onTaskCreated={loadTasks}
+                viewOnly={effectiveViewOnly}
+              />
+            </>
+          );
+        })()}
 
         {/* Departments tab */}
         {mainTab === 'departments' && (

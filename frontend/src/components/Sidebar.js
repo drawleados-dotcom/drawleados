@@ -342,18 +342,37 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* 3.6 Approvals - Centralized approval page */}
-        {(hasAccess('approvals') || (moduleAccess.length === 0 && (userRole === 'super_admin' || isAdmin || isProjectManager))) && (
-          <Link
-            to="/approvals"
-            data-testid="nav-approvals"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/approvals' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Approvals' : ''}
-          >
-            <CheckCircle2 className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Approvals'}
-          </Link>
-        )}
+        {/* 3.6 Approvals - Centralized approval page.
+            Hidden when user has zero Operations sub-tab access (per designation_config). */}
+        {(() => {
+          const role = (userRole || '').toLowerCase();
+          const isPriv = role === 'super_admin' || isAdmin || isProjectManager;
+          const cfg = user?.designation_config || {};
+          const anyOpsAccess = isPriv || !!(
+            cfg.operations_my_tasks ||
+            cfg.operations_assign_to_team ||
+            (cfg.operations_projects && cfg.operations_projects !== 'none') ||
+            cfg.operations_departments_tab ||
+            cfg.operations_approvals_tab ||
+            cfg.operations_meetings_tab
+          );
+          const showApprovals = anyOpsAccess && (
+            hasAccess('approvals') ||
+            (moduleAccess.length === 0 && isPriv)
+          );
+          if (!showApprovals) return null;
+          return (
+            <Link
+              to="/approvals"
+              data-testid="nav-approvals"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/approvals' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Approvals' : ''}
+            >
+              <CheckCircle2 className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Approvals'}
+            </Link>
+          );
+        })()}
 
 
         {/* 5. My Profile (HR) - visible for all users */}

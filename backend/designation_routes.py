@@ -24,6 +24,11 @@ class DesignationCreate(BaseModel):
     operations_assign_to_team: Optional[bool] = False
     operations_departments: Optional[List[str]] = []
     operations_approval_queue: Optional[str] = None  # 'pm' | 'operations' | 'ceo'
+    # NEW: Per-sub-tab access (Feb 2026)
+    operations_projects: Optional[str] = "none"   # 'none' | 'view' | 'edit'
+    operations_departments_tab: Optional[bool] = False
+    operations_approvals_tab: Optional[bool] = False
+    operations_meetings_tab: Optional[bool] = False
 
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
@@ -37,6 +42,11 @@ class DesignationUpdate(BaseModel):
     operations_assign_to_team: Optional[bool] = None
     operations_departments: Optional[List[str]] = None
     operations_approval_queue: Optional[str] = None
+    # NEW: Per-sub-tab access (Feb 2026)
+    operations_projects: Optional[str] = None
+    operations_departments_tab: Optional[bool] = None
+    operations_approvals_tab: Optional[bool] = None
+    operations_meetings_tab: Optional[bool] = None
 
 # Dependency to get DB
 async def get_db():
@@ -96,6 +106,11 @@ async def create_designation(data: DesignationCreate, db=Depends(get_db)):
             "operations_assign_to_team": bool(data.operations_assign_to_team),
             "operations_departments": data.operations_departments or [],
             "operations_approval_queue": data.operations_approval_queue,
+            # NEW per-sub-tab access (defaults — locked out unless admin explicitly grants)
+            "operations_projects": (data.operations_projects or "none"),
+            "operations_departments_tab": bool(data.operations_departments_tab),
+            "operations_approvals_tab": bool(data.operations_approvals_tab),
+            "operations_meetings_tab": bool(data.operations_meetings_tab),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
@@ -140,6 +155,15 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
             update_data["operations_departments"] = data.operations_departments
         if data.operations_approval_queue is not None:
             update_data["operations_approval_queue"] = data.operations_approval_queue
+        # NEW per-sub-tab access updates
+        if data.operations_projects is not None:
+            update_data["operations_projects"] = data.operations_projects
+        if data.operations_departments_tab is not None:
+            update_data["operations_departments_tab"] = data.operations_departments_tab
+        if data.operations_approvals_tab is not None:
+            update_data["operations_approvals_tab"] = data.operations_approvals_tab
+        if data.operations_meetings_tab is not None:
+            update_data["operations_meetings_tab"] = data.operations_meetings_tab
         
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         
