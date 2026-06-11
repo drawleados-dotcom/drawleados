@@ -1959,3 +1959,28 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 **Outstanding:**
 - Light/Dark theme inconsistencies on HR Admin / HR / Settings pages (P1, recurring).
 - Component refactoring for monolithic pages (P0 technical debt).
+
+
+---
+
+## 2026-02-11 — HR Attendance UI Single-Row Refactor + Route-Level RBAC + Catch-All
+
+**Files Modified:**
+- `/app/frontend/src/pages/HRPage.js` (AttendanceTab card grid + header tags)
+- `/app/frontend/src/components/ProtectedRoute.js` (module-prop RBAC)
+- `/app/frontend/src/App.js` (module keys on every protected route, legacy redirects for /sales /seo, catch-all `*` route)
+
+**Changes:**
+1. **HRPage Today's Attendance** — removed Status and Work Mode cards from the grid; moved them as non-clickable Badge tags next to the "Today's Attendance" header (`data-testid="attendance-status-tag"`, `attendance-work-mode-tag`). Remaining 6 cards (Login, Logout, Lunch, Sessions, Login Hour, Work Hours) sit in a single responsive row (`grid-cols-2 md:grid-cols-3 lg:grid-cols-6`) with enlarged `text-2xl` values.
+2. **ProtectedRoute now enforces module_access at the route level.** Accepts an optional `module` prop, uses the same alias map as Sidebar (operations↔our_tasks, hr↔my_profile, hr_admin↔hr_manager, etc.). Unauthorized users are redirected to `/our-tasks` BEFORE the page shell renders (previously only backend returned 403 while the UI shell rendered, causing console-error spam).
+3. **App.js** — every protected route now declares its module key (`<ProtectedRoute module="hr_admin">`, etc.). Added explicit Navigate redirects for legacy `/sales`, `/sales-tasks`, `/seo` (in addition to existing `/seo-board`, `/meta-ads`, `/bde-tasks`, etc.). Added catch-all `<Route path="*">` that redirects unknown URLs to `/our-tasks` instead of rendering a blank SPA shell.
+
+**Testing Status:**
+- Backend regression suite at `/app/backend/tests/test_drawlead_regression_jan2026.py` — 21/21 pass.
+- Frontend RBAC verified: `vinoth@drawlead.com` reaches all protected pages; `ops-user@drawlead.com` is redirected from `/hr-admin`, `/finance`, `/settings`, `/sales`, `/seo`, and any unknown path → `/our-tasks`.
+
+**Outstanding / Notes:**
+- Operations dept tab filter: only the "Chief Executive Officer" designation exists in the `designations` collection. The "Operation Head" designation referenced by `ops-user@drawlead.com` has no matching DB record, so the filter (correctly) falls through to "show all" because `operations_departments` is empty. **Action for user:** seed an "Operation Head" designation with the desired `operations_departments` array in HR Admin → Designations.
+- Recurring Light/Dark theme inconsistencies on HR/HR Admin/Settings still pending (P1).
+- Monolithic page refactor (`OurTasksPage.js`, `HRAdminPage.js`, `HRPage.js` >3k lines) still pending (P1, technical debt).
+- Google Calendar real event push still MOCKED.

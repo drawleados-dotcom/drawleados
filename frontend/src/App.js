@@ -49,7 +49,7 @@ function AppRouter() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="dashboard">
             <Dashboard />
           </ProtectedRoute>
         }
@@ -57,7 +57,7 @@ function AppRouter() {
       <Route
         path="/leads"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="leads">
             <LeadsPageV2 />
           </ProtectedRoute>
         }
@@ -65,7 +65,7 @@ function AppRouter() {
       <Route
         path="/finance"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="finance">
             <FinanceModule />
           </ProtectedRoute>
         }
@@ -73,7 +73,7 @@ function AppRouter() {
       <Route
         path="/services"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="services">
             <ServicesPage />
           </ProtectedRoute>
         }
@@ -81,7 +81,7 @@ function AppRouter() {
       <Route
         path="/operations"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="operations">
             <OperationsPage />
           </ProtectedRoute>
         }
@@ -89,7 +89,7 @@ function AppRouter() {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="settings">
             <SettingsPage />
           </ProtectedRoute>
         }
@@ -97,7 +97,7 @@ function AppRouter() {
       <Route
         path="/hr"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="hr">
             <HRPage />
           </ProtectedRoute>
         }
@@ -105,7 +105,7 @@ function AppRouter() {
       <Route
         path="/calendar/:date"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="calendar">
             <CalendarDayDetailPage />
           </ProtectedRoute>
         }
@@ -113,7 +113,7 @@ function AppRouter() {
       <Route
         path="/calendar"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="calendar">
             <CalendarPage />
           </ProtectedRoute>
         }
@@ -121,7 +121,7 @@ function AppRouter() {
       <Route
         path="/leave-verification"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="hr_admin">
             <LeaveVerificationPage />
           </ProtectedRoute>
         }
@@ -129,7 +129,7 @@ function AppRouter() {
       <Route
         path="/hr-admin"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="hr_admin">
             <HRAdminPage />
           </ProtectedRoute>
         }
@@ -137,7 +137,7 @@ function AppRouter() {
       <Route
         path="/marketing"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="marketing">
             <MarketingModule />
           </ProtectedRoute>
         }
@@ -145,17 +145,20 @@ function AppRouter() {
       <Route
         path="/sop-works"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="sop_works">
             <SOPWorksBoard />
           </ProtectedRoute>
         }
       />
-      {/* Legacy redirects → Web Dev */}
+      {/* Legacy redirects → consolidated modules */}
       <Route path="/website-projects" element={<Navigate to="/dl-operations" replace />} />
       <Route path="/social-media" element={<Navigate to="/dl-operations" replace />} />
       <Route path="/creative-board" element={<Navigate to="/dl-operations" replace />} />
       <Route path="/meta-ads" element={<Navigate to="/dl-operations" replace />} />
       <Route path="/seo-board" element={<Navigate to="/dl-operations" replace />} />
+      <Route path="/seo" element={<Navigate to="/dl-operations" replace />} />
+      <Route path="/sales" element={<Navigate to="/our-tasks" replace />} />
+      <Route path="/sales-tasks" element={<Navigate to="/our-tasks" replace />} />
       <Route path="/bde-tasks" element={<Navigate to="/operations" replace />} />
       <Route path="/tasks" element={<Navigate to="/operations" replace />} />
       <Route path="/my-tasks" element={<Navigate to="/operations" replace />} />
@@ -163,7 +166,7 @@ function AppRouter() {
       <Route
         path="/dl-operations"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="web_dev">
             <DLOperationsPage />
           </ProtectedRoute>
         }
@@ -171,7 +174,7 @@ function AppRouter() {
       <Route
         path="/project/:projectId"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="web_dev">
             <ProjectDetailPage />
           </ProtectedRoute>
         }
@@ -179,7 +182,7 @@ function AppRouter() {
       <Route
         path="/approvals"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="our_tasks">
             <ApprovalsPage />
           </ProtectedRoute>
         }
@@ -187,7 +190,7 @@ function AppRouter() {
       <Route
         path="/org-structure"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="hr_admin">
             <OrgStructurePage />
           </ProtectedRoute>
         }
@@ -195,7 +198,7 @@ function AppRouter() {
       <Route
         path="/hr-admin/attendance/:userId"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="hr_admin">
             <EmployeeAttendanceViewPage />
           </ProtectedRoute>
         }
@@ -203,7 +206,7 @@ function AppRouter() {
       <Route
         path="/documentations"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute module="documentations">
             <DocumentationsPage />
           </ProtectedRoute>
         }
@@ -233,6 +236,8 @@ function AppRouter() {
         }
       />
       <Route path="/" element={<Navigate to="/our-tasks" replace />} />
+      {/* Catch-all: unknown routes redirect to landing instead of rendering a blank shell */}
+      <Route path="*" element={<Navigate to="/our-tasks" replace />} />
     </Routes>
   );
 }
