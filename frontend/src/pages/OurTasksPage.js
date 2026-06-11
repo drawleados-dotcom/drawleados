@@ -448,10 +448,22 @@ export default function OurTasksPage() {
       const { start, end } = getTaskStartEnd(task);
       const anchorIso = start || end;
       const payload = {};
-      if (draft.start) payload.start_time = draft.start;
-      if (draft.end) payload.end_time = draft.end;
-      if (anchorIso) payload.date = anchorIso.slice(0, 10);
-      else payload.date = new Date().toISOString().slice(0, 10);
+      const baseDate = anchorIso ? anchorIso.slice(0, 10) : new Date().toISOString().slice(0, 10);
+      payload.date = baseDate;
+
+      // Convert HH:MM (local time) → ISO UTC string so backend stores the correct instant.
+      // (Backend previously parsed plain "HH:MM" as UTC, shifting times by the local offset.)
+      const localHmToIso = (hhmm) => {
+        if (!hhmm) return null;
+        const [h, m] = String(hhmm).split(':').map((v) => parseInt(v, 10));
+        if (Number.isNaN(h) || Number.isNaN(m)) return null;
+        const d = new Date(`${baseDate}T00:00:00`);
+        d.setHours(h, m, 0, 0);
+        return d.toISOString();
+      };
+
+      if (draft.start) payload.start_time = localHmToIso(draft.start);
+      if (draft.end) payload.end_time = localHmToIso(draft.end);
 
       // Block save if the task interval overlaps a recorded break on the same date.
       if (draft.start && draft.end) {
