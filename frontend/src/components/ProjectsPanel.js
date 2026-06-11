@@ -48,6 +48,9 @@ export default function ProjectsPanel({
   const [teamSaving, setTeamSaving] = useState(false);
   // Documents (Sheets / Docs / Drive) modal
   const [showDocsModal, setShowDocsModal] = useState(false);
+  const [showDeptsModal, setShowDeptsModal] = useState(false);
+  const [deptsDraft, setDeptsDraft] = useState([]);
+  const [deptsSaving, setDeptsSaving] = useState(false);
   const [docsTab, setDocsTab] = useState('sheets'); // 'sheets' | 'docs' | 'drive'
   const [editingDocId, setEditingDocId] = useState(null);
   const [docDraft, setDocDraft] = useState({ name: '', link: '' });
@@ -145,6 +148,31 @@ export default function ProjectsPanel({
       toast.error(e.response?.data?.detail || 'Failed to update team');
     } finally {
       setTeamSaving(false);
+    }
+  };
+
+  const openDeptsModal = () => {
+    setDeptsDraft([...(selectedProject?.departments || [])]);
+    setShowDeptsModal(true);
+  };
+
+  const handleSaveDepartments = async () => {
+    if (!selectedProject) return;
+    setDeptsSaving(true);
+    try {
+      await axios.patch(
+        `${API}/api/projects/${selectedProject.project_id}`,
+        { departments: deptsDraft },
+        { headers }
+      );
+      toast.success('Departments updated');
+      setShowDeptsModal(false);
+      refreshSelectedProject();
+      loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update departments');
+    } finally {
+      setDeptsSaving(false);
     }
   };
 
@@ -405,6 +433,38 @@ export default function ProjectsPanel({
               </div>
               <div className="flex items-center gap-2"><ListChecks className={`h-4 w-4 ${textSecondary}`} /><span className={textPrimary}>{selectedProject.tasks?.length || 0} tasks</span></div>
               <Badge className="bg-[#10b981]/20 text-[#10b981]">{selectedProject.status || 'active'}</Badge>
+            </div>
+
+            {/* Departments — chips with inline edit */}
+            <div className="flex items-start gap-2 flex-wrap pt-1" data-testid="project-departments-row">
+              <span className={`text-sm ${textSecondary} pt-0.5`}>Departments:</span>
+              {(selectedProject.departments || []).length === 0 ? (
+                <span className={`text-sm ${textSecondary} italic`}>None linked</span>
+              ) : (
+                (selectedProject.departments || []).map((dKey) => {
+                  const dept = deptCategories.find(d => d.dept_key === dKey);
+                  return (
+                    <Badge
+                      key={dKey}
+                      className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/30 pointer-events-none text-xs"
+                    >
+                      {dept?.label || dKey}
+                    </Badge>
+                  );
+                })
+              )}
+              {canManageProjects && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openDeptsModal}
+                  className={`${borderColor} h-7 px-2 ml-1`}
+                  data-testid="project-edit-departments-btn"
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  {(selectedProject.departments || []).length === 0 ? 'Add' : 'Edit'}
+                </Button>
+              )}
             </div>
 
             {/* Summary cards — counts respect the task Date filter above (filteredTasks) */}
@@ -845,6 +905,76 @@ export default function ProjectsPanel({
           textPrimary={textPrimary}
           textSecondary={textSecondary}
         />
+
+        {/* Departments edit modal */}
+        {showDeptsModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => setShowDeptsModal(false)}>
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>Link Departments — {selectedProject.name}</h3>
+                  <button onClick={() => setShowDeptsModal(false)} className={textSecondary} data-testid="project-depts-close">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-xs ${textSecondary}`}>
+                  Pick the departments this project belongs to. Tasks created against this project will only show categories from the picked departments.
+                </p>
+                {deptCategories.length === 0 ? (
+                  <p className={`text-sm ${textSecondary}`}>No departments configured yet. Create them in Settings.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-1">
+                    {deptCategories.map((d) => {
+                      const checked = deptsDraft.includes(d.dept_key);
+                      return (
+                        <label
+                          key={d.dept_key}
+                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${
+                            checked
+                              ? 'bg-[#6366f1]/10 border-[#6366f1]'
+                              : `${bgSecondary} ${borderColor} hover:bg-[#3f3f46]/30`
+                          }`}
+                          data-testid={`project-depts-option-${d.dept_key}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setDeptsDraft((prev) => e.target.checked
+                                ? [...prev, d.dept_key]
+                                : prev.filter(k => k !== d.dept_key));
+                            }}
+                            className="h-4 w-4 rounded border-gray-300 text-[#6366f1] focus:ring-[#6366f1]"
+                          />
+                          <span className={`text-sm ${textPrimary}`}>{d.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="flex gap-2 pt-2 border-t border-[#27272a]">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDeptsModal(false)}
+                    className={`flex-1 ${borderColor}`}
+                    disabled={deptsSaving}
+                    data-testid="project-depts-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSaveDepartments}
+                    disabled={deptsSaving}
+                    className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white disabled:opacity-50"
+                    data-testid="project-depts-save"
+                  >
+                    {deptsSaving ? 'Saving…' : 'Save'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Meetings list popup (status-aware: upcoming / completed) */}
         {showMeetingsList && (() => {
