@@ -785,64 +785,64 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
       {/* 1. Today's Attendance Summary (No buttons) */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader className="pb-2">
-          <CardTitle className={`${textPrimary} flex items-center gap-2`}>
-            <Clock className="h-5 w-5 text-[#10b981]" />
-            Today's Attendance
-            {settings && <span className={`text-sm font-normal ${textSecondary}`}>(Standard: {settings.standard_login_time} - {settings.standard_logout_time})</span>}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Status</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className={`${textPrimary} flex flex-wrap items-center gap-3`}>
+              <span className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-[#10b981]" />
+                Today's Attendance
+              </span>
+              {settings && <span className={`text-sm font-normal ${textSecondary}`}>(Standard: {settings.standard_login_time} - {settings.standard_logout_time})</span>}
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2" data-testid="attendance-header-tags">
               <Badge className={`${
                 isClockedOut ? 'bg-green-500/20 text-green-400' :
                 isOnLunch ? 'bg-yellow-500/20 text-yellow-400' :
                 isClockedIn ? 'bg-blue-500/20 text-blue-400' :
                 'bg-gray-500/20 text-gray-400'
-              }`}>
+              } px-3 py-1 text-sm pointer-events-none`} data-testid="attendance-status-tag">
                 {isClockedOut ? 'Day Complete' : isOnLunch ? 'On Lunch' : isClockedIn ? 'Working' : 'Not Started'}
               </Badge>
-            </div>
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Work Mode</p>
-              <div className="flex items-center gap-1">
+              <Badge className={`${bgSecondary} ${textPrimary} border ${borderColor} px-3 py-1 text-sm flex items-center gap-1 pointer-events-none`} data-testid="attendance-work-mode-tag">
                 {attendance?.work_mode === 'home' || attendance?.work_location === 'home' ? (
                   <>
-                    <Home className="h-4 w-4 text-[#10b981]" />
-                    <span className={`text-sm font-semibold ${textPrimary}`}>Remote</span>
+                    <Home className="h-3.5 w-3.5 text-[#10b981]" />
+                    <span>Remote</span>
                   </>
                 ) : (
                   <>
-                    <Building className="h-4 w-4 text-[#6366f1]" />
-                    <span className={`text-sm font-semibold ${textPrimary}`}>Office</span>
+                    <Building className="h-3.5 w-3.5 text-[#6366f1]" />
+                    <span>Office</span>
                   </>
                 )}
-              </div>
+              </Badge>
             </div>
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Login</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_in)}</p>
+              <p className={`text-2xl font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_in)}</p>
             </div>
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Logout</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_out)}</p>
+              <p className={`text-2xl font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_out)}</p>
             </div>
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Lunch</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>{attendance?.lunch_duration ? `${attendance.lunch_duration} min` : '-'}</p>
+              <p className={`text-2xl font-semibold ${textPrimary}`}>{attendance?.lunch_duration ? `${attendance.lunch_duration}m` : '-'}</p>
             </div>
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Sessions</p>
-              <p className={`text-lg font-semibold ${textPrimary}`}>{sessions.length > 0 ? sessions.length : (attendance?.clock_in ? 1 : 0)}</p>
+              <p className={`text-2xl font-semibold ${textPrimary}`}>{sessions.length > 0 ? sessions.length : (attendance?.clock_in ? 1 : 0)}</p>
             </div>
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Login Hour</p>
-              <p className={`text-lg font-semibold text-[#10b981]`}>{attendance?.total_hours?.toFixed(2) || '-'}</p>
+              <p className={`text-2xl font-semibold text-[#10b981]`}>{attendance?.total_hours?.toFixed(2) || '-'}</p>
             </div>
-            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+            <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Work Hours</p>
-              <p className={`text-lg font-semibold text-[#6366f1]`} data-testid="work-hours-today">{workHoursToday || '-'}</p>
+              <p className={`text-2xl font-semibold text-[#6366f1]`} data-testid="work-hours-today">{workHoursToday || '-'}</p>
               <p className={`text-[10px] ${textSecondary}`}>tracked from tasks</p>
             </div>
           </div>
