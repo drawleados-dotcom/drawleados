@@ -1766,11 +1766,25 @@ export default function OurTasksPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— None —</SelectItem>
-                      {projectsForTask
-                        .filter(p => !formData.department || (p.departments || []).includes(formData.department))
-                        .map(p => (
+                      {(() => {
+                        const myProjects = projectsForTask.filter((p) => {
+                          if (formData.department && !(p.departments || []).includes(formData.department)) {
+                            return false;
+                          }
+                          const members = Array.isArray(p.members) ? p.members : [];
+                          return members.includes(user?.user_id) || p.created_by === user?.user_id;
+                        });
+                        if (myProjects.length === 0) {
+                          return (
+                            <div className={`px-3 py-2 text-xs ${textSecondary}`}>
+                              No projects assigned to you{formData.department ? ` in this department` : ''}.
+                            </div>
+                          );
+                        }
+                        return myProjects.map((p) => (
                           <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
-                        ))}
+                        ));
+                      })()}
                     </SelectContent>
                   </Select>
                 </div>
