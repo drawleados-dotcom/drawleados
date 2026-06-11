@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import InvoiceModule from './InvoiceModule';
+import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
 import {
   Select,
   SelectContent,
@@ -91,6 +92,7 @@ const DEFAULT_TABS = [
   { id: 'budget', label: 'Budget', icon: Receipt, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'outstanding', label: 'Outstanding', icon: Target, isDefault: true },
+  { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
 ];
 
 const ExpenseTab = () => {
@@ -1702,6 +1704,9 @@ const ExpenseTab = () => {
           {activeTab === 'budget' && renderBudget()}
           {activeTab === 'invoice' && renderInvoice()}
           {activeTab === 'outstanding' && renderOutstanding()}
+          {activeTab === 'payment_schedule' && (
+            <FinancePaymentScheduleTab isDark={isDark} token={token} />
+          )}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}
