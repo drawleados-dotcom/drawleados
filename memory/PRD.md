@@ -30,6 +30,20 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Designation Title Whitespace Bug — FIXED (Feb 2026)
+
+**Bug:** Saranya was assigned the "Website Developer " designation (with a **trailing space** in the title). The user document stored `users.designation = "Website Developer "`. In `/api/auth/me`, the lookup code did `desg_title = data.get("designation").strip()` → "Website Developer", then queried `db.designations.find_one({"title": "Website Developer"})` → returned **None** because the saved title still had the trailing space. The fallback regex `^Website Developer$` also failed for the same reason. Result: `designation_config = None` → safety fallback kicked in showing **only My Tasks**. The `operations_projects: "view"` admin had set was silently invisible to the user.
+
+**Fix layers (defense-in-depth):**
+1. **`/api/auth/me`** (`backend/server.py`): Regex fallback now tolerates leading/trailing whitespace — `^\s*<title>\s*$` (case-insensitive). Same regex used in duplicate-check on Create.
+2. **`POST /api/designations/`** (`backend/designation_routes.py`): Designation title is `.strip()`-ed before insert. Duplicate check uses the whitespace-tolerant regex.
+3. **`PUT /api/designations/{id}`**: Title is `.strip()`-ed before update.
+4. **Startup migration** (`backend/server.py`): On every server boot, scans `db.designations` for titles with leading/trailing whitespace and updates them in-place. Also updates any `users.designation` values referencing the un-stripped title.
+
+After deploy, the startup task will auto-fix existing whitespace titles. Users will see their granted sub-tabs within 60s (no logout required, thanks to AuthContext auto-refresh).
+
+
+
 ### `OurTasksPage.js` refactor — Phase 1 (DONE — Feb 2026)
 
 Reduced the monolithic file by extracting 2 large, self-contained chunks into reusable components. Step toward keeping the file under 2,500 lines and preventing future Babel/AST crashes.

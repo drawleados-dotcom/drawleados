@@ -90,14 +90,21 @@ async def get_designation(designation_id: str, db=Depends(get_db)):
 @designation_router.post("/")
 async def create_designation(data: DesignationCreate, db=Depends(get_db)):
     try:
-        # Check if title already exists
-        existing = await db.designations.find_one({"title": data.title})
+        # Normalize title — strip leading/trailing whitespace to prevent lookup mismatches
+        title = (data.title or "").strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Designation title is required")
+        # Check if title already exists (case-insensitive, whitespace-tolerant)
+        import re as _re
+        existing = await db.designations.find_one(
+            {"title": {"$regex": f"^\\s*{_re.escape(title)}\\s*$", "$options": "i"}}
+        )
         if existing:
             raise HTTPException(status_code=400, detail="Designation with this title already exists")
         
         designation = {
             "designation_id": f"desg_{uuid.uuid4().hex[:12]}",
-            "title": data.title,
+            "title": title,
             "description": data.description or "",
             "roles_responsibilities": data.roles_responsibilities or "",
             "reporting_to": data.reporting_to or [],
@@ -137,7 +144,7 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
         
         update_data = {}
         if data.title is not None:
-            update_data["title"] = data.title
+            update_data["title"] = (data.title or "").strip()
         if data.description is not None:
             update_data["description"] = data.description
         if data.roles_responsibilities is not None:

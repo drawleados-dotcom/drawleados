@@ -88,6 +88,39 @@ async def startup_tasks():
     # No automatic admin creation - users will create accounts via /admin signup page
     logging.info("Server started - Admin signup available at /admin with code DRAWLEAD2025")
 
+    # One-time normalization: strip whitespace from designation titles and
+    # corresponding user.designation values. Fixes a class of /auth/me lookup
+    # mismatches caused by titles like "Website Developer " (trailing space).
+    try:
+        designations = db.designations.find({}, {"_id": 0, "title": 1, "designation_id": 1})
+        async for d in designations:
+            t = d.get("title") or ""
+            stripped = t.strip()
+            if stripped and stripped != t:
+                # Update designation doc
+                await db.designations.update_one(
+                    {"designation_id": d["designation_id"]},
+                    {"$set": {"title": stripped}}
+                )
+                # Update any user whose stored designation matches the un-stripped title
+                await db.users.update_many(
+                    {"designation": t},
+                    {"$set": {"designation": stripped}}
+                )
+                logging.info(f"[startup] Normalized designation title '{t}' -> '{stripped}'")
+        # Also strip user.designation values regardless (covers other sources of whitespace)
+        users_with_ws = db.users.find(
+            {"designation": {"$regex": r"^\s+|\s+$"}},
+            {"_id": 0, "user_id": 1, "designation": 1}
+        )
+        async for u in users_with_ws:
+            await db.users.update_one(
+                {"user_id": u["user_id"]},
+                {"$set": {"designation": (u.get("designation") or "").strip()}}
+            )
+    except Exception as _e:
+        logging.warning(f"[startup] Designation whitespace normalization skipped: {_e}")
+
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
 async def health_check():
@@ -931,8 +964,9 @@ async def get_me(user: User = Depends(get_current_user)):
         )
         if not desg_doc:
             import re as _re
+            # Tolerate leading/trailing whitespace AND case differences
             desg_doc = await db.designations.find_one(
-                {"title": {"$regex": f"^{_re.escape(desg_title)}$", "$options": "i"}},
+                {"title": {"$regex": f"^\\s*{_re.escape(desg_title)}\\s*$", "$options": "i"}},
                 {
                     "_id": 0,
                     "operations_my_tasks": 1,
