@@ -1258,9 +1258,33 @@ export default function ProjectsPanel({
                 data-testid={`project-card-${p.project_id}`}
               >
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className={`font-semibold ${textPrimary}`}>{p.name}</h3>
-                    <Badge className="bg-[#10b981]/20 text-[#10b981]">{p.status || 'active'}</Badge>
+                  <div className="flex items-start justify-between mb-2 gap-2">
+                    <h3 className={`font-semibold ${textPrimary} flex-1 min-w-0 truncate`}>{p.name}</h3>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Badge className="bg-[#10b981]/20 text-[#10b981]">{p.status || 'active'}</Badge>
+                      {canManageProjects && (
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!window.confirm(`Delete project "${p.name}"?\n\nTasks linked to it will be detached (not deleted).`)) return;
+                            try {
+                              await axios.delete(`${API}/api/projects/${p.project_id}`, { headers });
+                              toast.success('Project deleted');
+                              loadProjects();
+                              if (selectedProject?.project_id === p.project_id) setSelectedProject(null);
+                            } catch (err) {
+                              toast.error(err.response?.data?.detail || 'Failed to delete project');
+                            }
+                          }}
+                          className="p-1 rounded hover:bg-red-500/10 text-red-500 hover:text-red-400 transition"
+                          title="Delete project"
+                          data-testid={`project-delete-${p.project_id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p className={`text-sm ${textSecondary} line-clamp-2 mb-3`}>{p.description || 'No description'}</p>
                   {(p.departments || []).length > 0 && (
