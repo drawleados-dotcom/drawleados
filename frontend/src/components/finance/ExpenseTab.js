@@ -831,6 +831,46 @@ const ExpenseTab = () => {
     }
   };
 
+  // Edit an existing expense category (name / department)
+  const handleEditCategory = async (cat) => {
+    const newName = window.prompt('Rename category:', cat.name);
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      toast.error('Name is required');
+      return;
+    }
+    try {
+      await axios.put(
+        `${API}/api/expense/categories/${cat.category_id}`,
+        {
+          name: trimmed,
+          category_type: cat.category_type || 'expense',
+          department: cat.department || '',
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success('Category updated');
+      loadCategories();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update category');
+    }
+  };
+
+  // Delete an expense category (blocked server-side if entries are linked)
+  const handleDeleteCategory = async (cat) => {
+    if (!window.confirm(`Delete category "${cat.name}"? This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${API}/api/expense/categories/${cat.category_id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success('Category deleted');
+      loadCategories();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete category');
+    }
+  };
+
   const handleAddOutstanding = async () => {
     try {
       await axios.post(`${API}/api/expense/outstanding`, outstandingForm, {
@@ -1253,8 +1293,30 @@ const ExpenseTab = () => {
                       setShowAddExpenseToCategory(true);
                     }}
                     className={isDark ? 'hover:bg-[#27272a]' : ''}
+                    title="Add item to this category"
+                    data-testid={`category-add-${cat.category_id}`}
                   >
                     <Plus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => { e.stopPropagation(); handleEditCategory(cat); }}
+                    className={`${isDark ? 'hover:bg-[#27272a]' : 'hover:bg-gray-100'} text-[#6366f1]`}
+                    title="Rename category"
+                    data-testid={`category-edit-${cat.category_id}`}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat); }}
+                    className={`${isDark ? 'hover:bg-rose-500/10' : 'hover:bg-rose-50'} text-rose-500`}
+                    title="Delete category"
+                    data-testid={`category-delete-${cat.category_id}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </div>

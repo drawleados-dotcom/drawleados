@@ -202,6 +202,45 @@ async def create_expense_category(request: Request, data: ExpenseCategoryCreate)
     category.pop("_id", None)
     return category
 
+
+@expense_router.put("/categories/{category_id}")
+async def update_expense_category(category_id: str, request: Request, data: ExpenseCategoryCreate):
+    """Rename / edit an expense category."""
+    user = await get_current_user(request)
+    if not can_manage_finance(user):
+        raise HTTPException(status_code=403, detail="Only Finance/CEO can manage categories")
+    existing = await db.expense_categories.find_one({"category_id": category_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Category not found")
+    update_fields = {
+        "name": data.name,
+        "category_type": data.category_type,
+        "department": data.department,
+        "updated_at": datetime.now(timezone.utc),
+        "updated_by": user["user_id"],
+    }
+    await db.expense_categories.update_one({"category_id": category_id}, {"$set": update_fields})
+    doc = await db.expense_categories.find_one({"category_id": category_id}, {"_id": 0})
+    return doc
+
+
+@expense_router.delete("/categories/{category_id}")
+async def delete_expense_category(category_id: str, request: Request):
+    """Delete an expense category. Refuses if any entries are linked to it."""
+    user = await get_current_user(request)
+    if not can_manage_finance(user):
+        raise HTTPException(status_code=403, detail="Only Finance/CEO can manage categories")
+    in_use = await db.expense_entries.count_documents({"category_id": category_id})
+    if in_use > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete — {in_use} expense entries are linked to this category. Reassign them first.",
+        )
+    res = await db.expense_categories.delete_one({"category_id": category_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"ok": True, "message": "Category deleted"}
+
 # ============== EXPENSE ENTRIES ==============
 
 @expense_router.get("/entries")
