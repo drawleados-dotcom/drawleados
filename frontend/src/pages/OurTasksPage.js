@@ -266,6 +266,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Task name is required');
       return;
     }
+    // Enforce department BEFORE other field checks when assigning to team (clearer UX)
+    if (mainTab === 'assign_to_team' && !formData.department) {
+      toast.error('Please select a Department before creating a team task');
+      return;
+    }
     if (!formData.type) {
       toast.error('Please pick a Type for this task');
       return;
@@ -273,11 +278,6 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
       toast.error('Start date is required for recurring tasks');
-      return;
-    }
-    // Enforce: Department selection is mandatory when assigning to team
-    if (mainTab === 'assign_to_team' && !formData.department) {
-      toast.error('Please select a Department before creating a team task');
       return;
     }
     setSubmitting(true);

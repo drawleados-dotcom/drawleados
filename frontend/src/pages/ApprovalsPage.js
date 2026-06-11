@@ -635,7 +635,7 @@ export default function ApprovalsPage({ embedded = false }) {
         {decisionTask && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !decisionSubmitting && setDecisionTask(null)}>
             <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-xl mx-4`} onClick={(e) => e.stopPropagation()}>
-              <div className="p-6 border-b ${borderColor}">
+              <div className={`p-6 border-b ${borderColor}`}>
                 <div className="flex items-center justify-between">
                   <h3 className={`text-lg font-semibold ${textPrimary} flex items-center gap-2`}>
                     <CheckCircle2 className="h-5 w-5 text-[#6366f1]" />

@@ -30,6 +30,24 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Operations Modal & Approvals Restructure (DONE — Feb 2026)
+**Purpose:** Convert the centralised Approvals workflow into a unified modal-driven Operations Panel.
+
+- Clicking **Approvals** in the sidebar (`/approvals`) now opens a large centered modal (~92% w/h, backdrop, Escape/click-outside/X-button to close) at `OperationsModalPage` (`/components/operations/OperationsModalPage.js`).
+- The modal hosts the full `OurTasksPage` content with all 6 sub-tabs: **My Tasks, Assign to Team, Projects, Departments, Approvals (default), Meetings**. The “Hi, <Name>” header is suppressed inside the modal.
+- **3-way Approvals split**: Inside the Approvals sub-tab, three bucket sub-tabs filter task approvals by `approver_role`:
+  - **PM Approvals** → `approver_role == 'pm'`
+  - **Operations Approvals** → `approver_role in {operations, ceo, marketing_head}` (default active)
+  - **HR Approvals** → `approver_role == 'hr'`
+  - Super admin / admin can see all buckets; other users see only buckets routed to their `myApproverRoles`.
+- **Assign-to-Team Department mandatory**: Creating a task while on the Assign-to-Team tab now requires a Department; otherwise a clear toast fires *before* other field validations.
+- **Projects View/Edit toggle**: Visible only to `super_admin`. Defaults to “View only” — hides Create/Edit/Delete actions inside `ProjectsPanel` (via `viewOnly` prop overriding `canManageProjects`). Toggling to “Edit” restores full management.
+- **HR added** as a valid approver role in the “Send for Approval” popup (alongside PM, Operations, Marketing Head).
+- Files: `frontend/src/components/operations/OperationsModalPage.js` (new), `frontend/src/pages/OurTasksPage.js`, `frontend/src/pages/ApprovalsPage.js`, `frontend/src/components/ProjectsPanel.js`, `frontend/src/App.js`.
+- Status: Tested via `testing_agent_v3_fork` (iteration_66) — 4/5 features verified pass; F3 was a coverage gap that was subsequently improved by re-ordering validations.
+
+
+
 ### Website Development Dashboard Redesign (DONE - December 2025)
 **Purpose:** Completely redesigned the Web Dev main dashboard with a two-part layout for comprehensive project and task tracking.
 
