@@ -3081,6 +3081,7 @@ function AdTasksTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borde
 function MeetingsTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, borderColor, textPrimary, textSecondary }) {
   const [meetings, setMeetings] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [whenFilter, setWhenFilter] = useState('upcoming'); // upcoming | completed | all
   const [newMeeting, setNewMeeting] = useState({
     title: '', date: '', start_time: '', end_time: '', meeting_type: 'video', meeting_link: '', agenda: ''
   });
@@ -3142,50 +3143,122 @@ function MeetingsTab({ projectId, teamMembers, isDark, bgCard, bgSecondary, bord
       toast.error('Failed to delete');
     }
   };
+
+  // Split by status / when filter. Upcoming = NOT completed (incl. overdue). Completed = explicit status.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isCompleted = (m) => (m.status || '').toLowerCase() === 'completed';
+  const filtered = meetings.filter((m) => {
+    if (whenFilter === 'upcoming') return !isCompleted(m);
+    if (whenFilter === 'completed') return isCompleted(m);
+    return true;
+  }).sort((a, b) => {
+    const ka = `${a.date || ''} ${a.start_time || ''}`;
+    const kb = `${b.date || ''} ${b.start_time || ''}`;
+    return whenFilter === 'completed' ? kb.localeCompare(ka) : ka.localeCompare(kb);
+  });
+
+  const counts = {
+    upcoming: meetings.filter((m) => !isCompleted(m)).length,
+    completed: meetings.filter(isCompleted).length,
+    all: meetings.length,
+  };
   
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4" data-testid="project-meetings-tab">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className={`text-lg font-semibold ${textPrimary}`}>Meetings</h3>
-        <Button onClick={() => setShowModal(true)} className="bg-[#6366f1] h-9">
+        <Button onClick={() => setShowModal(true)} className="bg-[#6366f1] h-9" data-testid="project-create-meeting-btn">
           <Plus className="h-4 w-4 mr-2" /> Schedule Meeting
         </Button>
       </div>
-      
-      {meetings.length === 0 ? (
+
+      {/* Sub-tabs: Upcoming / Completed / All */}
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { id: 'upcoming', label: 'Upcoming', count: counts.upcoming },
+          { id: 'completed', label: 'Completed', count: counts.completed },
+          { id: 'all', label: 'All', count: counts.all },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setWhenFilter(t.id)}
+            data-testid={`project-meetings-filter-${t.id}`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
+              whenFilter === t.id
+                ? 'bg-[#6366f1] border-[#6366f1] text-white'
+                : isDark
+                  ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa] hover:bg-[#3f3f46]'
+                  : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
+            }`}
+          >
+            {t.label} <span className="ml-1 text-xs opacity-80">({t.count})</span>
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
         <div className={`text-center py-12 ${textSecondary}`}>
           <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No meetings scheduled for this project</p>
+          <p>
+            {whenFilter === 'upcoming' && 'No upcoming meetings for this project'}
+            {whenFilter === 'completed' && 'No completed meetings yet'}
+            {whenFilter === 'all' && 'No meetings scheduled for this project'}
+          </p>
+          <p className="text-xs opacity-70 mt-1">
+            Tip: tasks with Type = Meeting + this project will also appear here.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {meetings.map(meeting => (
-            <div key={meeting.meeting_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${meeting.meeting_type === 'video' ? 'bg-blue-500/20' : meeting.meeting_type === 'audio' ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
-                    <Calendar className={`h-5 w-5 ${meeting.meeting_type === 'video' ? 'text-blue-500' : meeting.meeting_type === 'audio' ? 'text-green-500' : 'text-purple-500'}`} />
-                  </div>
-                  <div>
-                    <p className={`font-medium ${textPrimary}`}>{meeting.title}</p>
-                    <div className="flex items-center gap-2 mt-1 text-sm">
-                      <span className={textSecondary}>{meeting.date} • {meeting.start_time}{meeting.end_time ? ` - ${meeting.end_time}` : ''}</span>
-                      <Badge variant="outline">{meeting.status}</Badge>
+          {filtered.map(meeting => {
+            const completed = isCompleted(meeting);
+            return (
+              <div key={meeting.meeting_id} className={`p-4 rounded-xl border ${borderColor} ${bgSecondary}`} data-testid={`project-meeting-${meeting.meeting_id}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${meeting.meeting_type === 'video' ? 'bg-blue-500/20' : meeting.meeting_type === 'audio' ? 'bg-green-500/20' : 'bg-purple-500/20'}`}>
+                      <Calendar className={`h-5 w-5 ${meeting.meeting_type === 'video' ? 'text-blue-500' : meeting.meeting_type === 'audio' ? 'text-green-500' : 'text-purple-500'}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`font-medium ${textPrimary} truncate`}>{meeting.title}</p>
+                        {meeting.linked_task_id && (
+                          <Badge className="bg-indigo-500/20 text-indigo-400 pointer-events-none text-[10px]">via Task</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 text-sm flex-wrap">
+                        <span className={textSecondary}>{meeting.date || '—'}{meeting.start_time ? ` • ${meeting.start_time}` : ''}{meeting.end_time ? ` - ${meeting.end_time}` : ''}</span>
+                        <Badge
+                          className={`${
+                            completed ? 'bg-emerald-500/20 text-emerald-400' :
+                            (meeting.date || '') < todayStr ? 'bg-amber-500/20 text-amber-400' :
+                            'bg-blue-500/20 text-blue-400'
+                          } pointer-events-none`}
+                        >
+                          {completed ? 'Completed' : (meeting.date || '') < todayStr ? 'Overdue' : 'Upcoming'}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {meeting.meeting_link && (
-                    <Button size="sm" variant="outline" onClick={() => window.open(meeting.meeting_link, '_blank')}>
-                      <ExternalLink className="h-3 w-3 mr-1" /> Join
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {meeting.meeting_link && (
+                      <Button size="sm" variant="outline" onClick={() => window.open(meeting.meeting_link, '_blank')}>
+                        <ExternalLink className="h-3 w-3 mr-1" /> Join
+                      </Button>
+                    )}
+                    {!completed && (
+                      <Button size="sm" variant="ghost" onClick={() => handleComplete(meeting.meeting_id)} title="Mark complete">
+                        <Check className="h-4 w-4 text-emerald-500" />
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => handleDelete(meeting.meeting_id)}>
+                      <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => handleComplete(meeting.meeting_id)}><Check className="h-4 w-4 text-emerald-500" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(meeting.meeting_id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       

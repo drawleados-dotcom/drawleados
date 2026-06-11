@@ -846,58 +846,87 @@ export default function ProjectsPanel({
           textSecondary={textSecondary}
         />
 
-        {/* Meetings list popup (past + upcoming) */}
+        {/* Meetings list popup (status-aware: upcoming / completed) */}
         {showMeetingsList && (() => {
           const today = new Date().toISOString().slice(0, 10);
-          const upcoming = projectMeetings.filter(m => (m.date || '') >= today).sort((a, b) => `${a.date}${a.start_time || ''}`.localeCompare(`${b.date}${b.start_time || ''}`));
-          const past = projectMeetings.filter(m => (m.date || '') < today).sort((a, b) => `${b.date}${b.start_time || ''}`.localeCompare(`${a.date}${a.start_time || ''}`));
+          const isCompleted = (m) => (m.status || '').toLowerCase() === 'completed';
+          // Upcoming bucket = anything not yet completed (incl. overdue). Completed = explicit status.
+          const upcoming = projectMeetings.filter((m) => !isCompleted(m)).sort((a, b) => `${a.date}${a.start_time || ''}`.localeCompare(`${b.date}${b.start_time || ''}`));
+          const completed = projectMeetings.filter(isCompleted).sort((a, b) => `${b.date}${b.start_time || ''}`.localeCompare(`${a.date}${a.start_time || ''}`));
           const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '—';
-          const MList = ({ list, label }) => (
+          const MList = ({ list, label, emptyHint }) => (
             <div>
               <p className={`text-xs uppercase font-semibold ${textSecondary} mb-2`}>{label} ({list.length})</p>
               {list.length === 0 ? (
-                <p className={`text-sm ${textSecondary} mb-3`}>None</p>
-              ) : list.map(m => (
-                <div
-                  key={m.meeting_id}
-                  className={`p-3 rounded-lg border ${borderColor} ${bgSecondary} mb-2 flex items-center justify-between gap-3`}
-                  data-testid={`proj-mtg-${m.meeting_id}`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-medium ${textPrimary} truncate`}>{m.title}</span>
-                      <Badge className={
-                        (m.category || 'team') === 'client'
-                          ? 'bg-[#f59e0b]/20 text-[#f59e0b] text-xs'
-                          : 'bg-[#3b82f6]/20 text-[#3b82f6] text-xs'
-                      }>{(m.category || 'team') === 'client' ? 'Client' : 'Team'}</Badge>
+                <p className={`text-sm ${textSecondary} mb-3`}>{emptyHint}</p>
+              ) : list.map(m => {
+                const completed = isCompleted(m);
+                const overdue = !completed && (m.date || '') < today;
+                return (
+                  <div
+                    key={m.meeting_id}
+                    className={`p-3 rounded-lg border ${borderColor} ${bgSecondary} mb-2 flex items-center justify-between gap-3`}
+                    data-testid={`proj-mtg-${m.meeting_id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-medium ${textPrimary} truncate`}>{m.title}</span>
+                        <Badge className={
+                          (m.category || 'team') === 'client'
+                            ? 'bg-[#f59e0b]/20 text-[#f59e0b] text-xs pointer-events-none'
+                            : 'bg-[#3b82f6]/20 text-[#3b82f6] text-xs pointer-events-none'
+                        }>{(m.category || 'team') === 'client' ? 'Client' : 'Team'}</Badge>
+                        {m.linked_task_id && (
+                          <Badge className="bg-indigo-500/20 text-indigo-400 text-[10px] pointer-events-none">via Task</Badge>
+                        )}
+                        <Badge className={`text-[10px] pointer-events-none ${
+                          completed ? 'bg-emerald-500/20 text-emerald-400' :
+                          overdue ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-blue-500/20 text-blue-400'
+                        }`}>
+                          {completed ? 'Completed' : overdue ? 'Overdue' : 'Upcoming'}
+                        </Badge>
+                      </div>
+                      <p className={`text-xs ${textSecondary} mt-1`}>{fmtDate(m.date)} · {m.start_time || '—'} · {(m.attendees || []).length} attendees</p>
                     </div>
-                    <p className={`text-xs ${textSecondary}`}>{fmtDate(m.date)} · {m.start_time || '—'} · {(m.attendees || []).length} attendees</p>
+                    {m.meeting_link && (
+                      <a
+                        href={m.meeting_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#6366f1] text-sm hover:underline flex items-center gap-1 flex-none"
+                      >
+                        <ExternalLink className="h-3 w-3" /> Join
+                      </a>
+                    )}
                   </div>
-                  {m.meeting_link && (
-                    <a
-                      href={m.meeting_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#6366f1] text-sm hover:underline flex items-center gap-1 flex-none"
-                    >
-                      <ExternalLink className="h-3 w-3" /> Join
-                    </a>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           );
           return (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => setShowMeetingsList(false)}>
               <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[85vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
                 <CardContent className="p-6 space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h3 className={`text-lg font-semibold ${textPrimary}`}>Project Meetings — {selectedProject.name}</h3>
-                    <button onClick={() => setShowMeetingsList(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => { setShowMeetingsList(false); setShowMeetingModal(true); }}
+                        className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                        data-testid="project-meetings-popup-schedule"
+                      >
+                        <Plus className="h-4 w-4 mr-1" /> Schedule Meeting
+                      </Button>
+                      <button onClick={() => setShowMeetingsList(false)} className={textSecondary}><X className="h-5 w-5" /></button>
+                    </div>
                   </div>
-                  <MList list={upcoming} label="Upcoming" />
-                  <MList list={past} label="Past" />
+                  <p className={`text-xs ${textSecondary}`}>
+                    Tip: tasks with Type = Meeting + this project are bridged here automatically.
+                  </p>
+                  <MList list={upcoming} label="Upcoming" emptyHint="No upcoming meetings." />
+                  <MList list={completed} label="Completed" emptyHint="No completed meetings yet." />
                 </CardContent>
               </Card>
             </div>

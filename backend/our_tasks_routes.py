@@ -287,7 +287,48 @@ async def create_task(task_data: TaskCreate, request: Request):
         
         await db.our_tasks.insert_one(task)
         task.pop("_id", None)
-        
+
+        # Bridge: if this task is a Meeting tied to a Project, also create a corresponding
+        # entry in the meetings collection so it shows up in the project's Meeting tab.
+        if (task_data.type or "").lower() == "meeting" and task_data.project_id:
+            try:
+                meeting_id = f"meet_{uuid.uuid4().hex[:12]}"
+                meeting_doc = {
+                    "meeting_id": meeting_id,
+                    "title": task_data.task_name,
+                    "description": task_data.description or "",
+                    "agenda": task_data.description or "",
+                    "date": task_data.due_date or "",
+                    "start_time": task_data.due_time or "",
+                    "end_time": "",
+                    "all_day": bool(task_data.all_day),
+                    "meeting_type": "video",
+                    "category": "team",
+                    "meeting_link": task_data.work_link or "",
+                    "location": "",
+                    "attendees": [],
+                    "project_id": task_data.project_id,
+                    "client_name": "",
+                    "notes": "",
+                    "reminder": 15,
+                    "status": "scheduled",
+                    "task_ids": [task_id],
+                    "linked_task_id": task_id,
+                    "created_by": user.user_id,
+                    "created_at": now.isoformat(),
+                    "updated_at": now.isoformat(),
+                }
+                await db.meetings.insert_one(meeting_doc)
+                # Store reverse link so deletion/status sync can find the meeting later.
+                await db.our_tasks.update_one(
+                    {"task_id": task_id},
+                    {"$set": {"linked_meeting_id": meeting_id}},
+                )
+                task["linked_meeting_id"] = meeting_id
+            except Exception:
+                # Don't fail task creation if the meeting bridge errors.
+                pass
+
         # Add user names before returning
         if task.get("assigned_to"):
             assigned_user = await db.users.find_one({"user_id": task["assigned_to"]}, {"name": 1, "_id": 0})
@@ -445,6 +486,13 @@ async def delete_task(task_id: str, request: Request):
             raise HTTPException(status_code=403, detail="Only the assignee or an admin can delete this task")
         
         await db.our_tasks.delete_one({"task_id": task_id})
+        # Bridge: also delete the linked meeting (best-effort).
+        linked_meeting_id = task.get("linked_meeting_id")
+        if linked_meeting_id:
+            try:
+                await db.meetings.delete_one({"meeting_id": linked_meeting_id})
+            except Exception:
+                pass
         return {"message": "Task deleted"}
     except HTTPException:
         raise
@@ -470,6 +518,18 @@ async def update_task_status(task_id: str, status_data: StatusUpdate, request: R
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
         )
+
+        # Bridge: mirror status to the linked meeting (completed↔completed, else scheduled).
+        linked_meeting_id = task.get("linked_meeting_id")
+        if linked_meeting_id:
+            try:
+                meeting_status = "completed" if status_data.status == "completed" else "scheduled"
+                await db.meetings.update_one(
+                    {"meeting_id": linked_meeting_id},
+                    {"$set": {"status": meeting_status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+                )
+            except Exception:
+                pass
         
         updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
         return updated
