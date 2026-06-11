@@ -69,12 +69,26 @@ const Sidebar = () => {
   
   // Check access permissions
   const hasAccess = (module) => {
-    // Super Admin - Full access to all modules
-    if (userRole === 'super_admin') {
-      return true; // Super admin has access to everything
+    // Designation-driven module access has HIGHEST priority (applies to ALL roles, including super_admin).
+    // If a user has a non-empty module_access list (set via their designation),
+    // STRICTLY honor it — only modules present in the list are visible.
+    if (Array.isArray(moduleAccess) && moduleAccess.length > 0) {
+      // Aliases between Sidebar module keys and stored module_access values
+      const aliasMap = {
+        operations: ['operations', 'our_tasks'],
+        web_dev: ['web_dev'],
+        our_tasks: ['our_tasks', 'operations'],
+        hr: ['hr', 'my_profile'],
+        hr_admin: ['hr_admin', 'hr_manager'],
+        my_profile: ['my_profile', 'hr'],
+      };
+      const allowed = new Set(moduleAccess.map(m => String(m).toLowerCase()));
+      const aliases = aliasMap[module] || [module];
+      return aliases.some(a => allowed.has(String(a).toLowerCase()));
     }
-    
-    // Admin has full access
+
+    // Fallback for users WITHOUT a designation-defined module_access:
+    if (userRole === 'super_admin') return true;
     if (userRole === 'admin') return true;
     
     // HR access - check explicit module access (support multiple names)
@@ -313,7 +327,7 @@ const Sidebar = () => {
         )}
 
         {/* 3.5 Web Dev - Website Development Projects */}
-        {(hasAccess('operations') || hasAccess('web_dev') || userRole === 'super_admin' || isAdmin || isProjectManager) && (
+        {(hasAccess('operations') || hasAccess('web_dev') || (moduleAccess.length === 0 && (userRole === 'super_admin' || isAdmin || isProjectManager))) && (
           <Link
             to="/dl-operations"
             data-testid="nav-web-dev"
@@ -326,7 +340,7 @@ const Sidebar = () => {
         )}
 
         {/* 3.6 Approvals - Centralized approval page */}
-        {(userRole === 'super_admin' || isAdmin || isProjectManager || hasAccess('approvals')) && (
+        {(hasAccess('approvals') || (moduleAccess.length === 0 && (userRole === 'super_admin' || isAdmin || isProjectManager))) && (
           <Link
             to="/approvals"
             data-testid="nav-approvals"
@@ -392,7 +406,7 @@ const Sidebar = () => {
         )}
 
         {/* 9. Documentation - visible for business_development, admins, and super_admin */}
-        {(hasAccess('documentations') || hasAccess('leads') || isBDE || isAdmin) && (
+        {(hasAccess('documentations') || (moduleAccess.length === 0 && (hasAccess('leads') || isBDE || isAdmin))) && (
           <Link
             to="/documentations"
             data-testid="nav-documentations"

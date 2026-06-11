@@ -96,6 +96,26 @@ export default function ApprovalsPage({ embedded = false }) {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
 
+  // Derive which approver_role(s) the current user is responsible for.
+  // Filters the task-approvals queue so each user only sees approvals routed to THEIR role.
+  const myApproverRoles = (() => {
+    const desg = (user?.designation || '').toLowerCase();
+    const role = (user?.role || '').toLowerCase();
+    if (desg.includes('chief executive') || desg === 'ceo') return ['ceo'];
+    if (desg.includes('operation')) return ['operations'];
+    if (desg.includes('marketing head')) return ['marketing_head'];
+    if (desg.includes('project manager') || role === 'project_manager') return ['pm'];
+    // Fallback by role
+    if (role === 'super_admin' || role === 'admin') return ['ceo'];
+    return [];
+  })();
+
+  // Filter task approvals to only those routed to my approver role(s)
+  const visibleTaskApprovals = (taskApprovals || []).filter(t => {
+    const reqRole = (t.approval_request?.approver_role || '').toLowerCase();
+    return myApproverRoles.includes(reqRole);
+  });
+
   // Load approvals
   const loadApprovals = useCallback(async () => {
     try {
@@ -451,15 +471,15 @@ export default function ApprovalsPage({ embedded = false }) {
         {/* Approvals List */}
         <div className="flex-1 overflow-auto p-6 space-y-6">
           {/* Task Approval Requests (from Operations > My Tasks) */}
-          {taskApprovals.length > 0 && (
+          {visibleTaskApprovals.length > 0 && (
             <div>
               <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
                 <CheckCircle2 className="h-4 w-4 text-[#6366f1]" />
                 Task Approval Requests
-                <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{taskApprovals.length}</Badge>
+                <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{visibleTaskApprovals.length}</Badge>
               </h3>
               <div className="space-y-3">
-                {taskApprovals.map(task => {
+                {visibleTaskApprovals.map(task => {
                   const req = task.approval_request || {};
                   return (
                     <div

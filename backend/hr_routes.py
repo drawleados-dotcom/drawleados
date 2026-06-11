@@ -3257,7 +3257,19 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
     update_module_access = profile_data.pop("update_module_access", False)
     new_module_access = profile_data.pop("new_module_access", [])
     designation_id = profile_data.pop("designation_id", None)
-    
+
+    # Auto-sync module_access from the designation whenever designation_id is sent,
+    # even if the caller didn't explicitly pass update_module_access. This ensures
+    # users always reflect their designation's module list.
+    if designation_id and not update_module_access:
+        try:
+            desig = await db.designations.find_one({"$or": [{"_id": designation_id}, {"designation_id": designation_id}, {"id": designation_id}]})
+            if desig and isinstance(desig.get("module_access"), list):
+                update_module_access = True
+                new_module_access = desig["module_access"]
+        except Exception:
+            pass
+
     if update_module_access and new_module_access:
         # Update user's module_access based on new designation
         await db.users.update_one(
