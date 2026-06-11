@@ -216,19 +216,23 @@ async def create_invoice(invoice_data: InvoiceCreate, request: Request):
             total_gst += gst_amount
         
         # Calculate invoice-level GST if gst_type is 'gst'
-        if invoice_data.gst_type == "gst":
-            # Use invoice-level GST if items don't have individual GST
-            invoice_gst_amount = (subtotal * invoice_data.gst_rate) / 100
-            is_inter_state = False  # Can be determined by GST state codes
-            gst_calc = calculate_gst(subtotal, invoice_data.gst_rate, is_inter_state)
+        # Always honor per-item discounts. When the invoice carries a flat
+        # invoice-level gst_rate AND items have no per-item gst_rate, fall back
+        # to invoice-level GST on the discounted subtotal. Otherwise, use the
+        # per-item totals already computed above.
+        taxable_base = subtotal - total_discount
+        items_have_gst = any((it.get("gst_rate") or 0) > 0 for it in invoice_data.items)
+
+        if invoice_data.gst_type == "gst" and not items_have_gst and (invoice_data.gst_rate or 0) > 0:
+            gst_calc = calculate_gst(taxable_base, invoice_data.gst_rate, False)
             cgst = gst_calc["cgst"]
             sgst = gst_calc["sgst"]
             igst = gst_calc["igst"]
-            total = subtotal + cgst + sgst + igst
+            total = taxable_base + cgst + sgst + igst
         else:
             cgst = sgst = igst = 0.0
-            # Use item-level GST totals
-            total = subtotal - total_discount + total_gst
+            # Use item-level GST totals (per-item discount + per-item gst_rate)
+            total = taxable_base + total_gst
         
         # Create invoice
         invoice_id = f"inv_{uuid.uuid4().hex[:12]}"

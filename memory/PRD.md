@@ -1,5 +1,39 @@
 # Drawlead OS - Product Requirements Document
 
+## Latest Update — Feb 11, 2026 — Finance Clients Module + GST Invoice Revamp
+
+### What was implemented
+- **New `Clients` tab in Finance module** (sits next to Dashboard / Cashbook / Expense / Budget / Invoice / Outstanding / Payment Schedule / Week Wise).
+  - Table of all clients with Invoiced/Paid/Outstanding totals + Invoice count + Last Invoice Date.
+  - Header summary cards: Total Clients / Total Invoiced / Total Paid / Outstanding.
+  - Search, Add Client, Migrate (one-click auto-create clients from existing invoice names), View Summary, Edit, Delete.
+- **Add Client popup (`AddClientModal.js`)** — Zoho-style fields: Customer Type (Business/Individual), Primary Contact (Salutation/First/Last Name), Company, Display Name *, Currency, Email, Work Phone, Mobile, Customer Language, GST Treatment, Place of Supply, GSTIN, PAN, Tax Preference, Payment Terms, Enable Portal toggle, Billing Address, Shipping Address (with "Same as billing" toggle), Remarks.
+- **Client Summary modal (`ClientSummaryModal.js`)** — 6 summary cards (Total Invoiced, Total Paid, Outstanding, Invoice Count, Last Invoice Date, Last Payment Date), client details panel, and complete Invoice History table per client.
+- **InvoiceFormModal completely rewritten** (Zoho-style):
+  - Customer Name is now a **dropdown of existing clients** (free-text removed). Inline "+ Add Client" launches AddClientModal.
+  - Invoice # (auto-generated, readonly), Invoice Date, Terms dropdown (Due on Receipt / Net 15 / 30 / 45 / 60 / 90 / Custom — auto-updates Due Date).
+  - Inline Item Table: Qty / Rate / Discount % / Tax % / Amount, with Add New Row.
+  - Customer Notes, collapsible Add Terms and Conditions, Add Payment Gateway placeholder.
+  - **Save as Draft** + **Save and Send** (marks invoice status='sent', no email per user choice).
+- **Auto-migration** — `POST /api/finance/clients/migrate-from-invoices` (idempotent). Run during build, migrated 2 existing invoices (Mona + Sample Check) into Client records and linked them via `client_id`.
+
+### Backend
+- New module `clients_routes.py` (`/api/finance/clients` CRUD + `/summary` + `/migrate-from-invoices`).
+- New collection: `finance_clients`.
+- `invoices` collection: added `client_id` field. Invoice model + Create/Update accept it.
+- **Bug fix in `finance_routes.py`**: invoice total no longer ignores per-item discount when `gst_type=='gst'` (verified: qty=2*rate=5000-10%*1.18 → ₹10,620 saved correctly).
+
+### Testing
+- Backend pytest: 7/7 PASS (`/app/backend/tests/test_clients_invoices.py`).
+- testing_agent_v3_fork iteration 69: backend 100%, frontend 95% (all UI flows verified, only the discount bug was outstanding — now fixed).
+
+### Files
+- Backend: `clients_routes.py`, `finance_models.py`, `finance_routes.py`, `server.py`.
+- Frontend: `ClientsTab.js`, `AddClientModal.js`, `ClientSummaryModal.js`, `InvoiceFormModal.js`, `ExpenseTab.js`.
+
+---
+
+
 ## Original Problem Statement
 Build a comprehensive internal operating system called "Drawlead OS" for managing leads, HR, operations, and documentation. The system should support role-based access control (RBAC) with different user types having different module access.
 
