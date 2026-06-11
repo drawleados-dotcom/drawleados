@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Building2, Plus, X, Check, Tag, Trash2 } from 'lucide-react';
+import { Building2, Plus, X, Check, Tag, Trash2, Pencil } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
@@ -35,6 +35,27 @@ export default function DepartmentsPanel({
   const openEdit = (dept) => {
     setEditingDept({ ...dept, categories: [...(dept.categories || [])] });
     setCategoryDraft('');
+    setEditingCategory(null);
+  };
+  const [editingCategory, setEditingCategory] = useState(null); // { original, value }
+
+  const startEditCategory = (c) => setEditingCategory({ original: c, value: c });
+  const commitEditCategory = () => {
+    if (!editingCategory) return;
+    const next = (editingCategory.value || '').trim();
+    if (!next) {
+      toast.error('Category name cannot be empty');
+      return;
+    }
+    if (next !== editingCategory.original && (editingDept.categories || []).includes(next)) {
+      toast.error('Category already exists');
+      return;
+    }
+    setEditingDept(prev => ({
+      ...prev,
+      categories: (prev.categories || []).map(c => c === editingCategory.original ? next : c),
+    }));
+    setEditingCategory(null);
   };
 
   const addCategory = () => {
@@ -143,20 +164,56 @@ export default function DepartmentsPanel({
                 {(editingDept.categories || []).length === 0 ? (
                   <p className={`text-sm ${textSecondary}`}>No categories yet.</p>
                 ) : (
-                  (editingDept.categories || []).map(c => (
-                    <div
-                      key={c}
-                      className={`flex items-center justify-between p-2 rounded-lg ${bgSecondary}`}
-                      data-testid={`dept-cat-row-${c.toLowerCase().replace(/\s+/g, '-')}`}
-                    >
-                      <span className={`text-sm ${textPrimary} flex items-center gap-2`}>
-                        <Tag className="h-3 w-3 text-[#6366f1]" /> {c}
-                      </span>
-                      <button onClick={() => removeCategory(c)} className="text-[#ef4444]">
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))
+                  (editingDept.categories || []).map(c => {
+                    const isEditing = editingCategory?.original === c;
+                    return (
+                      <div
+                        key={c}
+                        className={`flex items-center justify-between p-2 rounded-lg ${bgSecondary} gap-2`}
+                        data-testid={`dept-cat-row-${c.toLowerCase().replace(/\s+/g, '-')}`}
+                      >
+                        {isEditing ? (
+                          <>
+                            <Input
+                              autoFocus
+                              value={editingCategory.value}
+                              onChange={(e) => setEditingCategory(prev => ({ ...prev, value: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); commitEditCategory(); }
+                                if (e.key === 'Escape') { e.preventDefault(); setEditingCategory(null); }
+                              }}
+                              className="h-8 flex-1"
+                              data-testid={`dept-cat-edit-input-${c.toLowerCase().replace(/\s+/g, '-')}`}
+                            />
+                            <button onClick={commitEditCategory} className="text-[#10b981] p-1" title="Save" data-testid="dept-cat-edit-confirm">
+                              <Check className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => setEditingCategory(null)} className={`${textSecondary} p-1`} title="Cancel">
+                              <X className="h-4 w-4" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className={`text-sm ${textPrimary} flex items-center gap-2 flex-1 min-w-0`}>
+                              <Tag className="h-3 w-3 text-[#6366f1]" />
+                              <span className="truncate">{c}</span>
+                            </span>
+                            <button
+                              onClick={() => startEditCategory(c)}
+                              className="text-[#6366f1] p-1"
+                              title="Edit"
+                              data-testid={`dept-cat-edit-${c.toLowerCase().replace(/\s+/g, '-')}`}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button onClick={() => removeCategory(c)} className="text-[#ef4444] p-1" title="Delete">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })
                 )}
               </div>
 

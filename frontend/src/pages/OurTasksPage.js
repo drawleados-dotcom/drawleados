@@ -94,7 +94,7 @@ export default function OurTasksPage() {
     priority: 'medium',
     type: '',          // empty → forces user to pick (required)
     assigned_to: '',
-    due_date: '',
+    due_date: new Date().toISOString().slice(0, 10),
     due_time: '',
     all_day: false,
     recurrence: 'none', // none, daily, weekly, monthly, yearly, weekdays, custom
@@ -639,7 +639,7 @@ export default function OurTasksPage() {
       priority: 'medium',
       type: '',
       assigned_to: '',
-      due_date: '',
+      due_date: new Date().toISOString().slice(0, 10),
       due_time: '',
       all_day: false,
       recurrence: 'none',
@@ -1807,7 +1807,21 @@ export default function OurTasksPage() {
                               setFormData(prev => ({ ...prev, project_id: '', project_name: '' }));
                             } else {
                               const proj = projectsForTask.find(p => p.project_id === v);
-                              setFormData(prev => ({ ...prev, project_id: v, project_name: proj?.name || '' }));
+                              const projDepts = proj?.departments || [];
+                              setFormData(prev => {
+                                // Auto-sync department to the project's first dept if the current
+                                // dept isn't one of the project's depts — keeps the Category list correct.
+                                const nextDept = (projDepts.includes(prev.department))
+                                  ? prev.department
+                                  : (projDepts[0] || prev.department);
+                                return {
+                                  ...prev,
+                                  project_id: v,
+                                  project_name: proj?.name || '',
+                                  department: nextDept,
+                                  category: nextDept === prev.department ? prev.category : '',
+                                };
+                              });
                             }
                           }}
                           disabled={!formData.department}
