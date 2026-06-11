@@ -909,8 +909,11 @@ async def get_me(user: User = Depends(get_current_user)):
         data["designation"] = extra.get("designation", "")
     # Enrich with the designation's operations_* config (per-sub-tab access)
     desg_title = (data.get("designation") or "").strip()
+    user_modules = data.get("module_access") or []
+    has_operations_module = any(str(m).lower() == "operations" for m in user_modules)
     designation_config = None
     if desg_title:
+        # Try exact match first, then case-insensitive fallback for resilience
         desg_doc = await db.designations.find_one(
             {"title": desg_title},
             {
@@ -926,6 +929,23 @@ async def get_me(user: User = Depends(get_current_user)):
                 "operations_meetings_tab": 1,
             }
         )
+        if not desg_doc:
+            import re as _re
+            desg_doc = await db.designations.find_one(
+                {"title": {"$regex": f"^{_re.escape(desg_title)}$", "$options": "i"}},
+                {
+                    "_id": 0,
+                    "operations_my_tasks": 1,
+                    "operations_assign_to_team": 1,
+                    "operations_departments": 1,
+                    "operations_approval_queue": 1,
+                    "operations_projects": 1,
+                    "operations_payment_schedule": 1,
+                    "operations_departments_tab": 1,
+                    "operations_approvals_tab": 1,
+                    "operations_meetings_tab": 1,
+                }
+            )
         if desg_doc:
             designation_config = {
                 "operations_my_tasks": bool(desg_doc.get("operations_my_tasks", False)),
@@ -938,6 +958,36 @@ async def get_me(user: User = Depends(get_current_user)):
                 "operations_approvals_tab": bool(desg_doc.get("operations_approvals_tab", False)),
                 "operations_meetings_tab": bool(desg_doc.get("operations_meetings_tab", False)),
             }
+
+    # Safety fallback: any user with 'operations' in module_access should at least
+    # see "My Tasks". This protects legacy designations that pre-date the per-tab fields,
+    # and any title-mismatch lookups. Admins can still EXPLICITLY turn fields off via the
+    # Operations Module Configuration modal.
+    if has_operations_module:
+        if designation_config is None:
+            designation_config = {
+                "operations_my_tasks": True,
+                "operations_assign_to_team": False,
+                "operations_departments": [],
+                "operations_approval_queue": None,
+                "operations_projects": "none",
+                "operations_payment_schedule": "visible",
+                "operations_departments_tab": False,
+                "operations_approvals_tab": False,
+                "operations_meetings_tab": False,
+            }
+        else:
+            # All sub-tabs are off → bootstrap My Tasks so the user isn't blocked
+            no_subtabs = not (
+                designation_config.get("operations_my_tasks")
+                or designation_config.get("operations_assign_to_team")
+                or (designation_config.get("operations_projects") and designation_config.get("operations_projects") != "none")
+                or designation_config.get("operations_departments_tab")
+                or designation_config.get("operations_approvals_tab")
+                or designation_config.get("operations_meetings_tab")
+            )
+            if no_subtabs:
+                designation_config["operations_my_tasks"] = True
     data["designation_config"] = designation_config
     return data
 

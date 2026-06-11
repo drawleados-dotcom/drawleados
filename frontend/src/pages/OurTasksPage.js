@@ -1095,13 +1095,23 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             // Super Admin / Admin always see everything.
             const role = (user?.role || '').toLowerCase();
             const isPrivileged = role === 'super_admin' || role === 'admin';
-            const cfg = user?.designation_config || {};
+            // Robust fallback: if designation_config is null/missing but user has
+            // 'operations' in module_access, treat My Tasks as granted by default.
+            // (Protects users on legacy designations that pre-date the per-sub-tab fields.)
+            const userModules = Array.isArray(user?.module_access) ? user.module_access : [];
+            const hasOpsModule = userModules.some(m => String(m).toLowerCase() === 'operations');
+            const cfg = (user?.designation_config) || (hasOpsModule ? { operations_my_tasks: true } : {});
             const isVisible = (id) => {
               if (isPrivileged) return true;
               // My Tasks shows when the user has ANY operations sub-tab access
               // (my_tasks / assign_to_team / projects). Guarantees a default
               // landing tab whenever any Operations access is granted.
               if (id === 'assigned_to_me') {
+                if (hasOpsModule && !cfg.operations_my_tasks && !cfg.operations_assign_to_team &&
+                    (!cfg.operations_projects || cfg.operations_projects === 'none')) {
+                  // Legacy / partial config — still let them in
+                  return true;
+                }
                 return !!(
                   cfg.operations_my_tasks ||
                   cfg.operations_assign_to_team ||

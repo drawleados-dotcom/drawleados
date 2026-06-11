@@ -349,7 +349,10 @@ const Sidebar = () => {
         {(() => {
           const role = (userRole || '').toLowerCase();
           const isPriv = role === 'super_admin' || isAdmin || isProjectManager;
-          const cfg = user?.designation_config || {};
+          // Robust fallback: a user with 'operations' in module_access should see My Tasks
+          // even when designation_config hasn't propagated yet (e.g., legacy designation doc).
+          const hasOps = moduleAccess.some(m => String(m).toLowerCase() === 'operations');
+          const cfg = user?.designation_config || (hasOps ? { operations_my_tasks: true } : {});
           const anyOpsAccess = isPriv || !!(
             cfg.operations_my_tasks ||
             cfg.operations_assign_to_team ||

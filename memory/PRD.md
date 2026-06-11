@@ -30,6 +30,21 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 
 ## Implemented Features
 
+### Robust fallback for Operations sub-tab visibility (DONE — Feb 2026)
+**Bug:** Production users with `'operations'` in `module_access` were stuck on the empty-state ("No Operations sub-tabs have been granted to your designation") when:
+- The designation document pre-dated the new per-sub-tab fields (legacy data)
+- OR the user's stored `designation` title didn't match a designation doc (case / whitespace mismatch)
+- OR the admin saved a partial config and all sub-tab flags were false
+
+**Fix layers (defense-in-depth):**
+1. **Backend `/api/auth/me`**: Designation lookup now retries with a case-insensitive regex match if the exact-title lookup fails. After the lookup, if `designation_config` is None or has zero sub-tabs enabled AND user has `'operations'` in `module_access`, `operations_my_tasks` is auto-set to `true`.
+2. **Frontend `OurTasksPage`**: If `designation_config` is null but `module_access` contains `'operations'`, treat `operations_my_tasks` as granted. Same guard in the per-tab visibility check.
+3. **Frontend `Sidebar`**: Same fallback applied to the Approvals link visibility computation.
+
+Net result: A user with `'operations'` module access is guaranteed to see at least the **My Tasks** tab, even if their designation doc has no per-sub-tab config. Admins retain full control — they can explicitly set other sub-tabs via the Operations Module Configuration modal.
+
+
+
 ### Self-Service Google Sheets OAuth Credentials (DONE — Feb 2026)
 **Purpose:** Super admins can manage Google Sheets OAuth credentials directly from the UI — no more support tickets to update production env vars.
 
