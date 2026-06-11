@@ -778,12 +778,23 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
     setShowDayDetailModal(true);
   };
 
+  // Format minutes → "Xh Ym" (e.g., 90 → "1h 30m", 45 → "45m")
+  const formatMinutes = (mins) => {
+    const total = Number(mins);
+    if (!total || total <= 0) return '0m';
+    const h = Math.floor(total / 60);
+    const m = Math.round(total % 60);
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  };
+
   // Calculate lunch difference
   const getLunchDiff = (lunchDuration) => {
     if (!lunchDuration) return null;
     const diff = lunchDuration - standardLunchMinutes;
-    if (diff > 0) return { text: `+${diff} min extra`, color: 'text-red-400' };
-    if (diff < 0) return { text: `${Math.abs(diff)} min before`, color: 'text-green-400' };
+    if (diff > 0) return { text: `+${formatMinutes(diff)} extra`, color: 'text-red-400' };
+    if (diff < 0) return { text: `${formatMinutes(Math.abs(diff))} before`, color: 'text-green-400' };
     return { text: 'On time', color: 'text-gray-400' };
   };
 
@@ -1070,7 +1081,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                       <td className={`p-3`}>
                         {record.lunch_duration ? (
                           <div>
-                            <span className={textPrimary}>{record.lunch_duration} min</span>
+                            <span className={textPrimary}>{formatMinutes(record.lunch_duration)}</span>
                             {lunchDiff && <span className={`text-xs ml-1 ${lunchDiff.color}`}>({lunchDiff.text})</span>}
                           </div>
                         ) : '-'}
@@ -1157,8 +1168,8 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                 <p className={`text-xs ${textSecondary} mb-2`}>Lunch Break</p>
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-xl font-bold text-[#f59e0b]">{selectedDayRecord.lunch_duration || 0} min</span>
-                    <span className={textSecondary}> / {standardLunchMinutes} min</span>
+                    <span className="text-xl font-bold text-[#f59e0b]">{formatMinutes(selectedDayRecord.lunch_duration || 0)}</span>
+                    <span className={textSecondary}> / {formatMinutes(standardLunchMinutes)}</span>
                   </div>
                   {(() => {
                     const diff = getLunchDiff(selectedDayRecord.lunch_duration);

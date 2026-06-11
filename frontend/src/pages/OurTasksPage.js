@@ -145,6 +145,60 @@ export default function OurTasksPage() {
   const [meetingsCount, setMeetingsCount] = useState(0);
   // Current user's designation config (for Assign-to-Team monitoring scope)
   const [myDesignation, setMyDesignation] = useState(null);
+  // Today's break intervals (used to block task time edits that overlap a break)
+  const [todayBreaks, setTodayBreaks] = useState([]);
+  const [breakConflictModal, setBreakConflictModal] = useState(null);
+
+  // Fetch today's breaks once on mount so we can validate task time entries
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await axios.get(`${API}/api/hr/attendance/today`, { headers });
+        if (!active) return;
+        const att = res.data?.attendance || {};
+        setTodayBreaks(Array.isArray(att.breaks) ? att.breaks : []);
+      } catch {
+        // Silently ignore — break validation is a best-effort UX guard.
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  // Convert HH:MM string + YYYY-MM-DD date into a Date object (local time)
+  const combineDateTime = (dateStr, hhmm) => {
+    if (!dateStr || !hhmm) return null;
+    const [h, m] = String(hhmm).split(':').map((v) => parseInt(v, 10));
+    if (Number.isNaN(h) || Number.isNaN(m)) return null;
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+
+  const formatBreakLabel = (cat) => {
+    const map = { lunch: 'Lunch', breakfast: 'Breakfast', tea: 'Tea Break', other: 'Other' };
+    return map[cat] || (cat || 'Break');
+  };
+
+  // Return the first break that overlaps [taskStart, taskEnd]. Null if no conflict.
+  const findBreakConflict = (dateStr, startHHMM, endHHMM) => {
+    if (!startHHMM || !endHHMM || !dateStr) return null;
+    const today = new Date().toISOString().slice(0, 10);
+    if (dateStr !== today) return null; // only enforce on today's date
+    const taskStart = combineDateTime(dateStr, startHHMM);
+    const taskEnd = combineDateTime(dateStr, endHHMM);
+    if (!taskStart || !taskEnd || taskStart >= taskEnd) return null;
+    for (const b of todayBreaks) {
+      if (!b.start_time) continue;
+      const bStart = new Date(b.start_time);
+      const bEnd = b.end_time ? new Date(b.end_time) : new Date();
+      // Standard half-open interval overlap check.
+      if (taskStart < bEnd && taskEnd > bStart) {
+        return { breakInfo: b, bStart, bEnd };
+      }
+    }
+    return null;
+  };
 
   const loadProjectsAndCategories = useCallback(async () => {
     try {
@@ -364,6 +418,21 @@ export default function OurTasksPage() {
       if (draft.end) payload.end_time = draft.end;
       if (anchorIso) payload.date = anchorIso.slice(0, 10);
       else payload.date = new Date().toISOString().slice(0, 10);
+
+      // Block save if the task interval overlaps a recorded break on the same date.
+      if (draft.start && draft.end) {
+        const conflict = findBreakConflict(payload.date, draft.start, draft.end);
+        if (conflict) {
+          setBreakConflictModal({
+            taskId,
+            taskStart: draft.start,
+            taskEnd: draft.end,
+            ...conflict,
+          });
+          return;
+        }
+      }
+
       await axios.patch(`${API}/api/our-tasks/tasks/${taskId}/time-edit`, payload, { headers });
       toast.success('Time saved');
       setEditingTimeRow(null);
@@ -2164,6 +2233,58 @@ export default function OurTasksPage() {
                 </Button>
               </div>
             </Card>
+          </div>
+        )}
+
+        {/* Break-time conflict warning popup */}
+        {breakConflictModal && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setBreakConflictModal(null)}
+            data-testid="break-conflict-modal"
+          >
+            <div
+              className="w-full max-w-md bg-[#18181b] border border-[#f59e0b] rounded-xl shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 border-b border-[#27272a]">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-[#f59e0b]/20 flex items-center justify-center">
+                    <AlertCircle className="h-5 w-5 text-[#f59e0b]" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-[#fafafa]">Time conflicts with a break</h3>
+                    <p className="text-xs text-[#a1a1aa]">Tasks can&apos;t be logged during a recorded break.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5 space-y-3 text-sm">
+                <div className="p-3 rounded-lg bg-[#27272a] flex items-center justify-between">
+                  <span className="text-[#a1a1aa]">Your task time</span>
+                  <span className="text-[#fafafa] font-mono">
+                    {breakConflictModal.taskStart} – {breakConflictModal.taskEnd}
+                  </span>
+                </div>
+                <div className="p-3 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/30 flex items-center justify-between">
+                  <span className="text-[#f59e0b] font-semibold">{formatBreakLabel(breakConflictModal.breakInfo?.category)} break</span>
+                  <span className="text-[#fafafa] font-mono">
+                    {formatTimeOnly(breakConflictModal.bStart.toISOString())} – {breakConflictModal.bEnd ? formatTimeOnly(breakConflictModal.bEnd.toISOString()) : 'now'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#a1a1aa]">
+                  Pick a different window before <strong className="text-[#fafafa]">{formatTimeOnly(breakConflictModal.bStart.toISOString())}</strong> or after <strong className="text-[#fafafa]">{breakConflictModal.bEnd ? formatTimeOnly(breakConflictModal.bEnd.toISOString()) : 'now'}</strong>.
+                </p>
+              </div>
+              <div className="p-4 border-t border-[#27272a] flex justify-end">
+                <Button
+                  onClick={() => setBreakConflictModal(null)}
+                  className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                  data-testid="break-conflict-ok"
+                >
+                  Got it
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>
