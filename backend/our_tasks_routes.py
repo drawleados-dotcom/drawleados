@@ -391,6 +391,13 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
         task = await db.our_tasks.find_one({"task_id": task_id})
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
+
+        # Authorization: only creator or super_admin/admin can do a full update.
+        # Assignees (when not also the creator) can only edit timing via /time-edit, not field-level.
+        is_admin = user.role in ["super_admin", "admin"]
+        is_creator = task.get("created_by") == user.user_id
+        if not (is_admin or is_creator):
+            raise HTTPException(status_code=403, detail="Only the creator or an admin can edit this task. Assignees may edit only the timing.")
         
         update_dict = {k: v for k, v in task_data.dict().items() if v is not None}
         update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -431,9 +438,11 @@ async def delete_task(task_id: str, request: Request):
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         
-        # Only creator or admin can delete
-        if task["created_by"] != user.user_id and user.role not in ["super_admin", "admin"]:
-            raise HTTPException(status_code=403, detail="Not authorized to delete this task")
+        # Only the assignee or super_admin/admin can delete.
+        is_admin = user.role in ["super_admin", "admin"]
+        is_assignee = task.get("assigned_to") == user.user_id
+        if not (is_admin or is_assignee):
+            raise HTTPException(status_code=403, detail="Only the assignee or an admin can delete this task")
         
         await db.our_tasks.delete_one({"task_id": task_id})
         return {"message": "Task deleted"}

@@ -87,11 +87,12 @@ export default function OurTasksPage() {
   const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
 
   // Form state
+  const [submitting, setSubmitting] = useState(false); // prevents double-create
   const [formData, setFormData] = useState({
     task_name: '',
     description: '',
     priority: 'medium',
-    type: 'general',
+    type: '',          // empty → forces user to pick (required)
     assigned_to: '',
     due_date: '',
     due_time: '',
@@ -258,8 +259,13 @@ export default function OurTasksPage() {
 
   // Create task
   const handleCreateTask = async () => {
+    if (submitting) return; // ignore double-clicks
     if (!formData.task_name.trim()) {
       toast.error('Task name is required');
+      return;
+    }
+    if (!formData.type) {
+      toast.error('Please pick a Type for this task');
       return;
     }
     // Require due_date when recurrence is set
@@ -267,21 +273,34 @@ export default function OurTasksPage() {
       toast.error('Start date is required for recurring tasks');
       return;
     }
+    setSubmitting(true);
     try {
-      await axios.post(`${API}/api/our-tasks/tasks`, formData, { headers });
+      // In My Tasks tab, force assignee to current user (Assign To dropdown is hidden).
+      const payload = { ...formData };
+      if (mainTab === 'assigned_to_me' && !payload.assigned_to) {
+        payload.assigned_to = user?.user_id;
+      }
+      await axios.post(`${API}/api/our-tasks/tasks`, payload, { headers });
       toast.success('Task created successfully');
       setShowCreateModal(false);
       resetForm();
       loadTasks();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create task');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   // Update task
   const handleUpdateTask = async () => {
+    if (submitting) return;
     if (!formData.task_name.trim()) {
       toast.error('Task name is required');
+      return;
+    }
+    if (!formData.type) {
+      toast.error('Please pick a Type for this task');
       return;
     }
     // Require due_date when recurrence is set
@@ -289,6 +308,7 @@ export default function OurTasksPage() {
       toast.error('Start date is required for recurring tasks');
       return;
     }
+    setSubmitting(true);
     try {
       await axios.put(`${API}/api/our-tasks/tasks/${editingTask.task_id}`, formData, { headers });
       toast.success('Task updated successfully');
@@ -297,6 +317,8 @@ export default function OurTasksPage() {
       loadTasks();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to update task');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -615,7 +637,7 @@ export default function OurTasksPage() {
       task_name: '',
       description: '',
       priority: 'medium',
-      type: 'general',
+      type: '',
       assigned_to: '',
       due_date: '',
       due_time: '',
@@ -1486,12 +1508,41 @@ export default function OurTasksPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openEditModal(task); }}>
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.task_id); }}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {(() => {
+                            const isSuperAdmin = (user?.role || '').toLowerCase() === 'super_admin';
+                            const isCreator = task.created_by === user?.user_id;
+                            const isAssignee = task.assigned_to === user?.user_id;
+                            // Pencil-edit: full edit allowed for creator / super_admin only.
+                            // Assignees who are NOT creators can only edit timing (separate Edit button in TIMER column).
+                            const canFullEdit = isSuperAdmin || isCreator;
+                            // Delete: only super_admin OR the assignee can delete (per user requirement).
+                            const canDelete = isSuperAdmin || isAssignee;
+                            return (
+                              <>
+                                {canFullEdit && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => { e.stopPropagation(); openEditModal(task); }}
+                                    data-testid={`task-edit-${task.task_id}`}
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                                {canDelete && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-[#ef4444]"
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.task_id); }}
+                                    data-testid={`task-delete-${task.task_id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </>
+                            );
+                          })()}
                           {mainTab === 'assigned_to_me' && (
                             <Button
                               size="sm"
@@ -1586,10 +1637,10 @@ export default function OurTasksPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className={textPrimary}>Type</Label>
+                  <Label className={textPrimary}>Type <span className="text-red-500">*</span></Label>
                   <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v }))}>
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                      <SelectValue />
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`} data-testid="create-task-type">
+                      <SelectValue placeholder="Select type…" />
                     </SelectTrigger>
                     <SelectContent className={bgCard}>
                       <SelectItem value="general">General</SelectItem>
@@ -1597,22 +1648,26 @@ export default function OurTasksPage() {
                       <SelectItem value="meeting">Meeting</SelectItem>
                       <SelectItem value="proposal">Proposal</SelectItem>
                       <SelectItem value="call">Call</SelectItem>
+                      <SelectItem value="learning">Learning</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label className={textPrimary}>Assign To</Label>
-                  <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                      <SelectValue placeholder="Select user" />
-                    </SelectTrigger>
-                    <SelectContent className={bgCard}>
-                      {users.map(u => (
-                        <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Assign To — hidden when creating from My Tasks (assignee = current user) */}
+                {!(mainTab === 'assigned_to_me' && !editingTask) && (
+                  <div>
+                    <Label className={textPrimary}>Assign To</Label>
+                    <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                        <SelectValue placeholder="Select user" />
+                      </SelectTrigger>
+                      <SelectContent className={bgCard}>
+                        {users.map(u => (
+                          <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div>
                   <Label className={textPrimary}>Status</Label>
                   <Select value={formData.status} onValueChange={(v) => setFormData(prev => ({ ...prev, status: v }))}>
@@ -1817,11 +1872,16 @@ export default function OurTasksPage() {
                   />
                 </div>
                 <div className="md:col-span-2 flex gap-3 pt-2">
-                  <Button variant="outline" onClick={() => { setShowCreateModal(false); setEditingTask(null); resetForm(); }} className="flex-1">
+                  <Button variant="outline" onClick={() => { setShowCreateModal(false); setEditingTask(null); resetForm(); }} className="flex-1" disabled={submitting}>
                     Cancel
                   </Button>
-                  <Button onClick={editingTask ? handleUpdateTask : handleCreateTask} className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5]">
-                    {editingTask ? 'Update Task' : 'Create Task'}
+                  <Button
+                    onClick={editingTask ? handleUpdateTask : handleCreateTask}
+                    disabled={submitting}
+                    className="flex-1 bg-[#6366f1] hover:bg-[#4f46e5] disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="create-task-submit"
+                  >
+                    {submitting ? 'Saving…' : (editingTask ? 'Update Task' : 'Create Task')}
                   </Button>
                 </div>
               </CardContent>
