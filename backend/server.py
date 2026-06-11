@@ -49,6 +49,7 @@ from meetings_routes import meetings_router, init_meetings_db
 from sheets_routes import sheets_router
 from org_tree_routes import org_tree_router, init_org_tree_db
 from db_admin_routes import db_admin_router, init_db_admin
+from clients_routes import clients_router, init_clients_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -60,6 +61,7 @@ db = client[os.environ['DB_NAME']]
 
 # Initialize finance and operations modules with database
 init_finance_db(db)
+init_clients_db(db)
 init_operations_db(db)
 init_hr_db(db)
 init_notion_db(db)
@@ -2612,6 +2614,7 @@ async def seed_data():
 
 # Include finance and operations routers in api_router BEFORE including api_router in app
 api_router.include_router(finance_router)
+api_router.include_router(clients_router)
 api_router.include_router(operations_router)
 api_router.include_router(hr_router)
 api_router.include_router(notion_router)

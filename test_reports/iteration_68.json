@@ -1,0 +1,59 @@
+{
+  "summary": "Tested the new Finance Clients module + Invoice client-linkage end-to-end. Backend Clients API and migration are fully working (7/7 pytest passed). Frontend Clients tab, AddClientModal, ClientSummaryModal all render correctly and persist data. CRITICAL: the new InvoiceFormModal is NOT wired into the live Finance > Invoice tab — clicking 'Create Invoice' still opens the OLD InvoiceModule modal (Client/Items/Payment/Settings tab layout), so none of the user-requested fields (Customer dropdown, Terms, inline item table, Save as Draft / Save and Send, Payment Gateway toggle) are reachable from the UI. The new InvoiceFormModal lives inside InvoicesTab.js, which is not referenced by ExpenseTab's renderInvoice().",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Finance > Invoice tab (InvoiceModule.js)",
+        "issue": "Create Invoice button opens the legacy 4-tab modal (Client/Items/Payment/Settings) from InvoiceModule.js, not the new InvoiceFormModal. New InvoiceFormModal is wired into InvoicesTab.js but that file is never rendered. None of the user-requested testids exist: invoice-client-select, invoice-number, invoice-date, invoice-terms, invoice-due-date, invoice-add-item-btn, invoice-save-draft-btn, invoice-save-send-btn, invoice-add-client-btn. Save as Draft / Save and Send / Customer Notes / Payment Gateway toggle / Terms dropdown / inline-item table are all missing.",
+        "selector": "button[data-testid='create-invoice-btn'] (in InvoiceModule.js line 466)",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "Clients tab (ClientsTab.js)",
+        "issue": "data-testid for the Clients tab button is 'tab-clients' (set by ExpenseTab tab-${tab.id}), not 'clients-tab' as advertised in the review request. Tests/automation per the spec will fail to find the tab. Either rename the spec or add an alias data-testid='clients-tab' on the tab trigger.",
+        "selector": "[data-testid='tab-clients']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Invoice creation linked to Clients",
+        "issue": "Because the new InvoiceFormModal is unreachable, the end-user flow 'select Acme Corp from a Customer Name dropdown, auto-populate email/GSTIN/place-of-supply, add an inline item, see live totals, click Save as Draft' is fully broken from the UI. Backend supports client_id linkage correctly (verified via pytest).",
+        "affected_selectors": ["[data-testid='invoice-client-select']", "[data-testid='invoice-save-draft-btn']", "[data-testid='invoice-save-send-btn']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_clients_invoices.py",
+    "/app/test_reports/pytest/iter68_clients.xml"
+  ],
+  "action_items": [
+    "URGENT: In /app/frontend/src/components/finance/ExpenseTab.js, replace the renderInvoice() implementation (currently `<InvoiceModule />`) with `<InvoicesTab />` (from ./InvoicesTab) so the new InvoiceFormModal is actually shown. Alternatively, refactor InvoiceModule.js to use InvoiceFormModal in place of its built-in Dialog at line 598.",
+    "Add data-testid='clients-tab' as an alias on the Clients tab trigger if the public spec needs that exact id (currently only 'tab-clients' exists).",
+    "After re-wiring, re-test: Customer dropdown lists all clients, auto-fill on client select, Terms dropdown updates Due Date, item math (2*5000 -10% *1.18 = 10620), Save as Draft creates draft, Save and Send marks as sent, Acme totals reflect in Clients tab."
+  ],
+  "critical_code_review_comments": [
+    "InvoiceModule.js (1131 lines) and InvoicesTab.js (634 lines) are two parallel implementations of the same Invoice screen — only one is wired in. The new InvoiceFormModal work was done on the wrong sibling.",
+    "ExpenseTab.js is 2000+ lines — should be split per tab into smaller modules.",
+    "clients_routes.py /summary endpoint computes summary by Python-side aggregation; for large client lists this would be slow. Consider a Mongo $lookup aggregation for the list endpoint.",
+    "InvoiceFormModal payment-gateway toggle is a placeholder that does nothing — should either be hidden or call backend."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_clients_invoices.py (new file — 7 pytest cases for clients + invoice linkage)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "60%"
+  },
+  "test_credentials": "vinoth@drawlead.com / Admin@123 (super_admin) — verified working",
+  "seed_data_creation": "Created TEST_AcmeUI_<ts> client via UI (one row added to /finance/clients). Created TEST_Acme_<tag> client + linked invoice via backend pytest (auto-cleanup via fixture; invoice may persist if test interrupted). Existing migrated clients (Mona, Sample Check) are intact.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend pytest at /app/backend/tests/test_clients_invoices.py — login uses session_token via Authorization: Bearer header (cookie path doesn't work cross-domain through Cloudflare). The Clients tab data-testid is 'tab-clients' (NOT 'clients-tab'). The migrated clients Mona + Sample Check + any TEST_ created during pytest may need cleanup if test fixtures aborted (filter display_name_lower starts with 'test_'). After main agent fixes the InvoiceModule->InvoicesTab wiring, re-run UI test for invoice creation flow: select client, add item with qty=2/rate=5000/discount=10/tax=18 and verify Amount=10620, then Save as Draft, then check Acme Corp summary shows the invoice.",
+  "rca of the issue": "Root cause: ExpenseTab.js line 1562 renders `<InvoiceModule />` for activeTab==='invoice'. The new InvoiceFormModal (which contains all the user-requested UI: Customer Name dropdown, Invoice#, Terms dropdown, inline item table, Save as Draft/Save and Send, Payment Gateway toggle) is only referenced from InvoicesTab.js (line 608), but InvoicesTab is never imported by ExpenseTab.js. So the main agent built the right modal but did not switch the renderer. Fix: import InvoicesTab in ExpenseTab.js and replace `const renderInvoice = () => <InvoiceModule />;` with `const renderInvoice = () => <InvoicesTab />;` (or refactor InvoiceModule to use InvoiceFormModal). Reproduction: login → /finance → Invoice tab → click Create Invoice → observe 4-tab Dialog (Client/Items/Payment/Settings) instead of the spec-required layout with Customer Name select + Save as Draft/Save and Send footer."
+}

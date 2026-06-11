@@ -12,6 +12,7 @@ class Invoice(BaseModel):
     due_date: datetime
     lead_id: Optional[str] = None
     project_id: Optional[str] = None
+    client_id: Optional[str] = None
     # Client Information
     client_name: str
     client_company: Optional[str] = None
@@ -94,6 +95,7 @@ class InvoiceCreate(BaseModel):
     due_date: datetime
     lead_id: Optional[str] = None
     project_id: Optional[str] = None
+    client_id: Optional[str] = None
     # Client Info
     client_name: str
     client_company: Optional[str] = None

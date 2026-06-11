@@ -8,6 +8,7 @@ import { Badge } from '../ui/badge';
 import InvoiceModule from './InvoiceModule';
 import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
 import WeekWiseTab from './WeekWiseTab';
+import ClientsTab from './ClientsTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
@@ -54,6 +55,7 @@ import {
   Trash2,
   Edit2,
   FileSpreadsheet,
+  Users,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -93,6 +95,7 @@ const DEFAULT_TABS = [
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
   { id: 'budget', label: 'Budget', icon: Receipt, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
+  { id: 'clients', label: 'Clients', icon: Users, isDefault: true },
   { id: 'outstanding', label: 'Outstanding', icon: Target, isDefault: true },
   { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
   { id: 'weekly', label: 'Week Wise', icon: Calendar, isDefault: true },
@@ -1792,6 +1795,7 @@ const ExpenseTab = () => {
               borderColor={isDark ? 'border-[#27272a]' : 'border-gray-200'}
             />
           )}
+          {activeTab === 'clients' && <ClientsTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}
