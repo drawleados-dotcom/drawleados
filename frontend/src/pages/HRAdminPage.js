@@ -17,12 +17,11 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check, Network, Database
+  ChevronDown, Check, Network
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import PayrollManagementTab from '../components/hr/PayrollManagementTab';
-import DatabaseToolsTab from '../components/hr/DatabaseToolsTab';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -1197,7 +1196,6 @@ export default function HRAdminPage() {
     { id: 'quotes', label: 'Quotes', icon: FileText, hrManagerAccess: false },
     { id: 'my-profile-config', label: 'My Profile Config', icon: Settings, hrManagerAccess: false },
     { id: 'org-structure', label: 'Org Structure', icon: Network, hrManagerAccess: true },
-    { id: 'database-tools', label: 'Database Tools', icon: Database, hrManagerAccess: false },
   ];
 
   // Filter tabs based on role - HR Manager only sees specific tabs
@@ -1674,18 +1672,6 @@ export default function HRAdminPage() {
         )}
 
         {/* Org Structure Tab handled by separate route to keep this file lean — see /org-structure */}
-
-        {/* Database Tools Tab */}
-        {activeTab === 'database-tools' && (
-          <DatabaseToolsTab
-            isDark={isDark}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
 
         {/* Reviews Tab */}
         {activeTab === 'reviews' && (
@@ -5573,6 +5559,7 @@ function EnhancedAttendanceTab({
       let checkIn = null;
       let checkOut = null;
       let workedHours = null;
+      let totalLoginHours = null;
       let rawCheckIn = null;
       let rawCheckOut = null;
 
@@ -5593,18 +5580,28 @@ function EnhancedAttendanceTab({
 
         if (rawCheckOut) {
           status = 'present';
-          // Prefer DB-stored total; fallback to compute
+          // Total Login Hour (gross: clock_out - clock_in, INCLUDES break time)
+          if (rawCheckIn) {
+            const ms = new Date(rawCheckOut) - new Date(rawCheckIn);
+            totalLoginHours = (ms / 3600000).toFixed(1);
+          }
+          // Worked Hours (effective: prefer DB stored, fallback to gross - lunch)
           if (record.total_hours != null) workedHours = Number(record.total_hours).toFixed(1);
           else if (record.worked_hours != null) workedHours = Number(record.worked_hours).toFixed(1);
           else if (rawCheckIn) {
             const ms = new Date(rawCheckOut) - new Date(rawCheckIn);
-            workedHours = (ms / 3600000).toFixed(1);
+            const lunchMin = Number(record.lunch_duration) || 0;
+            workedHours = ((ms / 3600000) - (lunchMin / 60)).toFixed(1);
           }
         } else if (rawCheckIn) {
           status = 'working';
-          // Live worked hours so far today
+          // Live total login hour so far today
           const ms = new Date() - new Date(rawCheckIn);
-          if (ms > 0) workedHours = (ms / 3600000).toFixed(1);
+          if (ms > 0) {
+            totalLoginHours = (ms / 3600000).toFixed(1);
+            const lunchMin = Number(record.lunch_duration) || 0;
+            workedHours = ((ms / 3600000) - (lunchMin / 60)).toFixed(1);
+          }
         }
 
         // Check for WFH
@@ -5626,6 +5623,7 @@ function EnhancedAttendanceTab({
         status,
         checkIn,
         checkOut,
+        totalLoginHours,
         workedHours,
         workLocation: record?.work_location || record?.work_mode || 'office'
       };
@@ -5812,6 +5810,7 @@ function EnhancedAttendanceTab({
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Check In</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Check Out</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`} data-testid="th-total-login-hour">Total Login Hour</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Worked Hours</th>
                   <th className={`px-4 py-3 text-right text-xs font-medium ${textSecondary} uppercase`}>Details</th>
                 </tr>
@@ -5834,6 +5833,9 @@ function EnhancedAttendanceTab({
                     <td className="px-4 py-3">{getStatusBadge(emp.status)}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkIn || '-'}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkOut || '-'}</td>
+                    <td className={`px-4 py-3 ${textPrimary}`} data-testid={`td-total-login-${emp.user_id}`}>
+                      {emp.totalLoginHours ? `${emp.totalLoginHours}h` : '-'}
+                    </td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.workedHours ? `${emp.workedHours}h` : '-'}</td>
                     <td className="px-4 py-3 text-right">
                       <Button

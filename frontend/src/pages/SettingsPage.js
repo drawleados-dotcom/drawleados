@@ -13,12 +13,13 @@ import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { 
   Users, Shield, Building2, Plus, Search, Edit, Trash2, 
-  Layers, Tag, Layout as LayoutIcon
+  Layers, Tag, Layout as LayoutIcon, Database
 } from 'lucide-react';
 import { toast } from 'sonner';
 import CompanyProfileTab from '../components/settings/CompanyProfileTab';
 import WorkspacesTab from '../components/settings/WorkspacesTab';
 import StatusManagementTab from '../components/settings/StatusManagementTab';
+import DatabaseToolsTab from '../components/hr/DatabaseToolsTab';
 
 const SettingsPage = () => {
   const { isDark } = useTheme();
@@ -233,8 +234,8 @@ const SettingsPage = () => {
           </div>
         </div>
 
-        {/* Main Tabs - Only Company Tab */}
-        <Tabs value="company" className="w-full">
+        {/* Main Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className={`${bgCard} border ${borderColor} p-1 flex-wrap h-auto`}>
             <TabsTrigger
               value="company"
@@ -244,6 +245,14 @@ const SettingsPage = () => {
               <Building2 className="h-4 w-4 mr-2" />
               Company
             </TabsTrigger>
+            <TabsTrigger
+              value="database"
+              data-testid="settings-database-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              <Database className="h-4 w-4 mr-2" />
+              Database Tools
+            </TabsTrigger>
           </TabsList>
 
           {/* Company Tab Content */}
@@ -252,6 +261,18 @@ const SettingsPage = () => {
               bgCard={bgCard}
               bgSecondary={bgSecondary}
               bgInput={bgInput}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          </TabsContent>
+
+          {/* Database Tools Tab Content */}
+          <TabsContent value="database" className="mt-6">
+            <DatabaseToolsTab
+              isDark={isDark}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
               textPrimary={textPrimary}
               textSecondary={textSecondary}
               borderColor={borderColor}
