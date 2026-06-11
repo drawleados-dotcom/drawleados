@@ -204,6 +204,7 @@ export default function HRAdminPage() {
     operations_departments: [],
     operations_approval_queue: null,
     operations_projects: 'none',
+    operations_payment_schedule: 'visible',
     operations_departments_tab: false,
     operations_approvals_tab: false,
     operations_meetings_tab: false,
@@ -1144,7 +1145,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_approval_queue: null, operations_projects: 'none', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -6539,6 +6540,40 @@ function DesignationsDeptsTab({
                               })}
                             </div>
                           )}
+
+                          {/* Payment Schedule visibility — only meaningful when Projects access is granted */}
+                          {(opsState.operations_projects || 'none') !== 'none' && (
+                            <div className="mt-3 pt-3 border-t ${borderColor}" style={{ borderTopWidth: 1 }}>
+                              <div className={`text-xs font-medium ${textPrimary} mb-1`}>Payment Schedule (inside Project)</div>
+                              <div className={`text-xs ${textSecondary} mb-2`}>Controls whether the Payment Schedule tab is visible inside each project.</div>
+                              <div className="flex gap-2">
+                                {[
+                                  { value: 'visible', label: 'Visible', activeCls: 'bg-emerald-500 border-emerald-500 text-white' },
+                                  { value: 'hidden', label: 'Hide', activeCls: 'bg-rose-500 border-rose-500 text-white' },
+                                ].map(opt => {
+                                  const selected = (opsState.operations_payment_schedule || 'visible') === opt.value;
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        setOpsState(prev => ({ ...prev, operations_payment_schedule: opt.value }));
+                                      }}
+                                      className={`px-3 py-1.5 rounded-md text-xs font-medium border-2 transition-all ${
+                                        selected
+                                          ? opt.activeCls
+                                          : `${bgCard} border-transparent ${textSecondary} hover:border-[#6366f1]/50`
+                                      }`}
+                                      data-testid={`ops-cfg-payment-schedule-${opt.value}`}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </label>
 
@@ -6675,6 +6710,7 @@ function DesignationsDeptsTab({
                         operations_departments: [],
                         operations_approval_queue: null,
                         operations_projects: 'none',
+                        operations_payment_schedule: 'visible',
                         operations_departments_tab: false,
                         operations_approvals_tab: false,
                         operations_meetings_tab: false,

@@ -26,6 +26,7 @@ class DesignationCreate(BaseModel):
     operations_approval_queue: Optional[str] = None  # 'pm' | 'operations' | 'ceo'
     # NEW: Per-sub-tab access (Feb 2026)
     operations_projects: Optional[str] = "none"   # 'none' | 'view' | 'edit'
+    operations_payment_schedule: Optional[str] = "visible"  # 'hidden' | 'visible'
     operations_departments_tab: Optional[bool] = False
     operations_approvals_tab: Optional[bool] = False
     operations_meetings_tab: Optional[bool] = False
@@ -44,6 +45,7 @@ class DesignationUpdate(BaseModel):
     operations_approval_queue: Optional[str] = None
     # NEW: Per-sub-tab access (Feb 2026)
     operations_projects: Optional[str] = None
+    operations_payment_schedule: Optional[str] = None
     operations_departments_tab: Optional[bool] = None
     operations_approvals_tab: Optional[bool] = None
     operations_meetings_tab: Optional[bool] = None
@@ -108,6 +110,7 @@ async def create_designation(data: DesignationCreate, db=Depends(get_db)):
             "operations_approval_queue": data.operations_approval_queue,
             # NEW per-sub-tab access (defaults — locked out unless admin explicitly grants)
             "operations_projects": (data.operations_projects or "none"),
+            "operations_payment_schedule": (data.operations_payment_schedule or "visible"),
             "operations_departments_tab": bool(data.operations_departments_tab),
             "operations_approvals_tab": bool(data.operations_approvals_tab),
             "operations_meetings_tab": bool(data.operations_meetings_tab),
@@ -158,6 +161,8 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
         # NEW per-sub-tab access updates
         if data.operations_projects is not None:
             update_data["operations_projects"] = data.operations_projects
+        if data.operations_payment_schedule is not None:
+            update_data["operations_payment_schedule"] = data.operations_payment_schedule
         if data.operations_departments_tab is not None:
             update_data["operations_departments_tab"] = data.operations_departments_tab
         if data.operations_approvals_tab is not None:

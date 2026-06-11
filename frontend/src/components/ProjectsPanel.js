@@ -511,45 +511,65 @@ export default function ProjectsPanel({
         </Card>
 
         {/* Inner tabs: Tasks · Payment Schedule */}
-        <div className="flex gap-2 flex-wrap" data-testid="project-inner-tabs">
-          {[
+        {(() => {
+          const role = (currentUser?.role || '').toLowerCase();
+          const isPriv = role === 'super_admin' || role === 'admin';
+          const psVisibility = currentUser?.designation_config?.operations_payment_schedule || 'visible';
+          const showPaymentSchedule = isPriv || psVisibility !== 'hidden';
+          const innerTabs = [
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
-            { id: 'payment', label: 'Payment Schedule', icon: Wallet },
-          ].map((t) => {
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setProjectInnerTab(t.id)}
-                data-testid={`project-inner-tab-${t.id}`}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition border ${
-                  projectInnerTab === t.id
-                    ? 'bg-[#6366f1] border-[#6366f1] text-white'
-                    : isDark
-                      ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa] hover:bg-[#3f3f46]'
-                      : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {t.label}
-              </button>
-            );
-          })}
-        </div>
+            ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
+          ];
+          // If user was on Payment but it's now hidden, switch them to Tasks
+          if (!showPaymentSchedule && projectInnerTab === 'payment') {
+            setTimeout(() => setProjectInnerTab('tasks'), 0);
+          }
+          return (
+            <div className="flex gap-2 flex-wrap" data-testid="project-inner-tabs">
+              {innerTabs.map((t) => {
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setProjectInnerTab(t.id)}
+                    data-testid={`project-inner-tab-${t.id}`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition border ${
+                      projectInnerTab === t.id
+                        ? 'bg-[#6366f1] border-[#6366f1] text-white'
+                        : isDark
+                          ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa] hover:bg-[#3f3f46]'
+                          : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
 
-        {projectInnerTab === 'payment' && (
-          <PaymentScheduleTab
-            project={selectedProject}
-            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
-            isSuperAdmin={(currentUser?.role || '').toLowerCase() === 'super_admin'}
-            isDark={isDark}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            borderColor={borderColor}
-          />
-        )}
+        {projectInnerTab === 'payment' && (() => {
+          // Defensive re-check: never render Payment Schedule when hidden by designation
+          const role = (currentUser?.role || '').toLowerCase();
+          const isPriv = role === 'super_admin' || role === 'admin';
+          const psVisibility = currentUser?.designation_config?.operations_payment_schedule || 'visible';
+          if (!isPriv && psVisibility === 'hidden') return null;
+          return (
+            <PaymentScheduleTab
+              project={selectedProject}
+              onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+              isSuperAdmin={(currentUser?.role || '').toLowerCase() === 'super_admin'}
+              isDark={isDark}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          );
+        })()}
 
         {projectInnerTab === 'tasks' && (
         <div className="space-y-2">
