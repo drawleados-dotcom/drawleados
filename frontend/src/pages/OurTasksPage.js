@@ -13,7 +13,7 @@ import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video
+  Repeat, Video, ListChecks, ShieldCheck, Crown
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -50,6 +50,15 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [mainTab, setMainTab] = useState(defaultTab); // assigned_to_me, assign_to_team, projects, departments, approvals, meetings
   // View/Edit toggle for Projects tab — visible only to super_admin
   const [projectsViewMode, setProjectsViewMode] = useState('view'); // 'view' | 'edit'
+  // Operations Summary cards (Feb 2026) — driven by /api/our-tasks/summary/{date}
+  const [summaryDate, setSummaryDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [summary, setSummary] = useState({
+    worked_hours: { formatted: '0h 0m' },
+    total_to_do: 0,
+    pending: 0,
+    awaiting_ops: 0,
+    awaiting_ceo: 0,
+  });
   const [meetingsSubActive, setMeetingsSubActive] = useState(false); // when true → render Meetings panel inside My Tasks / Assign-to-Team
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
@@ -266,6 +275,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     [loadTasks, loadUsers, loadProjectsAndCategories],
     { enabled: !showCreateModal && !editingTask && !editTimeModal && !approvalTask }
   );
+
+  // Operations Summary loader (drives the 5 cards above the tabs)
+  const loadSummary = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/our-tasks/summary/${summaryDate}`, { headers });
+      setSummary(res.data || {});
+    } catch (_) { /* silent */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summaryDate, headers]);
+  useEffect(() => { loadSummary(); }, [loadSummary]);
+  useAutoRefresh(loadSummary, { enabled: !showCreateModal && !editingTask });
 
   // Create task
   const handleCreateTask = async () => {
@@ -970,6 +990,96 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         </div>
         )}
 
+        {/* Operations Summary Cards — Feb 2026
+            5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO */}
+        <div className="space-y-3 mb-6" data-testid="operations-summary">
+          {/* Date picker — drives the worked-hours calculation */}
+          <div className="flex items-center gap-2">
+            <Calendar className={`h-4 w-4 ${textSecondary}`} />
+            <span className={`text-xs ${textSecondary}`}>Summary for</span>
+            <input
+              type="date"
+              value={summaryDate}
+              onChange={(e) => setSummaryDate(e.target.value)}
+              className={`text-sm rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} px-2 py-1`}
+              data-testid="summary-date-picker"
+            />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[
+              {
+                key: 'worked',
+                testid: 'summary-worked-hours',
+                label: 'Total Worked Hours',
+                sub: 'on selected date',
+                value: summary?.worked_hours?.formatted || '0h 0m',
+                icon: Clock,
+                ring: 'from-emerald-500/30 to-emerald-500/0',
+                text: 'text-emerald-500',
+              },
+              {
+                key: 'todo',
+                testid: 'summary-total-todo',
+                label: 'Total Works To-Do',
+                sub: 'open + in progress',
+                value: summary?.total_to_do ?? 0,
+                icon: ListChecks,
+                ring: 'from-indigo-500/30 to-indigo-500/0',
+                text: 'text-indigo-500',
+              },
+              {
+                key: 'pending',
+                testid: 'summary-pending',
+                label: 'Pending',
+                sub: 'awaiting start',
+                value: summary?.pending ?? 0,
+                icon: AlertCircle,
+                ring: 'from-amber-500/30 to-amber-500/0',
+                text: 'text-amber-500',
+              },
+              {
+                key: 'ops',
+                testid: 'summary-awaiting-ops',
+                label: 'Awaiting for Ops',
+                sub: 'Operations approval',
+                value: summary?.awaiting_ops ?? 0,
+                icon: ShieldCheck,
+                ring: 'from-blue-500/30 to-blue-500/0',
+                text: 'text-blue-500',
+              },
+              {
+                key: 'ceo',
+                testid: 'summary-awaiting-ceo',
+                label: 'Awaiting CEO',
+                sub: 'forwarded to CEO',
+                value: summary?.awaiting_ceo ?? 0,
+                icon: Crown,
+                ring: 'from-purple-500/30 to-purple-500/0',
+                text: 'text-purple-500',
+              },
+            ].map(card => {
+              const Icon = card.icon;
+              return (
+                <div
+                  key={card.key}
+                  data-testid={card.testid}
+                  className={`relative overflow-hidden rounded-xl border ${borderColor} ${bgCard} p-4`}
+                >
+                  <div className={`absolute -top-8 -right-8 h-24 w-24 rounded-full bg-gradient-to-br ${card.ring}`} />
+                  <div className="relative">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>{card.label}</p>
+                      <Icon className={`h-4 w-4 ${card.text}`} />
+                    </div>
+                    <p className={`text-2xl font-bold ${textPrimary}`}>{card.value}</p>
+                    <p className={`text-[11px] ${textSecondary} mt-0.5`}>{card.sub}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Main Tabs — pill style matching My Profile */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {(() => {
@@ -988,7 +1098,16 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             const cfg = user?.designation_config || {};
             const isVisible = (id) => {
               if (isPrivileged) return true;
-              if (id === 'assigned_to_me') return !!cfg.operations_my_tasks;
+              // My Tasks shows when the user has ANY operations sub-tab access
+              // (my_tasks / assign_to_team / projects). Guarantees a default
+              // landing tab whenever any Operations access is granted.
+              if (id === 'assigned_to_me') {
+                return !!(
+                  cfg.operations_my_tasks ||
+                  cfg.operations_assign_to_team ||
+                  (cfg.operations_projects && cfg.operations_projects !== 'none')
+                );
+              }
               if (id === 'assign_to_team') return !!cfg.operations_assign_to_team;
               if (id === 'projects') return (cfg.operations_projects || 'none') !== 'none';
               if (id === 'departments') return !!cfg.operations_departments_tab;
@@ -1744,11 +1863,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           </SelectTrigger>
                           <SelectContent className={bgCard}>
                             <SelectItem value="general">General</SelectItem>
-                            <SelectItem value="follow_up">Follow Up</SelectItem>
-                            <SelectItem value="meeting">Meeting</SelectItem>
-                            <SelectItem value="proposal">Proposal</SelectItem>
-                            <SelectItem value="call">Call</SelectItem>
                             <SelectItem value="learning">Learning</SelectItem>
+                            <SelectItem value="discussion">Discussion</SelectItem>
+                            <SelectItem value="meeting">Meeting</SelectItem>
+                            <SelectItem value="team_meeting">Team Meeting</SelectItem>
+                            <SelectItem value="client_meeting">Client Meeting</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

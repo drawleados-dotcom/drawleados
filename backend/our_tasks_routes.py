@@ -363,11 +363,16 @@ async def get_work_hours_for_date(date: str, request: Request, user_id: Optional
     day_end = day_start + timedelta(days=1)
 
     total_seconds = 0
+    # Meeting-type tasks are scheduled events — even if no timer was started,
+    # credit the scheduled duration (start_time → end_time) on this date.
+    MEETING_TYPES = {"meeting", "team_meeting", "client_meeting"}
+
     cursor = db.our_tasks.find(
-        {"$or": [{"assigned_to": target}, {"created_by": target}], "time_tracking.sessions": {"$exists": True}},
-        {"_id": 0, "time_tracking": 1}
+        {"$or": [{"assigned_to": target}, {"created_by": target}]},
+        {"_id": 0, "time_tracking": 1, "type": 1, "start_time": 1, "end_time": 1}
     )
     async for t in cursor:
+        task_tracked_seconds = 0
         for s in (t.get("time_tracking", {}).get("sessions") or []):
             if s.get("user_id") and s.get("user_id") != target:
                 continue
@@ -380,16 +385,118 @@ async def get_work_hours_for_date(date: str, request: Request, user_id: Optional
                 en_dt = datetime.fromisoformat(en.replace("Z", "+00:00")) if en else datetime.now(timezone.utc)
             except Exception:
                 continue
-            # Clip session to the requested day
             overlap_start = max(st_dt, day_start)
             overlap_end = min(en_dt, day_end)
             if overlap_end > overlap_start:
-                total_seconds += int((overlap_end - overlap_start).total_seconds())
+                task_tracked_seconds += int((overlap_end - overlap_start).total_seconds())
+
+        # For meeting-type tasks, fall back to scheduled duration if not actively tracked.
+        if (t.get("type") or "").lower() in MEETING_TYPES:
+            try:
+                m_start = t.get("start_time")
+                m_end = t.get("end_time")
+                if m_start and m_end:
+                    m_st = datetime.fromisoformat(str(m_start).replace("Z", "+00:00"))
+                    m_en = datetime.fromisoformat(str(m_end).replace("Z", "+00:00"))
+                    overlap_start = max(m_st, day_start)
+                    overlap_end = min(m_en, day_end)
+                    if overlap_end > overlap_start:
+                        scheduled_seconds = int((overlap_end - overlap_start).total_seconds())
+                        # Use whichever is larger (avoids double-counting if both tracked & scheduled)
+                        task_tracked_seconds = max(task_tracked_seconds, scheduled_seconds)
+            except Exception:
+                pass
+
+        total_seconds += task_tracked_seconds
 
     hours = total_seconds / 3600.0
     h = int(hours)
     m = int((hours - h) * 60)
     return {"date": date, "user_id": target, "seconds": total_seconds, "hours": round(hours, 2), "formatted": f"{h}h {m}m"}
+
+
+@our_tasks_router.get("/summary/{date}")
+async def get_operations_summary(date: str, request: Request):
+    """Returns 5 summary metrics for the Operations page on a given date:
+      - worked_hours: total tracked hours (incl. meetings scheduled this day)
+      - total_to_do: total open tasks assigned to me (pending + in_progress)
+      - pending: tasks in 'pending' status
+      - awaiting_ops: tasks awaiting Operations approval (approval_request.approver_role in {operations, pm, marketing_head})
+      - awaiting_ceo: tasks awaiting CEO approval (approval_request.approver_role == 'ceo')
+    """
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    uid = user.user_id
+
+    # 1) Reuse work_hours computation
+    try:
+        day_start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    day_end = day_start + timedelta(days=1)
+    MEETING_TYPES = {"meeting", "team_meeting", "client_meeting"}
+
+    total_seconds = 0
+    cursor = db.our_tasks.find(
+        {"$or": [{"assigned_to": uid}, {"created_by": uid}]},
+        {"_id": 0, "time_tracking": 1, "type": 1, "start_time": 1, "end_time": 1}
+    )
+    async for t in cursor:
+        ts = 0
+        for s in (t.get("time_tracking", {}).get("sessions") or []):
+            if s.get("user_id") and s.get("user_id") != uid:
+                continue
+            st = s.get("start"); en = s.get("end")
+            if not st:
+                continue
+            try:
+                st_dt = datetime.fromisoformat(st.replace("Z", "+00:00"))
+                en_dt = datetime.fromisoformat(en.replace("Z", "+00:00")) if en else datetime.now(timezone.utc)
+            except Exception:
+                continue
+            os_, oe_ = max(st_dt, day_start), min(en_dt, day_end)
+            if oe_ > os_:
+                ts += int((oe_ - os_).total_seconds())
+        if (t.get("type") or "").lower() in MEETING_TYPES:
+            try:
+                if t.get("start_time") and t.get("end_time"):
+                    mst = datetime.fromisoformat(str(t["start_time"]).replace("Z", "+00:00"))
+                    men = datetime.fromisoformat(str(t["end_time"]).replace("Z", "+00:00"))
+                    os_, oe_ = max(mst, day_start), min(men, day_end)
+                    if oe_ > os_:
+                        ts = max(ts, int((oe_ - os_).total_seconds()))
+            except Exception:
+                pass
+        total_seconds += ts
+    hours = total_seconds / 3600.0
+    h = int(hours); mm = int((hours - h) * 60)
+
+    # 2-5) Counts on tasks assigned to me
+    base_q = {"assigned_to": uid}
+
+    total_to_do = await db.our_tasks.count_documents({**base_q, "status": {"$in": ["pending", "in_progress"]}})
+    pending = await db.our_tasks.count_documents({**base_q, "status": "pending"})
+
+    # Approval queue routing (matches ApprovalsPage buckets)
+    awaiting_ops = await db.our_tasks.count_documents({
+        **base_q,
+        "approval_request.status": "pending",
+        "approval_request.approver_role": {"$in": ["operations", "pm", "marketing_head"]},
+    })
+    awaiting_ceo = await db.our_tasks.count_documents({
+        **base_q,
+        "approval_request.status": "pending",
+        "approval_request.approver_role": "ceo",
+    })
+
+    return {
+        "date": date,
+        "worked_hours": {"seconds": total_seconds, "hours": round(hours, 2), "formatted": f"{h}h {mm}m"},
+        "total_to_do": total_to_do,
+        "pending": pending,
+        "awaiting_ops": awaiting_ops,
+        "awaiting_ceo": awaiting_ceo,
+    }
 
 
 
