@@ -21,27 +21,40 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [collectingId, setCollectingId] = useState(null);
+  const [me, setMe] = useState(null);
 
   // Filters
   const [monthFilter, setMonthFilter] = useState('all'); // MM or 'all'
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
-  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
-  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-50';
-  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
-  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
-  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+  const canCollect = useMemo(() => {
+    const r = (me?.role || '').toLowerCase();
+    return ['super_admin', 'admin', 'finance'].includes(r);
+  }, [me]);
+
+  const loadProjects = async () => {
+    try {
+      const res = await axios.get(`${API}/api/projects`, { headers: { Authorization: `Bearer ${token}` } });
+      setProjects((res.data || []).filter((p) => p.payment_schedule));
+    } catch (e) {
+      toast.error('Failed to load projects');
+    }
+  };
 
   useEffect(() => {
     let active = true;
     (async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`${API}/api/projects`, { headers: { Authorization: `Bearer ${token}` } });
+        const [pRes, meRes] = await Promise.all([
+          axios.get(`${API}/api/projects`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
         if (!active) return;
-        const withPay = (res.data || []).filter((p) => p.payment_schedule);
-        setProjects(withPay);
+        setProjects((pRes.data || []).filter((p) => p.payment_schedule));
+        setMe(meRes.data?.user || meRes.data || null);
       } catch (e) {
         toast.error('Failed to load projects');
       } finally {
@@ -50,6 +63,32 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
     })();
     return () => { active = false; };
   }, [token]);
+
+  const handleCollect = async (projectId, splitId) => {
+    if (!canCollect) return;
+    setCollectingId(splitId);
+    try {
+      const res = await axios.post(
+        `${API}/api/projects/${projectId}/payment-schedule/${splitId}/collect`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      toast.success(`Collected · ${res.data.invoice_number}`);
+      await loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to collect');
+    } finally {
+      setCollectingId(null);
+    }
+  };
+
+  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-50';
+  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
+  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+
+  // (project + me loaded in the effect above)
 
   // Flatten all splits across all projects (for rows view + summary)
   const allRows = useMemo(() => {
@@ -63,6 +102,7 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
           schedule_type: sch.type || 'one_time',
           recurrence: sch.recurrence || '',
           currency: sch.currency || 'INR',
+          departments: p.departments || [],
           ...sp,
         });
       });
@@ -95,14 +135,28 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
     const map = new Map();
     filteredRows.forEach((r) => {
       if (!map.has(r.project_id)) {
-        map.set(r.project_id, { project_id: r.project_id, project_name: r.project_name, currency: r.currency, splits: [] });
+        map.set(r.project_id, {
+          project_id: r.project_id,
+          project_name: r.project_name,
+          currency: r.currency,
+          departments: r.departments || [],
+          splits: [],
+        });
       }
       map.get(r.project_id).splits.push(r);
     });
     return Array.from(map.values()).map(p => {
       const total = p.splits.reduce((a, s) => a + (Number(s.amount) || 0), 0);
       const collected = p.splits.filter(s => s.collected).reduce((a, s) => a + (Number(s.amount) || 0), 0);
-      return { ...p, total, collected, pending: total - collected };
+      const dates = p.splits.map(s => s.expected_date).filter(Boolean).sort();
+      return {
+        ...p,
+        total,
+        collected,
+        pending: total - collected,
+        start_date: dates[0] || null,
+        due_date: dates[dates.length - 1] || null,
+      };
     });
   }, [filteredRows]);
 
@@ -206,6 +260,9 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
                 <thead>
                   <tr className={`border-b ${borderColor}`}>
                     <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Project</th>
+                    <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Departments</th>
+                    <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Start</th>
+                    <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Due</th>
                     <th className={`text-right p-3 text-xs font-medium ${textSecondary} uppercase`}>Splits</th>
                     <th className={`text-right p-3 text-xs font-medium ${textSecondary} uppercase`}>Total</th>
                     <th className={`text-right p-3 text-xs font-medium ${textSecondary} uppercase`}>Collected</th>
@@ -225,6 +282,19 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
                         <FolderOpen className={`h-4 w-4 ${textSecondary}`} />
                         {p.project_name}
                       </td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                          {(p.departments || []).length === 0 ? (
+                            <span className={`text-xs ${textSecondary} italic`}>—</span>
+                          ) : (p.departments || []).map((d) => (
+                            <Badge key={d} className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/30 text-[10px] pointer-events-none">
+                              {d.replace(/_/g, ' ')}
+                            </Badge>
+                          ))}
+                        </div>
+                      </td>
+                      <td className={`p-3 ${textSecondary} text-sm`}>{p.start_date || '—'}</td>
+                      <td className={`p-3 ${textSecondary} text-sm`}>{p.due_date || '—'}</td>
                       <td className={`p-3 text-right ${textSecondary}`}>{p.splits.length}</td>
                       <td className={`p-3 text-right ${textPrimary} font-medium`}>₹ {p.total.toLocaleString()}</td>
                       <td className={`p-3 text-right text-[#10b981]`}>₹ {p.collected.toLocaleString()}</td>
@@ -278,7 +348,7 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
                       <th className={`text-right p-3 text-xs font-medium ${textSecondary} uppercase`}>Amount / %</th>
                       <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Mode</th>
                       <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Expected</th>
-                      <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                      <th className={`text-left p-3 text-xs font-medium ${textSecondary} uppercase`}>Status / Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -294,9 +364,48 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
                         <td className={`p-3 ${textPrimary}`}>{sp.mode || '—'}</td>
                         <td className={`p-3 ${textPrimary}`}>{sp.expected_date || '—'}</td>
                         <td className="p-3">
-                          <Badge className={`pointer-events-none ${sp.collected ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                            {sp.collected ? `Collected${sp.collected_date ? ` · ${sp.collected_date}` : ''}` : 'Not collected'}
-                          </Badge>
+                          {sp.collected ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge className="bg-emerald-500/20 text-emerald-400 pointer-events-none">
+                                Collected{sp.collected_date ? ` · ${sp.collected_date}` : ''}
+                              </Badge>
+                              {sp.invoice_number && (
+                                <Badge className="bg-blue-500/20 text-blue-400 pointer-events-none">{sp.invoice_number}</Badge>
+                              )}
+                              {sp.invoice_id && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      const res = await axios.get(`${API}/api/finance/invoices/${sp.invoice_id}/pdf-data`, { headers: { Authorization: `Bearer ${token}` } });
+                                      const w = window.open('', '_blank');
+                                      if (w) {
+                                        w.document.write(`<pre style="font-family:monospace;padding:20px;white-space:pre-wrap">${JSON.stringify(res.data, null, 2)}</pre>`);
+                                      }
+                                    } catch (e) {
+                                      toast.error('Failed to fetch invoice');
+                                    }
+                                  }}
+                                  className="text-xs text-[#6366f1] hover:underline flex items-center gap-1"
+                                  data-testid={`finance-pay-download-${sp.id}`}
+                                >
+                                  ⬇ Download
+                                </button>
+                              )}
+                            </div>
+                          ) : canCollect ? (
+                            <Button
+                              size="sm"
+                              onClick={() => handleCollect(selected.project_id, sp.id)}
+                              disabled={collectingId === sp.id}
+                              className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
+                              data-testid={`finance-pay-collect-${sp.id}`}
+                            >
+                              {collectingId === sp.id ? 'Collecting…' : 'Collect'}
+                            </Button>
+                          ) : (
+                            <Badge className="bg-amber-500/20 text-amber-400 pointer-events-none">Not collected</Badge>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -304,7 +413,7 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
                 </table>
               </div>
               <p className={`text-xs ${textSecondary}`}>
-                Edits are managed inside the project's Payment Schedule tab — Super Admin only.
+                Only Super Admin / Admin / Finance can mark a split as collected — that action creates an invoice and posts to Income automatically.
               </p>
             </CardContent>
           </Card>

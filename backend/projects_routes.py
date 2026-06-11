@@ -149,9 +149,26 @@ async def update_project(project_id: str, payload: ProjectUpdate, request: Reque
     update_data = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
-    # Payment schedule is restricted to Super Admin only. Operation Head can view but not mutate.
-    if "payment_schedule" in update_data and (user.role or "").lower() != "super_admin":
-        raise HTTPException(status_code=403, detail="Only Super Admin can edit the payment schedule")
+    # Payment schedule editing — relaxed: Operation Head can add/edit splits.
+    # But the "collected" field on any split can ONLY be flipped by Super Admin / Admin / Finance role.
+    if "payment_schedule" in update_data:
+        role = (user.role or "").lower()
+        privileged = role in ("super_admin", "admin", "finance")
+        if not privileged:
+            # Block any change to the `collected` flag (or invoice fields) on splits.
+            existing_proj = await db.projects.find_one({"project_id": project_id}, {"payment_schedule": 1})
+            existing_splits = ((existing_proj or {}).get("payment_schedule") or {}).get("splits") or []
+            existing_by_id = {s.get("id"): s for s in existing_splits if isinstance(s, dict)}
+            new_splits = ((update_data.get("payment_schedule") or {}).get("splits") or [])
+            for ns in new_splits:
+                if not isinstance(ns, dict):
+                    continue
+                prev = existing_by_id.get(ns.get("id")) or {}
+                # Force non-privileged users to keep collected/invoice_* fields unchanged.
+                if bool(ns.get("collected")) != bool(prev.get("collected", False)):
+                    raise HTTPException(status_code=403, detail="Only Super Admin / Finance can mark a payment as collected")
+                if ns.get("invoice_id") != prev.get("invoice_id") or ns.get("invoice_number") != prev.get("invoice_number"):
+                    raise HTTPException(status_code=403, detail="Only Super Admin / Finance can attach an invoice")
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = await db.projects.update_one({"project_id": project_id}, {"$set": update_data})
     if result.matched_count == 0:
@@ -175,6 +192,120 @@ async def delete_project(project_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"message": "Project deleted", "project_id": project_id}
+
+
+@projects_router.post("/{project_id}/payment-schedule/{split_id}/collect")
+async def collect_payment_split(project_id: str, split_id: str, request: Request):
+    """Mark a payment split as collected AND create an invoice for it.
+    Only Super Admin / Admin / Finance role can call this."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    role = (user.role or "").lower()
+    if role not in ("super_admin", "admin", "finance"):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Finance can collect a payment")
+
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    sched = project.get("payment_schedule") or {}
+    splits = list(sched.get("splits") or [])
+    idx = next((i for i, s in enumerate(splits) if (s or {}).get("id") == split_id), -1)
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Split not found")
+    sp = splits[idx]
+    if sp.get("collected"):
+        raise HTTPException(status_code=400, detail="This split is already collected")
+
+    amount = float(sp.get("amount") or 0)
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+
+    # Generate an invoice number via the finance helper (reuses the same numbering scheme).
+    invoice_id = f"inv_{uuid.uuid4().hex[:12]}"
+    try:
+        from finance_routes import generate_invoice_number
+        invoice_number = await generate_invoice_number(datetime.now(timezone.utc).year)
+    except Exception:
+        invoice_number = f"INV-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+
+    invoice_doc = {
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "client_name": project.get("name") or "Client",
+        "client_address": "",
+        "client_gstin": "",
+        "invoice_date": today_iso,
+        "due_date": sp.get("expected_date") or today_iso,
+        "items": [{
+            "description": sp.get("label") or "Payment",
+            "quantity": 1,
+            "rate": amount,
+            "amount": amount,
+            "gst_rate": 0.0,
+            "gst_amount": 0.0,
+            "discount_percent": 0.0,
+            "discount_amount": 0.0,
+            "amount_before_tax": amount,
+        }],
+        "subtotal": amount,
+        "discount_amount": 0.0,
+        "gst_rate": 0.0,
+        "gst_amount": 0.0,
+        "cgst_amount": 0.0,
+        "sgst_amount": 0.0,
+        "igst_amount": 0.0,
+        "total": amount,
+        "gst_type": "no_gst",
+        "notes": f"Auto-generated from project payment schedule ({sp.get('label')})",
+        "payment_terms": sp.get("mode") or "",
+        "status": "paid",
+        "project_id": project_id,
+        "split_id": split_id,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.invoices.insert_one(invoice_doc)
+
+    # Also post into income / cashbook for visibility in the Income/Cashbook tab.
+    try:
+        await db.income.insert_one({
+            "income_id": f"inc_{uuid.uuid4().hex[:12]}",
+            "amount": amount,
+            "source": project.get("name") or "Project",
+            "category": "Project Payment",
+            "date": today_iso,
+            "invoice_id": invoice_id,
+            "invoice_number": invoice_number,
+            "project_id": project_id,
+            "notes": f"Collected via Payment Schedule ({sp.get('label')})",
+            "created_by": user.user_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception:
+        pass
+
+    # Mark the split collected with invoice reference.
+    splits[idx] = {
+        **sp,
+        "collected": True,
+        "collected_date": today_iso,
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "collected_by": user.user_id,
+    }
+    sched["splits"] = splits
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {"payment_schedule": sched, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {
+        "ok": True,
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "split_id": split_id,
+        "amount": amount,
+    }
 
 
 @projects_router.post("/{project_id}/tasks")
