@@ -17,11 +17,12 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check, Network
+  ChevronDown, Check, Network, Database
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import PayrollManagementTab from '../components/hr/PayrollManagementTab';
+import DatabaseToolsTab from '../components/hr/DatabaseToolsTab';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -1196,6 +1197,7 @@ export default function HRAdminPage() {
     { id: 'quotes', label: 'Quotes', icon: FileText, hrManagerAccess: false },
     { id: 'my-profile-config', label: 'My Profile Config', icon: Settings, hrManagerAccess: false },
     { id: 'org-structure', label: 'Org Structure', icon: Network, hrManagerAccess: true },
+    { id: 'database-tools', label: 'Database Tools', icon: Database, hrManagerAccess: false },
   ];
 
   // Filter tabs based on role - HR Manager only sees specific tabs
@@ -1672,6 +1674,18 @@ export default function HRAdminPage() {
         )}
 
         {/* Org Structure Tab handled by separate route to keep this file lean — see /org-structure */}
+
+        {/* Database Tools Tab */}
+        {activeTab === 'database-tools' && (
+          <DatabaseToolsTab
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
 
         {/* Reviews Tab */}
         {activeTab === 'reviews' && (

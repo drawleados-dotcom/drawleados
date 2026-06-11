@@ -2018,3 +2018,24 @@ Build a comprehensive internal operating system called "Drawlead OS" for managin
 - Frontend screenshots verify card displays "1h 30m" + "3×" badge, summary popup lists all 3 breaks with correct categories/times/reasons, Break Out modal shows the 4 category buttons.
 
 **data-testid added:** `break-out-btn`, `break-in-btn`, `break-category-buttons`, `break-category-lunch|breakfast|tea|other`, `break-reason-input`, `break-card`, `break-count-badge`, `break-total-display`, `break-summary-modal`, `break-summary-total`, `break-summary-count`, `break-summary-close`, `break-item-{idx}`, `break-item-{idx}-duration`.
+
+
+---
+
+## 2026-02-11 — Database Tools Panel (HR Admin → Database Tools)
+
+**Why:** User wants to back up their data and migrate to their own VPS / MongoDB Atlas in the future. Production DB and Preview DB are separate; without an export tool, data would be trapped.
+
+**Backend (`/app/backend/db_admin_routes.py` — NEW):**
+- `GET /api/admin/db/collections` — list every collection with document counts (admin-only).
+- `GET /api/admin/db/export/{collection}` — stream a single collection as a downloadable JSON file.
+- `GET /api/admin/db/export-all` — stream a `.zip` with every non-system collection + a `_manifest.json`.
+- `POST /api/admin/db/import/{collection}` — upload JSON (multipart) with `mode=append|replace`.
+- `POST /api/admin/db/wipe` — guard-railed wipe (requires `confirm_text="WIPE"`).
+- All endpoints require `role in {super_admin, admin}` → 403 otherwise. System collections (`user_sessions`, `google_oauth_states`, `password_otps`) hard-blocked.
+
+**Frontend (`/app/frontend/src/components/hr/DatabaseToolsTab.js` — NEW):**
+- New "Database Tools" tab in HR Admin. Migration hint card + collections table with per-row Export + Import buttons + an Export Full Backup (.zip) button.
+- Import modal with Append vs Replace mode selector (Replace prompts for confirm).
+
+**Testing:** Verified with curl — 47 collections, ops-user 403, /export/users returns 19 users, /export-all produces 110KB zip. Frontend screenshot confirms tab renders with all 47 collections.
