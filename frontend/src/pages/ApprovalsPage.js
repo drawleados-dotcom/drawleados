@@ -111,10 +111,40 @@ export default function ApprovalsPage({ embedded = false }) {
   })();
 
   // Filter task approvals to only those routed to my approver role(s)
-  const visibleTaskApprovals = (taskApprovals || []).filter(t => {
+  // Super Admin / Admin can see all buckets regardless.
+  const _viewerRole = (user?.role || '').toLowerCase();
+  const _isPrivilegedViewer = _viewerRole === 'super_admin' || _viewerRole === 'admin';
+  const baseVisibleTaskApprovals = (taskApprovals || []).filter(t => {
+    if (_isPrivilegedViewer) return true;
     const reqRole = (t.approval_request?.approver_role || '').toLowerCase();
     return myApproverRoles.includes(reqRole);
   });
+
+  // 3-way Approvals bucket sub-tabs: PM / Operations / HR
+  // - PM       → approver_role === 'pm'
+  // - Operations → approver_role in {operations, ceo, marketing_head}
+  // - HR       → approver_role === 'hr'
+  const [approverBucket, setApproverBucket] = useState('operations');
+  const bucketMatchesRole = (role) => {
+    const r = (role || '').toLowerCase();
+    if (approverBucket === 'pm') return r === 'pm';
+    if (approverBucket === 'hr') return r === 'hr';
+    // operations bucket
+    return r === 'operations' || r === 'ceo' || r === 'marketing_head';
+  };
+  const visibleTaskApprovals = baseVisibleTaskApprovals.filter(t =>
+    bucketMatchesRole(t.approval_request?.approver_role)
+  );
+
+  // Bucket badge counts (use base list so each tab shows real total)
+  const bucketCounts = {
+    pm: baseVisibleTaskApprovals.filter(t => (t.approval_request?.approver_role || '').toLowerCase() === 'pm').length,
+    operations: baseVisibleTaskApprovals.filter(t => {
+      const r = (t.approval_request?.approver_role || '').toLowerCase();
+      return r === 'operations' || r === 'ceo' || r === 'marketing_head';
+    }).length,
+    hr: baseVisibleTaskApprovals.filter(t => (t.approval_request?.approver_role || '').toLowerCase() === 'hr').length,
+  };
 
   // Load approvals
   const loadApprovals = useCallback(async () => {
@@ -470,6 +500,39 @@ export default function ApprovalsPage({ embedded = false }) {
 
         {/* Approvals List */}
         <div className="flex-1 overflow-auto p-6 space-y-6">
+          {/* 3-way Approvals bucket sub-tabs: PM / Operations / HR */}
+          <div className="flex items-center gap-2 flex-wrap" data-testid="approver-bucket-tabs">
+            {[
+              { id: 'pm', label: 'PM Approvals', color: 'from-purple-500 to-purple-600' },
+              { id: 'operations', label: 'Operations Approvals', color: 'from-blue-500 to-indigo-600' },
+              { id: 'hr', label: 'HR Approvals', color: 'from-pink-500 to-rose-600' },
+            ].map(b => {
+              const isActive = approverBucket === b.id;
+              const count = bucketCounts[b.id] || 0;
+              return (
+                <button
+                  key={b.id}
+                  onClick={() => setApproverBucket(b.id)}
+                  data-testid={`approver-bucket-${b.id}`}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                    isActive
+                      ? `bg-gradient-to-r ${b.color} text-white border-transparent shadow-md`
+                      : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                  }`}
+                >
+                  {b.label}
+                  <span
+                    className={`ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full text-xs font-semibold px-1.5 ${
+                      isActive ? 'bg-white/25 text-white' : 'bg-[#6366f1]/15 text-[#6366f1]'
+                    }`}
+                  >
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Task Approval Requests (from Operations > My Tasks) */}
           {visibleTaskApprovals.length > 0 && (
             <div>

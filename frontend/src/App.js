@@ -28,7 +28,7 @@ import LeaveVerificationPage from './pages/LeaveVerificationPage';
 import MyDocumentsPage from './pages/MyDocumentsPage';
 import DLOperationsPage from './pages/DLOperationsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
-import ApprovalsPage from './pages/ApprovalsPage';
+import OperationsModalPage from './components/operations/OperationsModalPage';
 import OrgStructurePage from './pages/OrgStructurePage';
 import EmployeeAttendanceViewPage from './pages/EmployeeAttendanceViewPage';
 import './App.css';
@@ -183,7 +183,7 @@ function AppRouter() {
         path="/approvals"
         element={
           <ProtectedRoute module="our_tasks">
-            <ApprovalsPage />
+            <OperationsModalPage defaultTab="approvals" />
           </ProtectedRoute>
         }
       />

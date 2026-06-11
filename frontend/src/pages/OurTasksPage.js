@@ -37,7 +37,7 @@ const statusColors = {
   'on_hold': 'bg-[#f59e0b]/20 text-[#f59e0b]'
 };
 
-export default function OurTasksPage() {
+export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_to_me' }) {
   const { isDark } = useTheme();
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
@@ -46,7 +46,9 @@ export default function OurTasksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [filter, setFilter] = useState('all');
-  const [mainTab, setMainTab] = useState('assigned_to_me'); // assigned_to_me, assign_to_team
+  const [mainTab, setMainTab] = useState(defaultTab); // assigned_to_me, assign_to_team, projects, departments, approvals, meetings
+  // View/Edit toggle for Projects tab — visible only to super_admin
+  const [projectsViewMode, setProjectsViewMode] = useState('view'); // 'view' | 'edit'
   const [meetingsSubActive, setMeetingsSubActive] = useState(false); // when true → render Meetings panel inside My Tasks / Assign-to-Team
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
@@ -271,6 +273,11 @@ export default function OurTasksPage() {
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
       toast.error('Start date is required for recurring tasks');
+      return;
+    }
+    // Enforce: Department selection is mandatory when assigning to team
+    if (mainTab === 'assign_to_team' && !formData.department) {
+      toast.error('Please select a Department before creating a team task');
       return;
     }
     setSubmitting(true);
@@ -938,10 +945,11 @@ export default function OurTasksPage() {
         ? 'Work in Range'
         : 'Total Work Time';
 
-  return (
-    <Layout>
+  // When inside the Operations Modal, skip the global Layout wrapper.
+  const content = (
       <div className="space-y-6">
-        {/* Header */}
+        {/* Header (hidden when inside Operations Modal) */}
+        {!inModal && (
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-4xl font-bold tracking-tight mb-1">
@@ -952,6 +960,7 @@ export default function OurTasksPage() {
             <p className={textSecondary}>Team-wide task management for all users</p>
           </div>
         </div>
+        )}
 
         {/* Main Tabs — pill style matching My Profile */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
@@ -1008,17 +1017,54 @@ export default function OurTasksPage() {
 
         {/* Projects tab */}
         {mainTab === 'projects' && (
-          <ProjectsPanel
-            isDark={isDark}
-            textPrimary={textPrimary}
-            textSecondary={textSecondary}
-            bgCard={bgCard}
-            bgSecondary={bgSecondary}
-            borderColor={borderColor}
-            headers={headers}
-            currentUser={user}
-            onTaskCreated={loadTasks}
-          />
+          <>
+            {/* View / Edit toggle — visible only to super_admin */}
+            {(user?.role || '').toLowerCase() === 'super_admin' && (
+              <div className={`flex items-center justify-end gap-2 mb-3`} data-testid="projects-view-edit-toggle">
+                <span className={`text-xs ${textSecondary}`}>Mode:</span>
+                <div className={`inline-flex rounded-lg border ${borderColor} ${bgCard} p-1`}>
+                  <button
+                    onClick={() => setProjectsViewMode('view')}
+                    data-testid="projects-mode-view"
+                    className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                      projectsViewMode === 'view'
+                        ? 'bg-[#6366f1] text-white shadow'
+                        : `${textSecondary} hover:bg-[#6366f1]/10`
+                    }`}
+                  >
+                    View only
+                  </button>
+                  <button
+                    onClick={() => setProjectsViewMode('edit')}
+                    data-testid="projects-mode-edit"
+                    className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                      projectsViewMode === 'edit'
+                        ? 'bg-[#10b981] text-white shadow'
+                        : `${textSecondary} hover:bg-[#10b981]/10`
+                    }`}
+                  >
+                    Edit
+                  </button>
+                </div>
+              </div>
+            )}
+            <ProjectsPanel
+              isDark={isDark}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              borderColor={borderColor}
+              headers={headers}
+              currentUser={user}
+              onTaskCreated={loadTasks}
+              viewOnly={
+                (user?.role || '').toLowerCase() === 'super_admin'
+                  ? projectsViewMode === 'view'
+                  : false
+              }
+            />
+          </>
         )}
 
         {/* Departments tab */}
@@ -2274,11 +2320,12 @@ export default function OurTasksPage() {
                 {/* Approver role — restricted to PM / Operations / Marketing Head */}
                 <div>
                   <Label className={`${textPrimary} mb-2 block`}>Approve By</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {[
                       { value: 'pm', label: 'PM', color: 'bg-purple-500' },
                       { value: 'operations', label: 'Operations', color: 'bg-blue-500' },
                       { value: 'marketing_head', label: 'Marketing Head', color: 'bg-pink-500' },
+                      { value: 'hr', label: 'HR', color: 'bg-rose-500' },
                     ].map(opt => {
                       const selected = approvalDraft.approver_role === opt.value;
                       return (
@@ -2569,6 +2616,7 @@ export default function OurTasksPage() {
           </div>
         )}
       </div>
-    </Layout>
   );
+
+  return inModal ? content : <Layout>{content}</Layout>;
 }

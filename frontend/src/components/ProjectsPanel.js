@@ -25,11 +25,14 @@ const DEPARTMENTS = [
 
 export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
+  viewOnly = false,
 }) {
   // Permission: Super Admin / Admin / Operation Head designation can create + edit projects
   const role = (currentUser?.role || '').toLowerCase();
   const desg = (currentUser?.designation || '').toLowerCase().trim();
-  const canManageProjects = role === 'super_admin' || role === 'admin' || desg === 'operation head';
+  const _baseCanManage = role === 'super_admin' || role === 'admin' || desg === 'operation head';
+  // Force view-only when toggle is on
+  const canManageProjects = _baseCanManage && !viewOnly;
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
