@@ -397,18 +397,43 @@ class AdminSignup(BaseModel):
 
 @api_router.post("/auth/admin-signup")
 async def admin_signup(data: AdminSignup):
-    """Create a new admin/super_admin account with secret code"""
-    
-    # Verify admin code
+    """Bootstrap the canonical Super Admin (vinoth@drawlead.com only).
+
+    Hard rules:
+    - Only one Super Admin is ever allowed in the system.
+    - That single Super Admin must be `vinoth@drawlead.com`.
+    - Any other email is rejected with 403.
+    - If `vinoth@drawlead.com` already exists, no new account is created.
+    """
     if data.admin_code != ADMIN_SIGNUP_CODE:
         raise HTTPException(status_code=403, detail="Invalid admin access code")
-    
-    # Check if user exists
+
+    canonical_email = "vinoth@drawlead.com"
+    if (data.email or "").strip().lower() != canonical_email:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Only one Super Admin is allowed and it must be "
+                f"{canonical_email}. If you forgot the password, use "
+                "Forgot Password instead of creating a new account."
+            ),
+        )
+
+    # Hard cap: at most one super_admin in the system.
+    existing_super = await db.users.find_one({"role": "super_admin"})
+    if existing_super:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "A Super Admin already exists. Use Forgot Password to recover "
+                "access — only one Super Admin can ever be created."
+            ),
+        )
+
     existing = await db.users.find_one({"email": data.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create admin user
+
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     user_doc = {
         "user_id": user_id,
@@ -927,14 +952,18 @@ async def create_user(user_data: Dict[str, Any], current_user: User = Depends(ge
     
     # Set default permissions based on role
     role = user_data.get("role", "employee")
+    # Hard rule: at most one super_admin in the system, and only the canonical email.
+    if role == "super_admin":
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Super Admin cannot be created here. Only one Super Admin "
+                "(vinoth@drawlead.com) is allowed; use Forgot Password to recover access."
+            ),
+        )
     module_access = []
     
-    if role == "super_admin":
-        module_access = ["leads", "operations", "finance", "reports", "settings"]
-        user_data["can_create_projects"] = True
-        user_data["can_delete_tasks"] = True
-        user_data["can_manage_users"] = True
-    elif role == "admin":
+    if role == "admin":
         module_access = ["leads", "operations", "finance", "reports", "settings"]
         user_data["can_create_projects"] = True
         user_data["can_delete_tasks"] = True
@@ -979,6 +1008,14 @@ async def update_user(user_id: str, update_data: Dict[str, Any], current_user: U
     # Don't allow changing super_admin role
     if user.get("role") == "super_admin" and current_user.role != "super_admin":
         raise HTTPException(status_code=403, detail="Cannot modify super admin")
+
+    # Hard rule: no upgrade to super_admin via the user-edit endpoint.
+    # Only the canonical Super Admin (vinoth@drawlead.com) may keep super_admin role.
+    if update_data.get("role") == "super_admin" and (user.get("email") or "").lower() != "vinoth@drawlead.com":
+        raise HTTPException(
+            status_code=403,
+            detail="Only vinoth@drawlead.com can hold Super Admin role.",
+        )
     
     # Update password if provided
     if "password" in update_data:
