@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import InvoiceModule from './InvoiceModule';
 import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
+import WeekWiseTab from './WeekWiseTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
@@ -94,6 +95,7 @@ const DEFAULT_TABS = [
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'outstanding', label: 'Outstanding', icon: Target, isDefault: true },
   { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
+  { id: 'weekly', label: 'Week Wise', icon: Calendar, isDefault: true },
 ];
 
 const ExpenseTab = () => {
@@ -1778,6 +1780,17 @@ const ExpenseTab = () => {
           {activeTab === 'outstanding' && renderOutstanding()}
           {activeTab === 'payment_schedule' && (
             <FinancePaymentScheduleTab isDark={isDark} token={token} />
+          )}
+          {activeTab === 'weekly' && (
+            <WeekWiseTab
+              isDark={isDark}
+              bgCard={isDark ? 'bg-[#0a0a0a]' : 'bg-white'}
+              bgSecondary={isDark ? 'bg-[#18181b]' : 'bg-gray-50'}
+              bgInput={isDark ? 'bg-[#18181b]' : 'bg-white'}
+              textPrimary={isDark ? 'text-[#fafafa]' : 'text-gray-900'}
+              textSecondary={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}
+              borderColor={isDark ? 'border-[#27272a]' : 'border-gray-200'}
+            />
           )}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>

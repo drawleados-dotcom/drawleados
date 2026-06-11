@@ -10,7 +10,7 @@ Expense & Cashflow Management Module
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import uuid
 
@@ -1072,3 +1072,108 @@ async def get_budget_monthly(request: Request, month: int, year: int, category_i
             }
         }
 
+
+
+# ============== WEEK WISE (Tue → Mon, anchor: Jan 20, 2026 = Week 01) ==============
+
+# Anchor: Tuesday Jan 20, 2026 is the start of Week 01. Weeks run Tue-Mon.
+_WEEK_ANCHOR = datetime(2026, 1, 20, tzinfo=timezone.utc)
+
+
+def _week_meta_for_number(week_number: int):
+    """Returns (start_dt, end_dt_exclusive) for the given 1-based week_number."""
+    start = _WEEK_ANCHOR + timedelta(days=(week_number - 1) * 7)
+    end_exclusive = start + timedelta(days=7)
+    return start, end_exclusive
+
+
+def _current_week_number() -> int:
+    now = datetime.now(timezone.utc)
+    if now < _WEEK_ANCHOR:
+        return 1
+    delta_days = (now - _WEEK_ANCHOR).days
+    return (delta_days // 7) + 1
+
+
+@expense_router.get("/weekly")
+async def get_weekly_summary(request: Request, week_number: Optional[int] = None):
+    """Returns Income + Expense for a given week (default: current week) + a
+    short list of all selectable weeks for navigation.
+
+    Income source : cashbook_entries with type='income' OR cashflow.type='credit'
+    Expense source: expense_entries (all, regardless of paid status)
+    """
+    user = await get_current_user(request)
+
+    current_week = _current_week_number()
+    if not week_number:
+        week_number = current_week
+
+    start_dt, end_dt = _week_meta_for_number(week_number)
+
+    # === Income ===
+    income_entries = []
+    # Try the modern cashbook collection first; fall back to legacy cashflow.
+    income_cursor = db.cashbook_entries.find(
+        {"type": "income", "date": {"$gte": start_dt, "$lt": end_dt}},
+        {"_id": 0}
+    )
+    async for e in income_cursor:
+        income_entries.append(e)
+    if not income_entries:
+        legacy_cursor = db.cashflow.find(
+            {"type": "credit", "date": {"$gte": start_dt, "$lt": end_dt}},
+            {"_id": 0}
+        )
+        async for e in legacy_cursor:
+            income_entries.append({**e, "amount": e.get("amount", 0)})
+
+    total_income = sum(float(e.get("amount", 0) or 0) for e in income_entries)
+
+    # === Expense ===
+    expense_entries = []
+    exp_cursor = db.expense_entries.find(
+        {"$or": [
+            {"date": {"$gte": start_dt, "$lt": end_dt}},
+            {"created_at": {"$gte": start_dt, "$lt": end_dt}},
+        ]},
+        {"_id": 0}
+    )
+    async for e in exp_cursor:
+        expense_entries.append(e)
+    total_expense = sum(float(e.get("amount", 0) or 0) for e in expense_entries)
+
+    # Sort entries by date desc for display
+    def _date_key(e):
+        d = e.get("date") or e.get("created_at")
+        return d or datetime.min.replace(tzinfo=timezone.utc)
+    income_entries.sort(key=_date_key, reverse=True)
+    expense_entries.sort(key=_date_key, reverse=True)
+
+    # Navigation list — show all weeks from anchor up to current_week
+    weeks_nav = []
+    for wn in range(1, current_week + 1):
+        ws, we = _week_meta_for_number(wn)
+        weeks_nav.append({
+            "week_number": wn,
+            "start_date": ws.isoformat(),
+            "end_date": (we - timedelta(days=1)).isoformat(),
+            "label": f"Week {wn:02d}",
+        })
+
+    return {
+        "week_number": week_number,
+        "start_date": start_dt.isoformat(),
+        "end_date": (end_dt - timedelta(days=1)).isoformat(),
+        "label": f"Week {week_number:02d}",
+        "is_current": week_number == current_week,
+        "summary": {
+            "income": round(total_income, 2),
+            "expense": round(total_expense, 2),
+            "net": round(total_income - total_expense, 2),
+        },
+        "income_entries": income_entries,
+        "expense_entries": expense_entries,
+        "weeks": weeks_nav,
+        "current_week_number": current_week,
+    }
