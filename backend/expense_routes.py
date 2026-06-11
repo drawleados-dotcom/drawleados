@@ -1161,6 +1161,33 @@ async def get_weekly_summary(request: Request, week_number: Optional[int] = None
             "label": f"Week {wn:02d}",
         })
 
+    # Cumulative totals across ALL weeks from Week 01 through current_week
+    overall_start, _ = _week_meta_for_number(1)
+    _, overall_end = _week_meta_for_number(current_week)
+
+    cum_income = 0.0
+    async for e in db.cashbook_entries.find(
+        {"type": "income", "date": {"$gte": overall_start, "$lt": overall_end}},
+        {"_id": 0, "amount": 1}
+    ):
+        cum_income += float(e.get("amount", 0) or 0)
+    if cum_income == 0:
+        async for e in db.cashflow.find(
+            {"type": "credit", "date": {"$gte": overall_start, "$lt": overall_end}},
+            {"_id": 0, "amount": 1}
+        ):
+            cum_income += float(e.get("amount", 0) or 0)
+
+    cum_expense = 0.0
+    async for e in db.expense_entries.find(
+        {"$or": [
+            {"date": {"$gte": overall_start, "$lt": overall_end}},
+            {"created_at": {"$gte": overall_start, "$lt": overall_end}},
+        ]},
+        {"_id": 0, "amount": 1}
+    ):
+        cum_expense += float(e.get("amount", 0) or 0)
+
     return {
         "week_number": week_number,
         "start_date": start_dt.isoformat(),
@@ -1176,4 +1203,11 @@ async def get_weekly_summary(request: Request, week_number: Optional[int] = None
         "expense_entries": expense_entries,
         "weeks": weeks_nav,
         "current_week_number": current_week,
+        "cumulative": {
+            "income": round(cum_income, 2),
+            "expense": round(cum_expense, 2),
+            "net": round(cum_income - cum_expense, 2),
+            "from_week": 1,
+            "to_week": current_week,
+        },
     }
