@@ -304,6 +304,54 @@ async def create_task(task_data: TaskCreate, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@our_tasks_router.get("/work-hours/{date}")
+async def get_work_hours_for_date(date: str, request: Request, user_id: Optional[str] = None):
+    """Sum total time-tracked seconds across all of a user's tasks for the given date.
+    Date format: YYYY-MM-DD. Returns: {seconds, hours, formatted}."""
+    from server import get_current_user, db
+    requester = await get_current_user(request)
+    # Default to requester; allow admin/HR to query any user
+    target = user_id or requester.user_id
+    if target != requester.user_id and requester.role not in {"super_admin", "admin", "hr_manager"}:
+        raise HTTPException(status_code=403, detail="Cannot view other users' hours")
+
+    try:
+        day_start = datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    day_end = day_start + timedelta(days=1)
+
+    total_seconds = 0
+    cursor = db.our_tasks.find(
+        {"$or": [{"assigned_to": target}, {"created_by": target}], "time_tracking.sessions": {"$exists": True}},
+        {"_id": 0, "time_tracking": 1}
+    )
+    async for t in cursor:
+        for s in (t.get("time_tracking", {}).get("sessions") or []):
+            if s.get("user_id") and s.get("user_id") != target:
+                continue
+            st = s.get("start")
+            en = s.get("end")
+            if not st:
+                continue
+            try:
+                st_dt = datetime.fromisoformat(st.replace("Z", "+00:00"))
+                en_dt = datetime.fromisoformat(en.replace("Z", "+00:00")) if en else datetime.now(timezone.utc)
+            except Exception:
+                continue
+            # Clip session to the requested day
+            overlap_start = max(st_dt, day_start)
+            overlap_end = min(en_dt, day_end)
+            if overlap_end > overlap_start:
+                total_seconds += int((overlap_end - overlap_start).total_seconds())
+
+    hours = total_seconds / 3600.0
+    h = int(hours)
+    m = int((hours - h) * 60)
+    return {"date": date, "user_id": target, "seconds": total_seconds, "hours": round(hours, 2), "formatted": f"{h}h {m}m"}
+
+
+
 # Get a single task
 @our_tasks_router.get("/tasks/{task_id}")
 async def get_task(task_id: str, request: Request):

@@ -43,6 +43,7 @@ export default function HRPage() {
   
   // Attendance state
   const [todayAttendance, setTodayAttendance] = useState(null);
+  const [workHoursToday, setWorkHoursToday] = useState('-');
   const [attendanceHistory, setAttendanceHistory] = useState([]);
   const [attendanceSummary, setAttendanceSummary] = useState({});
   
@@ -92,6 +93,15 @@ export default function HRPage() {
       setTodayAttendance(res.data);
     } catch (error) {
       console.error('Error loading today attendance:', error);
+    }
+    // Also fetch work hours from operations tasks for today
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const wh = await axios.get(`${API}/api/our-tasks/work-hours/${today}`, { headers });
+      setWorkHoursToday(wh.data?.formatted || '0h 0m');
+    } catch (e) {
+      // silent — endpoint may not exist on older envs
+      setWorkHoursToday('-');
     }
   }, [token]);
 
@@ -382,6 +392,7 @@ export default function HRPage() {
             todayAttendance={todayAttendance}
             attendanceHistory={attendanceHistory}
             attendanceSummary={attendanceSummary}
+            workHoursToday={workHoursToday}
             onClockIn={handleClockIn}
             onClockOut={handleClockOut}
             formatTime={formatTime}
@@ -548,7 +559,7 @@ export default function HRPage() {
   );
 }
 
-function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, onClockIn, onClockOut, formatTime, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, workHoursToday, onClockIn, onClockOut, formatTime, formatDate, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showLunchModal, setShowLunchModal] = useState(false);
@@ -826,8 +837,13 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
               <p className={`text-lg font-semibold ${textPrimary}`}>{sessions.length > 0 ? sessions.length : (attendance?.clock_in ? 1 : 0)}</p>
             </div>
             <div className={`p-3 ${bgSecondary} rounded-lg`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Work Hours</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>Login Hour</p>
               <p className={`text-lg font-semibold text-[#10b981]`}>{attendance?.total_hours?.toFixed(2) || '-'}</p>
+            </div>
+            <div className={`p-3 ${bgSecondary} rounded-lg`}>
+              <p className={`text-xs ${textSecondary} mb-1`}>Work Hours</p>
+              <p className={`text-lg font-semibold text-[#6366f1]`} data-testid="work-hours-today">{workHoursToday || '-'}</p>
+              <p className={`text-[10px] ${textSecondary}`}>tracked from tasks</p>
             </div>
           </div>
         </CardContent>
