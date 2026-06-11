@@ -1002,6 +1002,8 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Sessions</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Login</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Logout</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`} data-testid="th-history-total-login">Total Login Hour</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`} data-testid="th-history-balance">Balance Hour</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Lunch</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Work Hrs</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
@@ -1014,6 +1016,19 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                   const dayName = recordDate.toLocaleDateString('en-US', { weekday: 'short' });
                   const sessionsCount = record.sessions?.length || (record.clock_in ? 1 : 0);
                   const lunchDiff = getLunchDiff(record.lunch_duration);
+
+                  // Total Login Hour = clock_out - clock_in (gross, includes breaks)
+                  let totalLoginHrs = null;
+                  if (record.clock_in && record.clock_out) {
+                    const ms = new Date(record.clock_out) - new Date(record.clock_in);
+                    if (ms > 0) totalLoginHrs = ms / 3600000;
+                  } else if (record.total_hours != null) {
+                    totalLoginHrs = Number(record.total_hours);
+                  }
+
+                  // Balance Hour = total login - standard work hours (default 8h)
+                  const standardWorkHours = Number(settings?.standard_work_hours) || 8;
+                  const balanceHrs = totalLoginHrs != null ? (totalLoginHrs - standardWorkHours) : null;
                   
                   // Determine reason text based on approval status
                   let reasonText = record.notes || record.reason || '';
@@ -1042,6 +1057,16 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                       </td>
                       <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in)}</td>
                       <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out)}</td>
+                      <td className={`p-3 ${textPrimary} font-medium`} data-testid={`history-total-login-${index}`}>
+                        {totalLoginHrs != null ? `${totalLoginHrs.toFixed(2)}h` : '-'}
+                      </td>
+                      <td className={`p-3 font-medium`} data-testid={`history-balance-${index}`}>
+                        {balanceHrs != null ? (
+                          <span className={balanceHrs >= 0 ? 'text-[#10b981]' : 'text-[#ef4444]'}>
+                            {balanceHrs >= 0 ? '+' : ''}{balanceHrs.toFixed(2)}h
+                          </span>
+                        ) : '-'}
+                      </td>
                       <td className={`p-3`}>
                         {record.lunch_duration ? (
                           <div>
@@ -1073,7 +1098,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                 })}
                 {filteredHistory.length === 0 && (
                   <tr>
-                    <td colSpan={9} className={`p-8 text-center ${textSecondary}`}>
+                    <td colSpan={11} className={`p-8 text-center ${textSecondary}`}>
                       No attendance records found for {monthNames[selectedMonth - 1]} {selectedYear}
                     </td>
                   </tr>
