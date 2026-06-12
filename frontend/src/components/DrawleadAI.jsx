@@ -329,7 +329,7 @@ const DrawleadAI = ({ currentModule = 'general', contextData = null }) => {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Ask Drawlead AI..."
-              className="flex-1 bg-[#18181b] border-[#27272a] focus:border-[#6366f1]"
+              className="flex-1 bg-[#18181b] border-[#27272a] focus:border-[#6366f1] text-[#fafafa] placeholder:text-[#71717a]"
               disabled={loading}
             />
             <Button
