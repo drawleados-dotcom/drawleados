@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -92,9 +92,9 @@ const WEBSITE_APPROVAL_STAGES = [
 export default function HRAdminPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('attendance');
+  const [activeTab, setActiveTab] = useState('employees');
   const token = localStorage.getItem('session_token');
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
   
   // Get user's module access
   const moduleAccess = user?.module_access || [];
@@ -824,7 +824,7 @@ export default function HRAdminPage() {
     else if (activeTab === 'designations-depts') { loadDesignations(); loadDepartments(); }
     else if (activeTab === 'quotes') { loadQuotes(); }
     else if (activeTab === 'reviews') { loadReviewEmployees && loadReviewEmployees(); }
-  });
+  }, { enabled: isAutoRefresh, interval: 30000 });
 
   useEffect(() => {
     if (activeTab === 'approvals') {
