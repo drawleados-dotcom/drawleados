@@ -838,39 +838,8 @@ export default function HRAdminPage() {
     }
   }, [wfhFilter, loadWfhRequests, activeTab]);
 
-  // Auto-refresh for real-time attendance tracking (every 10 seconds)
-  useEffect(() => {
-    if (!isAutoRefresh) return;
-    
-    const refreshInterval = setInterval(async () => {
-      if (activeTab === 'attendance') {
-        setIsRefreshing(true);
-        try {
-          await Promise.all([
-            loadAllAttendance(),
-            loadEmployees(),
-            loadStats()
-          ]);
-          setLastRefresh(new Date());
-        } catch (error) {
-          console.error('Auto-refresh error:', error);
-        }
-        setIsRefreshing(false);
-      } else if (activeTab === 'employees') {
-        setIsRefreshing(true);
-        await loadEmployees();
-        setLastRefresh(new Date());
-        setIsRefreshing(false);
-      } else if (activeTab === 'approvals') {
-        setIsRefreshing(true);
-        await loadPendingApprovals();
-        setLastRefresh(new Date());
-        setIsRefreshing(false);
-      }
-    }, 10000); // Refresh every 10 seconds
-    
-    return () => clearInterval(refreshInterval);
-  }, [activeTab, isAutoRefresh, loadAllAttendance, loadEmployees, loadStats, loadPendingApprovals]);
+  // Auto-refresh handled by useAutoRefresh hook above (30s polling, visibility-aware).
+  // The previous 10s setInterval here was a duplicate that doubled the API load.
 
   // Manual refresh function
   const handleManualRefresh = async () => {

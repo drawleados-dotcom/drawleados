@@ -90,6 +90,37 @@ async def startup_tasks():
     # No automatic admin creation - users will create accounts via /admin signup page
     logging.info("Server started - Admin signup available at /admin with code DRAWLEAD2025")
 
+    # ---- Ensure critical MongoDB indexes ----
+    # These are queried on every request and grow O(n) without an index.
+    try:
+        idx_targets = [
+            ("user_sessions", [("session_token", 1)], {"unique": True}),
+            ("user_sessions", [("expires_at", 1)], {}),
+            ("users", [("user_id", 1)], {"unique": True}),
+            ("users", [("email", 1)], {}),
+            ("our_tasks", [("assigned_to", 1)], {}),
+            ("our_tasks", [("status", 1)], {}),
+            ("attendance", [("user_id", 1), ("date", -1)], {}),
+            ("invoices", [("client_id", 1)], {}),
+            ("invoices", [("invoice_number", 1)], {}),
+            ("finance_clients", [("display_name_lower", 1)], {}),
+            ("leads", [("lead_id", 1)], {}),
+            ("projects", [("project_id", 1)], {}),
+            ("designations", [("designation_id", 1)], {}),
+            ("departments", [("department_id", 1)], {}),
+            ("leave_requests", [("user_id", 1), ("status", 1)], {}),
+            ("wfh_requests", [("user_id", 1), ("status", 1)], {}),
+            ("meetings", [("scheduled_at", 1)], {}),
+        ]
+        for coll_name, keys, opts in idx_targets:
+            try:
+                await db[coll_name].create_index(keys, **opts)
+            except Exception as e:
+                logging.warning(f"Index create skipped on {coll_name} {keys}: {e}")
+        logging.info(f"Ensured {len(idx_targets)} MongoDB indexes")
+    except Exception as e:
+        logging.warning(f"Index creation pass failed: {e}")
+
     # One-time normalization: strip whitespace from designation titles and
     # corresponding user.designation values. Fixes a class of /auth/me lookup
     # mismatches caused by titles like "Website Developer " (trailing space).

@@ -96,9 +96,11 @@ const Layout = ({ children }) => {
   const [currentDateTime, setCurrentDateTime] = useState(getCurrentDateInfo());
 
   useEffect(() => {
+    // Clock display shows HH:MM only (no seconds). Updating every 30s is plenty
+    // and avoids re-rendering the whole Layout (which wraps every page) 60×/min.
     const interval = setInterval(() => {
       setCurrentDateTime(getCurrentDateInfo());
-    }, 1000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 

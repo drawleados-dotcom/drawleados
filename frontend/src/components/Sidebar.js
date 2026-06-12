@@ -198,8 +198,8 @@ const Sidebar = () => {
     loadDatabases();
     loadUnreadCount();
     
-    // Poll for unread count every 10 seconds
-    const interval = setInterval(loadUnreadCount, 10000);
+    // Poll for unread chat count every 30 seconds (was 10s — too aggressive)
+    const interval = setInterval(loadUnreadCount, 30000);
     return () => clearInterval(interval);
   }, [loadDatabases, loadUnreadCount]);
 
