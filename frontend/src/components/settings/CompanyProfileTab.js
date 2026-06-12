@@ -36,6 +36,8 @@ const CompanyProfileTab = () => {
     pan_number: '',
     invoice_prefix: 'INV',
     terms_conditions: '',
+    invoice_theme_color: '#F97316',
+    invoice_signature_label: 'Authorized Signature',
     bank_details: {
       account_name: '',
       account_number: '',
@@ -438,6 +440,52 @@ const CompanyProfileTab = () => {
                   <p className={`text-xs ${textSecondary}`}>
                     Preview: {profile.invoice_prefix}-2026-001
                   </p>
+                </div>
+
+                <div className="space-y-2 pt-3 border-t border-[#27272a]">
+                  <Label className={textPrimary}>Invoice Theme Color</Label>
+                  <p className={`text-xs ${textSecondary} -mt-1`}>
+                    Used for the header strip, table header, and totals on the downloaded PDF
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={profile.invoice_theme_color || '#F97316'}
+                      onChange={(e) => setProfile({ ...profile, invoice_theme_color: e.target.value })}
+                      className="h-10 w-16 rounded cursor-pointer bg-transparent border border-[#27272a]"
+                      data-testid="invoice-theme-color-picker"
+                    />
+                    <Input
+                      value={profile.invoice_theme_color || '#F97316'}
+                      onChange={(e) => setProfile({ ...profile, invoice_theme_color: e.target.value })}
+                      placeholder="#F97316"
+                      className={`${bgInput} border ${borderColor} ${textPrimary} flex-1 font-mono`}
+                      data-testid="invoice-theme-color-input"
+                    />
+                  </div>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {['#F97316', '#6366F1', '#10B981', '#EF4444', '#0EA5E9', '#8B5CF6', '#0F172A'].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setProfile({ ...profile, invoice_theme_color: c })}
+                        className="h-7 w-7 rounded border-2 border-[#27272a] hover:scale-110 transition-transform"
+                        style={{ background: c }}
+                        title={c}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-3 border-t border-[#27272a]">
+                  <Label className={textPrimary}>Signature Label</Label>
+                  <Input
+                    value={profile.invoice_signature_label || 'Authorized Signature'}
+                    onChange={(e) => setProfile({ ...profile, invoice_signature_label: e.target.value })}
+                    placeholder="Authorized Signature"
+                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                    data-testid="invoice-signature-label-input"
+                  />
                 </div>
               </CardContent>
             </Card>

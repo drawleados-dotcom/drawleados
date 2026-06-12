@@ -303,6 +303,9 @@ class CompanyProfile(BaseModel):
     terms_conditions: str = ""
     bank_details: BankDetails = BankDetails()
     upi_ids: List[str] = []
+    # Invoice PDF theme (Zoho-style)
+    invoice_theme_color: str = "#F97316"  # default orange like Zoho
+    invoice_signature_label: str = "Authorized Signature"
     updated_at: Optional[datetime] = None
     updated_by: Optional[str] = None
 
@@ -1895,8 +1898,13 @@ async def get_company_profile(user: User = Depends(get_current_user)):
                 "bank_name": "",
                 "branch": ""
             },
-            "upi_ids": []
+            "upi_ids": [],
+            "invoice_theme_color": "#F97316",
+            "invoice_signature_label": "Authorized Signature"
         }
+    # Backfill defaults for old documents missing these new keys
+    profile.setdefault("invoice_theme_color", "#F97316")
+    profile.setdefault("invoice_signature_label", "Authorized Signature")
     return profile
 
 @api_router.put("/company-profile")
