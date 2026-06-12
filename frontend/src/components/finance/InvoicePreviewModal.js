@@ -88,6 +88,38 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
     const logoUrl = companyProfile?.logo_url || '';
     const logoWidth = Number(companyProfile?.invoice_logo_width_mm) || 35;
     const logoHeightCfg = Number(companyProfile?.invoice_logo_height_mm) || 0;
+    const signatureImageUrl = companyProfile?.invoice_signature_image || '';
+    const signatureWidth = Number(companyProfile?.invoice_signature_width_mm) || 40;
+
+    // Load an image URL (or data URL) into a usable data URL with natural dims.
+    const loadImage = async (src, targetWidth) => {
+      if (!src) return null;
+      try {
+        let dataUrl = src;
+        if (!src.startsWith('data:')) {
+          const resp = await fetch(src, { mode: 'cors' });
+          const blob = await resp.blob();
+          dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
+        const dims = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const ratio = img.naturalHeight / img.naturalWidth || 0.4;
+            resolve({ w: targetWidth, h: targetWidth * ratio });
+          };
+          img.onerror = () => resolve({ w: targetWidth, h: targetWidth * 0.4 });
+          img.src = dataUrl;
+        });
+        return { dataUrl, ...dims };
+      } catch {
+        return null;
+      }
+    };
 
     // Preload logo as a data URL and get natural dimensions to honor aspect ratio.
     let logoData = null;
@@ -445,6 +477,17 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
 
     // Signature (right)
     const sigY = pageH - 35;
+    // Render signature image just above the line if available
+    const sigImg = await loadImage(signatureImageUrl, signatureWidth);
+    if (sigImg) {
+      try {
+        const sigImgX = pageW - M - sigImg.w;
+        const sigImgY = sigY - sigImg.h - 1;
+        doc.addImage(sigImg.dataUrl, 'PNG', sigImgX, sigImgY, sigImg.w, sigImg.h, undefined, 'FAST');
+      } catch {
+        // ignore
+      }
+    }
     doc.setDrawColor(120, 120, 120);
     doc.setLineWidth(0.3);
     doc.line(pageW - M - 55, sigY, pageW - M, sigY);

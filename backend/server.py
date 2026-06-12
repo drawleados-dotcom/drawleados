@@ -308,6 +308,8 @@ class CompanyProfile(BaseModel):
     invoice_signature_label: str = "Authorized Signature"
     invoice_logo_width_mm: float = 35.0  # logo width on PDF in mm
     invoice_logo_height_mm: float = 0.0  # 0 = auto from aspect ratio
+    invoice_signature_image: str = ""  # data URL or remote URL of signature image
+    invoice_signature_width_mm: float = 40.0
     updated_at: Optional[datetime] = None
     updated_by: Optional[str] = None
 
@@ -331,6 +333,8 @@ class CompanyProfileUpdate(BaseModel):
     invoice_signature_label: Optional[str] = None
     invoice_logo_width_mm: Optional[float] = None
     invoice_logo_height_mm: Optional[float] = None
+    invoice_signature_image: Optional[str] = None
+    invoice_signature_width_mm: Optional[float] = None
 
 # ============== WORKSPACE MODELS ==============
 
@@ -1913,6 +1917,8 @@ async def get_company_profile(user: User = Depends(get_current_user)):
     profile.setdefault("invoice_signature_label", "Authorized Signature")
     profile.setdefault("invoice_logo_width_mm", 35.0)
     profile.setdefault("invoice_logo_height_mm", 0.0)
+    profile.setdefault("invoice_signature_image", "")
+    profile.setdefault("invoice_signature_width_mm", 40.0)
     return profile
 
 @api_router.put("/company-profile")

@@ -40,6 +40,8 @@ const CompanyProfileTab = () => {
     invoice_signature_label: 'Authorized Signature',
     invoice_logo_width_mm: 35,
     invoice_logo_height_mm: 0,
+    invoice_signature_image: '',
+    invoice_signature_width_mm: 40,
     bank_details: {
       account_name: '',
       account_number: '',
@@ -559,6 +561,70 @@ const CompanyProfileTab = () => {
                     className={`${bgInput} border ${borderColor} ${textPrimary}`}
                     data-testid="invoice-signature-label-input"
                   />
+                </div>
+
+                <div className="space-y-2 pt-3 border-t border-[#27272a]">
+                  <Label className={textPrimary}>Authorized Signature Image</Label>
+                  <p className={`text-xs ${textSecondary} -mt-1`}>
+                    Upload a transparent PNG of your signature. It will appear above the signature line on every invoice PDF.
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <label
+                      htmlFor="signature-upload"
+                      className={`cursor-pointer px-4 py-2 rounded border ${borderColor} ${bgInput} ${textPrimary} hover:bg-[#27272a] text-sm`}
+                      data-testid="upload-signature-btn"
+                    >
+                      Upload Signature
+                    </label>
+                    <input
+                      id="signature-upload"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          alert('Signature image must be under 2 MB.');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setProfile({ ...profile, invoice_signature_image: ev.target.result });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    {profile.invoice_signature_image && (
+                      <button
+                        type="button"
+                        onClick={() => setProfile({ ...profile, invoice_signature_image: '' })}
+                        className="text-[#f87171] text-sm hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  {profile.invoice_signature_image && (
+                    <div className="mt-2 p-3 rounded border border-dashed border-[#27272a] inline-block bg-white">
+                      <img
+                        src={profile.invoice_signature_image}
+                        alt="Signature"
+                        style={{ maxHeight: '70px', maxWidth: '240px', objectFit: 'contain' }}
+                        onError={(e) => (e.target.style.display = 'none')}
+                      />
+                    </div>
+                  )}
+                  <div className="mt-2">
+                    <Label className={`${textSecondary} text-xs`}>Signature Width (mm)</Label>
+                    <Input
+                      type="number" min="20" max="80" step="1"
+                      value={profile.invoice_signature_width_mm ?? 40}
+                      onChange={(e) => setProfile({ ...profile, invoice_signature_width_mm: parseFloat(e.target.value) || 40 })}
+                      className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                      data-testid="invoice-signature-width-input"
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>
