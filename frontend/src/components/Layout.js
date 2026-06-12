@@ -568,15 +568,6 @@ const Layout = ({ children }) => {
                 </Button>
               </nav>
             )}
-            <Button
-              size="sm"
-              onClick={() => navigate('/bde-tasks')}
-              className={`h-8 px-2 sm:px-3 text-xs whitespace-nowrap ${location.pathname === '/bde-tasks' ? 'bg-[#6366f1]' : isDark ? 'bg-[#27272a] hover:bg-[#3f3f46]' : 'bg-gray-100 hover:bg-gray-200'} ${isDark ? 'text-white' : 'text-gray-700'} ${isOperationsOnlyUser ? 'hidden' : ''}`}
-              data-testid="task-manager-btn"
-            >
-              <ClipboardList className="h-3 w-3 sm:mr-1" />
-              <span className="hidden sm:inline">Task Manager</span>
-            </Button>
             <ThemeToggle />
             {isOperationsOnlyUser && (
               <Button
