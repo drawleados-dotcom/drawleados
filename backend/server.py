@@ -306,6 +306,8 @@ class CompanyProfile(BaseModel):
     # Invoice PDF theme (Zoho-style)
     invoice_theme_color: str = "#F97316"  # default orange like Zoho
     invoice_signature_label: str = "Authorized Signature"
+    invoice_logo_width_mm: float = 35.0  # logo width on PDF in mm
+    invoice_logo_height_mm: float = 0.0  # 0 = auto from aspect ratio
     updated_at: Optional[datetime] = None
     updated_by: Optional[str] = None
 
@@ -325,6 +327,10 @@ class CompanyProfileUpdate(BaseModel):
     terms_conditions: Optional[str] = None
     bank_details: Optional[BankDetails] = None
     upi_ids: Optional[List[str]] = None
+    invoice_theme_color: Optional[str] = None
+    invoice_signature_label: Optional[str] = None
+    invoice_logo_width_mm: Optional[float] = None
+    invoice_logo_height_mm: Optional[float] = None
 
 # ============== WORKSPACE MODELS ==============
 
@@ -1905,6 +1911,8 @@ async def get_company_profile(user: User = Depends(get_current_user)):
     # Backfill defaults for old documents missing these new keys
     profile.setdefault("invoice_theme_color", "#F97316")
     profile.setdefault("invoice_signature_label", "Authorized Signature")
+    profile.setdefault("invoice_logo_width_mm", 35.0)
+    profile.setdefault("invoice_logo_height_mm", 0.0)
     return profile
 
 @api_router.put("/company-profile")

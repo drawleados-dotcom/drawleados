@@ -38,6 +38,8 @@ const CompanyProfileTab = () => {
     terms_conditions: '',
     invoice_theme_color: '#F97316',
     invoice_signature_label: 'Authorized Signature',
+    invoice_logo_width_mm: 35,
+    invoice_logo_height_mm: 0,
     bank_details: {
       account_name: '',
       account_number: '',
@@ -172,20 +174,59 @@ const CompanyProfileTab = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className={textPrimary}>Logo URL</Label>
+                  <Label className={textPrimary}>Company Logo</Label>
+                  <div className="flex items-center gap-3">
+                    <label
+                      htmlFor="company-logo-upload"
+                      className={`cursor-pointer px-4 py-2 rounded border ${borderColor} ${bgInput} ${textPrimary} hover:bg-[#27272a] text-sm`}
+                      data-testid="upload-logo-btn"
+                    >
+                      Upload Logo
+                    </label>
+                    <input
+                      id="company-logo-upload"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 2 * 1024 * 1024) {
+                          alert('Logo must be under 2 MB. Please compress it first.');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setProfile({ ...profile, logo_url: ev.target.result });
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    {profile.logo_url && (
+                      <button
+                        type="button"
+                        onClick={() => setProfile({ ...profile, logo_url: '' })}
+                        className="text-[#f87171] text-sm hover:underline"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                   <Input
                     value={profile.logo_url || ''}
                     onChange={(e) => setProfile({ ...profile, logo_url: e.target.value })}
-                    placeholder="https://example.com/logo.png"
-                    className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                    placeholder="…or paste a logo URL (https://...)"
+                    className={`${bgInput} border ${borderColor} ${textPrimary} text-xs`}
                   />
                   {profile.logo_url && (
-                    <img
-                      src={profile.logo_url}
-                      alt="Company Logo"
-                      className="h-16 mt-2 rounded"
-                      onError={(e) => (e.target.style.display = 'none')}
-                    />
+                    <div className="mt-2 p-3 rounded border border-dashed border-[#27272a] inline-block bg-white">
+                      <img
+                        src={profile.logo_url}
+                        alt="Company Logo"
+                        style={{ maxHeight: '64px', maxWidth: '200px', objectFit: 'contain' }}
+                        onError={(e) => (e.target.style.display = 'none')}
+                      />
+                    </div>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -475,6 +516,38 @@ const CompanyProfileTab = () => {
                       />
                     ))}
                   </div>
+                </div>
+
+                <div className="space-y-2 pt-3 border-t border-[#27272a]">
+                  <Label className={textPrimary}>Logo Size on Invoice</Label>
+                  <p className={`text-xs ${textSecondary} -mt-1`}>
+                    Controls the width of your logo on the downloaded invoice PDF
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className={`${textSecondary} text-xs`}>Width (mm)</Label>
+                      <Input
+                        type="number" min="10" max="100" step="1"
+                        value={profile.invoice_logo_width_mm ?? 35}
+                        onChange={(e) => setProfile({ ...profile, invoice_logo_width_mm: parseFloat(e.target.value) || 35 })}
+                        className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                        data-testid="invoice-logo-width-input"
+                      />
+                    </div>
+                    <div>
+                      <Label className={`${textSecondary} text-xs`}>Height (mm) — 0 = auto</Label>
+                      <Input
+                        type="number" min="0" max="60" step="1"
+                        value={profile.invoice_logo_height_mm ?? 0}
+                        onChange={(e) => setProfile({ ...profile, invoice_logo_height_mm: parseFloat(e.target.value) || 0 })}
+                        className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                        data-testid="invoice-logo-height-input"
+                      />
+                    </div>
+                  </div>
+                  <p className={`text-xs ${textSecondary}`}>
+                    Tip: A4 width is 210mm. 35mm ≈ a normal-sized header logo.
+                  </p>
                 </div>
 
                 <div className="space-y-2 pt-3 border-t border-[#27272a]">

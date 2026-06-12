@@ -81,10 +81,51 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
     return 'Indian Rupee ' + words.trim().replace(/\s+/g, ' ') + ' Only';
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     const themeColor = companyProfile?.invoice_theme_color || '#F97316';
     const [tr, tg, tb] = hexToRgb(themeColor);
     const signatureLabel = companyProfile?.invoice_signature_label || 'Authorized Signature';
+    const logoUrl = companyProfile?.logo_url || '';
+    const logoWidth = Number(companyProfile?.invoice_logo_width_mm) || 35;
+    const logoHeightCfg = Number(companyProfile?.invoice_logo_height_mm) || 0;
+
+    // Preload logo as a data URL and get natural dimensions to honor aspect ratio.
+    let logoData = null;
+    let logoDims = { w: logoWidth, h: 0 };
+    if (logoUrl) {
+      try {
+        // If logoUrl is already a data URL, use it directly; otherwise fetch and convert.
+        let dataUrl = logoUrl;
+        if (!logoUrl.startsWith('data:')) {
+          const resp = await fetch(logoUrl, { mode: 'cors' });
+          const blob = await resp.blob();
+          dataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
+        // Probe natural size for aspect ratio
+        await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const ratio = img.naturalHeight / img.naturalWidth || 0.4;
+            logoDims = {
+              w: logoWidth,
+              h: logoHeightCfg > 0 ? logoHeightCfg : logoWidth * ratio,
+            };
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = dataUrl;
+        });
+        logoData = dataUrl;
+      } catch {
+        // Silently skip the logo if it cannot be loaded (e.g. CORS / 404)
+        logoData = null;
+      }
+    }
 
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();   // 210
@@ -104,13 +145,22 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
     doc.setTextColor(120, 120, 120);
     doc.text(`# ${invoice.invoice_number || ''}`, M, 29);
 
-    // Right: Company info
-    let rightY = 18;
+    // Right: LOGO (if available) + Company info
+    let rightY = 14;
+    if (logoData && logoDims.h > 0) {
+      try {
+        const logoX = pageW - M - logoDims.w;
+        doc.addImage(logoData, 'PNG', logoX, rightY, logoDims.w, logoDims.h, undefined, 'FAST');
+        rightY += logoDims.h + 3;
+      } catch {
+        // ignore image errors
+      }
+    }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(15);
+    doc.setFontSize(13);
     doc.setTextColor(45, 45, 45);
     const companyName = companyProfile?.company_name || 'Your Company';
-    doc.text(companyName, pageW - M, rightY, { align: 'right' });
+    doc.text(companyName, pageW - M, rightY + 2, { align: 'right' });
     rightY += 6;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
