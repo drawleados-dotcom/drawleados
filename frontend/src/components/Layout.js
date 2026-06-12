@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import TopNav from './TopNav';
+import { useMenuLayout } from '../hooks/useMenuLayout';
 import DrawleadAI from './DrawleadAI';
 import ThemeToggle from './ThemeToggle';
 import { useTheme } from '../contexts/ThemeContext';
@@ -35,6 +37,7 @@ const Layout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isDark } = useTheme();
+  const { layout: menuLayout } = useMenuLayout();
   const { user, logout } = useAuth();
   const currentModule = routeToContext[location.pathname] || 'general';
 
@@ -459,7 +462,7 @@ const Layout = ({ children }) => {
 
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
-      {!isOperationsOnlyUser && <Sidebar />}
+      {!isOperationsOnlyUser && menuLayout === 'sidebar' && <Sidebar />}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header with Attendance & Theme Toggle */}
         <header className={`h-14 flex items-center justify-between px-6 border-b ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}>
@@ -581,7 +584,10 @@ const Layout = ({ children }) => {
             )}
           </div>
         </header>
-        
+
+        {/* Top horizontal nav — only when user picked "Top Menu View" in Settings */}
+        {!isOperationsOnlyUser && menuLayout === 'top' && <TopNav />}
+
         {/* Main Content */}
         <div className="flex-1 overflow-auto">
           <div className="p-8">{children}</div>

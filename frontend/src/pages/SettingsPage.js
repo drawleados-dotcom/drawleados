@@ -13,7 +13,7 @@ import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { 
   Users, Shield, Building2, Plus, Search, Edit, Trash2, 
-  Layers, Tag, Layout as LayoutIcon, Database, Plug
+  Layers, Tag, Layout as LayoutIcon, Database, Plug, Menu as MenuIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
@@ -22,6 +22,7 @@ import WorkspacesTab from '../components/settings/WorkspacesTab';
 import StatusManagementTab from '../components/settings/StatusManagementTab';
 import DatabaseToolsTab from '../components/hr/DatabaseToolsTab';
 import IntegrationsTab from '../components/settings/IntegrationsTab';
+import MenuSettingsTab from '../components/settings/MenuSettingsTab';
 
 const SettingsPage = () => {
   const { isDark } = useTheme();
@@ -257,6 +258,14 @@ const SettingsPage = () => {
               <Database className="h-4 w-4 mr-2" />
               Database Tools
             </TabsTrigger>
+            <TabsTrigger
+              value="menu"
+              data-testid="settings-menu-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              <MenuIcon className="h-4 w-4 mr-2" />
+              Menu
+            </TabsTrigger>
             {isSuperAdmin && (
               <TabsTrigger
                 value="integrations"
@@ -285,6 +294,17 @@ const SettingsPage = () => {
           <TabsContent value="database" className="mt-6">
             <DatabaseToolsTab
               isDark={isDark}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          </TabsContent>
+
+          {/* Menu Layout Tab Content */}
+          <TabsContent value="menu" className="mt-6">
+            <MenuSettingsTab
               bgCard={bgCard}
               bgSecondary={bgSecondary}
               textPrimary={textPrimary}
