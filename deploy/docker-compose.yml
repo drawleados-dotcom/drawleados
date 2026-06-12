@@ -1,0 +1,71 @@
+# ===== docker-compose.yml for Hostinger VPS =====
+# Runs: MongoDB + FastAPI backend + nginx-served React frontend
+# Usage on VPS:
+#   docker compose --env-file .env up -d --build
+
+version: "3.9"
+
+services:
+  # ---------- MongoDB ----------
+  mongo:
+    image: mongo:7
+    container_name: drawlead_mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${DB_NAME}
+    volumes:
+      - mongo_data:/data/db
+      - ./backup:/backup           # for mongodump/mongorestore
+    networks:
+      - drawlead_net
+    # NOTE: do NOT expose Mongo to the internet. It is only reachable from
+    # other containers on the drawlead_net network.
+    # ports:
+    #   - "27017:27017"   # uncomment ONLY for local debugging
+
+  # ---------- Backend (FastAPI) ----------
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+    container_name: drawlead_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override MONGO_URL to use the mongo container with auth
+      MONGO_URL: "mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/${DB_NAME}?authSource=admin"
+    depends_on:
+      - mongo
+    networks:
+      - drawlead_net
+    # Backend is internal-only — nginx in frontend container proxies to it.
+    # ports:
+    #   - "8001:8001"   # uncomment ONLY for local debugging
+
+  # ---------- Frontend (React + nginx) ----------
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+      args:
+        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL}
+    container_name: drawlead_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - drawlead_net
+    ports:
+      - "80:80"
+      # Add 443 when you wire up SSL (see SETUP.md → Step 6)
+      # - "443:443"
+
+volumes:
+  mongo_data:
+
+networks:
+  drawlead_net:
+    driver: bridge
