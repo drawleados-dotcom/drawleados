@@ -316,9 +316,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     setSubmitting(true);
     try {
-      // In My Tasks tab, force assignee to current user (Assign To dropdown is hidden).
+      // Outside the Assign-to-Team tab, the Assign To dropdown is hidden — always
+      // default the assignee to the current user.
       const payload = { ...formData };
-      if (mainTab === 'assigned_to_me' && !payload.assigned_to) {
+      if (mainTab !== 'assign_to_team') {
         payload.assigned_to = user?.user_id;
       }
       await axios.post(`${API}/api/our-tasks/tasks`, payload, { headers });
@@ -1814,8 +1815,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         </Select>
                       </div>
                     </div>
-                    {/* Assign To — hidden when creating from My Tasks (assignee = current user) */}
-                    {!(mainTab === 'assigned_to_me' && !editingTask) && (
+                    {/* Assign To — shown ONLY in the "Assign to Team" tab.
+                        In My Tasks (and other tabs), the assignee is always the current user. */}
+                    {mainTab === 'assign_to_team' && (
                       <div>
                         <Label className={textPrimary}>Assign To</Label>
                         <Select value={formData.assigned_to} onValueChange={(v) => setFormData(prev => ({ ...prev, assigned_to: v }))}>
