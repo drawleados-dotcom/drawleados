@@ -621,23 +621,105 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
 
     const isApproved = task.approval_request?.status === 'approved';
+    if (isApproved) {
+      return (
+        <Badge className="bg-[#3f3f46] text-[#a1a1aa] h-8 px-3 flex items-center" title="Locked — approved by Operations">
+          <CheckCircle2 className="h-3 w-3 mr-1" /> Locked
+        </Badge>
+      );
+    }
 
-    return (
+    // Live timer controls + manual Edit (both available side-by-side)
+    const editBtn = (
       <Button
         size="sm"
+        variant="outline"
         onClick={() => openEditTimeModal(task)}
-        disabled={isApproved}
-        className={
-          isApproved
-            ? 'bg-[#3f3f46] text-[#a1a1aa] h-8 px-3 cursor-not-allowed'
-            : 'bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3'
-        }
+        className="h-8 px-2 border-[#27272a] text-[#a1a1aa] hover:text-[#fafafa]"
         data-testid={`time-edit-btn-${task.task_id}`}
-        title={isApproved ? 'Locked — approved by Operations' : 'Edit Start & End time'}
+        title="Manually enter Start & End time"
       >
-        <Edit2 className="h-3 w-3 mr-1" />
-        {isApproved ? 'Locked' : 'Edit'}
+        <Edit2 className="h-3 w-3" />
       </Button>
+    );
+
+    if (status === 'finished') {
+      return (
+        <div className="flex gap-1 items-center">
+          <Badge className="bg-[#10b981]/20 text-[#10b981]">
+            <CheckCircle2 className="h-3 w-3 mr-1" /> Done {formatDuration(tracking.total_seconds || 0)}
+          </Badge>
+          {editBtn}
+        </div>
+      );
+    }
+
+    if (status === 'running') {
+      return (
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            onClick={() => handleTimeTracking(task.task_id, 'pause')}
+            className="bg-[#f59e0b] hover:bg-[#d97706] text-white h-8 px-2"
+            data-testid={`time-pause-btn-${task.task_id}`}
+            title="Pause"
+          >
+            <Pause className="h-3 w-3" />
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => handleTimeTracking(task.task_id, 'finish')}
+            className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-2"
+            data-testid={`time-finish-btn-${task.task_id}`}
+            title="Finish"
+          >
+            <Square className="h-3 w-3" />
+          </Button>
+          {editBtn}
+        </div>
+      );
+    }
+
+    if (status === 'paused') {
+      return (
+        <div className="flex gap-1">
+          <Button
+            size="sm"
+            onClick={() => handleTimeTracking(task.task_id, 'resume')}
+            className="bg-[#3b82f6] hover:bg-[#2563eb] text-white h-8 px-2"
+            data-testid={`time-resume-btn-${task.task_id}`}
+            title="Resume"
+          >
+            <Play className="h-3 w-3" />
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => handleTimeTracking(task.task_id, 'finish')}
+            className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-2"
+            data-testid={`time-finish-btn-${task.task_id}`}
+            title="Finish"
+          >
+            <Square className="h-3 w-3" />
+          </Button>
+          {editBtn}
+        </div>
+      );
+    }
+
+    // not_started — show Start + Edit (manual)
+    return (
+      <div className="flex gap-1">
+        <Button
+          size="sm"
+          onClick={() => handleTimeTracking(task.task_id, 'start')}
+          className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-2"
+          data-testid={`time-start-btn-${task.task_id}`}
+          title="Start timer"
+        >
+          <Play className="h-3 w-3" />
+        </Button>
+        {editBtn}
+      </div>
     );
   };
 
