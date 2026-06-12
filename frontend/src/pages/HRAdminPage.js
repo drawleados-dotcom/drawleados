@@ -6668,11 +6668,12 @@ function DesignationsDeptsTab({
                   <div>
                     <Label className={`${textPrimary} mb-2 block`}>Approval Queue</Label>
                     <p className={`text-xs ${textSecondary} mb-2`}>Tasks created or completed under this designation will route to:</p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       {[
-                        { value: 'pm', label: 'PM Approval', color: 'bg-purple-500' },
-                        { value: 'operations', label: 'Operations Approval', color: 'bg-blue-500' },
-                        { value: 'ceo', label: 'CEO Approval', color: 'bg-orange-500' },
+                        { value: 'pm', label: 'Tech Lead', color: 'bg-purple-500' },
+                        { value: 'marketing_head', label: 'Marketing Head', color: 'bg-pink-500' },
+                        { value: 'operations', label: 'Operations', color: 'bg-blue-500' },
+                        { value: 'ceo', label: 'CEO', color: 'bg-orange-500' },
                       ].map(opt => {
                         const selected = opsState.operations_approval_queue === opt.value;
                         return (

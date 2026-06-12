@@ -507,7 +507,7 @@ export default function ApprovalsPage({ embedded = false }) {
           {/* 3-way Approvals bucket sub-tabs: PM / Operations / HR */}
           <div className="flex items-center gap-2 flex-wrap" data-testid="approver-bucket-tabs">
             {[
-              { id: 'pm', label: 'PM Approvals', color: 'from-purple-500 to-purple-600' },
+              { id: 'pm', label: 'Tech Lead Approvals', color: 'from-purple-500 to-purple-600' },
               { id: 'operations', label: 'Operations Approvals', color: 'from-blue-500 to-indigo-600' },
               { id: 'hr', label: 'HR Approvals', color: 'from-pink-500 to-rose-600' },
             ].map(b => {

@@ -1872,7 +1872,7 @@ function TrackerBoard({
               <p className={`text-xs ${textSecondary} mb-2`}>Approval Flow:</p>
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs">
-                  <User className="h-3 w-3" /> PM Approval
+                  <User className="h-3 w-3" /> Tech Lead Approval
                 </div>
                 <ArrowRight className={`h-3 w-3 ${textSecondary}`} />
                 <div className="flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs">

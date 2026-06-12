@@ -23,7 +23,7 @@ class DesignationCreate(BaseModel):
     operations_my_tasks: Optional[bool] = True
     operations_assign_to_team: Optional[bool] = False
     operations_departments: Optional[List[str]] = []
-    operations_approval_queue: Optional[str] = None  # 'pm' | 'operations' | 'ceo'
+    operations_approval_queue: Optional[str] = None  # 'pm' (Tech Lead) | 'marketing_head' | 'operations' | 'ceo'
     # NEW: Per-sub-tab access (Feb 2026)
     operations_projects: Optional[str] = "none"   # 'none' | 'view' | 'edit'
     operations_payment_schedule: Optional[str] = "visible"  # 'hidden' | 'visible'
