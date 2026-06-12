@@ -42,6 +42,33 @@ def init_hr_db(database):
     global db
     db = database
 
+
+# ============== HR ADMIN PERMISSION HELPER ==============
+
+async def is_hr_admin(user) -> bool:
+    """
+    Returns True if the user can access HR-admin endpoints.
+    Accepts EITHER:
+      - role in [admin, super_admin, hr_manager], OR
+      - their designation has 'hr_admin' module access.
+    """
+    role = getattr(user, "role", None) or (user.get("role") if isinstance(user, dict) else None)
+    if role in ("admin", "super_admin", "hr_manager"):
+        return True
+
+    designation_id = (
+        getattr(user, "designation_id", None)
+        or (user.get("designation_id") if isinstance(user, dict) else None)
+    )
+    if not designation_id or db is None:
+        return False
+    desig = await db.designations.find_one({"designation_id": designation_id}, {"module_access": 1})
+    if not desig:
+        return False
+    mods = desig.get("module_access") or []
+    return "hr_admin" in mods or "hr_manager" in mods
+
+
 # ============== EMAIL HELPER ==============
 
 async def send_email_notification(to_email: str, subject: str, html_content: str):
@@ -397,7 +424,7 @@ async def get_employee_profile(user_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "project_manager"]:
+    if not await is_hr_admin(current_user):
         if current_user.user_id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
     
@@ -413,7 +440,7 @@ async def admin_update_profile(user_id: str, update_data: Dict[str, Any], reques
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin"]:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     update_data["updated_at"] = datetime.now(timezone.utc)
@@ -1032,7 +1059,7 @@ async def get_attendance_report(request: Request, user_id: Optional[str] = None)
     target_user_id = user_id or current_user.user_id
     
     # Non-admins can only see their own report
-    if current_user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+    if not await is_hr_admin(current_user):
         target_user_id = current_user.user_id
     
     # Get last 6 months of attendance
@@ -1087,7 +1114,7 @@ async def get_attendance_date_detail(date: str, request: Request, user_id: Optio
     target_user_id = user_id or current_user.user_id
     
     # Non-admins can only see their own detail
-    if current_user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+    if not await is_hr_admin(current_user):
         target_user_id = current_user.user_id
     
     try:
@@ -1184,7 +1211,7 @@ async def get_attendance_calendar(year: int, month: int, request: Request, user_
     target_user_id = user_id or current_user.user_id
     
     # Non-admins can only see their own calendar
-    if current_user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+    if not await is_hr_admin(current_user):
         target_user_id = current_user.user_id
     
     try:
@@ -1314,7 +1341,7 @@ async def get_pending_approvals(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Get pending attendance approvals
@@ -1344,7 +1371,7 @@ async def approve_attendance(attendance_id: str, request: Request, action: str =
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     attendance = await db.attendance.find_one({"attendance_id": attendance_id})
@@ -1370,7 +1397,7 @@ async def approve_permission(permission_id: str, request: Request, action: str =
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     permission = await db.permissions.find_one({"permission_id": permission_id})
@@ -1432,7 +1459,7 @@ async def get_all_attendance(
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     now = datetime.now(timezone.utc)
@@ -1483,7 +1510,7 @@ async def get_settings(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     return await get_hr_settings()
@@ -1494,7 +1521,7 @@ async def update_settings(request: Request, settings_data: dict):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     current = await get_hr_settings()
@@ -1563,7 +1590,7 @@ async def update_my_profile_config(request: Request, payload: dict):
     """Update visibility config for My Profile tabs. HR Admin / Super Admin only."""
     from server import get_current_user
     user = await get_current_user(request)
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     incoming = (payload or {}).get("tabs") or {}
@@ -1643,7 +1670,7 @@ async def update_calendar(year: int, month: int, request: Request, calendar_data
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     calendar = await db.hr_calendar.find_one({"month": month, "year": year})
@@ -1683,7 +1710,7 @@ async def get_salary_details(user_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     salary = await db.salary_details.find_one(
@@ -1699,7 +1726,7 @@ async def set_salary_details(user_id: str, request: Request, salary_data: dict):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     existing = await db.salary_details.find_one({"user_id": user_id})
@@ -1739,7 +1766,7 @@ async def generate_payslip(request: Request, payslip_data: dict):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     user_id = payslip_data.get("user_id")
@@ -1887,7 +1914,7 @@ async def create_manual_payslip(request: Request, payload: dict):
     """Create a fully manual payslip — HR Admin enters every field."""
     from server import get_current_user
     user = await get_current_user(request)
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     user_id = payload.get("user_id")
     month = int(payload.get("month") or 0)
@@ -2157,7 +2184,7 @@ async def get_all_payslips(
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager", "finance"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     query = {}
@@ -2177,7 +2204,7 @@ async def submit_payslip_for_approval(payslip_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     payslip = await db.payslips.find_one({"payslip_id": payslip_id})
@@ -2231,7 +2258,7 @@ async def delete_payslip(payslip_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized to delete payslips")
     
     payslip = await db.payslips.find_one({"payslip_id": payslip_id})
@@ -2251,7 +2278,7 @@ async def edit_payslip(payslip_id: str, request: Request, updates: dict):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized to edit payslips")
     
     payslip = await db.payslips.find_one({"payslip_id": payslip_id})
@@ -2285,7 +2312,7 @@ async def regenerate_payslip(payslip_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized to regenerate payslips")
     
     payslip = await db.payslips.find_one({"payslip_id": payslip_id})
@@ -2441,7 +2468,7 @@ async def send_to_finance(payslip_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     payslip = await db.payslips.find_one({"payslip_id": payslip_id})
@@ -2468,7 +2495,7 @@ async def release_payment(payslip_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "finance"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     payslip = await db.payslips.find_one({"payslip_id": payslip_id})
@@ -2613,7 +2640,7 @@ async def get_pending_leave_requests(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     requests = await db.leave_requests.find(
@@ -2629,7 +2656,7 @@ async def approve_leave_request(leave_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id})
@@ -2688,7 +2715,7 @@ async def reject_leave_request(leave_id: str, request: Request, reason: str = ""
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id})
@@ -2741,7 +2768,7 @@ async def get_tasks_for_leave_period(leave_id: str, request: Request):
     user = await get_current_user(request)
     
     # Only managers and admins can view this
-    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager", "operations_admin"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id}, {"_id": 0})
@@ -2780,7 +2807,7 @@ async def send_leave_for_verification(leave_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id})
@@ -2808,7 +2835,7 @@ async def get_pending_verification_leaves(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "operations_admin", "project_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     requests = await db.leave_requests.find(
@@ -2853,7 +2880,7 @@ async def verify_leave_tasks(leave_id: str, verification: LeaveVerification, req
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "operations_admin", "project_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id})
@@ -2917,7 +2944,7 @@ async def final_approve_leave(leave_id: str, request: Request, remarks: str = ""
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     leave = await db.leave_requests.find_one({"leave_id": leave_id})
@@ -3122,7 +3149,7 @@ async def generate_payslip(payslip_data: Dict[str, Any], request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     payslip_id = f"pay_{uuid.uuid4().hex[:12]}"
@@ -3192,7 +3219,7 @@ async def create_review(review_data: Dict[str, Any], request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     review_id = f"review_{uuid.uuid4().hex[:12]}"
@@ -3251,7 +3278,7 @@ async def get_all_employees(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     employees = await db.users.find(
@@ -3276,7 +3303,7 @@ async def get_team_attendance_overview(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -3314,7 +3341,7 @@ async def get_all_leave_requests(request: Request, status: Optional[str] = None)
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     query = {}
@@ -3334,7 +3361,7 @@ async def get_all_employee_details(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Get all employees
@@ -3386,7 +3413,7 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Get user info
@@ -3453,7 +3480,7 @@ async def delete_employee(user_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin"]:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Prevent deleting yourself
@@ -3524,7 +3551,7 @@ async def get_hr_dashboard_stats(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Access denied")
     
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -3607,7 +3634,7 @@ async def create_employee(data: CreateEmployeeRequest, request: Request):
     from server import get_current_user, hash_password
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Admin/HR access required")
     
     # Check if email already exists
@@ -3793,7 +3820,7 @@ async def get_pending_permission_requests(request: Request):
     current_user = await get_current_user(request)
     
     # Check if user is HR admin
-    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     requests = await db.permission_requests.find(
@@ -3809,7 +3836,7 @@ async def approve_permission_request(permission_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     result = await db.permission_requests.update_one(
@@ -3838,7 +3865,7 @@ async def reject_permission_request(permission_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     result = await db.permission_requests.update_one(
@@ -3897,7 +3924,7 @@ async def add_quote(request: Request, quote_data: dict):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     quote_text = quote_data.get("text", "").strip()
@@ -3921,7 +3948,7 @@ async def update_quote(quote_id: str, request: Request, quote_data: dict):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     update_fields = {}
@@ -3951,7 +3978,7 @@ async def delete_quote(quote_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     result = await db.motivational_quotes.delete_one({"quote_id": quote_id})
@@ -3972,7 +3999,7 @@ async def get_employees_for_review(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     employees = await db.users.find(
@@ -3989,7 +4016,7 @@ async def get_employee_review_summary(employee_id: str, review_type: str, period
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Parse period based on review_type
@@ -4125,7 +4152,7 @@ async def get_employee_tasks_for_review(employee_id: str, review_type: str, peri
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Parse period
@@ -4263,7 +4290,7 @@ async def create_performance_review(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "hr_manager", "operations_manager", "ceo"]:
+    if not await is_hr_admin(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     data = await request.json()
@@ -4435,7 +4462,7 @@ async def get_pending_wfh_requests(request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     requests = await db.wfh_requests.find(
@@ -4458,7 +4485,7 @@ async def get_all_wfh_requests(
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     query = {}
@@ -4507,7 +4534,7 @@ async def approve_wfh_request(wfh_id: str, request: Request, data: dict = Body(d
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     wfh = await db.wfh_requests.find_one({"wfh_id": wfh_id})
@@ -4539,7 +4566,7 @@ async def reject_wfh_request(wfh_id: str, request: Request, data: dict = Body(de
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    if not await is_hr_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     wfh = await db.wfh_requests.find_one({"wfh_id": wfh_id})
@@ -4577,7 +4604,7 @@ async def cancel_wfh_request(wfh_id: str, request: Request):
     
     # Only owner can cancel if pending, admins can cancel anytime
     if wfh["user_id"] != current_user.user_id:
-        if current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+        if not await is_hr_admin(current_user):
             raise HTTPException(status_code=403, detail="Not authorized")
     else:
         if wfh["status"] != "pending":
