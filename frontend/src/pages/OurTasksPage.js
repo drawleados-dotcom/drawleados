@@ -293,6 +293,48 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   useEffect(() => { loadSummary(); }, [loadSummary]);
   useAutoRefresh(loadSummary, { enabled: !showCreateModal && !editingTask });
 
+  // Tab-scoped summary computed from the already-loaded tasks, so the cards
+  // always reflect the active main tab (My Tasks vs Assign to Team) and the
+  // selected date.
+  const tabScopedSummary = useMemo(() => {
+    const isMine = (t) => t.assigned_to === user?.user_id || t.created_by === user?.user_id;
+    let pool;
+    if (mainTab === 'assigned_to_me') {
+      pool = tasks.filter(isMine);
+    } else if (mainTab === 'assign_to_team') {
+      const role = (user?.role || '').toLowerCase().trim();
+      const desg = (user?.designation || '').toLowerCase().trim();
+      const isPrivileged = role === 'super_admin' || role === 'admin' || desg.includes('operation');
+      if (isPrivileged) pool = tasks;
+      else {
+        const myDepts = myDesignation?.operations_departments || [];
+        pool = tasks.filter(t =>
+          (t.created_by === user?.user_id && t.assigned_to !== user?.user_id) ||
+          (t.department && myDepts.includes(t.department) && t.assigned_to !== user?.user_id)
+        );
+      }
+    } else {
+      pool = tasks;
+    }
+
+    // Filter by selected summaryDate (compare local YYYY-MM-DD on planned_date/created_at)
+    const onDate = pool.filter(t => {
+      const d = (t.planned_date || t.created_at || '').toString().slice(0, 10);
+      return d === summaryDate;
+    });
+
+    const wsec = onDate.reduce((s, t) => s + Number(t?.time_tracking?.total_seconds || 0), 0);
+    const fmtH = (sec) => `${Math.floor(sec/3600)}h ${Math.floor((sec%3600)/60)}m`;
+
+    return {
+      worked_hours: { formatted: fmtH(wsec) },
+      total_to_do: pool.filter(t => t.status === 'pending' || t.status === 'in_progress').length,
+      pending: pool.filter(t => t.status === 'pending').length,
+      awaiting_ops: pool.filter(t => t.approval_request?.status === 'pending_ops' || t.approval_request?.queue === 'operations').length,
+      awaiting_ceo: pool.filter(t => t.approval_request?.status === 'pending_ceo' || t.approval_request?.queue === 'ceo').length,
+    };
+  }, [tasks, mainTab, user, myDesignation, summaryDate]);
+
   // Create task
   const handleCreateTask = async () => {
     if (submitting) return; // ignore double-clicks
@@ -1079,9 +1121,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         {/* Operations Summary Cards — Feb 2026
             5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO */}
         <OperationsSummaryCards
-          summary={summary}
+          summary={tabScopedSummary}
           summaryDate={summaryDate}
           onDateChange={setSummaryDate}
+          activeFilter={filter}
+          onCardClick={(key) => {
+            // 'todo'  -> show all (open + in progress + others)
+            // 'pending' -> show only pending
+            // 'ops' / 'ceo' / 'worked' -> reset to all (visual highlight only)
+            if (key === 'pending') setFilter('pending');
+            else setFilter('all');
+          }}
           textPrimary={textPrimary}
           textSecondary={textSecondary}
           bgCard={bgCard}

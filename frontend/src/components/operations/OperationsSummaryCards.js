@@ -10,6 +10,8 @@ export default function OperationsSummaryCards({
   summary = {},
   summaryDate,
   onDateChange,
+  activeFilter,
+  onCardClick,
   textPrimary,
   textSecondary,
   bgCard,
@@ -85,11 +87,17 @@ export default function OperationsSummaryCards({
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {cards.map((card) => {
           const Icon = card.icon;
+          const isActive =
+            (card.key === 'pending' && activeFilter === 'pending') ||
+            (card.key !== 'pending' && (activeFilter === 'all' || !activeFilter));
+          const ringActive = isActive ? 'ring-2 ring-indigo-500/60' : '';
           return (
-            <div
+            <button
+              type="button"
               key={card.key}
               data-testid={card.testid}
-              className={`relative overflow-hidden rounded-xl border ${borderColor} ${bgCard} p-4`}
+              onClick={() => onCardClick && onCardClick(card.key)}
+              className={`relative overflow-hidden rounded-xl border ${borderColor} ${bgCard} p-4 text-left transition-transform hover:scale-[1.02] hover:shadow-lg cursor-pointer ${ringActive}`}
             >
               <div className={`absolute -top-8 -right-8 h-24 w-24 rounded-full bg-gradient-to-br ${card.ring}`} />
               <div className="relative">
@@ -100,7 +108,7 @@ export default function OperationsSummaryCards({
                 <p className={`text-2xl font-bold ${textPrimary}`}>{card.value}</p>
                 <p className={`text-[11px] ${textSecondary} mt-0.5`}>{card.sub}</p>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
