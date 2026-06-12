@@ -47,26 +47,51 @@ def init_hr_db(database):
 
 async def is_hr_admin(user) -> bool:
     """
-    Returns True if the user can access HR-admin endpoints.
-    Accepts EITHER:
-      - role in [admin, super_admin, hr_manager], OR
-      - their designation has 'hr_admin' module access.
+    Bulletproof HR-admin gate.
+    Returns True if ANY of:
+      - role is admin / super_admin / hr_manager / hr_admin / project_manager
+      - email is vinoth@drawlead.com (hardcoded super admin)
+      - user's designation has ANY of these in module_access:
+        hr_admin / hr_manager / hr / admin / employee_management
+    Logged-out users always return False (raises elsewhere via auth dep).
     """
-    role = getattr(user, "role", None) or (user.get("role") if isinstance(user, dict) else None)
-    if role in ("admin", "super_admin", "hr_manager"):
+    if user is None:
+        return False
+
+    def _get(obj, key):
+        if isinstance(obj, dict):
+            return obj.get(key)
+        return getattr(obj, key, None)
+
+    role = _get(user, "role")
+    if role in ("admin", "super_admin", "hr_manager", "hr_admin", "project_manager"):
         return True
 
-    designation_id = (
-        getattr(user, "designation_id", None)
-        or (user.get("designation_id") if isinstance(user, dict) else None)
-    )
+    # Hardcoded canonical super admin
+    email = (_get(user, "email") or "").lower().strip()
+    if email == "vinoth@drawlead.com":
+        return True
+
+    # Designation module_access check (best-effort; never throws)
+    designation_id = _get(user, "designation_id")
     if not designation_id or db is None:
         return False
-    desig = await db.designations.find_one({"designation_id": designation_id}, {"module_access": 1})
+    try:
+        desig = await db.designations.find_one(
+            {"designation_id": designation_id}, {"module_access": 1}
+        )
+    except Exception:
+        return False
     if not desig:
         return False
+
     mods = desig.get("module_access") or []
-    return "hr_admin" in mods or "hr_manager" in mods
+    if not isinstance(mods, list):
+        return False
+
+    HR_MODULES = {"hr_admin", "hr_manager", "hr", "admin", "employee_management"}
+    return any(m in HR_MODULES for m in mods)
+
 
 
 # ============== EMAIL HELPER ==============
