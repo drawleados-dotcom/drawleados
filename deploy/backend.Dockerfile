@@ -11,7 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements first for better layer caching
 COPY backend/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# The emergentintegrations package is hosted on Emergent's private PyPI mirror,
+# so we add it as an extra index. Public packages still come from PyPI.
+RUN pip install --no-cache-dir \
+    --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ \
+    -r /app/requirements.txt
 
 # Copy backend source
 COPY backend/ /app/
