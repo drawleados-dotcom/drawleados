@@ -814,19 +814,16 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const filteredTasks = tasks.filter(task => {
     // Main Tab filter - Assigned to Me vs Assign to Team
     if (mainTab === 'assigned_to_me') {
-      // Tasks assigned to me (by others) OR tasks I created for myself
-      if (!(task.assigned_to === user?.user_id)) return false;
+      // My Tasks = tasks assigned to me OR created by me (fix: was missing created_by)
+      const isMine = task.assigned_to === user?.user_id || task.created_by === user?.user_id;
+      if (!isMine) return false;
     } else if (mainTab === 'assign_to_team') {
-      // I can see this team task if any of:
-      //  - I'm Super Admin / Admin / Operation Head → see ALL tasks (full org visibility)
-      //  - I created it and assigned to someone else
-      //  - The task's department is in my designation's allowed Operations departments
-      const role = (user?.role || '').toLowerCase();
+      // Super Admin / Admin / Operation Head → see EVERY task in the org
+      const role = (user?.role || '').toLowerCase().trim();
       const desg = (user?.designation || '').toLowerCase().trim();
-      const isPrivileged = role === 'super_admin' || role === 'admin' || desg === 'operation head';
-      if (isPrivileged) {
-        // Show everything in Assign to Team for privileged users — no exclusions
-      } else {
+      const isPrivileged = role === 'super_admin' || role === 'admin' ||
+                           desg === 'operation head' || desg.includes('operation');
+      if (!isPrivileged) {
         const myDepts = (myDesignation?.operations_departments || []);
         const createdByMe = task.created_by === user?.user_id && task.assigned_to !== user?.user_id;
         const inMyDept = task.department && myDepts.includes(task.department) && task.assigned_to !== user?.user_id;

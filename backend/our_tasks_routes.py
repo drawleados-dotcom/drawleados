@@ -211,36 +211,29 @@ async def get_tasks(request: Request):
     
     try:
         # All authenticated users can see all team tasks
-        tasks = await db.our_tasks.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+        tasks = await db.our_tasks.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
         
-        # Add assigned user names and assigned_by names
+        # Collect unique user_ids referenced by any task and batch-fetch their names
+        # ONCE instead of N+1 queries (this was the major slowness).
+        uid_set = set()
+        for t in tasks:
+            for k in ("assigned_to", "assigned_by", "created_by"):
+                if t.get(k):
+                    uid_set.add(t[k])
+        users_map = {}
+        if uid_set:
+            users_cursor = db.users.find(
+                {"user_id": {"$in": list(uid_set)}},
+                {"_id": 0, "user_id": 1, "name": 1}
+            )
+            async for u in users_cursor:
+                users_map[u["user_id"]] = u.get("name") or "Unknown"
+
         for task in tasks:
-            if task.get("assigned_to"):
-                assigned_user = await db.users.find_one(
-                    {"user_id": task["assigned_to"]}, 
-                    {"name": 1, "_id": 0}
-                )
-                task["assigned_to_name"] = assigned_user.get("name") if assigned_user else "Unknown"
-            else:
-                task["assigned_to_name"] = None
-            
-            # Add assigned_by name
-            if task.get("assigned_by"):
-                assigned_by_user = await db.users.find_one(
-                    {"user_id": task["assigned_by"]}, 
-                    {"name": 1, "_id": 0}
-                )
-                task["assigned_by_name"] = assigned_by_user.get("name") if assigned_by_user else "Unknown"
-            else:
-                task["assigned_by_name"] = None
-                
-            if task.get("created_by"):
-                creator = await db.users.find_one(
-                    {"user_id": task["created_by"]}, 
-                    {"name": 1, "_id": 0}
-                )
-                task["created_by_name"] = creator.get("name") if creator else "Unknown"
-        
+            task["assigned_to_name"] = users_map.get(task.get("assigned_to")) if task.get("assigned_to") else None
+            task["assigned_by_name"] = users_map.get(task.get("assigned_by")) if task.get("assigned_by") else None
+            task["created_by_name"] = users_map.get(task.get("created_by")) if task.get("created_by") else None
+
         return tasks
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
