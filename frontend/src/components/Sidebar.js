@@ -66,6 +66,43 @@ const Sidebar = () => {
   const userRole = user?.role || 'employee';
   const moduleAccess = user?.module_access || [];
   const userDepartment = user?.department || '';
+
+  // Per-department menu order — fetched from /api/menu-order; applied via CSS `order`.
+  const [deptOrder, setDeptOrder] = useState([]);
+  useEffect(() => {
+    const loadOrder = async () => {
+      try {
+        const r = await axios.get(`${API}/api/menu-order`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setDeptOrder(r.data?.order || []);
+      } catch { setDeptOrder([]); }
+    };
+    loadOrder();
+    const refresh = () => loadOrder();
+    window.addEventListener('menu-order-change', refresh);
+    return () => window.removeEventListener('menu-order-change', refresh);
+  }, [token]);
+
+  // Map Sidebar item → MenuSettings module key.
+  const SIDEBAR_KEY_MAP = {
+    'leads':           'leads',
+    'our_tasks':       'our_tasks',
+    'calendar':        'meetings',
+    'web_dev':         'web_dev',
+    'approvals':       'approvals',
+    'finance':         'finance',
+    'hr_admin':        'hr_admin',
+    'hr':              'my_profile',
+    'settings':        'settings',
+    'documentations':  'documentations',
+  };
+  const orderStyle = (sidebarKey) => {
+    if (!deptOrder || deptOrder.length === 0) return undefined;
+    const moduleKey = SIDEBAR_KEY_MAP[sidebarKey] || sidebarKey;
+    const idx = deptOrder.indexOf(moduleKey);
+    return { order: idx === -1 ? 999 : idx };
+  };
   
   // Check access permissions
   const hasAccess = (module) => {
@@ -248,7 +285,7 @@ const Sidebar = () => {
         </Button>
       </div>
 
-      <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} space-y-1 overflow-y-auto`}>
+      <nav className={`flex-1 ${isCollapsed ? 'px-2' : 'px-4'} flex flex-col gap-1 overflow-y-auto`}>
         {/* === TASKS MODULE USER VIEW (Operations Head) === */}
         {hasTasksModuleOnly && (
           <>
@@ -297,6 +334,7 @@ const Sidebar = () => {
           <Link
             to="/leads"
             data-testid="nav-leads"
+            style={orderStyle('leads')}
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'Leads' : ''}
           >
@@ -310,6 +348,7 @@ const Sidebar = () => {
         <Link
           to="/our-tasks"
           data-testid="nav-our-tasks"
+          style={orderStyle('our_tasks')}
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/our-tasks' ? navItemActive : navItemInactive}`}
           title={isCollapsed ? 'Operations' : ''}
         >
@@ -323,6 +362,7 @@ const Sidebar = () => {
         <Link
           to="/calendar"
           data-testid="nav-calendar"
+          style={orderStyle('calendar')}
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/calendar') ? navItemActive : navItemInactive}`}
           title={isCollapsed ? 'Calendar' : ''}
         >
@@ -336,6 +376,7 @@ const Sidebar = () => {
           <Link
             to="/dl-operations"
             data-testid="nav-web-dev"
+            style={orderStyle('web_dev')}
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/dl-operations' || location.pathname.startsWith('/project/') ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'Web Dev' : ''}
           >
@@ -370,6 +411,7 @@ const Sidebar = () => {
             <Link
               to="/approvals"
               data-testid="nav-approvals"
+              style={orderStyle('approvals')}
               className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/approvals' ? navItemActive : navItemInactive}`}
               title={isCollapsed ? 'Approvals' : ''}
             >
@@ -385,6 +427,7 @@ const Sidebar = () => {
           <Link
             to="/finance"
             data-testid="nav-finance"
+            style={orderStyle('finance')}
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/finance' ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'Finance' : ''}
           >
@@ -398,6 +441,7 @@ const Sidebar = () => {
           <Link
             to="/hr-admin"
             data-testid="nav-hr-admin"
+            style={orderStyle('hr_admin')}
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr-admin' ? navItemActive : navItemInactive}`}
             title={isCollapsed ? (moduleAccess.includes('hr_manager') && !moduleAccess.includes('hr_admin') ? 'HR Manager' : 'HR Admin') : ''}
           >
@@ -411,6 +455,7 @@ const Sidebar = () => {
         <Link
           to="/hr"
           data-testid="nav-my-profile"
+          style={orderStyle('hr')}
           className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/hr' ? navItemActive : navItemInactive}`}
           title={isCollapsed ? 'My Profile' : ''}
         >
@@ -424,6 +469,7 @@ const Sidebar = () => {
           <Link
             to="/settings"
             data-testid="nav-settings"
+            style={orderStyle('settings')}
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/settings' ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'Settings' : ''}
           >
@@ -437,6 +483,7 @@ const Sidebar = () => {
           <Link
             to="/documentations"
             data-testid="nav-documentations"
+            style={orderStyle('documentations')}
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/documentations' ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'Documentation' : ''}
           >

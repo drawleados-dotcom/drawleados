@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2 } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -43,7 +43,8 @@ export default function ProjectsPanel({
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
 
-  const [projectDraft, setProjectDraft] = useState({ name: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
+  const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
+  const [clients, setClients] = useState([]);
   const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [activeCategoryTab, setActiveCategoryTab] = useState('all');
@@ -101,13 +102,23 @@ export default function ProjectsPanel({
     }
   }, [headers]);
 
+  const loadClients = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/finance/clients?include_summary=false`, { headers });
+      setClients(res.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [headers]);
+
   useEffect(() => {
     // Show spinner ONLY on first mount. Auto-refresh ticks update silently
     // so the list doesn't flicker every 15 seconds.
     loadProjects(true);
     loadUsers();
     loadDeptCategories();
-  }, [loadProjects, loadUsers, loadDeptCategories]);
+    loadClients();
+  }, [loadProjects, loadUsers, loadDeptCategories, loadClients]);
 
   // Background polling + focus refresh — pauses while a create/edit modal is open
   useAutoRefresh(
@@ -117,10 +128,11 @@ export default function ProjectsPanel({
 
   const handleCreateProject = async () => {
     if (!projectDraft.name.trim()) { toast.error('Project name is required'); return; }
+    if (!projectDraft.client_id) { toast.error('Please select a client (Finance → Clients)'); return; }
     try {
       await axios.post(`${API}/api/projects`, projectDraft, { headers });
       toast.success('Project created');
-      setProjectDraft({ name: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
+      setProjectDraft({ name: '', client_id: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
       setShowCreateProject(false);
       loadProjects();
     } catch (e) {
@@ -451,6 +463,31 @@ export default function ProjectsPanel({
               </div>
               <div className="flex items-center gap-2"><ListChecks className={`h-4 w-4 ${textSecondary}`} /><span className={textPrimary}>{selectedProject.tasks?.length || 0} tasks</span></div>
               <Badge className="bg-[#10b981]/20 text-[#10b981]">{selectedProject.status || 'active'}</Badge>
+            </div>
+
+            {/* Client — required link to Finance → Clients */}
+            <div className="flex items-center gap-2 flex-wrap pt-1" data-testid="project-client-row">
+              <Building2 className={`h-4 w-4 ${textSecondary}`} />
+              <span className={`text-sm ${textSecondary}`}>Client:</span>
+              {canManageProjects ? (
+                <select
+                  value={selectedProject.client_id || ''}
+                  onChange={(e) => updateProjectField('client_id', e.target.value)}
+                  className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="project-edit-client-select"
+                >
+                  <option value="">Select a client...</option>
+                  {clients.map((c) => (
+                    <option key={c.client_id} value={c.client_id}>
+                      {c.display_name}{c.company_name ? ` — ${c.company_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className={`text-sm font-medium ${textPrimary}`}>
+                  {selectedProject.client_name || (clients.find(c => c.client_id === selectedProject.client_id)?.display_name) || '—'}
+                </span>
+              )}
             </div>
 
             {/* Departments — chips with inline edit */}
@@ -1338,6 +1375,14 @@ export default function ProjectsPanel({
                     <span className="flex items-center gap-1"><ListChecks className="h-3 w-3" />{p.task_count || 0} tasks</span>
                     <span className="flex items-center gap-1"><Users className="h-3 w-3" />{p.members?.length || 0}</span>
                   </div>
+                  {(p.client_name || p.client_id) && (
+                    <div className={`flex items-center gap-1 text-xs ${textSecondary} mt-2 pt-2 border-t ${borderColor}`}>
+                      <Building2 className="h-3 w-3" />
+                      <span className="truncate" data-testid={`project-card-client-${p.project_id}`}>
+                        {p.client_name || (clients.find(c => c.client_id === p.client_id)?.display_name) || 'Client'}
+                      </span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -1355,6 +1400,30 @@ export default function ProjectsPanel({
                 <button onClick={() => setShowCreateProject(false)} className={textSecondary}><X className="h-5 w-5" /></button>
               </div>
               <div><Label className={textPrimary}>Project Name *</Label><Input value={projectDraft.name} onChange={(e) => setProjectDraft({ ...projectDraft, name: e.target.value })} placeholder="e.g. Website Revamp" data-testid="project-name-input" /></div>
+
+              {/* Client (mandatory) — sourced from Finance → Clients */}
+              <div>
+                <Label className={textPrimary}>Client *</Label>
+                <select
+                  value={projectDraft.client_id}
+                  onChange={(e) => setProjectDraft({ ...projectDraft, client_id: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm focus:outline-none focus:ring-2 focus:ring-[#6366f1]/40`}
+                  data-testid="project-client-select"
+                >
+                  <option value="">Select a client...</option>
+                  {clients.map((c) => (
+                    <option key={c.client_id} value={c.client_id}>
+                      {c.display_name}{c.company_name ? ` — ${c.company_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {clients.length === 0 && (
+                  <p className={`text-xs ${textSecondary} mt-1`}>
+                    No clients yet — add one under Finance → Clients first.
+                  </p>
+                )}
+              </div>
+
               <div><Label className={textPrimary}>Description</Label><Input value={projectDraft.description} onChange={(e) => setProjectDraft({ ...projectDraft, description: e.target.value })} placeholder="What is this project about?" /></div>
               <div className="grid grid-cols-2 gap-3">
                 <div>

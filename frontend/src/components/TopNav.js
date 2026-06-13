@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
+import axios from 'axios';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,6 +8,8 @@ import {
   UserCircle, Shield, MessageSquare, Megaphone, ClipboardList, ClipboardCheck,
   Globe, FolderOpen, Calendar, Briefcase, FileSpreadsheet, Search,
 } from 'lucide-react';
+
+const API = process.env.REACT_APP_BACKEND_URL;
 
 /**
  * TopNav — horizontal navigation alternative to the left Sidebar.
@@ -54,13 +57,41 @@ export default function TopNav() {
 
   const visible = items.filter((it) => hasAccess(it.key));
 
+  // Apply per-department order from /api/menu-order
+  const [deptOrder, setDeptOrder] = useState(null);
+  useEffect(() => {
+    const token = localStorage.getItem('session_token');
+    const loadOrder = async () => {
+      try {
+        const r = await axios.get(`${API}/api/menu-order`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setDeptOrder(r.data?.order || []);
+      } catch { setDeptOrder([]); }
+    };
+    loadOrder();
+    const refresh = () => loadOrder();
+    window.addEventListener('menu-order-change', refresh);
+    return () => window.removeEventListener('menu-order-change', refresh);
+  }, []);
+
+  const sortedVisible = useMemo(() => {
+    if (!deptOrder || deptOrder.length === 0) return visible;
+    const idxMap = new Map(deptOrder.map((k, i) => [k, i]));
+    return [...visible].sort((a, b) => {
+      const ai = idxMap.has(a.key) ? idxMap.get(a.key) : 999;
+      const bi = idxMap.has(b.key) ? idxMap.get(b.key) : 999;
+      return ai - bi;
+    });
+  }, [visible, deptOrder]);
+
   return (
     <nav
       data-testid="top-nav"
       className={`flex items-center gap-1 px-3 py-2 border-b overflow-x-auto whitespace-nowrap
         ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}
     >
-      {visible.map(({ key, path, label, icon: Icon }) => (
+      {sortedVisible.map(({ key, path, label, icon: Icon }) => (
         <NavLink
           key={key}
           to={path}

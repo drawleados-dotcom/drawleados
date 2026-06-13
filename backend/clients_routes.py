@@ -374,3 +374,182 @@ async def migrate_clients_from_invoices(request: Request):
         "skipped": skipped,
         "message": f"Migration complete: {created} new client(s), {linked} invoice(s) linked.",
     }
+
+
+
+# ============== CLIENT SERVICES (per-client service catalog) ==============
+
+class ClientServicePayload(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    amount: Optional[float] = 0
+    currency: Optional[str] = "INR"
+    status: Optional[str] = "active"  # active | paused | completed
+
+
+@clients_router.get("/{client_id}/services")
+async def list_client_services(client_id: str, request: Request):
+    await get_current_user_from_request(request)
+    items = await db.client_services.find(
+        {"client_id": client_id, "is_deleted": {"$ne": True}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    for it in items:
+        for k in ("created_at", "updated_at"):
+            if isinstance(it.get(k), datetime):
+                it[k] = it[k].isoformat()
+    return items
+
+
+@clients_router.post("/{client_id}/services")
+async def add_client_service(client_id: str, payload: ClientServicePayload, request: Request):
+    user = await get_current_user_from_request(request)
+    if not (payload.name or "").strip():
+        raise HTTPException(status_code=400, detail="Service name is required")
+    doc = {
+        "service_id": f"svc_{uuid.uuid4().hex[:12]}",
+        "client_id": client_id,
+        "name": payload.name.strip(),
+        "description": (payload.description or "").strip(),
+        "amount": float(payload.amount or 0),
+        "currency": payload.currency or "INR",
+        "status": payload.status or "active",
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "is_deleted": False,
+    }
+    await db.client_services.insert_one(doc)
+    doc.pop("_id", None)
+    for k in ("created_at", "updated_at"):
+        if isinstance(doc.get(k), datetime):
+            doc[k] = doc[k].isoformat()
+    return doc
+
+
+@clients_router.put("/{client_id}/services/{service_id}")
+async def update_client_service(client_id: str, service_id: str, payload: ClientServicePayload, request: Request):
+    await get_current_user_from_request(request)
+    update = payload.model_dump(exclude_unset=True)
+    if "name" in update:
+        if not (update["name"] or "").strip():
+            raise HTTPException(status_code=400, detail="Service name cannot be empty")
+        update["name"] = update["name"].strip()
+    update["updated_at"] = datetime.now(timezone.utc)
+    res = await db.client_services.update_one(
+        {"service_id": service_id, "client_id": client_id}, {"$set": update}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Service not found")
+    doc = await db.client_services.find_one({"service_id": service_id}, {"_id": 0})
+    for k in ("created_at", "updated_at"):
+        if isinstance(doc.get(k), datetime):
+            doc[k] = doc[k].isoformat()
+    return doc
+
+
+@clients_router.delete("/{client_id}/services/{service_id}")
+async def delete_client_service(client_id: str, service_id: str, request: Request):
+    await get_current_user_from_request(request)
+    res = await db.client_services.update_one(
+        {"service_id": service_id, "client_id": client_id},
+        {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return {"message": "Service removed"}
+
+
+# ============== CLIENT PAYMENT SCHEDULE (aggregated from projects) ==============
+
+@clients_router.get("/{client_id}/payment-schedule")
+async def list_client_payment_schedule(client_id: str, request: Request):
+    """
+    Returns the combined payment-schedule splits across every project tied to
+    this client. Each split is enriched with `project_id`, `project_name`.
+    """
+    await get_current_user_from_request(request)
+    projects = await db.projects.find(
+        {"client_id": client_id}, {"_id": 0, "project_id": 1, "name": 1, "payment_schedule": 1}
+    ).to_list(500)
+    rows = []
+    for p in projects:
+        schedule = (p.get("payment_schedule") or {})
+        for s in (schedule.get("splits") or []):
+            if not isinstance(s, dict):
+                continue
+            rows.append({
+                "project_id": p.get("project_id"),
+                "project_name": p.get("name"),
+                "split_id": s.get("id"),
+                "label": s.get("label"),
+                "due_date": s.get("due_date"),
+                "amount": s.get("amount"),
+                "collected": bool(s.get("collected", False)),
+                "invoice_id": s.get("invoice_id"),
+                "invoice_number": s.get("invoice_number"),
+            })
+    # newest first by due_date desc, falling back to project_name
+    rows.sort(key=lambda r: (r.get("due_date") or "", r.get("project_name") or ""), reverse=True)
+    return rows
+
+
+# ============== CLIENT REVIEW / FEEDBACK ==============
+
+class ClientFeedbackPayload(BaseModel):
+    comment: str
+    rating: Optional[int] = None   # 1..5 (optional)
+
+
+@clients_router.get("/{client_id}/feedback")
+async def list_client_feedback(client_id: str, request: Request):
+    await get_current_user_from_request(request)
+    items = await db.client_feedback.find(
+        {"client_id": client_id, "is_deleted": {"$ne": True}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    for it in items:
+        for k in ("created_at", "updated_at"):
+            if isinstance(it.get(k), datetime):
+                it[k] = it[k].isoformat()
+    return items
+
+
+@clients_router.post("/{client_id}/feedback")
+async def add_client_feedback(client_id: str, payload: ClientFeedbackPayload, request: Request):
+    user = await get_current_user_from_request(request)
+    if not (payload.comment or "").strip():
+        raise HTTPException(status_code=400, detail="Comment is required")
+    rating = payload.rating
+    if rating is not None:
+        try:
+            rating = int(rating)
+            if rating < 1 or rating > 5:
+                rating = None
+        except Exception:
+            rating = None
+    doc = {
+        "feedback_id": f"fb_{uuid.uuid4().hex[:12]}",
+        "client_id": client_id,
+        "comment": payload.comment.strip(),
+        "rating": rating,
+        "created_by": user["user_id"],
+        "created_by_name": user.get("name") or user.get("email") or "",
+        "created_at": datetime.now(timezone.utc),
+        "is_deleted": False,
+    }
+    await db.client_feedback.insert_one(doc)
+    doc.pop("_id", None)
+    if isinstance(doc.get("created_at"), datetime):
+        doc["created_at"] = doc["created_at"].isoformat()
+    return doc
+
+
+@clients_router.delete("/{client_id}/feedback/{feedback_id}")
+async def delete_client_feedback(client_id: str, feedback_id: str, request: Request):
+    await get_current_user_from_request(request)
+    res = await db.client_feedback.update_one(
+        {"feedback_id": feedback_id, "client_id": client_id},
+        {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}}
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    return {"message": "Feedback removed"}

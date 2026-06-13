@@ -1,5 +1,37 @@
 # Drawlead OS - Product Requirements Document
 
+
+## Latest Update — Jun 13, 2026 — Mandatory Client on Projects + Finance Client 3-Tab View
+
+### What was implemented
+- **Operations → Projects → Create/Edit** now requires a client picked from `Finance → Clients`. The Create Project modal exposes a mandatory **Client \*** dropdown (data-testid `project-client-select`), and on the Project detail panel the client is shown + inline-editable (data-testid `project-edit-client-select`). Empty client → toast error + server 400.
+  - Backend: `ProjectCreate.client_id` is required; both POST `/api/projects` and PATCH `/api/projects/{id}` validate the client exists in `finance_clients` (otherwise 400) and stamp `client_id` + `client_name` on the project doc.
+  - Project list cards show the linked client name below department badges.
+- **Finance → Clients → View Summary** now shows three tabs inside the modal: **Services | Payment Schedule | Review & Feedback** (data-testid `client-tab-services`, `client-tab-payment_schedule`, `client-tab-feedback`).
+  - **Services tab**: per-client catalog (name, description, amount, status). Add via inline form; remove via trash icon. Backed by `client_services` collection.
+  - **Payment Schedule tab**: aggregates every `payment_schedule.splits` entry across all projects that reference this `client_id`. Shows Project / Milestone / Due Date / Amount / Invoice # / Status. Empty state guides the user to add splits under Operations → Project → Payment.
+  - **Review & Feedback tab**: textarea + 5-star rating. Backed by `client_feedback` collection. Each entry shows author name, rating, date, comment with delete affordance.
+
+### Backend
+- `clients_routes.py`: added 7 new endpoints —
+  - `GET/POST /finance/clients/{client_id}/services`
+  - `PUT/DELETE /finance/clients/{client_id}/services/{service_id}`
+  - `GET /finance/clients/{client_id}/payment-schedule`
+  - `GET/POST/DELETE /finance/clients/{client_id}/feedback`
+- New collections: `client_services`, `client_feedback`.
+- `projects_routes.py`: `ProjectCreate.client_id` now required; create/patch routes look up `finance_clients` and stamp `client_name`.
+
+### Files touched
+- Backend: `clients_routes.py`, `projects_routes.py`.
+- Frontend: `components/ProjectsPanel.js` (loadClients, mandatory dropdown, inline client edit, client name on cards), `components/finance/ClientSummaryModal.js` (tabbed UI for Services / Payment Schedule / Review & Feedback).
+
+### Testing
+- Backend smoke via curl: POST/GET services, POST/GET feedback, GET payment-schedule all 200 with valid payloads.
+- Frontend visual smoke (screenshot): Create Project modal renders Client \*, dropdown populated from Finance Clients; client modal shows all 3 tabs with content.
+
+---
+
+
 ## Latest Update — Feb 11, 2026 — Finance Clients Module + GST Invoice Revamp
 
 ### What was implemented

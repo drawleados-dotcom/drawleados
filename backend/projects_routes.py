@@ -17,6 +17,7 @@ projects_router = APIRouter(prefix="/projects", tags=["projects"])
 
 class ProjectCreate(BaseModel):
     name: str
+    client_id: str  # MANDATORY — points to finance_clients.client_id
     description: Optional[str] = ""
     start_date: Optional[str] = None  # ISO date string
     due_date: Optional[str] = None  # ISO date string
@@ -27,6 +28,7 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
+    client_id: Optional[str] = None
     description: Optional[str] = None
     start_date: Optional[str] = None
     due_date: Optional[str] = None
@@ -70,7 +72,6 @@ async def list_projects(request: Request):
     from server import get_current_user, db
     user = await get_current_user(request)
 
-    role = (user.role or "").lower()
     is_admin_or_ops = await _is_operation_head_or_admin(user, db)
 
     # Super Admin / Admin / Operations → see ALL projects
@@ -107,9 +108,21 @@ async def create_project(payload: ProjectCreate, request: Request):
     if user.user_id not in members:
         members.append(user.user_id)
 
+    # Validate client_id — mandatory & must exist in finance_clients
+    if not (payload.client_id or "").strip():
+        raise HTTPException(status_code=400, detail="Client is required")
+    client_doc = await db.finance_clients.find_one(
+        {"client_id": payload.client_id, "is_deleted": False},
+        {"_id": 0, "client_id": 1, "display_name": 1}
+    )
+    if not client_doc:
+        raise HTTPException(status_code=400, detail="Selected client does not exist")
+
     project = {
         "project_id": f"prj_{uuid.uuid4().hex[:12]}",
         "name": payload.name.strip(),
+        "client_id": client_doc["client_id"],
+        "client_name": client_doc.get("display_name", ""),
         "description": (payload.description or "").strip(),
         "start_date": payload.start_date,
         "due_date": payload.due_date,
@@ -149,6 +162,19 @@ async def update_project(project_id: str, payload: ProjectUpdate, request: Reque
     update_data = {k: v for k, v in payload.dict(exclude_unset=True).items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
+    # If client_id is being updated, validate and refresh client_name.
+    if "client_id" in update_data:
+        new_cid = (update_data["client_id"] or "").strip()
+        if not new_cid:
+            raise HTTPException(status_code=400, detail="Client is required")
+        client_doc = await db.finance_clients.find_one(
+            {"client_id": new_cid, "is_deleted": False},
+            {"_id": 0, "client_id": 1, "display_name": 1}
+        )
+        if not client_doc:
+            raise HTTPException(status_code=400, detail="Selected client does not exist")
+        update_data["client_id"] = client_doc["client_id"]
+        update_data["client_name"] = client_doc.get("display_name", "")
     # Payment schedule editing — relaxed: Operation Head can add/edit splits.
     # But the "collected" field on any split can ONLY be flipped by Super Admin / Admin / Finance role.
     if "payment_schedule" in update_data:
