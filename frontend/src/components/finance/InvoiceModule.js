@@ -38,7 +38,9 @@ import {
   Printer,
   Edit,
   ChevronDown,
+  IndianRupee,
 } from 'lucide-react';
+import CollectInvoiceModal from './CollectInvoiceModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -61,6 +63,7 @@ const InvoiceModule = () => {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [collectInvoice, setCollectInvoice] = useState(null);
   const [leads, setLeads] = useState([]);
 
   // Form state
@@ -568,6 +571,18 @@ const InvoiceModule = () => {
                 </td>
                 <td className="p-3">
                   <div className="flex justify-center gap-1">
+                    {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setCollectInvoice(inv)}
+                        title="Collect Payment"
+                        className="text-emerald-500 hover:bg-emerald-500/10"
+                        data-testid={`collect-btn-${inv.invoice_id}`}
+                      >
+                        <IndianRupee className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost" onClick={() => viewInvoice(inv)} title="View">
                       <Eye className="h-4 w-4" />
                     </Button>
@@ -1123,6 +1138,15 @@ const InvoiceModule = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Collect Payment Modal */}
+      {collectInvoice && (
+        <CollectInvoiceModal
+          invoice={collectInvoice}
+          onClose={() => setCollectInvoice(null)}
+          onSaved={() => { setCollectInvoice(null); loadInvoices(); }}
+        />
+      )}
     </div>
   );
 };

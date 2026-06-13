@@ -57,8 +57,10 @@ import {
   Edit2,
   FileSpreadsheet,
   Users,
+  Building2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import BanksTab from './BanksTab';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -97,6 +99,7 @@ const DEFAULT_TABS = [
   { id: 'budget', label: 'Budget', icon: Receipt, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'clients', label: 'Clients', icon: Users, isDefault: true },
+  { id: 'banks', label: 'Banks', icon: Building2, isDefault: true },
   { id: 'outstanding', label: 'Outstanding', icon: Target, isDefault: true },
   { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
   { id: 'weekly', label: 'Week Wise', icon: Calendar, isDefault: true },
@@ -227,6 +230,23 @@ const ExpenseTab = () => {
 
   // ============== DATA LOADING ==============
   
+  // Bank breakdown (Cash / Cheque / Bank / Total by gst_type) for Dashboard.
+  const [bankBreakdown, setBankBreakdown] = useState({
+    has_non_gst_banks: false,
+    bank_breakdown: { gst: { cash: 0, cheque: 0, bank: 0, upi: 0, total: 0 }, non_gst: null },
+    payment_schedule_total: 0,
+  });
+  const loadBankBreakdown = useCallback(async () => {
+    try {
+      const r = await axios.get(`${API}/api/finance/banks/dashboard/bank-breakdown`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setBankBreakdown(r.data);
+    } catch (e) {
+      console.error('Error loading bank breakdown:', e);
+    }
+  }, [token]);
+
   const loadDashboard = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/expense/dashboard-summary`, {
@@ -373,16 +393,16 @@ const ExpenseTab = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'dashboard') loadDashboard();
+    if (activeTab === 'dashboard') { loadDashboard(); loadBankBreakdown(); }
     if (activeTab === 'cashbook') loadCashbook();
     if (activeTab === 'budget') loadBudget();
     if (activeTab === 'outstanding') loadOutstanding();
     if (activeTab === 'invoice') loadInvoices();
-  }, [activeTab, selectedMonth, selectedYear, loadDashboard, loadCashbook, loadBudget, loadOutstanding, loadInvoices]);
+  }, [activeTab, selectedMonth, selectedYear, loadDashboard, loadBankBreakdown, loadCashbook, loadBudget, loadOutstanding, loadInvoices]);
 
   // Background polling + focus refresh — keeps the active finance tab live
   useAutoRefresh(() => {
-    if (activeTab === 'dashboard') loadDashboard();
+    if (activeTab === 'dashboard') { loadDashboard(); loadBankBreakdown(); }
     else if (activeTab === 'cashbook') loadCashbook();
     else if (activeTab === 'budget') loadBudget();
     else if (activeTab === 'outstanding') loadOutstanding();
@@ -939,117 +959,134 @@ const ExpenseTab = () => {
   };
 
   // ============ RENDER DASHBOARD ============
-  const renderDashboard = () => (
-    <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-[#22c55e]/20">
-              <TrendingUp className="h-5 w-5 text-[#22c55e]" />
-            </div>
-          </div>
-          <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Revenue</p>
-          <p className="text-2xl font-bold text-[#22c55e]">{formatCurrency(dashboardData?.total_revenue)}</p>
-        </div>
+  const renderDashboard = () => {
+    const revenue = Number(dashboardData?.total_revenue || 0);
+    const expense = Number(dashboardData?.total_expense || 0);
+    const balance = revenue - expense;
+    const psTotal = Number(bankBreakdown?.payment_schedule_total || 0);
+    const has2col = !!bankBreakdown?.has_non_gst_banks;
+    const bd = bankBreakdown?.bank_breakdown || { gst: { cash: 0, cheque: 0, bank: 0, total: 0 }, non_gst: null };
 
-        <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-[#f59e0b]/20">
-              <Clock className="h-5 w-5 text-[#f59e0b]" />
-            </div>
-          </div>
-          <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Payment Due</p>
-          <p className="text-2xl font-bold text-[#f59e0b]">{formatCurrency(dashboardData?.payment_due)}</p>
+    const BankColumn = ({ title, color, data, testId }) => (
+      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-gray-50 border-gray-200'}`} data-testid={testId}>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className={`text-sm font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>{title}</h4>
+          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
         </div>
-
-        <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-[#6366f1]/20">
-              <Target className="h-5 w-5 text-[#6366f1]" />
-            </div>
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cash</span>
+            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cash)}</span>
           </div>
-          <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Outstanding</p>
-          <p className="text-2xl font-bold text-[#6366f1]">{formatCurrency(dashboardData?.outstanding_amount)}</p>
-        </div>
-
-        <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2.5 rounded-lg bg-[#ef4444]/20">
-              <TrendingDown className="h-5 w-5 text-[#ef4444]" />
-            </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cheque</span>
+            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cheque)}</span>
           </div>
-          <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Expense</p>
-          <p className="text-2xl font-bold text-[#ef4444]">{formatCurrency(dashboardData?.total_expense)}</p>
-        </div>
-
-        <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-3">
-            <div className={`p-2.5 rounded-lg ${(dashboardData?.profit || 0) >= 0 ? 'bg-[#22c55e]/20' : 'bg-[#ef4444]/20'}`}>
-              <PiggyBank className={`h-5 w-5 ${(dashboardData?.profit || 0) >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`} />
-            </div>
+          <div className="flex items-center justify-between">
+            <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Bank</span>
+            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.bank)}</span>
           </div>
-          <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Profit</p>
-          <p className={`text-2xl font-bold ${(dashboardData?.profit || 0) >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-            {formatCurrency(dashboardData?.profit)}
-          </p>
+          {(Number(data?.upi || 0) > 0) && (
+            <div className="flex items-center justify-between">
+              <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>UPI</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.upi)}</span>
+            </div>
+          )}
+          <div className={`pt-2.5 mt-2.5 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} flex items-center justify-between`}>
+            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</span>
+            <span className="text-lg font-bold" style={{ color }}>{formatCurrency(data?.total)}</span>
+          </div>
         </div>
       </div>
+    );
 
-      {/* Bank Accounts */}
-      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-        <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>Bank Accounts</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {accounts.map(acc => (
-            <div key={acc.account_id} className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <CreditCard className="h-4 w-4 text-[#6366f1]" />
-                <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{acc.name}</span>
+    return (
+      <div className="space-y-6">
+        {/* Summary Cards — 5 metrics */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-lg bg-[#22c55e]/20">
+                <TrendingUp className="h-5 w-5 text-[#22c55e]" />
               </div>
-              <p className={`text-xl font-bold ${(acc.current_balance || 0) >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
-                {formatCurrency(acc.current_balance || acc.initial_balance || 0)}
-              </p>
             </div>
-          ))}
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Revenue</p>
+            <p className="text-2xl font-bold text-[#22c55e]" data-testid="dashboard-total-revenue">{formatCurrency(revenue)}</p>
+          </div>
+
+          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-lg bg-[#f59e0b]/20">
+                <Clock className="h-5 w-5 text-[#f59e0b]" />
+              </div>
+            </div>
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Payment Due</p>
+            <p className="text-2xl font-bold text-[#f59e0b]" data-testid="dashboard-payment-due">{formatCurrency(dashboardData?.payment_due)}</p>
+          </div>
+
+          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-lg bg-[#6366f1]/20">
+                <Wallet className="h-5 w-5 text-[#6366f1]" />
+              </div>
+            </div>
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Payment Schedule</p>
+            <p className="text-2xl font-bold text-[#6366f1]" data-testid="dashboard-payment-schedule">{formatCurrency(psTotal)}</p>
+          </div>
+
+          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-lg bg-[#ef4444]/20">
+                <TrendingDown className="h-5 w-5 text-[#ef4444]" />
+              </div>
+            </div>
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Expense</p>
+            <p className="text-2xl font-bold text-[#ef4444]" data-testid="dashboard-total-expense">{formatCurrency(expense)}</p>
+          </div>
+
+          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className={`p-2.5 rounded-lg ${balance >= 0 ? 'bg-[#22c55e]/20' : 'bg-[#ef4444]/20'}`}>
+                <PiggyBank className={`h-5 w-5 ${balance >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`} />
+              </div>
+            </div>
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Balance</p>
+            <p className={`text-2xl font-bold ${balance >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`} data-testid="dashboard-balance">
+              {formatCurrency(balance)}
+            </p>
+          </div>
+        </div>
+
+        {/* Banks — Cash / Cheque / Bank / Total by GST type */}
+        <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+          <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>Banks</h3>
+          <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4`} data-testid="dashboard-banks-grid">
+            <BankColumn
+              title="GST Accounts"
+              color="#22c55e"
+              data={bd.gst}
+              testId="bank-col-gst"
+            />
+            {has2col && bd.non_gst && (
+              <BankColumn
+                title="Non-GST Accounts"
+                color="#f59e0b"
+                data={bd.non_gst}
+                testId="bank-col-non-gst"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Export Button */}
+        <div className="flex justify-end">
+          <Button onClick={exportDashboard} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+            <Download className="h-4 w-4 mr-2" /> Export Dashboard
+          </Button>
         </div>
       </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Button onClick={openAddCreditModal} className="bg-[#22c55e] hover:bg-[#16a34a] h-auto py-4">
-          <div className="flex flex-col items-center">
-            <ArrowDownCircle className="h-6 w-6 mb-2" />
-            <span>Add Cash In</span>
-          </div>
-        </Button>
-        <Button onClick={() => setShowAddDebit(true)} className="bg-[#ef4444] hover:bg-[#dc2626] h-auto py-4">
-          <div className="flex flex-col items-center">
-            <ArrowUpCircle className="h-6 w-6 mb-2" />
-            <span>Add Cash Out</span>
-          </div>
-        </Button>
-        <Button onClick={() => setShowAddOutstanding(true)} className="bg-[#6366f1] hover:bg-[#5855eb] h-auto py-4">
-          <div className="flex flex-col items-center">
-            <Target className="h-6 w-6 mb-2" />
-            <span>Add Outstanding</span>
-          </div>
-        </Button>
-        <Button variant="outline" onClick={() => setActiveTab('budget')} className={`h-auto py-4 ${isDark ? 'border-[#3f3f46]' : ''}`}>
-          <div className="flex flex-col items-center">
-            <LayoutGrid className="h-6 w-6 mb-2" />
-            <span>View Budget</span>
-          </div>
-        </Button>
-      </div>
-
-      {/* Export Button */}
-      <div className="flex justify-end">
-        <Button onClick={exportDashboard} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
-          <Download className="h-4 w-4 mr-2" /> Export Dashboard
-        </Button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ============ RENDER CASHBOOK ============
   const renderCashbook = () => {
@@ -1509,7 +1546,7 @@ const ExpenseTab = () => {
             <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
             <p className="text-2xl font-bold text-[#22c55e]">{formatCurrency(budgetData?.summary?.paid)}</p>
           </div>
-          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>>
+          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
             <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
             <p className="text-2xl font-bold text-[#ef4444]">{formatCurrency(budgetData?.summary?.balance)}</p>
           </div>
@@ -1797,6 +1834,7 @@ const ExpenseTab = () => {
             />
           )}
           {activeTab === 'clients' && <ClientsTab />}
+          {activeTab === 'banks' && <BanksTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}

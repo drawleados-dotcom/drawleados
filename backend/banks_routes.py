@@ -1,0 +1,283 @@
+"""
+Finance Bank Accounts — GST vs Non-GST.
+
+Used by:
+- Settings → (no UI; admin-managed via Finance → Banks tab)
+- Invoice Collect modal — Bank dropdown filtered by the invoice's `gst_type`.
+"""
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime, timezone
+import uuid
+
+banks_router = APIRouter(prefix="/finance/banks")
+db = None
+
+
+def init_banks_db(database):
+    global db
+    db = database
+
+
+class BankCreate(BaseModel):
+    gst_type: str  # "gst" | "non_gst"
+    account_holder: str  # e.g. "Drawlead Pvt Ltd" (GST) or "Latha Babu" (Non-GST)
+    bank_name: str = ""
+    ifsc_code: str = ""
+    account_number: str = ""
+    branch: str = ""
+    upi: str = ""
+    account_type: str = "savings"  # savings | current
+    is_active: bool = True
+
+
+class BankUpdate(BaseModel):
+    gst_type: Optional[str] = None
+    account_holder: Optional[str] = None
+    bank_name: Optional[str] = None
+    ifsc_code: Optional[str] = None
+    account_number: Optional[str] = None
+    branch: Optional[str] = None
+    upi: Optional[str] = None
+    account_type: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+async def _get_user(request: Request) -> dict:
+    session_token = request.cookies.get("session_token") or (
+        (request.headers.get("Authorization") or "").replace("Bearer ", "").strip() or None
+    )
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+def _serialize(doc: dict) -> dict:
+    doc.pop("_id", None)
+    for k in ("created_at", "updated_at"):
+        if isinstance(doc.get(k), datetime):
+            doc[k] = doc[k].isoformat()
+    return doc
+
+
+@banks_router.get("")
+async def list_banks(request: Request, gst_type: Optional[str] = None):
+    await _get_user(request)
+    query: dict = {"is_deleted": {"$ne": True}}
+    if gst_type in ("gst", "non_gst"):
+        query["gst_type"] = gst_type
+    rows = await db.finance_banks.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [_serialize(r) for r in rows]
+
+
+@banks_router.post("")
+async def create_bank(payload: BankCreate, request: Request):
+    user = await _get_user(request)
+    if payload.gst_type not in ("gst", "non_gst"):
+        raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
+    if not (payload.account_holder or "").strip():
+        raise HTTPException(status_code=400, detail="Account holder name is required")
+    doc = {
+        "bank_id": f"bank_{uuid.uuid4().hex[:12]}",
+        "gst_type": payload.gst_type,
+        "account_holder": payload.account_holder.strip(),
+        "bank_name": (payload.bank_name or "").strip(),
+        "ifsc_code": (payload.ifsc_code or "").strip().upper(),
+        "account_number": (payload.account_number or "").strip(),
+        "branch": (payload.branch or "").strip(),
+        "upi": (payload.upi or "").strip(),
+        "account_type": payload.account_type or "savings",
+        "is_active": True if payload.is_active is None else bool(payload.is_active),
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "is_deleted": False,
+    }
+    await db.finance_banks.insert_one(doc)
+    return _serialize(doc)
+
+
+@banks_router.put("/{bank_id}")
+async def update_bank(bank_id: str, payload: BankUpdate, request: Request):
+    await _get_user(request)
+    update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
+    if "ifsc_code" in update:
+        update["ifsc_code"] = str(update["ifsc_code"]).strip().upper()
+    if "account_holder" in update:
+        v = (update["account_holder"] or "").strip()
+        if not v:
+            raise HTTPException(status_code=400, detail="Account holder name cannot be empty")
+        update["account_holder"] = v
+    update["updated_at"] = datetime.now(timezone.utc)
+    res = await db.finance_banks.update_one({"bank_id": bank_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Bank not found")
+    doc = await db.finance_banks.find_one({"bank_id": bank_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@banks_router.delete("/{bank_id}")
+async def delete_bank(bank_id: str, request: Request):
+    await _get_user(request)
+    res = await db.finance_banks.update_one(
+        {"bank_id": bank_id},
+        {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Bank not found")
+    return {"message": "Bank removed"}
+
+
+# ============== INVOICE COLLECT ==============
+
+class InvoiceCollectPayload(BaseModel):
+    amount: float
+    date: Optional[str] = None  # ISO date — defaults to today
+    payment_mode: str  # "cash" | "upi" | "bank" | "cheque"
+    bank_id: Optional[str] = None  # required when payment_mode == "bank"
+    notes: Optional[str] = ""
+
+
+@banks_router.post("/collect/{invoice_id}")
+async def collect_invoice(invoice_id: str, payload: InvoiceCollectPayload, request: Request):
+    """
+    Record a payment against an invoice and create a Cashbook credit entry.
+    The bank_id (when payment_mode == 'bank') is validated to match the invoice's gst_type.
+    """
+    user = await _get_user(request)
+    inv = await db.invoices.find_one({"invoice_id": invoice_id, "is_deleted": {"$ne": True}})
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    if payload.amount is None or payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+
+    bank_doc = None
+    if payload.payment_mode == "bank":
+        if not payload.bank_id:
+            raise HTTPException(status_code=400, detail="Bank account is required for bank payments")
+        bank_doc = await db.finance_banks.find_one(
+            {"bank_id": payload.bank_id, "is_deleted": {"$ne": True}}, {"_id": 0}
+        )
+        if not bank_doc:
+            raise HTTPException(status_code=400, detail="Selected bank not found")
+        # Validate gst_type matches the invoice
+        inv_gst = (inv.get("gst_type") or "gst").lower()
+        if (bank_doc.get("gst_type") or "").lower() != inv_gst:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This is a {inv_gst.upper()} invoice — please pick a {inv_gst.upper()} bank account.",
+            )
+
+    paid_amount = float(inv.get("paid_amount", 0)) + float(payload.amount)
+    total = float(inv.get("total_amount", 0))
+    new_status = "paid" if paid_amount >= total - 0.01 else ("partial" if paid_amount > 0 else inv.get("status", "sent"))
+    payment_date = payload.date or datetime.now(timezone.utc).date().isoformat()
+
+    await db.invoices.update_one(
+        {"invoice_id": invoice_id},
+        {"$set": {
+            "paid_amount": paid_amount,
+            "balance_due": max(0.0, total - paid_amount),
+            "status": new_status,
+            "payment_date": payment_date,
+            "payment_mode": payload.payment_mode,
+            "payment_bank_id": payload.bank_id,
+            "updated_at": datetime.now(timezone.utc),
+        }},
+    )
+
+    # Record the cash-in entry so it shows up in the Cashbook.
+    entry = {
+        "entry_id": f"cb_{uuid.uuid4().hex[:12]}",
+        "kind": "credit",
+        "date": payment_date,
+        "from": inv.get("client_name") or inv.get("display_name") or "Invoice payment",
+        "category": "invoice",
+        "category_label": "Invoice Collected",
+        "amount": float(payload.amount),
+        "invoice_id": invoice_id,
+        "invoice_number": inv.get("invoice_number"),
+        "gst_type": inv.get("gst_type") or "gst",
+        "payment_mode": payload.payment_mode,
+        "bank_id": payload.bank_id,
+        "bank_label": (bank_doc or {}).get("account_holder") if bank_doc else None,
+        "notes": (payload.notes or "").strip(),
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.cashbook_entries.insert_one(entry)
+    entry.pop("_id", None)
+    if isinstance(entry.get("created_at"), datetime):
+        entry["created_at"] = entry["created_at"].isoformat()
+
+    return {
+        "message": "Payment collected",
+        "invoice_id": invoice_id,
+        "paid_amount": paid_amount,
+        "balance_due": max(0.0, total - paid_amount),
+        "status": new_status,
+        "cashbook_entry": entry,
+    }
+
+
+# ============== DASHBOARD AGGREGATIONS ==============
+
+@banks_router.get("/dashboard/bank-breakdown")
+async def bank_breakdown(request: Request):
+    """
+    Returns Cash / Cheque / Bank / Total split by gst_type for the Finance Dashboard.
+    `non_gst` is omitted when no Non-GST bank accounts exist (so the UI can render 1 column).
+    """
+    await _get_user(request)
+    has_non_gst_banks = await db.finance_banks.count_documents(
+        {"gst_type": "non_gst", "is_deleted": {"$ne": True}}
+    ) > 0
+
+    pipeline = [
+        {"$match": {"kind": "credit"}},
+        {"$group": {
+            "_id": {"gst_type": {"$ifNull": ["$gst_type", "gst"]}, "mode": {"$ifNull": ["$payment_mode", "bank"]}},
+            "amount": {"$sum": "$amount"},
+        }},
+    ]
+    rows = await db.cashbook_entries.aggregate(pipeline).to_list(100)
+
+    def empty():
+        return {"cash": 0.0, "cheque": 0.0, "bank": 0.0, "upi": 0.0, "total": 0.0}
+
+    out = {"gst": empty(), "non_gst": empty() if has_non_gst_banks else None}
+    for row in rows:
+        gt = (row["_id"].get("gst_type") or "gst").lower()
+        if gt not in out or out[gt] is None:
+            continue
+        mode = (row["_id"].get("mode") or "bank").lower()
+        amount = float(row.get("amount", 0))
+        if mode in out[gt]:
+            out[gt][mode] += amount
+        out[gt]["total"] += amount
+
+    # Payment schedule total (sum of uncollected splits across all projects)
+    proj_pipeline = [
+        {"$match": {"payment_schedule.splits": {"$exists": True}}},
+        {"$project": {"_id": 0, "splits": "$payment_schedule.splits"}},
+        {"$unwind": "$splits"},
+        {"$match": {"$or": [{"splits.collected": False}, {"splits.collected": {"$exists": False}}]}},
+        {"$group": {"_id": None, "amount": {"$sum": {"$ifNull": ["$splits.amount", 0]}}}},
+    ]
+    ps_amount = 0.0
+    async for row in db.projects.aggregate(proj_pipeline):
+        ps_amount = float(row.get("amount", 0))
+
+    return {
+        "has_non_gst_banks": has_non_gst_banks,
+        "bank_breakdown": out,
+        "payment_schedule_total": ps_amount,
+    }
+

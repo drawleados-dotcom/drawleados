@@ -51,6 +51,7 @@ from org_tree_routes import org_tree_router, init_org_tree_db
 from db_admin_routes import db_admin_router, init_db_admin
 from clients_routes import clients_router, init_clients_db
 from menu_order_routes import menu_order_router, init_menu_order_db
+from banks_routes import banks_router, init_banks_db
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -64,6 +65,7 @@ db = client[os.environ['DB_NAME']]
 init_finance_db(db)
 init_clients_db(db)
 init_menu_order_db(db)
+init_banks_db(db)
 init_operations_db(db)
 init_hr_db(db)
 init_notion_db(db)
@@ -2673,6 +2675,7 @@ async def seed_data():
 api_router.include_router(finance_router)
 api_router.include_router(clients_router)
 api_router.include_router(menu_order_router)
+api_router.include_router(banks_router)
 api_router.include_router(operations_router)
 api_router.include_router(hr_router)
 api_router.include_router(notion_router)
