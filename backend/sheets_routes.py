@@ -48,6 +48,13 @@ async def _load_oauth_cfg():
                 cfg["redirect_uri"] = doc["redirect_uri"]
     except Exception:
         pass  # DB unavailable — fall back to env
+    # Sanitize client_id — strip any accidental scheme/whitespace
+    # (DB values saved before the input-time fix may still have "http://" prefix.)
+    cid = (cfg.get("client_id") or "").strip()
+    for scheme in ("https://", "http://"):
+        if cid.lower().startswith(scheme):
+            cid = cid[len(scheme):]
+    cfg["client_id"] = cid.strip("/ ") or None
     _CFG_CACHE["value"] = cfg
     _CFG_CACHE["fetched_at"] = now
     return cfg
@@ -284,7 +291,16 @@ async def put_oauth_config(payload: SheetsOAuthConfig, request: Request):
     from server import db
     update_fields = {"updated_at": datetime.now(timezone.utc), "updated_by": user.user_id}
     if payload.client_id is not None:
-        update_fields["client_id"] = payload.client_id.strip()
+        # Sanitize — strip whitespace and any accidental scheme/path prefix
+        # (Google client IDs are bare strings like "1234-abc.apps.googleusercontent.com",
+        # users sometimes paste them as "https://1234-abc..." which Google rejects with
+        # invalid_client.)
+        cid = payload.client_id.strip()
+        for scheme in ("https://", "http://"):
+            if cid.lower().startswith(scheme):
+                cid = cid[len(scheme):]
+        cid = cid.strip("/ ")
+        update_fields["client_id"] = cid
     if payload.client_secret is not None:
         # Treat "***" placeholder (from the masked GET) as "no change"
         cs = payload.client_secret.strip()
