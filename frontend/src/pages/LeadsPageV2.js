@@ -2084,64 +2084,6 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
 
   return (
     <div className="space-y-4">
-      {/* Per-stage Summary Cards — clickable, drives `activeTab` */}
-      {stages.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2" data-testid="lead-stage-summary-cards">
-          <button
-            type="button"
-            onClick={() => setActiveTab('all')}
-            data-testid="stage-card-all"
-            className={`group text-left p-3 rounded-lg border transition-all ${
-              activeTab === 'all'
-                ? 'border-[#3b82f6] bg-[#3b82f6]/10 shadow-[0_0_0_3px_rgba(59,130,246,0.15)]'
-                : `${borderColor} ${isDark ? 'bg-[#18181b] hover:bg-[#27272a]' : 'bg-white hover:bg-gray-50'}`
-            }`}
-            style={{ borderLeftWidth: 3, borderLeftColor: '#3b82f6' }}
-          >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>All Leads</span>
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
-            </div>
-            <div className={`mt-1 text-2xl font-bold ${activeTab === 'all' ? 'text-[#3b82f6]' : textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
-              {leads.length}
-            </div>
-          </button>
-          {stages.map((stage) => {
-            const count = stageCounts[stage.stage_id] || 0;
-            const isActive = activeTab === stage.stage_id;
-            return (
-              <button
-                key={stage.stage_id}
-                type="button"
-                onClick={() => setActiveTab(stage.stage_id)}
-                data-testid={`stage-card-${stage.stage_id}`}
-                className={`group text-left p-3 rounded-lg border transition-all ${
-                  isActive
-                    ? 'shadow-[0_0_0_3px_rgba(99,102,241,0.18)]'
-                    : `${borderColor} ${isDark ? 'bg-[#18181b] hover:bg-[#27272a]' : 'bg-white hover:bg-gray-50'}`
-                }`}
-                style={{
-                  borderLeftWidth: 3,
-                  borderLeftColor: stage.color,
-                  backgroundColor: isActive ? `${stage.color}1A` : undefined,
-                  borderColor: isActive ? stage.color : undefined,
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary} truncate`} title={stage.name}>
-                    {stage.name}
-                  </span>
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-                </div>
-                <div className="mt-1 text-2xl font-bold" style={{ color: isActive ? stage.color : (isDark ? '#fafafa' : '#111827'), fontFamily: 'Plus Jakarta Sans' }}>
-                  {count}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {/* Tab Filters - Scrollable */}
       <div className={`flex items-center gap-3 sm:gap-6 pb-3 border-b-2 ${borderColor} overflow-x-auto no-scrollbar`}>
         <button
