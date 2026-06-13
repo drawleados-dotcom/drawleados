@@ -108,6 +108,8 @@ const LeadsPageV2 = () => {
     location: '',
     website: '',
     social_media: '',
+    company_name: '',
+    what_do_you_do: '',
     // Lead Details
     source: '',
     lead_owner: '',
@@ -335,6 +337,8 @@ const LeadsPageV2 = () => {
       location: '',
       website: '',
       social_media: '',
+      company_name: '',
+      what_do_you_do: '',
       // Lead Details
       source: '',
       lead_owner: '',
@@ -362,6 +366,8 @@ const LeadsPageV2 = () => {
       location: lead.location || '',
       website: lead.website || '',
       social_media: lead.social_media || '',
+      company_name: lead.company_name || '',
+      what_do_you_do: lead.what_do_you_do || '',
       // Lead Details
       source: lead.source || '',
       lead_owner: lead.lead_owner || '',
@@ -1246,6 +1252,28 @@ const LeadsPageV2 = () => {
                       onChange={(e) => setLeadForm({ ...leadForm, social_media: e.target.value })}
                       placeholder="Instagram/LinkedIn URL"
                       className={bgSecondary}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Company Name</label>
+                    <Input
+                      value={leadForm.company_name}
+                      onChange={(e) => setLeadForm({ ...leadForm, company_name: e.target.value })}
+                      placeholder="Company / Business name"
+                      className={bgSecondary}
+                      data-testid="lead-company-name-input"
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>What do you do?</label>
+                    <Input
+                      value={leadForm.what_do_you_do}
+                      onChange={(e) => setLeadForm({ ...leadForm, what_do_you_do: e.target.value })}
+                      placeholder="e.g. Build a new website"
+                      className={bgSecondary}
+                      data-testid="lead-what-do-you-do-input"
                     />
                   </div>
                 </div>

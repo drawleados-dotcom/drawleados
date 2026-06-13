@@ -499,22 +499,41 @@ async def sync_sheet(sheet_type: str, request: Request):
             "imported_at": now,
         })
         # Map common column names → lead_v2 fields
-        name = _col(r, "name", "lead_name", "full name", "contact name") or "—"
-        phone = _col(r, "phone", "mobile", "contact", "phone number")
+        name = _col(r, "name", "lead_name", "full name", "full_name", "contact name") or "—"
+        phone = _col(r, "phone", "mobile", "contact", "phone number", "phone_number")
         email = _col(r, "email", "email id", "e-mail")
+        location = _col(r, "location", "city", "city/town")
+        website = _col(r, "website", "site", "url")
+        company_name = _col(r, "company_name", "company name", "company", "organization", "business_name")
+        what_do_you_do = _col(r, "what_do_you_want_to_do?", "what_do_you_want_to_do", "what do you do", "what_do_you_do")
         notes = _col(r, "notes", "remarks", "comments", "message")
+        # Columns mapped to first-class lead fields (so they don't double-up under custom_fields)
+        mapped_cols = {
+            "name", "lead_name", "full name", "full_name", "contact name",
+            "phone", "mobile", "contact", "phone number", "phone_number",
+            "email", "email id", "e-mail",
+            "location", "city", "city/town",
+            "website", "site", "url",
+            "company_name", "company name", "company", "organization", "business_name",
+            "what_do_you_want_to_do?", "what_do_you_want_to_do", "what do you do", "what_do_you_do",
+            "notes", "remarks", "comments", "message",
+        }
         lead_docs.append({
             "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
             "name": str(name).strip() or "—",
             "phone": str(phone).strip(),
             "email": str(email).strip(),
+            "location": str(location).strip(),
+            "website": str(website).strip(),
+            "company_name": str(company_name).strip(),
+            "what_do_you_do": str(what_do_you_do).strip(),
             "source": cfg.get("source_type") or "website",
             "stage_id": stage_id,
             "lead_owner": user.user_id,
             "notes": str(notes).strip(),
             "imported_from_sheet": sheet_type,
             "sheet_row_id": row_id,
-            "custom_fields": {k: v for k, v in record.items() if k.lower() not in ("name", "lead_name", "phone", "mobile", "email", "notes")},
+            "custom_fields": {k: v for k, v in record.items() if k.lower() not in mapped_cols},
             "created_by": user.user_id,
             "created_at": now,
             "updated_at": now,

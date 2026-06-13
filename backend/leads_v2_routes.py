@@ -61,6 +61,8 @@ class LeadCreate(BaseModel):
     location: str = ''
     website: str = ''
     social_media: str = ''
+    company_name: str = ''
+    what_do_you_do: str = ''
     # Lead Details
     source: str = ''
     lead_owner: str = ''  # user_id of team member
@@ -84,6 +86,8 @@ class LeadUpdate(BaseModel):
     location: Optional[str] = None
     website: Optional[str] = None
     social_media: Optional[str] = None
+    company_name: Optional[str] = None
+    what_do_you_do: Optional[str] = None
     # Lead Details
     source: Optional[str] = None
     lead_owner: Optional[str] = None
@@ -1015,3 +1019,67 @@ async def import_leads(request: Request):
         "total": len(leads_data),
         "errors": errors
     }
+
+
+
+# ============== ONE-TIME BACKFILL — promote custom_fields → first-class fields ==============
+# Safe to re-run; only updates fields that are still empty so manual edits are never overwritten.
+
+@leads_v2_router.post("/leads/backfill-from-custom-fields")
+async def backfill_from_custom_fields(request: Request):
+    """
+    Promote sheet-imported custom_fields (company_name, what_do_you_want_to_do?, phone_number,
+    city, website, ...) into the corresponding first-class fields on each lead. Idempotent:
+    only fills fields that are still empty, so manual edits made in the UI are preserved.
+    """
+    from server import get_current_user
+    user = await get_current_user(request)
+    role = (user.role or "").lower()
+    if role not in ("super_admin", "admin"):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    cursor = db.leads_v2.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0, "lead_id": 1, "custom_fields": 1, "company_name": 1,
+         "what_do_you_do": 1, "phone": 1, "location": 1, "website": 1, "email": 1, "name": 1},
+    )
+    updated = 0
+    total = 0
+
+    def _pick(cf: dict, *keys: str) -> str:
+        for k in keys:
+            v = cf.get(k)
+            if v:
+                return str(v).strip()
+        return ""
+
+    async for ld in cursor:
+        total += 1
+        cf = ld.get("custom_fields") or {}
+        # Normalize cf keys lower-case once for matching
+        cf_lower = {str(k).lower(): v for k, v in cf.items()}
+        updates: dict = {}
+        if not ld.get("company_name"):
+            v = _pick(cf_lower, "company_name", "company name", "company", "organization", "business_name")
+            if v:
+                updates["company_name"] = v
+        if not ld.get("what_do_you_do"):
+            v = _pick(cf_lower, "what_do_you_want_to_do?", "what_do_you_want_to_do", "what do you do", "what_do_you_do")
+            if v:
+                updates["what_do_you_do"] = v
+        if not ld.get("phone"):
+            v = _pick(cf_lower, "phone_number", "phone number", "mobile", "contact")
+            if v:
+                updates["phone"] = v
+        if not ld.get("location"):
+            v = _pick(cf_lower, "city", "location", "city/town")
+            if v:
+                updates["location"] = v
+        if not ld.get("website"):
+            v = _pick(cf_lower, "website", "site", "url")
+            if v:
+                updates["website"] = v
+        if updates:
+            await db.leads_v2.update_one({"lead_id": ld["lead_id"]}, {"$set": updates})
+            updated += 1
+    return {"scanned": total, "updated": updated, "message": f"Backfill complete — {updated}/{total} leads updated."}
