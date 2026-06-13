@@ -14,6 +14,8 @@ import {
   RotateCcw,
   ExternalLink,
   Copy,
+  Pencil,
+  Lock,
 } from 'lucide-react';
 
 /**
@@ -42,6 +44,9 @@ export default function IntegrationsTab({
     updated_at: null,
   });
   const [secretDirty, setSecretDirty] = useState(false);
+  // Edit-lock state — saved-in-app fields stay read-only until the admin clicks Edit.
+  const [editing, setEditing] = useState({ client_id: false, client_secret: false, redirect_uri: false });
+  const isLocked = (field) => config.source?.[field] === 'db' && !editing[field];
 
   const defaultRedirectUri =
     (typeof window !== 'undefined' ? `${window.location.origin}` : '') +
@@ -56,6 +61,7 @@ export default function IntegrationsTab({
         client_secret: '', // never preload the secret into the input
       });
       setSecretDirty(false);
+      setEditing({ client_id: false, client_secret: false, redirect_uri: false });
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Failed to load OAuth config');
     } finally {
@@ -126,6 +132,33 @@ export default function IntegrationsTab({
     return <Badge className="bg-rose-500/15 text-rose-500 border-rose-500/30">Not set</Badge>;
   };
 
+  // Renders an Edit / Cancel button next to a saved-in-app field so it can't be
+  // overwritten accidentally.
+  const editToggle = (field, label = field) => {
+    if (config.source?.[field] !== 'db') return null;
+    const isEditing = editing[field];
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setEditing((e) => ({ ...e, [field]: !isEditing }));
+          if (isEditing) {
+            // Cancelled — wipe pending edits so the masked/saved value remains intact
+            if (field === 'client_secret') {
+              setConfig((c) => ({ ...c, client_secret: '' }));
+              setSecretDirty(false);
+            }
+          }
+        }}
+        data-testid={`sheets-edit-${field}`}
+        className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border ${borderColor} ${textSecondary} hover:${textPrimary} hover:bg-[#6366f1]/10 transition`}
+        title={isEditing ? `Cancel editing ${label}` : `Edit ${label}`}
+      >
+        {isEditing ? (<><Lock className="h-3 w-3" /> Cancel</>) : (<><Pencil className="h-3 w-3" /> Edit</>)}
+      </button>
+    );
+  };
+
   return (
     <div className={`${bgCard} border ${borderColor} rounded-2xl p-6 space-y-6`} data-testid="integrations-sheets-card">
       {/* Header */}
@@ -188,7 +221,10 @@ export default function IntegrationsTab({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="sheets-client-id" className={textPrimary}>Client ID</Label>
-            {sourceBadge(config.source?.client_id)}
+            <div className="flex items-center gap-2">
+              {sourceBadge(config.source?.client_id)}
+              {editToggle('client_id', 'Client ID')}
+            </div>
           </div>
           <Input
             id="sheets-client-id"
@@ -196,15 +232,18 @@ export default function IntegrationsTab({
             value={config.client_id || ''}
             onChange={(e) => setConfig((c) => ({ ...c, client_id: e.target.value }))}
             placeholder="123456789-abcxyz.apps.googleusercontent.com"
-            disabled={loading || saving}
-            className={`${bgInput || bgCard} ${borderColor} ${textPrimary} font-mono text-sm`}
+            disabled={loading || saving || isLocked('client_id')}
+            className={`${bgInput || bgCard} ${borderColor} ${textPrimary} font-mono text-sm ${isLocked('client_id') ? 'opacity-70 cursor-not-allowed' : ''}`}
           />
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="sheets-client-secret" className={textPrimary}>Client Secret</Label>
-            {sourceBadge(config.source?.client_secret)}
+            <div className="flex items-center gap-2">
+              {sourceBadge(config.source?.client_secret)}
+              {editToggle('client_secret', 'Client Secret')}
+            </div>
           </div>
           <div className="relative">
             <Input
@@ -217,8 +256,8 @@ export default function IntegrationsTab({
                 setSecretDirty(true);
               }}
               placeholder={config.has_client_secret ? config.client_secret_masked : 'GOCSPX-...'}
-              disabled={loading || saving}
-              className={`${bgInput || bgCard} ${borderColor} ${textPrimary} font-mono text-sm pr-10`}
+              disabled={loading || saving || isLocked('client_secret')}
+              className={`${bgInput || bgCard} ${borderColor} ${textPrimary} font-mono text-sm pr-10 ${isLocked('client_secret') ? 'opacity-70 cursor-not-allowed' : ''}`}
             />
             <button
               type="button"
@@ -229,17 +268,24 @@ export default function IntegrationsTab({
               {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {config.has_client_secret && !secretDirty && (
+          {isLocked('client_secret') ? (
+            <p className={`text-xs ${textSecondary} flex items-center gap-1`}>
+              <Lock className="h-3 w-3" /> Secret is saved &amp; locked. Click <b>Edit</b> above to replace it.
+            </p>
+          ) : config.has_client_secret && !secretDirty ? (
             <p className={`text-xs ${textSecondary}`}>
               Leave blank to keep the existing secret. Type a new value to replace it.
             </p>
-          )}
+          ) : null}
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="sheets-redirect-uri" className={textPrimary}>Redirect URI</Label>
-            {sourceBadge(config.source?.redirect_uri)}
+            <div className="flex items-center gap-2">
+              {sourceBadge(config.source?.redirect_uri)}
+              {editToggle('redirect_uri', 'Redirect URI')}
+            </div>
           </div>
           <Input
             id="sheets-redirect-uri"
@@ -247,8 +293,8 @@ export default function IntegrationsTab({
             value={config.redirect_uri || ''}
             onChange={(e) => setConfig((c) => ({ ...c, redirect_uri: e.target.value }))}
             placeholder={defaultRedirectUri}
-            disabled={loading || saving}
-            className={`${bgInput || bgCard} ${borderColor} ${textPrimary} font-mono text-sm`}
+            disabled={loading || saving || isLocked('redirect_uri')}
+            className={`${bgInput || bgCard} ${borderColor} ${textPrimary} font-mono text-sm ${isLocked('redirect_uri') ? 'opacity-70 cursor-not-allowed' : ''}`}
           />
           <p className={`text-xs ${textSecondary}`}>
             Must match exactly one of the Authorized redirect URIs in your Google Cloud OAuth client.
