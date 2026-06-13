@@ -83,15 +83,25 @@ async def list_projects(request: Request):
         ]
     }
     projects = await db.projects.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
-    # Attach task counts for each project
+    # Batched task counts — single aggregation instead of 2*N count_documents.
+    project_ids = [p.get("project_id") for p in projects if p.get("project_id")]
+    counts_map: dict = {}
+    if project_ids:
+        pipeline = [
+            {"$match": {"project_id": {"$in": project_ids}}},
+            {"$group": {
+                "_id": "$project_id",
+                "total": {"$sum": 1},
+                "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+            }},
+        ]
+        async for row in db.our_tasks.aggregate(pipeline):
+            counts_map[row["_id"]] = {"total": row.get("total", 0), "completed": row.get("completed", 0)}
     for p in projects:
         pid = p.get("project_id")
-        if not pid:
-            continue
-        total = await db.our_tasks.count_documents({"project_id": pid})
-        completed = await db.our_tasks.count_documents({"project_id": pid, "status": "completed"})
-        p["task_count"] = total
-        p["completed_task_count"] = completed
+        c = counts_map.get(pid, {})
+        p["task_count"] = c.get("total", 0)
+        p["completed_task_count"] = c.get("completed", 0)
     return projects
 
 

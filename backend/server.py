@@ -102,6 +102,8 @@ async def startup_tasks():
             ("users", [("email", 1)], {}),
             ("our_tasks", [("assigned_to", 1)], {}),
             ("our_tasks", [("status", 1)], {}),
+            ("our_tasks", [("project_id", 1)], {}),
+            ("our_tasks", [("created_by", 1)], {}),
             ("attendance", [("user_id", 1), ("date", -1)], {}),
             ("invoices", [("client_id", 1)], {}),
             ("invoices", [("invoice_number", 1)], {}),
