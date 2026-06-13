@@ -1847,6 +1847,81 @@ const LeadsPageV2 = () => {
           borderColor={borderColor}
           textPrimary={textPrimary}
           textSecondary={textSecondary}
+          stagesPanel={
+            <div data-testid="leadsheet-stages-panel">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className={`text-sm font-semibold ${textPrimary}`}>Lead Stages</h4>
+                <span className={`text-xs ${textSecondary}`}>{stages.length} stage{stages.length === 1 ? '' : 's'}</span>
+              </div>
+              <p className={`text-xs ${textSecondary} mb-2`}>Reorder with ↑ / ↓ or delete a stage. New stages appear at the bottom.</p>
+              <div className="space-y-1.5 mb-3 max-h-[220px] overflow-y-auto">
+                {stages.length === 0 && (
+                  <div className={`p-3 rounded-lg ${bgSecondary} text-xs ${textSecondary}`}>No stages yet. Create the first one below.</div>
+                )}
+                {stages.map((stage, index) => (
+                  <div key={stage.stage_id} className={`px-2.5 py-2 rounded-lg ${bgSecondary} flex items-center justify-between gap-2`}>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          onClick={() => moveStageUp(index)}
+                          disabled={index === 0}
+                          data-testid={`leadsheet-move-stage-up-${index}`}
+                          className={`p-0.5 rounded hover:bg-[#3f3f46] ${index === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        >
+                          <ArrowUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => moveStageDown(index)}
+                          disabled={index === stages.length - 1}
+                          data-testid={`leadsheet-move-stage-down-${index}`}
+                          className={`p-0.5 rounded hover:bg-[#3f3f46] ${index === stages.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        >
+                          <ArrowDown className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <div className="w-3.5 h-3.5 rounded flex-shrink-0" style={{ backgroundColor: stage.color }} />
+                      <span className={`text-sm ${textPrimary} truncate`}>{stage.name}</span>
+                      <span className={`text-xs ${textSecondary} ml-auto`}>#{index + 1}</span>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => deleteStage(stage.stage_id)} className="text-red-400 h-7 w-7 p-0" data-testid={`leadsheet-delete-stage-${stage.stage_id}`}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <div className={`p-3 rounded-lg border ${borderColor}`}>
+                <h5 className={`text-xs font-medium ${textPrimary} mb-2 uppercase tracking-wide`}>Add New Stage</h5>
+                <div className="flex gap-2 mb-2">
+                  <Input
+                    value={newStageName}
+                    onChange={(e) => setNewStageName(e.target.value)}
+                    placeholder="Stage name"
+                    className={`flex-1 ${bgSecondary} text-sm`}
+                    data-testid="leadsheet-new-stage-name"
+                  />
+                  <input
+                    type="color"
+                    value={newStageColor}
+                    onChange={(e) => setNewStageColor(e.target.value)}
+                    className="w-10 h-9 p-0.5 rounded border-0 cursor-pointer"
+                  />
+                </div>
+                <div className="flex gap-1 mb-2 flex-wrap">
+                  {STAGE_COLORS.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setNewStageColor(color)}
+                      className={`w-5 h-5 rounded ${newStageColor === color ? 'ring-2 ring-[#6366f1]' : ''}`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+                <Button onClick={createStage} className="w-full bg-[#10b981] hover:bg-[#059669] text-white h-8 text-sm" data-testid="leadsheet-add-stage-btn">
+                  <Plus className="h-4 w-4 mr-2" /> Add Stage
+                </Button>
+              </div>
+            </div>
+          }
         />
 
         {/* Google Sheets Modal */}
@@ -2009,6 +2084,64 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
 
   return (
     <div className="space-y-4">
+      {/* Per-stage Summary Cards — clickable, drives `activeTab` */}
+      {stages.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2" data-testid="lead-stage-summary-cards">
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            data-testid="stage-card-all"
+            className={`group text-left p-3 rounded-lg border transition-all ${
+              activeTab === 'all'
+                ? 'border-[#3b82f6] bg-[#3b82f6]/10 shadow-[0_0_0_3px_rgba(59,130,246,0.15)]'
+                : `${borderColor} ${isDark ? 'bg-[#18181b] hover:bg-[#27272a]' : 'bg-white hover:bg-gray-50'}`
+            }`}
+            style={{ borderLeftWidth: 3, borderLeftColor: '#3b82f6' }}
+          >
+            <div className="flex items-center justify-between">
+              <span className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary}`}>All Leads</span>
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#3b82f6' }} />
+            </div>
+            <div className={`mt-1 text-2xl font-bold ${activeTab === 'all' ? 'text-[#3b82f6]' : textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
+              {leads.length}
+            </div>
+          </button>
+          {stages.map((stage) => {
+            const count = stageCounts[stage.stage_id] || 0;
+            const isActive = activeTab === stage.stage_id;
+            return (
+              <button
+                key={stage.stage_id}
+                type="button"
+                onClick={() => setActiveTab(stage.stage_id)}
+                data-testid={`stage-card-${stage.stage_id}`}
+                className={`group text-left p-3 rounded-lg border transition-all ${
+                  isActive
+                    ? 'shadow-[0_0_0_3px_rgba(99,102,241,0.18)]'
+                    : `${borderColor} ${isDark ? 'bg-[#18181b] hover:bg-[#27272a]' : 'bg-white hover:bg-gray-50'}`
+                }`}
+                style={{
+                  borderLeftWidth: 3,
+                  borderLeftColor: stage.color,
+                  backgroundColor: isActive ? `${stage.color}1A` : undefined,
+                  borderColor: isActive ? stage.color : undefined,
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] uppercase tracking-wider font-semibold ${textSecondary} truncate`} title={stage.name}>
+                    {stage.name}
+                  </span>
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+                </div>
+                <div className="mt-1 text-2xl font-bold" style={{ color: isActive ? stage.color : (isDark ? '#fafafa' : '#111827'), fontFamily: 'Plus Jakarta Sans' }}>
+                  {count}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Tab Filters - Scrollable */}
       <div className={`flex items-center gap-3 sm:gap-6 pb-3 border-b-2 ${borderColor} overflow-x-auto no-scrollbar`}>
         <button

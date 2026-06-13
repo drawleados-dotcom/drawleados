@@ -32,6 +32,7 @@ export default function SheetConnectModal({
   open, onClose, onSaved, sheetType, userId, headers,
   bgCard = 'bg-white', bgSecondary = 'bg-gray-100',
   borderColor = 'border-gray-200', textPrimary = 'text-gray-900', textSecondary = 'text-gray-500',
+  stagesPanel = null,
 }) {
   const [oauthConnected, setOauthConnected] = useState(false);
   const [config, setConfig] = useState(null);
@@ -264,6 +265,13 @@ export default function SheetConnectModal({
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* Stages Panel (Lead Sheet only) — passed in from parent */}
+          {sheetType === 'lead' && stagesPanel && (
+            <div className={`pt-2 border-t ${borderColor}`}>
+              {stagesPanel}
             </div>
           )}
 
