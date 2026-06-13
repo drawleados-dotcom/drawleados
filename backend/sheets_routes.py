@@ -305,6 +305,22 @@ async def put_oauth_config(payload: SheetsOAuthConfig, request: Request):
         # Treat "***" placeholder (from the masked GET) as "no change"
         cs = payload.client_secret.strip()
         if cs and "*" not in cs:
+            # If the user pasted the full credentials.json blob, auto-extract the
+            # `client_secret` field. Same trick for `client_id`.
+            if cs.startswith("{"):
+                try:
+                    import json
+                    parsed = json.loads(cs)
+                    container = parsed.get("web") or parsed.get("installed") or parsed
+                    extracted_secret = container.get("client_secret")
+                    extracted_id = container.get("client_id")
+                    if extracted_secret:
+                        cs = extracted_secret.strip()
+                    if extracted_id and payload.client_id is None:
+                        # Also auto-set client_id if not explicitly provided in this request
+                        update_fields["client_id"] = extracted_id.strip()
+                except Exception:
+                    pass  # Fall through with the raw value; Google will reject as before
             update_fields["client_secret"] = cs
         elif cs == "":
             update_fields["client_secret"] = ""
