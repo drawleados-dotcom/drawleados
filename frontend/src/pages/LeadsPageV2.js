@@ -78,7 +78,14 @@ const LeadsPageV2 = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
-  const [dateRange, setDateRange] = useState({ from: undefined, to: undefined }); // Custom date range filter
+  const [dateRange, setDateRange] = useState(() => {
+    // Default to TODAY (00:00 → 23:59:59 local time) so the board shows only today's leads.
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    return { from: start, to: end };
+  }); // Custom date range filter — defaults to Today
   const [showDatePopover, setShowDatePopover] = useState(false);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showStagesModal, setShowStagesModal] = useState(false);
@@ -588,12 +595,27 @@ const LeadsPageV2 = () => {
     }
   };
 
+  const [syncing, setSyncing] = useState(false);
   const syncSheets = async () => {
+    setSyncing(true);
     try {
-      const res = await axios.post(`${API}/api/leads-v2/google-sheets/sync`, {}, { headers });
-      toast.info(res.data.note || 'Sync initiated');
+      // Sync both connected sheets (Prospect + Lead) in parallel.
+      const tasks = [];
+      if (prospectCfg?.sheet_id) tasks.push(axios.post(`${API}/api/sheets/sync/prospect`, {}, { headers }));
+      if (leadCfg?.sheet_id)     tasks.push(axios.post(`${API}/api/sheets/sync/lead`, {}, { headers }));
+      if (tasks.length === 0) {
+        toast.error('No Google Sheet connected — open Lead Sheet / Prospect Sheet first.');
+        return;
+      }
+      const results = await Promise.all(tasks);
+      const totalSynced = results.reduce((acc, r) => acc + (r.data?.synced || 0), 0);
+      toast.success(`Synced ${totalSynced} row(s) from Google Sheets`);
+      // Reload leads + stats so the new rows show up immediately.
+      await Promise.all([loadLeads(), loadStats()]);
     } catch (error) {
-      toast.error('Failed to sync');
+      toast.error(error.response?.data?.detail || 'Sync failed');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -889,6 +911,19 @@ const LeadsPageV2 = () => {
                 <FileSpreadsheet className="h-4 w-4" />
                 Lead Sheet
                 {leadCfg?.sheet_id && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">Connected</Badge>}
+              </Button>
+
+              {/* Sync Sheets — pulls latest rows from any connected sheet */}
+              <Button
+                onClick={syncSheets}
+                disabled={syncing || (!prospectCfg?.sheet_id && !leadCfg?.sheet_id)}
+                variant="outline"
+                className={`${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary} gap-2`}
+                data-testid="leads-sync-btn"
+                title="Pull latest rows from connected Google Sheets"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing…' : 'Sync'}
               </Button>
 
               {/* View Toggle removed — List view is the only view */}

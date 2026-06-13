@@ -468,14 +468,17 @@ async def sync_sheet(sheet_type: str, request: Request):
     )
     stage_id = stage.get("stage_id") if stage else ""
 
-    # Remove previously sheet-imported leads for this sheet_type so re-sync is idempotent
-    await db.leads_v2.delete_many({
-        "imported_from_sheet": sheet_type,
-        "created_by": user.user_id,
-    })
+    # Build lookup of EXISTING sheet-imported leads keyed by lowercased email.
+    # We UPSERT — manual stage changes / edits are preserved; only new rows are inserted.
+    existing = await db.leads_v2.find(
+        {"imported_from_sheet": sheet_type, "created_by": user.user_id, "is_deleted": {"$ne": True}},
+        {"_id": 0, "lead_id": 1, "email": 1},
+    ).to_list(10000)
+    existing_by_email = {(e.get("email") or "").strip().lower(): e["lead_id"] for e in existing if e.get("email")}
 
     sheet_docs = []
-    lead_docs = []
+    inserted = 0
+    updated = 0
     lower_headers = [h.lower() for h in headers_arr]
 
     def _col(row, *candidates):
@@ -518,8 +521,9 @@ async def sync_sheet(sheet_type: str, request: Request):
             "what_do_you_want_to_do?", "what_do_you_want_to_do", "what do you do", "what_do_you_do",
             "notes", "remarks", "comments", "message",
         }
-        lead_docs.append({
-            "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
+        email_key = str(email).strip().lower()
+        existing_lead_id = existing_by_email.get(email_key) if email_key else None
+        common_fields = {
             "name": str(name).strip() or "—",
             "phone": str(phone).strip(),
             "email": str(email).strip(),
@@ -528,29 +532,44 @@ async def sync_sheet(sheet_type: str, request: Request):
             "company_name": str(company_name).strip(),
             "what_do_you_do": str(what_do_you_do).strip(),
             "source": cfg.get("source_type") or "website",
-            "stage_id": stage_id,
             "lead_owner": user.user_id,
             "notes": str(notes).strip(),
             "imported_from_sheet": sheet_type,
             "sheet_row_id": row_id,
             "custom_fields": {k: v for k, v in record.items() if k.lower() not in mapped_cols},
-            "created_by": user.user_id,
-            "created_at": now,
             "updated_at": now,
             "is_deleted": False,
-        })
+        }
+        if existing_lead_id:
+            # UPSERT — preserve stage_id, lead_id, and any manual edits the user made.
+            # Only refresh the synced fields (name/phone/email/location/etc) from the sheet.
+            await db.leads_v2.update_one(
+                {"lead_id": existing_lead_id},
+                {"$set": common_fields}
+            )
+            updated += 1
+        else:
+            await db.leads_v2.insert_one({
+                "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
+                "stage_id": stage_id,
+                "created_by": user.user_id,
+                "created_at": now,
+                **common_fields,
+            })
+            inserted += 1
 
     if sheet_docs:
         await db.leads_sheet_rows.insert_many(sheet_docs)
-    if lead_docs:
-        await db.leads_v2.insert_many(lead_docs)
 
+    total_synced = inserted + updated
     await db.leads_sheet_configs.update_one(
         {"user_id": user.user_id, "sheet_type": sheet_type},
-        {"$set": {"last_synced_at": now, "last_synced_count": len(lead_docs)}},
+        {"$set": {"last_synced_at": now, "last_synced_count": total_synced}},
     )
     return {
-        "synced": len(lead_docs),
+        "synced": total_synced,
+        "inserted": inserted,
+        "updated": updated,
         "stage_id": stage_id,
         "stage_matched": bool(stage_id),
         "last_synced_at": now,
