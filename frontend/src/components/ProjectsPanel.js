@@ -1327,7 +1327,14 @@ export default function ProjectsPanel({
               <Card
                 key={p.project_id}
                 className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#6366f1] transition-colors`}
-                onClick={() => setSelectedProject(p)}
+                onClick={async () => {
+                  // Optimistic UI — show the project shell immediately, then hydrate with tasks.
+                  setSelectedProject(p);
+                  try {
+                    const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
+                    setSelectedProject(res.data);
+                  } catch { /* ignore — keep optimistic copy */ }
+                }}
                 data-testid={`project-card-${p.project_id}`}
               >
                 <CardContent className="p-5">
