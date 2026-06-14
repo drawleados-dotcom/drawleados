@@ -10,6 +10,7 @@ import InvoicesTab from './InvoicesTab';
 import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
 import WeekWiseTab from './WeekWiseTab';
 import ClientsTab from './ClientsTab';
+import ExpenseSplitTab from './ExpenseSplitTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
@@ -128,6 +129,7 @@ const ExpenseTab = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [selectedAccount, setSelectedAccount] = useState(null);
+  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // 'categories' | 'split'
   
   // Data state
   const [dashboardData, setDashboardData] = useState(null);
@@ -1854,7 +1856,36 @@ const ExpenseTab = () => {
       ) : (
         <>
           {activeTab === 'dashboard' && renderDashboard()}
-          {activeTab === 'expense' && renderExpense()}
+          {activeTab === 'expense' && (
+            <div className="space-y-3">
+              {/* Sub-tabs: Categories | Expense Split */}
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+                <button
+                  onClick={() => setExpenseSubTab('categories')}
+                  data-testid="expense-subtab-categories"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    expenseSubTab === 'categories'
+                      ? 'bg-[#27272a] text-white'
+                      : 'text-[#a1a1aa] hover:text-white'
+                  }`}
+                >
+                  Categories
+                </button>
+                <button
+                  onClick={() => setExpenseSubTab('split')}
+                  data-testid="expense-subtab-split"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    expenseSubTab === 'split'
+                      ? 'bg-[#27272a] text-white'
+                      : 'text-[#a1a1aa] hover:text-white'
+                  }`}
+                >
+                  Expense Split
+                </button>
+              </div>
+              {expenseSubTab === 'categories' ? renderExpense() : <ExpenseSplitTab />}
+            </div>
+          )}
           {activeTab === 'budget' && renderBudget()}
           {activeTab === 'invoice' && renderInvoice()}
           {activeTab === 'payment_schedule' && (

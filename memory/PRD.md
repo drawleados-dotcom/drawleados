@@ -1,6 +1,40 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 (cont.) — Expense Split (% allocation by Income) ✅
+
+### What was implemented
+- **New sub-tab "Expense Split"** inside Finance → Expense (alongside "Categories"). Allocates monthly income across **top categories** by `% of Income`, and inside each top, **sub-categories** by `% of the top's bucket`.
+- **Hierarchy**: One level of nesting only (Top → Sub).
+- **Soft cap**: Users can overspend; rows / cards flip red but the expense is never blocked. Aggregate warning when total top-level % > 100% or sub-totals > 100% of their parent.
+- **Live month/year filter** drives Income from `cashbook_entries` (credit) for that period; allocations recompute live.
+- **Live preview** while adding a top category: shows the ₹ amount for the selected period as you type the %.
+- **Spent tracking placeholder**: `cashbook_entries.split_category_id` is the optional tag we sum on; today an expense isn't auto-tagged, so the Spent column reads ₹0 until tagging is wired into the existing Expense flow (next iteration).
+- **Lock/Edit**: percent is editable inline (pencil icon); cascade-delete removes a top + all its sub-categories.
+
+### Backend
+- New `/app/backend/expense_split_routes.py` exposing:
+  - `GET /api/finance/expense-split/categories?month=X&year=Y` — returns `{ income, categories: [{...top, allocated, spent, balance, over_budget, sub_categories:[{...sub, allocated, spent, balance, over_budget}]}], total_allocated_percent }`
+  - `POST /api/finance/expense-split/categories` — body `{ name, percent, parent_id?, color? }`; rejects 2nd-level nesting (parent must be top).
+  - `PUT /api/finance/expense-split/categories/{id}` — partial update (`name`, `percent`, `color`, `order`).
+  - `DELETE /api/finance/expense-split/categories/{id}` — soft-delete + cascade to sub-categories.
+- New collection: `expense_split_categories` (`category_id`, `name`, `percent`, `parent_id`, `color`, `order`, `is_deleted`, `created_at`).
+
+### Frontend
+- New component `/app/frontend/src/components/finance/ExpenseSplitTab.js`.
+- `/app/frontend/src/components/finance/ExpenseTab.js` — wraps `renderExpense()` with `Categories | Expense Split` sub-tab toggle.
+
+### Self-test
+- ✅ Backend curl: POST top (Overhead 30%) → POST sub (Rent 50% of Overhead) → GET returns income ₹15,180, Overhead allocated ₹4,554, Rent ₹2,277. Cascade DELETE removed both.
+- ✅ Frontend screenshot: sub-tab renders, modal opens with live ₹ preview, save adds row with progress bar + 50% pill.
+
+### Next iteration (not in this turn)
+- Wire `split_category_id` selection into the existing Expense entry form so Spent values populate automatically.
+
+---
+
+
+
 ## Latest Update — Feb 14, 2026 — Invoice Raise Bridge (Sales → Finance) ✅
 
 ### What was implemented

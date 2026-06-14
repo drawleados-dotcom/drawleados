@@ -52,6 +52,7 @@ from db_admin_routes import db_admin_router, init_db_admin
 from clients_routes import clients_router, init_clients_db
 from menu_order_routes import menu_order_router, init_menu_order_db
 from banks_routes import banks_router, init_banks_db
+from expense_split_routes import expense_split_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2676,6 +2677,7 @@ api_router.include_router(finance_router)
 api_router.include_router(clients_router)
 api_router.include_router(menu_order_router)
 api_router.include_router(banks_router)
+api_router.include_router(expense_split_router)
 api_router.include_router(operations_router)
 api_router.include_router(hr_router)
 api_router.include_router(notion_router)
