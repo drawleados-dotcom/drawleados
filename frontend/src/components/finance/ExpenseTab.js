@@ -58,9 +58,11 @@ import {
   FileSpreadsheet,
   Users,
   Building2,
+  Target as TargetIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import BanksTab from './BanksTab';
+import PipelineTab from './PipelineTab';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -100,6 +102,7 @@ const DEFAULT_TABS = [
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'clients', label: 'Clients', icon: Users, isDefault: true },
   { id: 'banks', label: 'Banks', icon: Building2, isDefault: true },
+  { id: 'pipeline', label: 'Pipeline', icon: TargetIcon, isDefault: true },
   { id: 'outstanding', label: 'Outstanding', icon: Target, isDefault: true },
   { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
   { id: 'weekly', label: 'Week Wise', icon: Calendar, isDefault: true },
@@ -1869,6 +1872,7 @@ const ExpenseTab = () => {
           )}
           {activeTab === 'clients' && <ClientsTab />}
           {activeTab === 'banks' && <BanksTab />}
+          {activeTab === 'pipeline' && <PipelineTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}
