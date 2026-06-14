@@ -137,7 +137,8 @@ async def get_current_user_from_request(request: Request) -> dict:
 
 @leads_v2_router.get("/stages")
 async def get_stages(request: Request):
-    """Get all lead stages"""
+    """Get all lead stages. Auto-seeds defaults on first call and idempotently
+    backfills the fixed "Invoice Raise" stage if it's missing."""
     await get_current_user_from_request(request)
     stages = await db.lead_stages.find(
         {"is_deleted": {"$ne": True}},
@@ -154,14 +155,44 @@ async def get_stages(request: Request):
             {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Negotiation", "color": "#ec4899", "order": 4},
             {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Followup", "color": "#14b8a6", "order": 5},
             {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Payment Stage", "color": "#f97316", "order": 6},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Deal Closed", "color": "#22c55e", "order": 7},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 7, "is_fixed": True},
+            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Deal Closed", "color": "#22c55e", "order": 8},
         ]
         for stage in default_stages:
             stage["created_at"] = datetime.now(timezone.utc)
             stage["is_deleted"] = False
             await db.lead_stages.insert_one(stage)
         stages = default_stages
-    
+
+    # Idempotent backfill: ensure "Invoice Raise" exists for existing tenants.
+    # Inserted just before "Deal Closed" / "Lost" if present, otherwise at the end.
+    has_invoice_raise = any((s.get("name") or "").strip().lower() == "invoice raise" for s in stages)
+    if not has_invoice_raise:
+        # Find the order of "Deal Closed" or "Lost" — Invoice Raise goes immediately before it.
+        terminal_orders = [s.get("order", 0) for s in stages
+                           if (s.get("name") or "").strip().lower() in ("deal closed", "lost", "won")]
+        insert_order = (min(terminal_orders) if terminal_orders else (max((s.get("order", 0) for s in stages), default=-1) + 1))
+        # Shift terminal stages down by 1 to make room.
+        if terminal_orders:
+            await db.lead_stages.update_many(
+                {"is_deleted": {"$ne": True}, "order": {"$gte": insert_order}},
+                {"$inc": {"order": 1}},
+            )
+        new_stage = {
+            "stage_id": f"stage_{uuid.uuid4().hex[:8]}",
+            "name": "Invoice Raise",
+            "color": "#a855f7",
+            "order": insert_order,
+            "is_fixed": True,
+            "created_at": datetime.now(timezone.utc),
+            "is_deleted": False,
+        }
+        await db.lead_stages.insert_one(new_stage)
+        stages = await db.lead_stages.find(
+            {"is_deleted": {"$ne": True}},
+            {"_id": 0}
+        ).sort("order", 1).to_list(100)
+
     return stages
 
 @leads_v2_router.post("/stages")
@@ -227,7 +258,12 @@ async def update_stage(stage_id: str, update_data: StageUpdate, request: Request
 async def delete_stage(stage_id: str, request: Request):
     """Delete a stage"""
     await get_current_user_from_request(request)
-    
+
+    # Fixed stages (e.g. "Invoice Raise") cannot be deleted — they back built-in flows.
+    existing = await db.lead_stages.find_one({"stage_id": stage_id}, {"_id": 0})
+    if existing and existing.get("is_fixed"):
+        raise HTTPException(status_code=400, detail=f"'{existing.get('name')}' is a fixed stage and cannot be deleted.")
+
     # Check if any leads are using this stage
     lead_count = await db.leads_v2.count_documents({"stage_id": stage_id, "is_deleted": {"$ne": True}})
     if lead_count > 0:
