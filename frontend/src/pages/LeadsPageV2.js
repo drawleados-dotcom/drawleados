@@ -335,7 +335,7 @@ const LeadsPageV2 = () => {
       // Detect transition to the special "Invoice Raise" stage by name and pop the billing-request modal.
       const stageName = (stages.find(s => s.stage_id === stageId)?.name || '').toLowerCase().trim();
       if (stageName === 'invoice raise' || stageName === 'invoice_raise' || stageName === 'invoiceraise') {
-        const lead = leads.find(l => l.lead_id === leadId);
+        const lead = leads.find(l => l.lead_id === leadId) || (editingLead && editingLead.lead_id === leadId ? editingLead : null);
         if (lead) setInvoiceRaiseLead(lead);
       }
       loadLeads();
@@ -1597,6 +1597,14 @@ const LeadsPageV2 = () => {
                             toast.success(`Moved to ${stage.name}`);
                             loadLeads();
                             loadStats();
+                            // If moving into the fixed "Invoice Raise" stage, close the
+                            // Edit Lead modal and pop the dedicated billing-request modal.
+                            const stageName = (stage.name || '').toLowerCase().trim();
+                            if (stageName === 'invoice raise' || stageName === 'invoice_raise' || stageName === 'invoiceraise') {
+                              const leadForRaise = { ...editingLead, stage_id: stage.stage_id };
+                              setEditingLead(null);
+                              setInvoiceRaiseLead(leadForRaise);
+                            }
                           } catch (e) {
                             toast.error('Failed to change stage');
                           }
