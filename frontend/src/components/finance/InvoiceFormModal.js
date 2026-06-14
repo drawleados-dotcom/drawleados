@@ -31,7 +31,7 @@ const addDays = (date, days) => {
   return d.toISOString().split('T')[0];
 };
 
-const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
+const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstType, presetItems, presetNotes }) => {
   const today = new Date().toISOString().split('T')[0];
 
   const [formData, setFormData] = useState({
@@ -82,6 +82,31 @@ const InvoiceFormModal = ({ invoice, onClose, onSave }) => {
   }, []);
 
   useEffect(() => { loadClients(); }, [loadClients]);
+
+  // Prefill from request (create mode only — when no full invoice supplied)
+  useEffect(() => {
+    if (invoice) return;
+    if (presetClientId) {
+      setFormData((p) => ({
+        ...p,
+        client_id: presetClientId,
+        gst_type: presetGstType || p.gst_type,
+        notes: presetNotes || p.notes,
+      }));
+    } else if (presetGstType) {
+      setFormData((p) => ({ ...p, gst_type: presetGstType }));
+    }
+    if (Array.isArray(presetItems) && presetItems.length > 0) {
+      setItems(presetItems.map((it) => ({
+        service_name: it.service_name || '',
+        description: it.description || '',
+        quantity: it.quantity ?? 1,
+        rate: it.rate ?? 0,
+        discount_percent: it.discount_percent ?? 0,
+        gst_rate: it.gst_rate ?? (presetGstType === 'non_gst' ? 0 : 18),
+      })));
+    }
+  }, [invoice, presetClientId, presetGstType, presetItems, presetNotes]);
 
   // Initialize from existing invoice (edit mode)
   useEffect(() => {

@@ -8,6 +8,7 @@ import { Plus, FileText, Download, Copy, Edit, Trash2, Eye, Calendar, BarChart3 
 import { toast } from 'sonner';
 import InvoiceFormModal from './InvoiceFormModal';
 import InvoicePreviewModal from './InvoicePreviewModal';
+import InvoiceRequestDetailModal from './InvoiceRequestDetailModal';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const InvoicesTab = () => {
@@ -25,7 +26,10 @@ const InvoicesTab = () => {
 
   // Sales → Finance bridge: pending Invoice Requests raised from Leads
   const [invoiceRequests, setInvoiceRequests] = useState([]);
-  const [acceptingRequest, setAcceptingRequest] = useState(false);
+  // detail-popup state
+  const [viewingRequest, setViewingRequest] = useState(null);
+  // prefill payload passed to InvoiceFormModal after Raise Invoice
+  const [invoicePreset, setInvoicePreset] = useState(null); // { clientId, gstType, items, notes, requestId }
 
   const months = [
     { value: '0', label: 'January' },
@@ -120,61 +124,29 @@ const InvoicesTab = () => {
     }
   };
 
-  // Accept an Invoice Request from the Leads pipeline:
-  // auto-creates a Draft invoice with pre-filled fields (amount, company, GST type)
-  // and marks the request as invoiced. Admin can then open & finalize the draft.
-  const handleAcceptInvoiceRequest = async (req) => {
-    setAcceptingRequest(true);
-    try {
-      const isGst = (req.gst_type || 'gst') === 'gst';
-      const today = new Date();
-      const due = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      const payload = {
-        invoice_date: today.toISOString(),
-        due_date: due.toISOString(),
-        lead_id: req.lead_id || undefined,
-        client_name: req.lead_name || req.company_name,
-        client_company: req.company_name,
-        client_address: req.billing_address || '',
-        client_gst_number: isGst ? (req.gst_number || '') : '',
-        billing_address: req.billing_address || '',
-        invoice_type: isGst ? 'GST' : 'Non-GST',
-        gst_type: isGst ? 'gst' : 'non_gst',
+  // NEW two-step flow: open detail popup → Create Client → Raise Invoice.
+  // The InvoiceRequestDetailModal handles the Create Client step internally.
+  // When the user clicks "Raise Invoice" inside it, we open InvoiceFormModal
+  // with the resolved client + request data pre-filled.
+  const handleRaiseInvoiceFromRequest = ({ request, client }) => {
+    const isGst = (request.gst_type || 'gst') === 'gst';
+    setInvoicePreset({
+      requestId: request.request_id,
+      clientId: client.client_id,
+      gstType: isGst ? 'gst' : 'non_gst',
+      notes: request.notes || '',
+      items: [{
+        service_name: request.notes ? request.notes.slice(0, 80) : 'Service',
+        description: request.notes || '',
+        quantity: 1,
+        rate: parseFloat(request.amount) || 0,
+        discount_percent: 0,
         gst_rate: isGst ? 18 : 0,
-        payment_terms: 'Net 30',
-        payment_method: req.payment_mode || '',
-        reference_number: req.request_id,
-        notes: req.notes || '',
-        template_type: 'minimal',
-        items: [{
-          service_name: req.notes ? req.notes.slice(0, 80) : 'Service',
-          description: req.notes || '',
-          quantity: 1,
-          rate: parseFloat(req.amount) || 0,
-          discount_percent: 0,
-          gst_rate: isGst ? 18 : 0,
-        }],
-      };
-      const res = await api.post('/finance/invoices', payload);
-      // Mark the request as invoiced (non-fatal if it fails)
-      try {
-        await api.post(`/finance/banks/invoice-requests/${req.request_id}/mark-invoiced`);
-      } catch (e) {
-        console.error('Failed to mark request invoiced:', e);
-      }
-      toast.success(`Draft invoice ${res.data?.invoice_number || ''} created — review & finalize`);
-      fetchInvoiceRequests();
-      fetchInvoices();
-      // Auto-open the draft invoice for finalization
-      if (res.data) {
-        setSelectedInvoice(res.data);
-        setShowInvoiceModal(true);
-      }
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create invoice from request');
-    } finally {
-      setAcceptingRequest(false);
-    }
+      }],
+    });
+    setViewingRequest(null);
+    setSelectedInvoice(null);    // create-mode
+    setShowInvoiceModal(true);
   };
 
   const handleRejectInvoiceRequest = async (req) => {
@@ -747,12 +719,11 @@ const InvoicesTab = () => {
                         <div className="flex justify-end gap-2">
                           <Button
                             size="sm"
-                            disabled={acceptingRequest}
-                            onClick={() => handleAcceptInvoiceRequest(req)}
-                            data-testid={`invreq-accept-${req.request_id}`}
+                            onClick={() => setViewingRequest(req)}
+                            data-testid={`invreq-view-${req.request_id}`}
                             className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3 text-xs"
                           >
-                            Accept
+                            <Eye className="h-3.5 w-3.5 mr-1" /> View
                           </Button>
                           <Button
                             size="sm"
@@ -779,11 +750,34 @@ const InvoicesTab = () => {
       {showInvoiceModal && (
         <InvoiceFormModal
           invoice={selectedInvoice}
-          onClose={() => setShowInvoiceModal(false)}
-          onSave={() => {
+          presetClientId={invoicePreset?.clientId}
+          presetGstType={invoicePreset?.gstType}
+          presetItems={invoicePreset?.items}
+          presetNotes={invoicePreset?.notes}
+          onClose={() => { setShowInvoiceModal(false); setInvoicePreset(null); }}
+          onSave={async () => {
+            // If this invoice was created from a request, mark the request invoiced.
+            if (invoicePreset?.requestId) {
+              try {
+                await api.post(`/finance/banks/invoice-requests/${invoicePreset.requestId}/mark-invoiced`);
+              } catch (e) {
+                // non-fatal
+              }
+              fetchInvoiceRequests();
+            }
             setShowInvoiceModal(false);
+            setInvoicePreset(null);
             fetchInvoices();
           }}
+        />
+      )}
+
+      {/* Invoice Request Detail Modal — opens from "View" on a pending request */}
+      {viewingRequest && (
+        <InvoiceRequestDetailModal
+          request={viewingRequest}
+          onClose={() => setViewingRequest(null)}
+          onRaiseInvoice={handleRaiseInvoiceFromRequest}
         />
       )}
 

@@ -1,6 +1,28 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 (cont.) — Two-Step Invoice Request → Client → Invoice Popup ✅
+
+### What was implemented
+- Replaced the single "Accept" action on the New Invoice Req tab with a richer two-step **View** flow:
+  1. **View popup** — `InvoiceRequestDetailModal` shows all request details (Company / Lead / GST / GST# / Amount / Mode / Billing Address / Notes).
+  2. **Step 1 — Create Client** — auto-detects whether a Finance client with matching `display_name` already exists. If yes, jumps straight to step 2. If no, a single "Create Client" button posts to `POST /api/finance/clients` with the request data (company → display_name, GST → gst_treatment/gstin, billing_address, etc.). On 409-style duplicate, it transparently re-links.
+  3. **Step 2 — Raise Invoice** — opens the existing `InvoiceFormModal` in create-mode with the resolved `clientId`, `gstType`, `items` (rate = amount), and `notes` pre-filled. On Save, the underlying invoice-request is flipped to `invoiced` automatically.
+
+### Frontend
+- New component: `/app/frontend/src/components/finance/InvoiceRequestDetailModal.js`.
+- `/app/frontend/src/components/finance/InvoiceFormModal.js` — added `presetClientId`, `presetGstType`, `presetItems`, `presetNotes` props. A new effect prefills `formData.client_id`, `gst_type`, items, and notes only when no full `invoice` prop is supplied (i.e. true create mode).
+- `/app/frontend/src/components/finance/InvoicesTab.js` — replaced the row "Accept" button with **View**; new `handleRaiseInvoiceFromRequest` builds the preset payload and opens `InvoiceFormModal`; `onSave` of the form now marks the source request as invoiced.
+
+### Self-test (screenshots)
+- ✅ View → modal shows all request fields, Step 1 panel with `Create Client`.
+- ✅ Click Create Client → toast "Client 'a' created", panel switches to green "Client linked" badge + `Raise Invoice` button.
+- ✅ Raise Invoice → `New Invoice` modal opens with customer "a" already selected (GSTIN 12345678 shown), line item rate ₹5,00,000 @ 18%, Total ₹5,90,000.
+
+---
+
+
+
 ## Latest Update — Feb 14, 2026 (cont.) — Expense Split (% allocation by Income) ✅
 
 ### What was implemented
