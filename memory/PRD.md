@@ -1,6 +1,37 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 — Invoice Raise Bridge (Sales → Finance) ✅
+
+### What was implemented
+- **Leads → Invoice Raise modal**: When a lead is moved into a stage whose name is "Invoice Raise" (case-insensitive), the new `LeadInvoiceRaiseModal` opens pre-filled with the lead's name/company/location/estimation. The user picks GST / Non-GST, fills company name, billing address, GST number (if GST), amount, payment mode, notes. On submit, a request is created via `POST /api/finance/banks/invoice-requests`.
+- **Finance → Invoice → "New Invoice Req" sub-tab**: A new third tab beside `Invoice List` and `Monthly Report` shows pending requests with a live badge counter. Each row has Company / Lead / GST / GST # / Amount / Mode / Notes / Raised / Accept / Reject.
+- **Accept flow**: Auto-creates a Draft invoice via `POST /api/finance/invoices` with pre-filled client/company/GST/items[0]=service from notes & rate=amount, then marks the request as `invoiced` via `POST /api/finance/banks/invoice-requests/{id}/mark-invoiced`, and opens the existing `InvoiceFormModal` in Edit mode so the admin can finalize. The request disappears from the pending queue.
+- **Reject flow**: Soft-deletes the request after confirmation.
+
+### Backend (banks_routes.py)
+- Endpoints (added in prior turn, finished + bug-fixed this session): `POST/GET/PATCH/DELETE /api/finance/banks/invoice-requests`, `POST /api/finance/banks/invoice-requests/{id}/mark-invoiced`.
+- **Bug fixed**: Orphaned `bank_id` and `amount` fields had drifted out of the `ExpenseAllocation` Pydantic class; restored them so the multi-source expense allocator works end-to-end.
+- PATCH endpoint switched from typed payload to `dict` so partial updates don't require all fields.
+
+### Frontend
+- `components/finance/LeadInvoiceRaiseModal.js` — modal already present, now wired into `pages/LeadsPageV2.js` (`updateLeadStage` intercepts the transition by stage name).
+- `components/finance/InvoicesTab.js` — added state `invoiceRequests` + `acceptingRequest`, `fetchInvoiceRequests`, `handleAcceptInvoiceRequest`, `handleRejectInvoiceRequest`, third Tab trigger + content with badge counter and table.
+
+### Testing — iteration_70.json
+- ✅ Backend: 29/29 pytest pass — invoice-requests CRUD, multi-source expense (incl. balance rejection), invoice collect (single + multi + GST mismatch), cashbook entries/balances, bank-breakdown dashboard, leads-v2 stages.
+- ✅ Frontend E2E: New Invoice Req tab renders, empty state correct; seeded request appears; Accept creates Draft INV-2026-0013 (₹75,000 × 1.18 = ₹88,500), flips status to invoiced, opens edit modal pre-filled with item/GST/notes; Reject removes after confirm.
+
+### Files touched this session
+- `backend/banks_routes.py`
+- `frontend/src/pages/LeadsPageV2.js`
+- `frontend/src/components/finance/InvoicesTab.js`
+- `frontend/src/components/finance/InvoiceModule.js` (parallel implementation, currently unused but kept consistent)
+
+---
+
+
+
 ## Latest Update — Jun 13, 2026 — Mandatory Client on Projects + Finance Client 3-Tab View
 
 ### What was implemented
