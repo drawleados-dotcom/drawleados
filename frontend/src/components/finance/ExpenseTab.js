@@ -59,11 +59,13 @@ import {
   Users,
   Building2,
   Target as TargetIcon,
+  FolderOpen,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import BanksTab from './BanksTab';
 import PipelineTab from './PipelineTab';
 import CashbookSplit from './CashbookSplit';
+import ProjectsTab from './ProjectsTab';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -104,7 +106,7 @@ const DEFAULT_TABS = [
   { id: 'clients', label: 'Clients', icon: Users, isDefault: true },
   { id: 'banks', label: 'Banks', icon: Building2, isDefault: true },
   { id: 'pipeline', label: 'Pipeline', icon: TargetIcon, isDefault: true },
-  { id: 'outstanding', label: 'Outstanding', icon: Target, isDefault: true },
+  { id: 'projects', label: 'Projects', icon: FolderOpen, isDefault: true },
   { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
   { id: 'weekly', label: 'Week Wise', icon: Calendar, isDefault: true },
 ];
@@ -1855,7 +1857,6 @@ const ExpenseTab = () => {
           {activeTab === 'expense' && renderExpense()}
           {activeTab === 'budget' && renderBudget()}
           {activeTab === 'invoice' && renderInvoice()}
-          {activeTab === 'outstanding' && renderOutstanding()}
           {activeTab === 'payment_schedule' && (
             <FinancePaymentScheduleTab isDark={isDark} token={token} />
           )}
@@ -1874,6 +1875,7 @@ const ExpenseTab = () => {
           {activeTab === 'cashbook' && <CashbookSplit />}
           {activeTab === 'banks' && <BanksTab />}
           {activeTab === 'pipeline' && <PipelineTab />}
+          {activeTab === 'projects' && <ProjectsTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}
