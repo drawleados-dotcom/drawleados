@@ -1110,16 +1110,20 @@ async def get_weekly_summary(request: Request, week_number: Optional[int] = None
         week_number = current_week
 
     start_dt, end_dt = _week_meta_for_number(week_number)
+    # cashbook_entries stores `date` as an ISO date string ("YYYY-MM-DD").
+    # We need string bounds for the $gte / $lt query to actually match.
+    start_iso = start_dt.date().isoformat()
+    end_iso = end_dt.date().isoformat()
 
-    # === Income ===
+    # === Income — pull credits from unified cashbook_entries (GST + Non-GST) ===
     income_entries = []
-    # Try the modern cashbook collection first; fall back to legacy cashflow.
     income_cursor = db.cashbook_entries.find(
-        {"type": "income", "date": {"$gte": start_dt, "$lt": end_dt}},
+        {"kind": "credit", "date": {"$gte": start_iso, "$lt": end_iso}},
         {"_id": 0}
     )
     async for e in income_cursor:
         income_entries.append(e)
+    # Legacy fallback (old cashflow collection) — only if the new collection is empty.
     if not income_entries:
         legacy_cursor = db.cashflow.find(
             {"type": "credit", "date": {"$gte": start_dt, "$lt": end_dt}},
@@ -1130,17 +1134,25 @@ async def get_weekly_summary(request: Request, week_number: Optional[int] = None
 
     total_income = sum(float(e.get("amount", 0) or 0) for e in income_entries)
 
-    # === Expense ===
+    # === Expense — pull debits from unified cashbook_entries (GST + Non-GST) ===
     expense_entries = []
-    exp_cursor = db.expense_entries.find(
-        {"$or": [
-            {"date": {"$gte": start_dt, "$lt": end_dt}},
-            {"created_at": {"$gte": start_dt, "$lt": end_dt}},
-        ]},
+    debit_cursor = db.cashbook_entries.find(
+        {"kind": "debit", "date": {"$gte": start_iso, "$lt": end_iso}},
         {"_id": 0}
     )
-    async for e in exp_cursor:
+    async for e in debit_cursor:
         expense_entries.append(e)
+    # Legacy fallback to expense_entries collection too
+    if not expense_entries:
+        exp_cursor = db.expense_entries.find(
+            {"$or": [
+                {"date": {"$gte": start_dt, "$lt": end_dt}},
+                {"created_at": {"$gte": start_dt, "$lt": end_dt}},
+            ]},
+            {"_id": 0}
+        )
+        async for e in exp_cursor:
+            expense_entries.append(e)
     total_expense = sum(float(e.get("amount", 0) or 0) for e in expense_entries)
 
     # Sort entries by date desc for display
@@ -1164,26 +1176,19 @@ async def get_weekly_summary(request: Request, week_number: Optional[int] = None
     # Cumulative totals across ALL weeks from Week 01 through current_week
     overall_start, _ = _week_meta_for_number(1)
     _, overall_end = _week_meta_for_number(current_week)
+    overall_start_iso = overall_start.date().isoformat()
+    overall_end_iso = overall_end.date().isoformat()
 
     cum_income = 0.0
     async for e in db.cashbook_entries.find(
-        {"type": "income", "date": {"$gte": overall_start, "$lt": overall_end}},
+        {"kind": "credit", "date": {"$gte": overall_start_iso, "$lt": overall_end_iso}},
         {"_id": 0, "amount": 1}
     ):
         cum_income += float(e.get("amount", 0) or 0)
-    if cum_income == 0:
-        async for e in db.cashflow.find(
-            {"type": "credit", "date": {"$gte": overall_start, "$lt": overall_end}},
-            {"_id": 0, "amount": 1}
-        ):
-            cum_income += float(e.get("amount", 0) or 0)
 
     cum_expense = 0.0
-    async for e in db.expense_entries.find(
-        {"$or": [
-            {"date": {"$gte": overall_start, "$lt": overall_end}},
-            {"created_at": {"$gte": overall_start, "$lt": overall_end}},
-        ]},
+    async for e in db.cashbook_entries.find(
+        {"kind": "debit", "date": {"$gte": overall_start_iso, "$lt": overall_end_iso}},
         {"_id": 0, "amount": 1}
     ):
         cum_expense += float(e.get("amount", 0) or 0)
