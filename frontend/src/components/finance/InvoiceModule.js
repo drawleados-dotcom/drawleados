@@ -66,6 +66,11 @@ const InvoiceModule = () => {
   const [collectInvoice, setCollectInvoice] = useState(null);
   const [leads, setLeads] = useState([]);
 
+  // New Invoice Req queue (from Leads → Invoice Raise)
+  const [activeMainTab, setActiveMainTab] = useState('all');
+  const [invoiceRequests, setInvoiceRequests] = useState([]);
+  const [acceptingRequestId, setAcceptingRequestId] = useState(null);
+
   // Form state
   const [invoiceForm, setInvoiceForm] = useState({
     invoice_date: new Date(),
@@ -123,10 +128,21 @@ const InvoiceModule = () => {
     }
   }, [token]);
 
+  // Load pending invoice requests (Sales → Finance bridge)
+  const loadInvoiceRequests = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/finance/banks/invoice-requests?status=pending`, { headers });
+      setInvoiceRequests(res.data || []);
+    } catch (error) {
+      console.error('Error loading invoice requests:', error);
+    }
+  }, [token]);
+
   useEffect(() => {
     loadInvoices();
     loadLeads();
-  }, [loadInvoices, loadLeads]);
+    loadInvoiceRequests();
+  }, [loadInvoices, loadLeads, loadInvoiceRequests]);
 
   // Calculate totals
   const calculateTotals = () => {
@@ -211,12 +227,73 @@ const InvoiceModule = () => {
         due_date: invoiceForm.due_date.toISOString(),
       }, { headers });
 
+      // If this draft was created from a pending invoice request, mark it invoiced.
+      if (acceptingRequestId) {
+        try {
+          await axios.post(`${API}/api/finance/banks/invoice-requests/${acceptingRequestId}/mark-invoiced`, {}, { headers });
+        } catch (e) {
+          // Non-fatal — the invoice itself is created.
+          console.error('Failed to mark request invoiced:', e);
+        }
+        setAcceptingRequestId(null);
+        loadInvoiceRequests();
+      }
+
       toast.success('Invoice created successfully');
       setShowCreateModal(false);
       resetForm();
       loadInvoices();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create invoice');
+    }
+  };
+
+  // Accept a pending invoice request — pre-fills the Create Invoice modal
+  // with the request's company / amount / GST data so admin can finalize.
+  const acceptInvoiceRequest = (req) => {
+    const isGst = (req.gst_type || 'gst') === 'gst';
+    setInvoiceForm({
+      invoice_date: new Date(),
+      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      invoice_type: isGst ? 'GST' : 'Non-GST',
+      gst_type: isGst ? 'gst' : 'non_gst',
+      gst_rate: isGst ? 18 : 0,
+      client_name: req.lead_name || req.company_name || '',
+      client_company: req.company_name || '',
+      client_email: '',
+      client_phone: '',
+      client_address: req.billing_address || '',
+      client_city: '',
+      client_state: '',
+      client_pincode: '',
+      client_gst_number: isGst ? (req.gst_number || '') : '',
+      client_pan: '',
+      billing_address: req.billing_address || '',
+      shipping_address: '',
+      po_number: '',
+      reference_number: req.request_id || '',
+      payment_terms: 'Net 30',
+      payment_method: req.payment_mode ? req.payment_mode.charAt(0).toUpperCase() + req.payment_mode.slice(1) : '',
+      bank_details: '',
+      items: [{ service_name: req.notes || 'Service', description: req.notes || '', quantity: 1, rate: parseFloat(req.amount) || 0, gst_rate: isGst ? 18 : 0, discount_percent: 0 }],
+      notes: req.notes || '',
+      terms_and_conditions: '',
+      template_type: 'minimal',
+      lead_id: req.lead_id || '',
+    });
+    setAcceptingRequestId(req.request_id);
+    setShowCreateModal(true);
+  };
+
+  // Reject (delete) a pending request
+  const rejectInvoiceRequest = async (req) => {
+    if (!window.confirm(`Reject invoice request from ${req.company_name}?`)) return;
+    try {
+      await axios.delete(`${API}/api/finance/banks/invoice-requests/${req.request_id}`, { headers });
+      toast.success('Request removed');
+      loadInvoiceRequests();
+    } catch (e) {
+      toast.error('Failed to remove request');
     }
   };
 
@@ -498,8 +575,23 @@ const InvoiceModule = () => {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-4">
+      {/* Sub-tabs: All Invoices  |  New Invoice Req (from Leads) */}
+      <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
+        <TabsList className={`grid w-full max-w-md grid-cols-2 ${isDark ? 'bg-[#18181b]' : ''}`}>
+          <TabsTrigger value="all" data-testid="tab-all-invoices">All Invoices</TabsTrigger>
+          <TabsTrigger value="requests" data-testid="tab-new-invoice-req">
+            New Invoice Req
+            {invoiceRequests.length > 0 && (
+              <Badge className="ml-2 bg-[#6366f1] text-white text-[10px] px-1.5 py-0">
+                {invoiceRequests.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="mt-4 space-y-4">
+          {/* Filters */}
+          <div className="flex gap-4">
         <div className="relative flex-1">
           <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${mutedClass}`} />
           <Input
@@ -618,9 +710,80 @@ const InvoiceModule = () => {
           </tbody>
         </table>
       </div>
+        </TabsContent>
+
+        {/* New Invoice Req tab — pending requests raised from Leads */}
+        <TabsContent value="requests" className="mt-4 space-y-4" data-testid="invoice-requests-pane">
+          <div className={`p-3 rounded-lg border ${cardClass} text-xs ${mutedClass}`}>
+            Requests raised from the Leads pipeline (when a lead is moved to <b>Invoice Raise</b>). Accept to open a pre-filled Create Invoice form, or Reject to remove.
+          </div>
+          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+            <table className="w-full text-sm">
+              <thead className={isDark ? 'bg-[#27272a]' : 'bg-gray-100'}>
+                <tr>
+                  <th className={`p-3 text-left ${textClass}`}>Company</th>
+                  <th className={`p-3 text-left ${textClass}`}>Lead</th>
+                  <th className={`p-3 text-left ${textClass}`}>GST</th>
+                  <th className={`p-3 text-left ${textClass}`}>GST #</th>
+                  <th className={`p-3 text-right ${textClass}`}>Amount</th>
+                  <th className={`p-3 text-left ${textClass}`}>Mode</th>
+                  <th className={`p-3 text-left ${textClass}`}>Raised</th>
+                  <th className={`p-3 text-center ${textClass}`}>Actions</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+                {invoiceRequests.map((req) => (
+                  <tr key={req.request_id} className={isDark ? 'hover:bg-[#1f1f23]' : 'hover:bg-gray-50'} data-testid={`invreq-row-${req.request_id}`}>
+                    <td className={`p-3 font-medium ${textClass}`}>{req.company_name}</td>
+                    <td className={`p-3 ${mutedClass}`}>{req.lead_name || '-'}</td>
+                    <td className="p-3">
+                      <Badge className={`text-xs ${req.gst_type === 'gst' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-amber-500/20 text-amber-500'}`}>
+                        {req.gst_type === 'gst' ? 'GST' : 'Non-GST'}
+                      </Badge>
+                    </td>
+                    <td className={`p-3 font-mono text-xs ${mutedClass}`}>{req.gst_number || '-'}</td>
+                    <td className={`p-3 text-right font-medium ${textClass}`}>{formatCurrency(req.amount)}</td>
+                    <td className={`p-3 capitalize ${mutedClass}`}>{req.payment_mode || '-'}</td>
+                    <td className={`p-3 text-xs ${mutedClass}`}>{req.created_at ? format(new Date(req.created_at), 'dd MMM, HH:mm') : '-'}</td>
+                    <td className="p-3">
+                      <div className="flex justify-center gap-1">
+                        <Button
+                          size="sm"
+                          onClick={() => acceptInvoiceRequest(req)}
+                          className="bg-[#6366f1] hover:bg-[#5855eb] text-white h-8 px-3"
+                          data-testid={`invreq-accept-${req.request_id}`}
+                        >
+                          <FileCheck className="h-3.5 w-3.5 mr-1" /> Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => rejectInvoiceRequest(req)}
+                          className="text-red-500 hover:bg-red-500/10 h-8"
+                          data-testid={`invreq-reject-${req.request_id}`}
+                          title="Reject"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {invoiceRequests.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className={`p-8 text-center ${mutedClass}`}>
+                      No pending invoice requests.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Create Invoice Modal */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) { setAcceptingRequestId(null); } }}>
         <DialogContent className={`max-w-4xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={textClass}>Create New Invoice</DialogTitle>

@@ -527,6 +527,101 @@ class ExpenseAllocation(BaseModel):
     amount: float
 
 
+# ============== INVOICE REQUESTS (from Leads → Invoice Raise) ==============
+
+class InvoiceRequestPayload(BaseModel):
+    lead_id: Optional[str] = None
+    gst_type: str  # "gst" | "non_gst"
+    company_name: str
+    lead_name: str = ""
+    gst_number: str = ""
+    billing_address: str = ""
+    amount: float = 0
+    payment_mode: str = ""  # "cash" | "upi" | "bank" | "cheque"
+    notes: str = ""
+
+
+@banks_router.get("/invoice-requests")
+async def list_invoice_requests(request: Request, status: Optional[str] = None):
+    await _get_user(request)
+    q: dict = {"is_deleted": {"$ne": True}}
+    if status:
+        q["status"] = status
+    rows = await db.invoice_requests.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    for r in rows:
+        if isinstance(r.get("created_at"), datetime):
+            r["created_at"] = r["created_at"].isoformat()
+    return rows
+
+
+@banks_router.post("/invoice-requests")
+async def create_invoice_request(payload: InvoiceRequestPayload, request: Request):
+    user = await _get_user(request)
+    if payload.gst_type not in ("gst", "non_gst"):
+        raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
+    if not (payload.company_name or "").strip():
+        raise HTTPException(status_code=400, detail="Company name is required")
+    doc = {
+        "request_id": f"invreq_{uuid.uuid4().hex[:12]}",
+        "lead_id": payload.lead_id,
+        "gst_type": payload.gst_type,
+        "company_name": payload.company_name.strip(),
+        "lead_name": (payload.lead_name or "").strip(),
+        "gst_number": (payload.gst_number or "").strip().upper(),
+        "billing_address": (payload.billing_address or "").strip(),
+        "amount": float(payload.amount or 0),
+        "payment_mode": (payload.payment_mode or "").lower(),
+        "notes": (payload.notes or "").strip(),
+        "status": "pending",  # pending | invoiced | rejected
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "is_deleted": False,
+    }
+    await db.invoice_requests.insert_one(doc)
+    doc.pop("_id", None)
+    if isinstance(doc.get("created_at"), datetime):
+        doc["created_at"] = doc["created_at"].isoformat()
+    return doc
+
+
+@banks_router.patch("/invoice-requests/{request_id}")
+async def update_invoice_request(request_id: str, payload: dict, request: Request):
+    await _get_user(request)
+    update = {k: v for k, v in (payload or {}).items() if v is not None and k not in ("request_id", "created_at", "_id")}
+    update["updated_at"] = datetime.now(timezone.utc)
+    res = await db.invoice_requests.update_one({"request_id": request_id}, {"$set": update})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Request not found")
+    doc = await db.invoice_requests.find_one({"request_id": request_id}, {"_id": 0})
+    if isinstance(doc.get("created_at"), datetime):
+        doc["created_at"] = doc["created_at"].isoformat()
+    return doc
+
+
+@banks_router.post("/invoice-requests/{request_id}/mark-invoiced")
+async def mark_request_invoiced(request_id: str, request: Request):
+    user = await _get_user(request)
+    res = await db.invoice_requests.update_one(
+        {"request_id": request_id},
+        {"$set": {"status": "invoiced", "invoiced_at": datetime.now(timezone.utc), "invoiced_by": user["user_id"]}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return {"message": "Marked invoiced"}
+
+
+@banks_router.delete("/invoice-requests/{request_id}")
+async def delete_invoice_request(request_id: str, request: Request):
+    await _get_user(request)
+    res = await db.invoice_requests.update_one(
+        {"request_id": request_id},
+        {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc)}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return {"message": "Request removed"}
+
+
 class GroupedExpensePayload(BaseModel):
     gst_type: str
     date: Optional[str] = None

@@ -13,6 +13,7 @@ import { Calendar as CalendarPicker } from '../components/ui/calendar';
 import { toast } from 'sonner';
 import axios from 'axios';
 import SheetConnectModal from '../components/SheetConnectModal';
+import LeadInvoiceRaiseModal from '../components/finance/LeadInvoiceRaiseModal';
 import { useAuth } from '../contexts/AuthContext';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import {
@@ -93,6 +94,9 @@ const LeadsPageV2 = () => {
   const [showSheetsModal, setShowSheetsModal] = useState(false);
   const [selectedLead, setSelectedLead] = useState(null);
   const [editingLead, setEditingLead] = useState(null);
+
+  // Invoice Raise (Sales → Finance) modal — opens when a lead is moved into the "Invoice Raise" stage
+  const [invoiceRaiseLead, setInvoiceRaiseLead] = useState(null);
   
   // Add new service/industry modal state
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
@@ -328,6 +332,12 @@ const LeadsPageV2 = () => {
   const updateLeadStage = async (leadId, stageId) => {
     try {
       await axios.put(`${API}/api/leads-v2/leads/${leadId}/stage`, { stage_id: stageId }, { headers });
+      // Detect transition to the special "Invoice Raise" stage by name and pop the billing-request modal.
+      const stageName = (stages.find(s => s.stage_id === stageId)?.name || '').toLowerCase().trim();
+      if (stageName === 'invoice raise' || stageName === 'invoice_raise' || stageName === 'invoiceraise') {
+        const lead = leads.find(l => l.lead_id === leadId);
+        if (lead) setInvoiceRaiseLead(lead);
+      }
       loadLeads();
       loadStats();
     } catch (error) {
@@ -2089,6 +2099,15 @@ const LeadsPageV2 = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Invoice Raise (Sales → Finance) modal */}
+        {invoiceRaiseLead && (
+          <LeadInvoiceRaiseModal
+            lead={invoiceRaiseLead}
+            onClose={() => setInvoiceRaiseLead(null)}
+            onSubmitted={() => { loadLeads(); }}
+          />
+        )}
       </div>
     </Layout>
   );

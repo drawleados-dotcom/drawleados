@@ -23,6 +23,10 @@ const InvoicesTab = () => {
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [activeView, setActiveView] = useState('list');
 
+  // Sales → Finance bridge: pending Invoice Requests raised from Leads
+  const [invoiceRequests, setInvoiceRequests] = useState([]);
+  const [acceptingRequest, setAcceptingRequest] = useState(false);
+
   const months = [
     { value: '0', label: 'January' },
     { value: '1', label: 'February' },
@@ -43,6 +47,19 @@ const InvoicesTab = () => {
   useEffect(() => {
     fetchInvoices();
   }, [statusFilter]);
+
+  useEffect(() => {
+    fetchInvoiceRequests();
+  }, []);
+
+  const fetchInvoiceRequests = async () => {
+    try {
+      const res = await api.get('/finance/banks/invoice-requests', { params: { status: 'pending' } });
+      setInvoiceRequests(res.data || []);
+    } catch (error) {
+      console.error('Error fetching invoice requests:', error);
+    }
+  };
 
   const fetchInvoices = async () => {
     try {
@@ -100,6 +117,74 @@ const InvoicesTab = () => {
       fetchInvoices();
     } catch (error) {
       toast.error('Failed to update status');
+    }
+  };
+
+  // Accept an Invoice Request from the Leads pipeline:
+  // auto-creates a Draft invoice with pre-filled fields (amount, company, GST type)
+  // and marks the request as invoiced. Admin can then open & finalize the draft.
+  const handleAcceptInvoiceRequest = async (req) => {
+    setAcceptingRequest(true);
+    try {
+      const isGst = (req.gst_type || 'gst') === 'gst';
+      const today = new Date();
+      const due = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const payload = {
+        invoice_date: today.toISOString(),
+        due_date: due.toISOString(),
+        lead_id: req.lead_id || undefined,
+        client_name: req.lead_name || req.company_name,
+        client_company: req.company_name,
+        client_address: req.billing_address || '',
+        client_gst_number: isGst ? (req.gst_number || '') : '',
+        billing_address: req.billing_address || '',
+        invoice_type: isGst ? 'GST' : 'Non-GST',
+        gst_type: isGst ? 'gst' : 'non_gst',
+        gst_rate: isGst ? 18 : 0,
+        payment_terms: 'Net 30',
+        payment_method: req.payment_mode || '',
+        reference_number: req.request_id,
+        notes: req.notes || '',
+        template_type: 'minimal',
+        items: [{
+          service_name: req.notes ? req.notes.slice(0, 80) : 'Service',
+          description: req.notes || '',
+          quantity: 1,
+          rate: parseFloat(req.amount) || 0,
+          discount_percent: 0,
+          gst_rate: isGst ? 18 : 0,
+        }],
+      };
+      const res = await api.post('/finance/invoices', payload);
+      // Mark the request as invoiced (non-fatal if it fails)
+      try {
+        await api.post(`/finance/banks/invoice-requests/${req.request_id}/mark-invoiced`);
+      } catch (e) {
+        console.error('Failed to mark request invoiced:', e);
+      }
+      toast.success(`Draft invoice ${res.data?.invoice_number || ''} created — review & finalize`);
+      fetchInvoiceRequests();
+      fetchInvoices();
+      // Auto-open the draft invoice for finalization
+      if (res.data) {
+        setSelectedInvoice(res.data);
+        setShowInvoiceModal(true);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create invoice from request');
+    } finally {
+      setAcceptingRequest(false);
+    }
+  };
+
+  const handleRejectInvoiceRequest = async (req) => {
+    if (!window.confirm(`Reject invoice request from ${req.company_name}?`)) return;
+    try {
+      await api.delete(`/finance/banks/invoice-requests/${req.request_id}`);
+      toast.success('Request removed');
+      fetchInvoiceRequests();
+    } catch (error) {
+      toast.error('Failed to remove request');
     }
   };
 
@@ -329,6 +414,19 @@ const InvoicesTab = () => {
           >
             <BarChart3 className="h-4 w-4 mr-2" />
             Monthly Report
+          </TabsTrigger>
+          <TabsTrigger
+            value="requests"
+            className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs relative"
+            data-testid="tab-new-invoice-req"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            New Invoice Req
+            {invoiceRequests.length > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#6366f1] text-white text-[10px] font-bold">
+                {invoiceRequests.length}
+              </span>
+            )}
           </TabsTrigger>
         </TabsList>
 
@@ -597,6 +695,79 @@ const InvoicesTab = () => {
                       </td>
                     </tr>
                   )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* New Invoice Req tab — pending requests raised from Leads */}
+        <TabsContent value="requests" data-testid="invoice-requests-pane">
+          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 mb-3 text-xs text-[#a1a1aa]">
+            Requests raised from the Leads pipeline (when a lead is moved to <span className="text-[#fafafa] font-semibold">Invoice Raise</span>). Click <span className="text-[#fafafa] font-semibold">Accept</span> to auto-create a Draft invoice pre-filled with company, amount and GST data — you can finalize it from the Edit modal.
+          </div>
+          <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[#09090b] border-b border-[#27272a]">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Company</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Lead</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">GST</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">GST #</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Amount</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Mode</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Notes</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Raised</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#27272a]">
+                  {invoiceRequests.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-12 text-center text-[#a1a1aa]">
+                        No pending invoice requests.
+                      </td>
+                    </tr>
+                  ) : invoiceRequests.map((req) => (
+                    <tr key={req.request_id} className="hover:bg-[#27272a]/20 transition-colors" data-testid={`invreq-row-${req.request_id}`}>
+                      <td className="px-4 py-3 text-sm font-medium text-[#fafafa]">{req.company_name}</td>
+                      <td className="px-4 py-3 text-sm text-[#a1a1aa]">{req.lead_name || '-'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${req.gst_type === 'gst' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
+                          {req.gst_type === 'gst' ? 'GST' : 'Non-GST'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-mono text-[#a1a1aa]">{req.gst_number || '-'}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-[#fafafa]">₹{Number(req.amount || 0).toLocaleString('en-IN')}</td>
+                      <td className="px-4 py-3 text-sm capitalize text-[#a1a1aa]">{req.payment_mode || '-'}</td>
+                      <td className="px-4 py-3 text-xs text-[#a1a1aa] max-w-[260px] truncate" title={req.notes}>{req.notes || '-'}</td>
+                      <td className="px-4 py-3 text-xs text-[#a1a1aa]">{req.created_at ? new Date(req.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            disabled={acceptingRequest}
+                            onClick={() => handleAcceptInvoiceRequest(req)}
+                            data-testid={`invreq-accept-${req.request_id}`}
+                            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3 text-xs"
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleRejectInvoiceRequest(req)}
+                            data-testid={`invreq-reject-${req.request_id}`}
+                            className="text-red-400 hover:bg-red-500/10 h-8 px-2 text-xs"
+                            title="Reject"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

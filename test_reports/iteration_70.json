@@ -1,0 +1,57 @@
+{
+  "summary": "Comprehensive regression + new Invoice Raise bridge feature tested. Backend: 29/29 pytest pass covering Invoice Requests CRUD, Banks CRUD, Cashbook entries+balances, Multi-source Expense allocator with balance enforcement, Dashboard bank-breakdown shape, Invoice Collect (single+multi-source, revenue_kind=new/outstanding, gst_type bank mismatch), Leads V2 stages. Frontend E2E: Finance > Invoice > 'New Invoice Req' sub-tab renders correctly with empty state + table headers. Seeded request shows up with all fields. Reject button (with confirm dialog) removes the row. Accept button creates a Draft invoice (INV-2026-0013, ₹88,500 = 75000*1.18), flips request status to 'invoiced' (verified via API), removes it from pending list, and opens InvoiceFormModal in Edit mode pre-filled with: invoice items (service_name from notes, rate=amount), 18% GST, Customer Notes, dates, terms (Net 30). Toast 'Draft invoice INV-2026-0013 created — review & finalize' shown.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/finance/banks/invoice-requests",
+        "issue": "Returns 200 (not 201) on create — minor REST convention; consistent with rest of codebase so likely intentional."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Accept → InvoiceFormModal Customer Name not auto-selected",
+        "issue": "When admin clicks Accept on an invoice_request, a draft invoice is created with client_name=lead_name (e.g. 'TEST_E2E Lead') and the Edit modal opens, BUT the Customer Name dropdown shows 'Select a client' (empty) instead of either (a) auto-selecting a client whose name matches the lead, or (b) showing the lead_name as a placeholder/display value. The invoice IS saved correctly in DB with the lead name as client_name, but the modal's customer dropdown leaves the field looking unfilled, which can confuse the admin into thinking they must pick a client (and accidentally overwriting the lead name). Suggestion: if the draft invoice's client_name doesn't match an existing client, render it as a read-only/free-text customer label in the dropdown trigger, OR auto-create a client record from the lead at accept-time.",
+        "affected_selectors": ["[data-testid='invoice-form-modal']", "Customer Name select"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "InvoiceFormModal — Rate column",
+        "issues": ["Rate input column too narrow — value 75000 was truncated visually to '7500'. Math/total are correct (Sub Total ₹75,000, Total ₹88,500) but the rate cell display is misleading. Widen the rate column or remove leading-zero trim."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_finance_invoice_raise_regression.py",
+    "/app/test_reports/pytest/iter70_finance.xml"
+  ],
+  "action_items": [
+    "Auto-link or auto-create a client record from the lead when Accepting an invoice request (or show lead_name in the customer dropdown as a fallback display value) so the Customer field doesn't appear empty in the Edit Invoice modal.",
+    "Widen Rate column in InvoiceFormModal Item Table (currently truncates 5-digit values visually).",
+    "Optional: align POST invoice-requests to return 201 instead of 200 for REST convention (very minor)."
+  ],
+  "critical_code_review_comments": [
+    "/app/backend/banks_routes.py is 773 lines — close to the 700-line guideline. Consider splitting into banks_routes.py (CRUD), cashbook_routes.py (entries/balances/expense allocator), invoice_collect_routes.py, invoice_requests_routes.py, dashboard_routes.py.",
+    "create_invoice_request and create_bank both return 200 on POST instead of 201 — inconsistent with REST norms but consistent across this codebase.",
+    "delete_invoice_request soft-deletes but list_invoice_requests filters with {is_deleted:{$ne:true}} — that's correct; however older legacy documents without is_deleted field will still appear (handled by $ne, ok).",
+    "_balance_for runs 2 aggregations per source per request — for the balances endpoint it runs 2*(3+N) aggregations. For small N this is fine, but consider one $facet aggregation if cashbook_entries grows.",
+    "bank_breakdown aggregates over ALL cashbook entries every call with no date filter — at scale this can be slow; add an index on (kind, gst_type, payment_mode, bank_id) and consider caching."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_finance_invoice_raise_regression.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (29/29 pytest pass)",
+    "frontend": "95% (bridge flow E2E works; only Customer Name auto-link is missing in Edit modal)"
+  },
+  "test_credentials": "vinoth@drawlead.com / Admin@123 (super_admin) — verified working",
+  "seed_data_creation": "Test created during the run: invoice_requests (2x TEST_), banks (2x TEST_), cashbook_entries (3x TEST_, ~25k credit + 2 expense debits), draft invoices (2x TEST_). ALL CLEANED UP at end of pytest run (test_zz_cleanup) and at end of frontend run (browser-side delete loop). No residual TEST_ data in DB.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "New Invoice Raise bridge feature is FULLY WIRED end-to-end: Sales-side LeadInvoiceRaiseModal → POST /api/finance/banks/invoice-requests → Finance > Invoice > 'New Invoice Req' sub-tab → Accept creates draft invoice + opens InvoiceFormModal + flips request to 'invoiced', or Reject soft-deletes. The Leads-side modal trigger (stage name = 'invoice raise' / 'invoice_raise' / 'invoiceraise') was not exercised end-to-end through the UI because the 'Invoice Raise' stage is not seeded by default; backend POST /api/leads-v2/stages was confirmed working. Regression-tested Finance backend modules: Banks CRUD, Cashbook (entries/balances), multi-source Expense allocator with balance enforcement, Dashboard breakdown shape, Invoice Collect (single + multi-source with revenue_kind=new for first collection and revenue_kind=outstanding for subsequent collections, plus gst_type mismatch 400). Only open issue: Customer Name in Edit Invoice modal is empty after Accept (see action_items).",
+  "rca of the issue": "Not a bug — UX gap. On Accept, finance_routes POST /finance/invoices creates the invoice with client_name = lead_name (string). The InvoiceFormModal's Customer Name field is a SELECT bound to existing clients list; since the lead_name typically doesn't match an existing client, the select renders its placeholder 'Select a client'. The data IS persisted correctly (verified: invoice.client_name = 'TEST_E2E Lead' in DB), so this is purely a display gap in the modal. Fix options: (a) auto-create a client from the lead at accept-time and select it, or (b) detect 'free-text' client_name and render it as the dropdown trigger label."
+}
