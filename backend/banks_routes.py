@@ -489,3 +489,161 @@ async def delete_cashbook_entry(entry_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Entry not found")
     return {"message": "Entry removed"}
 
+
+# ============== MULTI-SOURCE EXPENSE (allocated across cash / cheque / banks) ==============
+
+class ExpenseAllocation(BaseModel):
+    # `source` is "cash" | "cheque" | "upi" | "bank"
+    source: str
+    bank_id: Optional[str] = None  # required when source == "bank"
+    amount: float
+
+
+class GroupedExpensePayload(BaseModel):
+    gst_type: str
+    date: Optional[str] = None
+    party: Optional[str] = ""
+    category: Optional[str] = ""
+    notes: Optional[str] = ""
+    allocations: List[ExpenseAllocation]
+
+
+async def _balance_for(gst_type: str, source: str, bank_id: Optional[str] = None) -> float:
+    """Compute the available running balance for one source (Σ credits − Σ debits)."""
+    base = {"gst_type": gst_type}
+    if source == "bank":
+        base["payment_mode"] = "bank"
+        base["bank_id"] = bank_id
+    else:
+        base["payment_mode"] = source
+    credits = 0.0
+    debits = 0.0
+    async for r in db.cashbook_entries.aggregate([
+        {"$match": {**base, "kind": "credit"}},
+        {"$group": {"_id": None, "amount": {"$sum": "$amount"}}},
+    ]):
+        credits = float(r.get("amount", 0))
+    async for r in db.cashbook_entries.aggregate([
+        {"$match": {**base, "kind": "debit"}},
+        {"$group": {"_id": None, "amount": {"$sum": "$amount"}}},
+    ]):
+        debits = float(r.get("amount", 0))
+    return credits - debits
+
+
+@banks_router.get("/cashbook/balances")
+async def cashbook_balances(request: Request, gst_type: str):
+    """Return current running balance per source (cash, cheque, upi, each bank)."""
+    await _get_user(request)
+    if gst_type not in ("gst", "non_gst"):
+        raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
+    banks = await db.finance_banks.find(
+        {"gst_type": gst_type, "is_deleted": {"$ne": True}},
+        {"_id": 0, "bank_id": 1, "account_holder": 1, "bank_name": 1},
+    ).to_list(500)
+    out = {
+        "cash": {"source": "cash", "label": "Cash", "balance": await _balance_for(gst_type, "cash")},
+        "cheque": {"source": "cheque", "label": "Cheque", "balance": await _balance_for(gst_type, "cheque")},
+        "upi": {"source": "upi", "label": "UPI", "balance": await _balance_for(gst_type, "upi")},
+        "banks": [],
+    }
+    for b in banks:
+        out["banks"].append({
+            "source": "bank",
+            "bank_id": b["bank_id"],
+            "label": b.get("account_holder") or b.get("bank_name") or "Bank",
+            "balance": await _balance_for(gst_type, "bank", b["bank_id"]),
+        })
+    return out
+
+
+@banks_router.post("/cashbook/expense")
+async def add_grouped_expense(payload: GroupedExpensePayload, request: Request):
+    """Record an expense split across N sources. Each allocation becomes one
+    cashbook debit entry stamped with the same `expense_group_id`. Validates
+    that every source has enough running balance to cover its share."""
+    user = await _get_user(request)
+    if payload.gst_type not in ("gst", "non_gst"):
+        raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
+    if not payload.allocations:
+        raise HTTPException(status_code=400, detail="At least one allocation is required")
+    # Validate amounts
+    total = 0.0
+    for a in payload.allocations:
+        if a.amount is None or a.amount <= 0:
+            raise HTTPException(status_code=400, detail="Each allocation amount must be > 0")
+        if a.source not in ("cash", "cheque", "upi", "bank"):
+            raise HTTPException(status_code=400, detail=f"Invalid source: {a.source}")
+        if a.source == "bank" and not a.bank_id:
+            raise HTTPException(status_code=400, detail="bank_id required for bank source")
+        total += float(a.amount)
+
+    # Balance check per allocation
+    bank_label_cache: dict = {}
+    for a in payload.allocations:
+        avail = await _balance_for(payload.gst_type, a.source, a.bank_id)
+        if a.amount > avail + 0.0001:
+            label = a.source
+            if a.source == "bank":
+                doc = await db.finance_banks.find_one({"bank_id": a.bank_id}, {"_id": 0, "account_holder": 1, "bank_name": 1, "gst_type": 1})
+                if not doc or doc.get("gst_type") != payload.gst_type:
+                    raise HTTPException(status_code=400, detail="Selected bank does not belong to this cashbook")
+                label = doc.get("account_holder") or doc.get("bank_name") or "Bank"
+                bank_label_cache[a.bank_id] = label
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label.capitalize()} balance is only ₹{avail:,.0f} — cannot release ₹{a.amount:,.0f}",
+            )
+
+    # Persist — one entry per allocation, all sharing the same group_id
+    group_id = f"exp_{uuid.uuid4().hex[:12]}"
+    date_str = payload.date or datetime.now(timezone.utc).date().isoformat()
+    inserted = []
+    for a in payload.allocations:
+        bank_label = None
+        if a.source == "bank":
+            bank_label = bank_label_cache.get(a.bank_id)
+            if not bank_label:
+                doc = await db.finance_banks.find_one({"bank_id": a.bank_id}, {"_id": 0, "account_holder": 1, "bank_name": 1})
+                bank_label = (doc or {}).get("account_holder") or (doc or {}).get("bank_name") or "Bank"
+        entry = {
+            "entry_id": f"cb_{uuid.uuid4().hex[:12]}",
+            "kind": "debit",
+            "gst_type": payload.gst_type,
+            "amount": float(a.amount),
+            "date": date_str,
+            "payment_mode": a.source,
+            "bank_id": a.bank_id if a.source == "bank" else None,
+            "bank_label": bank_label,
+            "to": (payload.party or "").strip(),
+            "category": (payload.category or "").strip(),
+            "category_label": (payload.category or "").strip(),
+            "notes": (payload.notes or "").strip(),
+            "expense_group_id": group_id,
+            "expense_group_total": total,
+            "created_by": user["user_id"],
+            "created_at": datetime.now(timezone.utc),
+        }
+        await db.cashbook_entries.insert_one(entry)
+        entry.pop("_id", None)
+        if isinstance(entry.get("created_at"), datetime):
+            entry["created_at"] = entry["created_at"].isoformat()
+        inserted.append(entry)
+
+    return {"expense_group_id": group_id, "total": total, "entries": inserted}
+
+
+@banks_router.get("/cashbook/expense/{group_id}")
+async def get_grouped_expense(group_id: str, request: Request):
+    """Return all entries in an expense group (for the eye-button summary)."""
+    await _get_user(request)
+    rows = await db.cashbook_entries.find(
+        {"expense_group_id": group_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(50)
+    for r in rows:
+        if isinstance(r.get("created_at"), datetime):
+            r["created_at"] = r["created_at"].isoformat()
+    if not rows:
+        raise HTTPException(status_code=404, detail="Group not found")
+    return {"group_id": group_id, "total": rows[0].get("expense_group_total"), "entries": rows}
+

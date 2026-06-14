@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, TrendingUp, TrendingDown, Loader2, Trash2, X } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Loader2, Trash2, X, Eye, AlertCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -42,9 +42,14 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [modal, setModal] = useState(null); // 'credit' | 'debit' | null
+  const [groupView, setGroupView] = useState(null); // { group_id, total, entries }
   const today = new Date().toISOString().slice(0, 10);
   const empty = { amount: '', date: today, payment_mode: 'bank', bank_id: '', party: '', category: '', notes: '' };
   const [form, setForm] = useState(empty);
+  // Multi-source expense state
+  const [balances, setBalances] = useState(null);
+  const [allocs, setAllocs] = useState([{ source: 'cash', bank_id: '', amount: '' }]);
+  const [expenseTotal, setExpenseTotal] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,10 +65,83 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  const openAdd = (kind) => {
+  const openAdd = async (kind) => {
     setModal(kind);
     const firstBank = (data?.banks || [])[0]?.bank_id || '';
     setForm({ ...empty, bank_id: firstBank });
+    if (kind === 'debit') {
+      // Multi-source flow — fetch current balances
+      try {
+        const r = await axios.get(`${API}/api/finance/banks/cashbook/balances?gst_type=${gstType}`, { headers });
+        setBalances(r.data);
+        setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
+        setExpenseTotal('');
+      } catch (e) {
+        toast.error(e.response?.data?.detail || 'Failed to load balances');
+      }
+    }
+  };
+
+  const sourceOptions = () => {
+    if (!balances) return [];
+    const opts = [
+      { value: 'cash', label: `Cash — Bal ₹${Number(balances.cash.balance).toLocaleString('en-IN')}`, available: balances.cash.balance },
+      { value: 'cheque', label: `Cheque — Bal ₹${Number(balances.cheque.balance).toLocaleString('en-IN')}`, available: balances.cheque.balance },
+      { value: 'upi', label: `UPI — Bal ₹${Number(balances.upi.balance).toLocaleString('en-IN')}`, available: balances.upi.balance },
+      ...balances.banks.map((b) => ({
+        value: `bank:${b.bank_id}`,
+        label: `${b.label} — Bal ₹${Number(b.balance).toLocaleString('en-IN')}`,
+        available: b.balance,
+        bank_id: b.bank_id,
+      })),
+    ];
+    return opts;
+  };
+
+  const allocSum = allocs.reduce((s, a) => s + (parseFloat(a.amount) || 0), 0);
+  const expenseTotalNum = parseFloat(expenseTotal) || 0;
+  const allocsBalanced = Math.abs(allocSum - expenseTotalNum) < 0.01 && expenseTotalNum > 0;
+
+  const updateAlloc = (idx, patch) => {
+    const next = allocs.map((a, i) => (i === idx ? { ...a, ...patch } : a));
+    setAllocs(next);
+  };
+
+  const addAllocRow = () => setAllocs((a) => [...a, { source: 'cash', bank_id: '', amount: '' }]);
+  const removeAllocRow = (idx) => setAllocs((a) => a.filter((_, i) => i !== idx));
+
+  const submitExpense = async () => {
+    if (!expenseTotalNum || expenseTotalNum <= 0) { toast.error('Enter total expense amount'); return; }
+    if (!allocsBalanced) { toast.error(`Allocations must sum to ₹${expenseTotalNum.toLocaleString('en-IN')}`); return; }
+    // Validate each row vs available
+    for (const a of allocs) {
+      const opt = sourceOptions().find((o) => (a.source === 'bank' ? o.value === `bank:${a.bank_id}` : o.value === a.source));
+      if (!opt) { toast.error('Pick a source for every row'); return; }
+      const amt = parseFloat(a.amount) || 0;
+      if (amt > Number(opt.available) + 0.001) {
+        toast.error(`${opt.label} cannot release ₹${amt.toLocaleString('en-IN')}`);
+        return;
+      }
+    }
+    try {
+      await axios.post(`${API}/api/finance/banks/cashbook/expense`, {
+        gst_type: gstType,
+        date: form.date,
+        party: form.party,
+        category: form.category,
+        notes: form.notes,
+        allocations: allocs.map((a) => ({
+          source: a.source,
+          bank_id: a.source === 'bank' ? a.bank_id : null,
+          amount: parseFloat(a.amount) || 0,
+        })),
+      }, { headers });
+      toast.success('Expense recorded');
+      setModal(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save');
+    }
   };
 
   const submit = async () => {
@@ -90,6 +168,15 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to save');
+    }
+  };
+
+  const viewGroup = async (group_id) => {
+    try {
+      const r = await axios.get(`${API}/api/finance/banks/cashbook/expense/${group_id}`, { headers });
+      setGroupView(r.data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load group');
     }
   };
 
@@ -261,9 +348,21 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                     <td className={`px-4 py-2 ${textSecondary} capitalize`}>{e.payment_mode}{e.bank_label ? ` · ${e.bank_label}` : ''}</td>
                     <td className="px-4 py-2 text-right font-semibold text-[#ef4444]">{fmt(e.amount)}</td>
                     <td className="px-4 py-2 text-right">
-                      <button onClick={() => deleteEntry(e)} className="text-[#f87171] hover:text-[#fca5a5]">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        {e.expense_group_id && (
+                          <button
+                            onClick={() => viewGroup(e.expense_group_id)}
+                            className="text-[#6366f1] hover:text-[#818cf8]"
+                            title="View payment summary"
+                            data-testid={`cb-view-${e.expense_group_id}`}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        <button onClick={() => deleteEntry(e)} className="text-[#f87171] hover:text-[#fca5a5]">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -274,13 +373,13 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
       </div>
 
       {/* Add Modal */}
-      {modal && (
+      {modal === 'credit' && (
         <Dialog open={true} onOpenChange={() => setModal(null)}>
           <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-md`} data-testid={`cashbook-add-modal-${modal}`}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                {modal === 'credit' ? <TrendingUp className="h-5 w-5 text-[#10b981]" /> : <TrendingDown className="h-5 w-5 text-[#ef4444]" />}
-                Add {modal === 'credit' ? 'Income' : 'Expense'} — {gstType === 'gst' ? 'GST' : 'Non-GST'}
+                <TrendingUp className="h-5 w-5 text-[#10b981]" />
+                Add Income — {gstType === 'gst' ? 'GST' : 'Non-GST'}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-3 mt-1">
@@ -298,36 +397,25 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                 <Label className={textPrimary}>Payment Mode</Label>
                 <div className="grid grid-cols-4 gap-1 mt-1">
                   {PAYMENT_MODES.map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setForm({ ...form, payment_mode: m })}
+                    <button key={m} type="button" onClick={() => setForm({ ...form, payment_mode: m })}
                       className={`px-2 py-1.5 rounded text-xs border capitalize transition-colors ${
                         form.payment_mode === m ? 'border-[#6366f1] bg-[#6366f1]/15' : `${borderColor} ${textSecondary}`
-                      }`}
-                    >
-                      {m}
-                    </button>
+                      }`}>{m}</button>
                   ))}
                 </div>
               </div>
               {form.payment_mode === 'bank' && (
                 <div>
                   <Label className={textPrimary}>{gstType === 'gst' ? 'GST' : 'Non-GST'} Bank</Label>
-                  <select
-                    value={form.bank_id}
-                    onChange={(e) => setForm({ ...form, bank_id: e.target.value })}
-                    className={`w-full h-10 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-                  >
+                  <select value={form.bank_id} onChange={(e) => setForm({ ...form, bank_id: e.target.value })}
+                    className={`w-full h-10 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}>
                     <option value="">Select bank...</option>
-                    {(data.banks || []).map((b) => (
-                      <option key={b.bank_id} value={b.bank_id}>{b.label}</option>
-                    ))}
+                    {(data.banks || []).map((b) => <option key={b.bank_id} value={b.bank_id}>{b.label}</option>)}
                   </select>
                 </div>
               )}
               <div>
-                <Label className={textPrimary}>{modal === 'credit' ? 'From (party)' : 'To (party)'}</Label>
+                <Label className={textPrimary}>From (party)</Label>
                 <Input value={form.party} onChange={(e) => setForm({ ...form, party: e.target.value })} placeholder="Name / company" className={bgSecondary} />
               </div>
               <div>
@@ -341,9 +429,142 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t mt-3" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
               <Button variant="ghost" onClick={() => setModal(null)} className={textSecondary}><X className="h-4 w-4 mr-1" /> Cancel</Button>
-              <Button onClick={submit} className={modal === 'credit' ? 'bg-[#10b981] hover:bg-[#059669] text-white' : 'bg-[#ef4444] hover:bg-[#dc2626] text-white'}>
-                Save
-              </Button>
+              <Button onClick={submit} className="bg-[#10b981] hover:bg-[#059669] text-white">Save</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Multi-source Expense modal */}
+      {modal === 'debit' && (
+        <Dialog open={true} onOpenChange={() => setModal(null)}>
+          <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-2xl`} data-testid="cashbook-add-modal-debit">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <TrendingDown className="h-5 w-5 text-[#ef4444]" />
+                Add Expense — {gstType === 'gst' ? 'GST' : 'Non-GST'}
+              </DialogTitle>
+              <p className={`text-xs ${textSecondary}`}>Split the amount across one or more payment sources. Each source must have enough balance.</p>
+            </DialogHeader>
+            <div className="space-y-3 mt-1">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className={textPrimary}>Total Amount *</Label>
+                  <Input type="number" value={expenseTotal} onChange={(e) => setExpenseTotal(e.target.value)} placeholder="10000" className={bgSecondary} autoFocus data-testid="expense-total-input" />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Date *</Label>
+                  <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className={bgSecondary} />
+                </div>
+                <div>
+                  <Label className={textPrimary}>To (party)</Label>
+                  <Input value={form.party} onChange={(e) => setForm({ ...form, party: e.target.value })} placeholder="Vendor" className={bgSecondary} />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className={textPrimary}>Payment Sources *</Label>
+                  <span className={`text-xs ${textSecondary}`}>Allocated: <b style={{ color: allocsBalanced ? '#10b981' : '#f59e0b' }}>{fmt(allocSum)}</b> / {fmt(expenseTotalNum)}</span>
+                </div>
+                <div className="space-y-2">
+                  {allocs.map((a, idx) => {
+                    const opts = sourceOptions();
+                    const currentVal = a.source === 'bank' ? `bank:${a.bank_id}` : a.source;
+                    const sel = opts.find((o) => o.value === currentVal);
+                    const amt = parseFloat(a.amount) || 0;
+                    const over = sel && amt > Number(sel.available) + 0.001;
+                    return (
+                      <div key={idx} className={`grid grid-cols-12 gap-2 items-center p-2 rounded-lg border ${over ? 'border-[#ef4444]' : borderColor} ${bgSecondary}`}>
+                        <select
+                          value={currentVal}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v.startsWith('bank:')) updateAlloc(idx, { source: 'bank', bank_id: v.slice(5) });
+                            else updateAlloc(idx, { source: v, bank_id: '' });
+                          }}
+                          className={`col-span-7 h-9 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                          data-testid={`alloc-source-${idx}`}
+                        >
+                          {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <Input
+                          type="number"
+                          value={a.amount}
+                          onChange={(e) => updateAlloc(idx, { amount: e.target.value })}
+                          placeholder="Amount"
+                          className={`col-span-4 ${bgCard} ${over ? 'border-[#ef4444]' : ''}`}
+                          data-testid={`alloc-amount-${idx}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAllocRow(idx)}
+                          disabled={allocs.length === 1}
+                          className={`col-span-1 ${textSecondary} hover:text-[#ef4444] disabled:opacity-30`}
+                        >
+                          <X className="h-4 w-4 mx-auto" />
+                        </button>
+                        {over && (
+                          <p className="col-span-12 text-[10px] text-[#ef4444] flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" /> Available balance is only ₹{Number(sel.available).toLocaleString('en-IN')}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <Button variant="outline" size="sm" onClick={addAllocRow} className={`${borderColor} mt-2`} data-testid="alloc-add-row">
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add another source
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Category</Label>
+                  <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Service / Salary" className={bgSecondary} />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Notes</Label>
+                  <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="UTR / cheque # / remarks" className={bgSecondary} />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t mt-3" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
+              <Button variant="ghost" onClick={() => setModal(null)} className={textSecondary}><X className="h-4 w-4 mr-1" /> Cancel</Button>
+              <Button
+                onClick={submitExpense}
+                disabled={!allocsBalanced}
+                className="bg-[#ef4444] hover:bg-[#dc2626] text-white disabled:opacity-40"
+                data-testid="expense-save-btn"
+              >Record Expense</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Expense group summary modal */}
+      {groupView && (
+        <Dialog open={true} onOpenChange={() => setGroupView(null)}>
+          <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-md`} data-testid="expense-group-modal">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5 text-[#6366f1]" /> Payment Summary
+              </DialogTitle>
+              <p className={`text-xs ${textSecondary}`}>Total <b className={textPrimary}>{fmt(groupView.total)}</b> split across {groupView.entries.length} source{groupView.entries.length === 1 ? '' : 's'}.</p>
+            </DialogHeader>
+            <div className="space-y-2 mt-2">
+              {groupView.entries.map((e) => (
+                <div key={e.entry_id} className={`flex items-center justify-between p-2.5 rounded ${bgSecondary} border ${borderColor}`}>
+                  <div>
+                    <p className={`text-sm font-medium ${textPrimary} capitalize`}>{e.payment_mode}{e.bank_label ? ` · ${e.bank_label}` : ''}</p>
+                    <p className={`text-[10px] ${textSecondary}`}>{fmtDate(e.date)}{e.to ? ` • To: ${e.to}` : ''}{e.category ? ` • ${e.category}` : ''}</p>
+                  </div>
+                  <span className="font-semibold text-[#ef4444]">{fmt(e.amount)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end pt-3 border-t mt-3" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
+              <Button onClick={() => setGroupView(null)} variant="outline" className={borderColor}>Close</Button>
             </div>
           </DialogContent>
         </Dialog>
