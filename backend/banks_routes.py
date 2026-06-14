@@ -628,6 +628,9 @@ class GroupedExpensePayload(BaseModel):
     party: Optional[str] = ""
     category: Optional[str] = ""
     notes: Optional[str] = ""
+    # Expense Split tagging — used to populate the budget's "Spent" column.
+    split_category_id: Optional[str] = None       # sub-category if chosen, else top
+    split_top_category_id: Optional[str] = None   # top category always (for rollup display)
     allocations: List[ExpenseAllocation]
 
 
@@ -742,6 +745,8 @@ async def add_grouped_expense(payload: GroupedExpensePayload, request: Request):
             "category": (payload.category or "").strip(),
             "category_label": (payload.category or "").strip(),
             "notes": (payload.notes or "").strip(),
+            "split_category_id": payload.split_category_id,
+            "split_top_category_id": payload.split_top_category_id,
             "expense_group_id": group_id,
             "expense_group_total": total,
             "created_by": user["user_id"],

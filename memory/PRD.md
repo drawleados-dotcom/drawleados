@@ -1,6 +1,37 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 (cont.) — Expense Split tagging on Add Expense ✅
+
+### What was implemented
+- The **Add Expense** modal (Cashbook → GST / Non-GST) now exposes a hierarchical **Expense Category (Budget)** picker:
+  - **Top Category** select (shows `name (percent%)` for each top from Expense Split).
+  - **Sub Category** select (disabled until a top is chosen; shows that top's sub-categories with their %; optional).
+- The previous free-text "Category" field becomes **Label / Description** — auto-filled from the picked names ("Top › Sub") if left blank.
+- Each cashbook debit entry written by `POST /api/finance/banks/cashbook/expense` is now stamped with `split_category_id` (sub if chosen, else top) and `split_top_category_id`. The **Expense Split** tab's `Spent ₹` column reads these and rolls sub → top automatically.
+
+### Backend
+- `banks_routes.py` → `GroupedExpensePayload` accepts `split_category_id` and `split_top_category_id`; `add_grouped_expense` persists both on every entry it inserts.
+- Existing `_calc_spent_per_category` in `expense_split_routes.py` groups by `split_category_id`; the GET response already rolls sub spend up to the parent top, so no changes needed there.
+
+### Frontend
+- `components/finance/CashbookSplit.js`:
+  - New state: `splitCategories`, `splitTopId`, `splitSubId`.
+  - On modal open (`debit`), fetches `/api/finance/expense-split/categories?month=X&year=Y` to populate the picker.
+  - `submitExpense` derives a human-readable category label from picks and posts the split IDs alongside allocations.
+  - Replaced the single Category input with a two-column Top + Sub select, plus a "No categories yet" hint when the user hasn't created any.
+
+### Self-test
+- ✅ Backend curl: posted a ₹100 cash expense tagged with `Investment` (top) + `Re - Investment` (sub). GET split-categories returned `Investment spent=₹100` and `Re - Investment spent=₹100` (sub spend rolled up to the top — exactly as designed).
+- ✅ Frontend: Add Expense modal renders Top + Sub selects. Picking "Investment (15%)" enables sub picker with 3 options; picking "Re - Investment (85%)" reflects in both selects. Form ready to submit.
+
+### Bonus
+- Cleared up the user's pending tooling: clicking "Invoice Raise" from the row dropdown or the Edit Lead modal both fire the modal cleanly; the new "View" flow on the New Invoice Req tab supersedes the old direct-Accept and produces real Finance Clients before raising the invoice.
+
+---
+
+
+
 ## Latest Update — Feb 14, 2026 (cont.) — Two-Step Invoice Request → Client → Invoice Popup ✅
 
 ### What was implemented

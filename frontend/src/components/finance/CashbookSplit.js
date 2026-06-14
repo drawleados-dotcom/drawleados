@@ -53,6 +53,10 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   // Income-only state
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
+  // Expense Split categories (for budget tagging on Add Expense)
+  const [splitCategories, setSplitCategories] = useState([]); // top categories with .sub_categories
+  const [splitTopId, setSplitTopId] = useState('');
+  const [splitSubId, setSplitSubId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,6 +96,19 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
     if (kind === 'debit') {
       setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
       setExpenseTotal('');
+      // Load Expense Split categories to tag this expense against a budget bucket.
+      try {
+        const now = new Date();
+        const r3 = await axios.get(
+          `${API}/api/finance/expense-split/categories?month=${now.getMonth() + 1}&year=${now.getFullYear()}`,
+          { headers },
+        );
+        setSplitCategories(r3.data?.categories || []);
+      } catch (e) {
+        setSplitCategories([]);
+      }
+      setSplitTopId('');
+      setSplitSubId('');
     }
   };
 
@@ -159,12 +176,20 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
       }
     }
     try {
+      // Derive a friendly category label from the selected split categories if user didn't type one.
+      const topCat = splitCategories.find((c) => c.category_id === splitTopId);
+      const subCat = topCat?.sub_categories?.find((s) => s.category_id === splitSubId);
+      const derivedCategory = (form.category || '').trim()
+        || (subCat ? `${topCat.name} › ${subCat.name}` : (topCat?.name || ''));
+      const splitCategoryId = splitSubId || splitTopId || null;
       await axios.post(`${API}/api/finance/banks/cashbook/expense`, {
         gst_type: gstType,
         date: form.date,
         party: form.party,
-        category: form.category,
+        category: derivedCategory,
         notes: form.notes,
+        split_category_id: splitCategoryId,
+        split_top_category_id: splitTopId || null,
         allocations: allocs.map((a) => ({
           source: a.source,
           bank_id: a.source === 'bank' ? a.bank_id : null,
@@ -615,10 +640,51 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                 </Button>
               </div>
 
+              {/* Expense Split — Top Category + optional Sub Category */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className={textPrimary}>Expense Category (Budget)</Label>
+                  {splitCategories.length === 0 && (
+                    <span className={`text-[10px] ${textSecondary}`}>No categories yet — add some in Expense → Expense Split</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={splitTopId}
+                    onChange={(e) => { setSplitTopId(e.target.value); setSplitSubId(''); }}
+                    className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="expense-split-top-select"
+                  >
+                    <option value="">— Top Category —</option>
+                    {splitCategories.map((c) => (
+                      <option key={c.category_id} value={c.category_id}>
+                        {c.name} ({c.percent}%)
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={splitSubId}
+                    onChange={(e) => setSplitSubId(e.target.value)}
+                    disabled={!splitTopId}
+                    className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
+                    data-testid="expense-split-sub-select"
+                  >
+                    <option value="">
+                      {splitTopId ? '— Sub Category (optional) —' : 'Pick top first'}
+                    </option>
+                    {(splitCategories.find((c) => c.category_id === splitTopId)?.sub_categories || []).map((s) => (
+                      <option key={s.category_id} value={s.category_id}>
+                        {s.name} ({s.percent}%)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className={textPrimary}>Category</Label>
-                  <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Service / Salary" className={bgSecondary} />
+                  <Label className={textPrimary}>Label / Description</Label>
+                  <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Auto from selection if empty" className={bgSecondary} />
                 </div>
                 <div>
                   <Label className={textPrimary}>Notes</Label>
