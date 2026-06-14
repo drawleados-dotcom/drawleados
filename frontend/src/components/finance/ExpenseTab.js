@@ -1078,7 +1078,15 @@ const ExpenseTab = () => {
 
         {/* Banks — Cash / Cheque / Bank / Total by GST type */}
         <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-          <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>Banks</h3>
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Total Book</h3>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>GST + Non-GST</span>
+              <span className="text-xl font-bold text-[#6366f1]" data-testid="dashboard-banks-combined-total">
+                {formatCurrency(Number(bd?.gst?.total || 0) + Number(bd?.non_gst?.total || 0))}
+              </span>
+            </div>
+          </div>
           <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4`} data-testid="dashboard-banks-grid">
             <BankColumn
               title="GST Accounts"
