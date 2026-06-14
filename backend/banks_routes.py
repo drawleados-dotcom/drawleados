@@ -138,49 +138,72 @@ async def delete_bank(bank_id: str, request: Request):
 # ============== INVOICE COLLECT ==============
 
 class InvoiceCollectPayload(BaseModel):
-    amount: float
+    amount: Optional[float] = None  # required when allocations is absent
     date: Optional[str] = None  # ISO date — defaults to today
-    payment_mode: str  # "cash" | "upi" | "bank" | "cheque"
+    payment_mode: Optional[str] = None  # "cash" | "upi" | "bank" | "cheque" — required when allocations absent
     bank_id: Optional[str] = None  # required when payment_mode == "bank"
     notes: Optional[str] = ""
+    # NEW: multi-source allocator — when present, overrides amount/payment_mode/bank_id.
+    allocations: Optional[List[dict]] = None
 
 
 @banks_router.post("/collect/{invoice_id}")
 async def collect_invoice(invoice_id: str, payload: InvoiceCollectPayload, request: Request):
     """
-    Record a payment against an invoice and create a Cashbook credit entry.
-    The bank_id (when payment_mode == 'bank') is validated to match the invoice's gst_type.
+    Record one or more payments against an invoice and create matching
+    Cashbook credit entries. Supports two shapes:
+    - Single source: amount + payment_mode (+ bank_id) — legacy.
+    - Multi-source : allocations=[{source, bank_id?, amount}] — splits the
+      collection across multiple cash / bank / cheque sources.
     """
     user = await _get_user(request)
     inv = await db.invoices.find_one({"invoice_id": invoice_id, "is_deleted": {"$ne": True}})
     if not inv:
         raise HTTPException(status_code=404, detail="Invoice not found")
-    if payload.amount is None or payload.amount <= 0:
-        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
 
-    bank_doc = None
-    if payload.payment_mode == "bank":
-        if not payload.bank_id:
-            raise HTTPException(status_code=400, detail="Bank account is required for bank payments")
-        bank_doc = await db.finance_banks.find_one(
-            {"bank_id": payload.bank_id, "is_deleted": {"$ne": True}}, {"_id": 0}
-        )
-        if not bank_doc:
-            raise HTTPException(status_code=400, detail="Selected bank not found")
-        # Validate gst_type matches the invoice
-        inv_gst = (inv.get("gst_type") or "gst").lower()
-        if (bank_doc.get("gst_type") or "").lower() != inv_gst:
-            raise HTTPException(
-                status_code=400,
-                detail=f"This is a {inv_gst.upper()} invoice — please pick a {inv_gst.upper()} bank account.",
+    # Build a normalized list of (source, bank_id, amount) tuples.
+    items: List[dict] = []
+    if payload.allocations:
+        for a in payload.allocations:
+            src = (a.get("source") or "").lower()
+            amt = float(a.get("amount") or 0)
+            if amt <= 0:
+                raise HTTPException(status_code=400, detail="Each allocation amount must be > 0")
+            if src not in ("cash", "cheque", "upi", "bank"):
+                raise HTTPException(status_code=400, detail=f"Invalid source: {src}")
+            if src == "bank" and not a.get("bank_id"):
+                raise HTTPException(status_code=400, detail="bank_id required for bank source")
+            items.append({"source": src, "bank_id": a.get("bank_id"), "amount": amt})
+    else:
+        if not payload.amount or payload.amount <= 0:
+            raise HTTPException(status_code=400, detail="Amount must be > 0")
+        if not payload.payment_mode:
+            raise HTTPException(status_code=400, detail="payment_mode is required")
+        items.append({
+            "source": payload.payment_mode,
+            "bank_id": payload.bank_id,
+            "amount": float(payload.amount),
+        })
+
+    total_collect = sum(i["amount"] for i in items)
+
+    inv_gst = (inv.get("gst_type") or "gst").lower()
+    bank_doc_cache: dict = {}
+    for it in items:
+        if it["source"] == "bank":
+            doc = await db.finance_banks.find_one(
+                {"bank_id": it["bank_id"], "is_deleted": {"$ne": True}}, {"_id": 0}
             )
+            if not doc:
+                raise HTTPException(status_code=400, detail="Selected bank not found")
+            if (doc.get("gst_type") or "").lower() != inv_gst:
+                raise HTTPException(status_code=400, detail=f"This is a {inv_gst.upper()} invoice — please pick a {inv_gst.upper()} bank account.")
+            bank_doc_cache[it["bank_id"]] = doc
 
-    paid_amount = float(inv.get("paid_amount", 0)) + float(payload.amount)
+    paid_amount = float(inv.get("paid_amount", 0)) + total_collect
     total = float(inv.get("total_amount", 0))
     new_status = "paid" if paid_amount >= total - 0.01 else ("partial" if paid_amount > 0 else inv.get("status", "sent"))
     payment_date = payload.date or datetime.now(timezone.utc).date().isoformat()
-    # The FIRST collection on an invoice is "new revenue"; every subsequent
-    # collection (i.e. payment-schedule follow-ups) is "outstanding".
     revenue_kind = "new" if float(inv.get("paid_amount", 0)) == 0 else "outstanding"
 
     await db.invoices.update_one(
@@ -189,45 +212,50 @@ async def collect_invoice(invoice_id: str, payload: InvoiceCollectPayload, reque
             "paid_amount": paid_amount,
             "balance_due": max(0.0, total - paid_amount),
             "status": new_status,
+            "paid_percent": round((paid_amount / total) * 100, 1) if total > 0 else 0,
             "payment_date": payment_date,
-            "payment_mode": payload.payment_mode,
-            "payment_bank_id": payload.bank_id,
             "updated_at": datetime.now(timezone.utc),
         }},
     )
 
-    # Record the cash-in entry so it shows up in the Cashbook.
-    entry = {
-        "entry_id": f"cb_{uuid.uuid4().hex[:12]}",
-        "kind": "credit",
-        "date": payment_date,
-        "from": inv.get("client_name") or inv.get("display_name") or "Invoice payment",
-        "category": "invoice",
-        "category_label": "Invoice Collected",
-        "amount": float(payload.amount),
-        "invoice_id": invoice_id,
-        "invoice_number": inv.get("invoice_number"),
-        "gst_type": inv.get("gst_type") or "gst",
-        "payment_mode": payload.payment_mode,
-        "bank_id": payload.bank_id,
-        "bank_label": (bank_doc or {}).get("account_holder") if bank_doc else None,
-        "revenue_kind": revenue_kind,
-        "notes": (payload.notes or "").strip(),
-        "created_by": user["user_id"],
-        "created_at": datetime.now(timezone.utc),
-    }
-    await db.cashbook_entries.insert_one(entry)
-    entry.pop("_id", None)
-    if isinstance(entry.get("created_at"), datetime):
-        entry["created_at"] = entry["created_at"].isoformat()
+    inserted: List[dict] = []
+    income_group_id = f"inc_{uuid.uuid4().hex[:12]}" if len(items) > 1 else None
+    for it in items:
+        bank_label = (bank_doc_cache.get(it["bank_id"]) or {}).get("account_holder") if it["source"] == "bank" else None
+        entry = {
+            "entry_id": f"cb_{uuid.uuid4().hex[:12]}",
+            "kind": "credit",
+            "date": payment_date,
+            "from": inv.get("client_name") or inv.get("display_name") or "Invoice payment",
+            "category": "invoice",
+            "category_label": "Invoice Collected",
+            "amount": it["amount"],
+            "invoice_id": invoice_id,
+            "invoice_number": inv.get("invoice_number"),
+            "gst_type": inv_gst,
+            "payment_mode": it["source"],
+            "bank_id": it["bank_id"] if it["source"] == "bank" else None,
+            "bank_label": bank_label,
+            "revenue_kind": revenue_kind,
+            "income_group_id": income_group_id,
+            "notes": (payload.notes or "").strip(),
+            "created_by": user["user_id"],
+            "created_at": datetime.now(timezone.utc),
+        }
+        await db.cashbook_entries.insert_one(entry)
+        entry.pop("_id", None)
+        if isinstance(entry.get("created_at"), datetime):
+            entry["created_at"] = entry["created_at"].isoformat()
+        inserted.append(entry)
 
     return {
         "message": "Payment collected",
         "invoice_id": invoice_id,
         "paid_amount": paid_amount,
         "balance_due": max(0.0, total - paid_amount),
+        "paid_percent": round((paid_amount / total) * 100, 1) if total > 0 else 0,
         "status": new_status,
-        "cashbook_entry": entry,
+        "entries": inserted,
     }
 
 

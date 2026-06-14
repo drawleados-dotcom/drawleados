@@ -562,11 +562,20 @@ const InvoiceModule = () => {
                 <td className="p-3 text-center">
                   <Badge className={`text-xs ${
                     inv.status === 'paid' ? 'bg-green-500/20 text-green-500' :
+                    inv.status === 'partial' ? 'bg-orange-500/20 text-orange-500' :
                     inv.status === 'sent' || inv.status === 'pending' ? 'bg-yellow-500/20 text-yellow-500' :
                     inv.status === 'overdue' ? 'bg-red-500/20 text-red-500' :
                     'bg-gray-500/20 text-gray-500'
                   }`}>
-                    {inv.status}
+                    {(() => {
+                      const total = Number(inv.total_amount) || 0;
+                      const paid = Number(inv.paid_amount) || 0;
+                      const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+                      if (inv.status === 'paid') return 'Paid 100%';
+                      if (inv.status === 'partial' || (paid > 0 && paid < total)) return `Partial ${pct}%`;
+                      if (inv.status === 'sent' || inv.status === 'pending') return `Pending 0%`;
+                      return inv.status;
+                    })()}
                   </Badge>
                 </td>
                 <td className="p-3">

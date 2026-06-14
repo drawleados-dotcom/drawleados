@@ -46,10 +46,13 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   const today = new Date().toISOString().slice(0, 10);
   const empty = { amount: '', date: today, payment_mode: 'bank', bank_id: '', party: '', category: '', notes: '' };
   const [form, setForm] = useState(empty);
-  // Multi-source expense state
+  // Multi-source expense / income state
   const [balances, setBalances] = useState(null);
   const [allocs, setAllocs] = useState([{ source: 'cash', bank_id: '', amount: '' }]);
   const [expenseTotal, setExpenseTotal] = useState('');
+  // Income-only state
+  const [invoices, setInvoices] = useState([]);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,18 +70,28 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
 
   const openAdd = async (kind) => {
     setModal(kind);
-    const firstBank = (data?.banks || [])[0]?.bank_id || '';
-    setForm({ ...empty, bank_id: firstBank });
-    if (kind === 'debit') {
-      // Multi-source flow — fetch current balances
+    setForm({ ...empty });
+    try {
+      const r = await axios.get(`${API}/api/finance/banks/cashbook/balances?gst_type=${gstType}`, { headers });
+      setBalances(r.data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load balances');
+    }
+    if (kind === 'credit') {
+      // Load every invoice for this gst_type that is NOT fully paid.
       try {
-        const r = await axios.get(`${API}/api/finance/banks/cashbook/balances?gst_type=${gstType}`, { headers });
-        setBalances(r.data);
-        setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
-        setExpenseTotal('');
+        const r2 = await axios.get(`${API}/api/finance/invoices?gst_type=${gstType}`, { headers });
+        setInvoices((r2.data || []).filter((i) => (Number(i.paid_amount) || 0) < (Number(i.total_amount) || 0)));
       } catch (e) {
-        toast.error(e.response?.data?.detail || 'Failed to load balances');
+        setInvoices([]);
       }
+      setSelectedInvoiceId('');
+      setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
+      setExpenseTotal('');
+    }
+    if (kind === 'debit') {
+      setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
+      setExpenseTotal('');
     }
   };
 
@@ -109,6 +122,28 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
 
   const addAllocRow = () => setAllocs((a) => [...a, { source: 'cash', bank_id: '', amount: '' }]);
   const removeAllocRow = (idx) => setAllocs((a) => a.filter((_, i) => i !== idx));
+
+  const submitIncome = async () => {
+    if (!selectedInvoiceId) { toast.error('Select an invoice'); return; }
+    if (!expenseTotalNum || expenseTotalNum <= 0) { toast.error('Enter amount to collect'); return; }
+    if (!allocsBalanced) { toast.error(`Allocations must sum to ₹${expenseTotalNum.toLocaleString('en-IN')}`); return; }
+    try {
+      await axios.post(`${API}/api/finance/banks/collect/${selectedInvoiceId}`, {
+        date: form.date,
+        notes: form.notes,
+        allocations: allocs.map((a) => ({
+          source: a.source,
+          bank_id: a.source === 'bank' ? a.bank_id : null,
+          amount: parseFloat(a.amount) || 0,
+        })),
+      }, { headers });
+      toast.success('Income recorded against invoice');
+      setModal(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save');
+    }
+  };
 
   const submitExpense = async () => {
     if (!expenseTotalNum || expenseTotalNum <= 0) { toast.error('Enter total expense amount'); return; }
@@ -372,56 +407,113 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
         </div>
       </div>
 
-      {/* Add Modal */}
+      {/* Add Income modal — invoice-tied, multi-source allocator */}
       {modal === 'credit' && (
         <Dialog open={true} onOpenChange={() => setModal(null)}>
-          <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-md`} data-testid={`cashbook-add-modal-${modal}`}>
+          <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-2xl`} data-testid="cashbook-add-modal-credit">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-[#10b981]" />
                 Add Income — {gstType === 'gst' ? 'GST' : 'Non-GST'}
               </DialogTitle>
+              <p className={`text-xs ${textSecondary}`}>Pick an invoice and record how much was collected, split across one or more payment sources.</p>
             </DialogHeader>
             <div className="space-y-3 mt-1">
+              <div>
+                <Label className={textPrimary}>Invoice * (only {gstType === 'gst' ? 'GST' : 'Non-GST'} invoices not fully paid)</Label>
+                <select
+                  value={selectedInvoiceId}
+                  onChange={(e) => {
+                    setSelectedInvoiceId(e.target.value);
+                    // Autofill balance-due into total
+                    const inv = invoices.find((i) => i.invoice_id === e.target.value);
+                    if (inv) {
+                      const due = (Number(inv.total_amount) || 0) - (Number(inv.paid_amount) || 0);
+                      setExpenseTotal(due > 0 ? String(due) : '');
+                    }
+                  }}
+                  className={`w-full h-10 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="income-invoice-select"
+                >
+                  <option value="">Select invoice...</option>
+                  {invoices.map((inv) => {
+                    const total = Number(inv.total_amount) || 0;
+                    const paid = Number(inv.paid_amount) || 0;
+                    const due = total - paid;
+                    const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+                    return (
+                      <option key={inv.invoice_id} value={inv.invoice_id}>
+                        {inv.invoice_number || inv.invoice_id} • {inv.client_name || '—'} • Total ₹{total.toLocaleString('en-IN')} • Paid {pct}% • Due ₹{due.toLocaleString('en-IN')}
+                      </option>
+                    );
+                  })}
+                </select>
+                {invoices.length === 0 && (
+                  <p className={`text-xs ${textSecondary} mt-1`}>
+                    No outstanding {gstType === 'gst' ? 'GST' : 'Non-GST'} invoices. Create one under the Invoice tab first.
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className={textPrimary}>Amount *</Label>
-                  <Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} className={bgSecondary} autoFocus />
+                  <Label className={textPrimary}>Amount to Collect *</Label>
+                  <Input type="number" value={expenseTotal} onChange={(e) => setExpenseTotal(e.target.value)} className={bgSecondary} data-testid="income-total-input" />
                 </div>
                 <div>
                   <Label className={textPrimary}>Date *</Label>
                   <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} className={bgSecondary} />
                 </div>
               </div>
+
               <div>
-                <Label className={textPrimary}>Payment Mode</Label>
-                <div className="grid grid-cols-4 gap-1 mt-1">
-                  {PAYMENT_MODES.map((m) => (
-                    <button key={m} type="button" onClick={() => setForm({ ...form, payment_mode: m })}
-                      className={`px-2 py-1.5 rounded text-xs border capitalize transition-colors ${
-                        form.payment_mode === m ? 'border-[#6366f1] bg-[#6366f1]/15' : `${borderColor} ${textSecondary}`
-                      }`}>{m}</button>
-                  ))}
+                <div className="flex items-center justify-between mb-1.5">
+                  <Label className={textPrimary}>Payment Sources *</Label>
+                  <span className={`text-xs ${textSecondary}`}>Allocated: <b style={{ color: allocsBalanced ? '#10b981' : '#f59e0b' }}>{fmt(allocSum)}</b> / {fmt(expenseTotalNum)}</span>
                 </div>
-              </div>
-              {form.payment_mode === 'bank' && (
-                <div>
-                  <Label className={textPrimary}>{gstType === 'gst' ? 'GST' : 'Non-GST'} Bank</Label>
-                  <select value={form.bank_id} onChange={(e) => setForm({ ...form, bank_id: e.target.value })}
-                    className={`w-full h-10 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}>
-                    <option value="">Select bank...</option>
-                    {(data.banks || []).map((b) => <option key={b.bank_id} value={b.bank_id}>{b.label}</option>)}
-                  </select>
+                <div className="space-y-2">
+                  {allocs.map((a, idx) => {
+                    const opts = sourceOptions();
+                    const currentVal = a.source === 'bank' ? `bank:${a.bank_id}` : a.source;
+                    return (
+                      <div key={idx} className={`grid grid-cols-12 gap-2 items-center p-2 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                        <select
+                          value={currentVal}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v.startsWith('bank:')) updateAlloc(idx, { source: 'bank', bank_id: v.slice(5) });
+                            else updateAlloc(idx, { source: v, bank_id: '' });
+                          }}
+                          className={`col-span-7 h-9 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                          data-testid={`income-alloc-source-${idx}`}
+                        >
+                          {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <Input
+                          type="number"
+                          value={a.amount}
+                          onChange={(e) => updateAlloc(idx, { amount: e.target.value })}
+                          placeholder="Amount"
+                          className={`col-span-4 ${bgCard}`}
+                          data-testid={`income-alloc-amount-${idx}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeAllocRow(idx)}
+                          disabled={allocs.length === 1}
+                          className={`col-span-1 ${textSecondary} hover:text-[#ef4444] disabled:opacity-30`}
+                        >
+                          <X className="h-4 w-4 mx-auto" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-              <div>
-                <Label className={textPrimary}>From (party)</Label>
-                <Input value={form.party} onChange={(e) => setForm({ ...form, party: e.target.value })} placeholder="Name / company" className={bgSecondary} />
+                <Button variant="outline" size="sm" onClick={addAllocRow} className={`${borderColor} mt-2`}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add another source
+                </Button>
               </div>
-              <div>
-                <Label className={textPrimary}>Category</Label>
-                <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Service / Salary / Office" className={bgSecondary} />
-              </div>
+
               <div>
                 <Label className={textPrimary}>Notes</Label>
                 <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="UTR / cheque # / remarks" className={bgSecondary} />
@@ -429,7 +521,12 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
             </div>
             <div className="flex justify-end gap-2 pt-3 border-t mt-3" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
               <Button variant="ghost" onClick={() => setModal(null)} className={textSecondary}><X className="h-4 w-4 mr-1" /> Cancel</Button>
-              <Button onClick={submit} className="bg-[#10b981] hover:bg-[#059669] text-white">Save</Button>
+              <Button
+                onClick={submitIncome}
+                disabled={!allocsBalanced || !selectedInvoiceId}
+                className="bg-[#10b981] hover:bg-[#059669] text-white disabled:opacity-40"
+                data-testid="income-save-btn"
+              >Record Income</Button>
             </div>
           </DialogContent>
         </Dialog>
