@@ -965,7 +965,10 @@ const ExpenseTab = () => {
     const balance = revenue - expense;
     const psTotal = Number(bankBreakdown?.payment_schedule_total || 0);
     const has2col = !!bankBreakdown?.has_non_gst_banks;
-    const bd = bankBreakdown?.bank_breakdown || { gst: { cash: 0, cheque: 0, bank: 0, total: 0 }, non_gst: null };
+    const bd = bankBreakdown?.bank_breakdown || {
+      gst: { banks: [], cash: 0, cheque: 0, upi: 0, bank_total: 0, total: 0 },
+      non_gst: null,
+    };
 
     const BankColumn = ({ title, color, data, testId }) => (
       <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-gray-50 border-gray-200'}`} data-testid={testId}>
@@ -973,26 +976,42 @@ const ExpenseTab = () => {
           <h4 className={`text-sm font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>{title}</h4>
           <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
         </div>
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between">
-            <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cash</span>
-            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cash)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cheque</span>
-            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cheque)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Bank</span>
-            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.bank)}</span>
-          </div>
-          {(Number(data?.upi || 0) > 0) && (
-            <div className="flex items-center justify-between">
-              <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>UPI</span>
-              <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.upi)}</span>
-            </div>
+
+        <div className="space-y-2">
+          {/* Per-bank rows */}
+          {(data?.banks || []).length === 0 ? (
+            <p className={`text-xs italic ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>
+              No bank accounts yet — add one in the Banks tab.
+            </p>
+          ) : (
+            (data.banks || []).map((b) => (
+              <div key={b.bank_id} className="flex items-center justify-between" data-testid={`bank-row-${b.bank_id}`}>
+                <span className={`text-sm ${isDark ? 'text-[#d4d4d8]' : 'text-gray-700'} truncate`}>{b.label}</span>
+                <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(b.amount)}</span>
+              </div>
+            ))
           )}
-          <div className={`pt-2.5 mt-2.5 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} flex items-center justify-between`}>
+
+          {/* Cash + Cheque + UPI (only show UPI if non-zero) */}
+          <div className={`pt-2 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} space-y-2`}>
+            <div className="flex items-center justify-between">
+              <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cash</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cash)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cheque</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cheque)}</span>
+            </div>
+            {(Number(data?.upi || 0) > 0) && (
+              <div className="flex items-center justify-between">
+                <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>UPI</span>
+                <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.upi)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Total */}
+          <div className={`pt-2.5 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} flex items-center justify-between`}>
             <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</span>
             <span className="text-lg font-bold" style={{ color }}>{formatCurrency(data?.total)}</span>
           </div>

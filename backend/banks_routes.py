@@ -240,28 +240,67 @@ async def bank_breakdown(request: Request):
         {"gst_type": "non_gst", "is_deleted": {"$ne": True}}
     ) > 0
 
-    pipeline = [
+    # Load all bank accounts (we'll attach running totals per bank below)
+    banks = await db.finance_banks.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0, "bank_id": 1, "account_holder": 1, "bank_name": 1, "gst_type": 1},
+    ).sort("created_at", 1).to_list(500)
+
+    # Aggregate cashbook credits — TWO groupings: by payment_mode, AND by bank_id.
+    by_mode_pipeline = [
         {"$match": {"kind": "credit"}},
         {"$group": {
             "_id": {"gst_type": {"$ifNull": ["$gst_type", "gst"]}, "mode": {"$ifNull": ["$payment_mode", "bank"]}},
             "amount": {"$sum": "$amount"},
         }},
     ]
-    rows = await db.cashbook_entries.aggregate(pipeline).to_list(100)
+    mode_rows = await db.cashbook_entries.aggregate(by_mode_pipeline).to_list(100)
+
+    by_bank_pipeline = [
+        {"$match": {"kind": "credit", "payment_mode": "bank", "bank_id": {"$ne": None}}},
+        {"$group": {"_id": "$bank_id", "amount": {"$sum": "$amount"}}},
+    ]
+    bank_totals: dict = {}
+    async for row in db.cashbook_entries.aggregate(by_bank_pipeline):
+        bank_totals[row["_id"]] = float(row.get("amount", 0))
 
     def empty():
-        return {"cash": 0.0, "cheque": 0.0, "bank": 0.0, "upi": 0.0, "total": 0.0}
+        return {
+            "banks": [],   # [{bank_id, label, amount}]
+            "cash": 0.0,
+            "cheque": 0.0,
+            "upi": 0.0,
+            "bank_total": 0.0,  # sum of every bank row
+            "total": 0.0,       # cash + cheque + upi + bank_total
+        }
 
     out = {"gst": empty(), "non_gst": empty() if has_non_gst_banks else None}
-    for row in rows:
+
+    # Attach per-bank balances under the right gst bucket
+    for b in banks:
+        gt = (b.get("gst_type") or "gst").lower()
+        if gt not in out or out[gt] is None:
+            continue
+        label = b.get("account_holder") or b.get("bank_name") or "Bank"
+        amt = float(bank_totals.get(b["bank_id"], 0.0))
+        out[gt]["banks"].append({"bank_id": b["bank_id"], "label": label, "amount": amt})
+        out[gt]["bank_total"] += amt
+
+    # Fold non-bank payment modes (cash / cheque / upi) into their gst bucket
+    for row in mode_rows:
         gt = (row["_id"].get("gst_type") or "gst").lower()
         if gt not in out or out[gt] is None:
             continue
         mode = (row["_id"].get("mode") or "bank").lower()
         amount = float(row.get("amount", 0))
-        if mode in out[gt]:
+        if mode in ("cash", "cheque", "upi"):
             out[gt][mode] += amount
-        out[gt]["total"] += amount
+
+    # Final totals
+    for gt in ("gst", "non_gst"):
+        if out.get(gt) is None:
+            continue
+        out[gt]["total"] = out[gt]["bank_total"] + out[gt]["cash"] + out[gt]["cheque"] + out[gt]["upi"]
 
     # Payment schedule total (sum of uncollected splits across all projects)
     proj_pipeline = [
