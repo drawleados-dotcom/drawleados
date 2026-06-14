@@ -960,9 +960,14 @@ const ExpenseTab = () => {
 
   // ============ RENDER DASHBOARD ============
   const renderDashboard = () => {
-    const revenue = Number(dashboardData?.total_revenue || 0);
-    const expense = Number(dashboardData?.total_expense || 0);
-    const balance = revenue - expense;
+    const newRev = Number(bankBreakdown?.new_revenue || 0);
+    const outstandingCollected = Number(bankBreakdown?.outstanding_collected || 0);
+    const totalRev = Number(bankBreakdown?.total_revenue || (newRev + outstandingCollected));
+    const expense = Number(
+      bankBreakdown?.total_expense != null
+        ? bankBreakdown.total_expense
+        : (dashboardData?.total_expense || 0)
+    );
     const psTotal = Number(bankBreakdown?.payment_schedule_total || 0);
     const has2col = !!bankBreakdown?.has_non_gst_banks;
     const bd = bankBreakdown?.bank_breakdown || {
@@ -1021,8 +1026,30 @@ const ExpenseTab = () => {
 
     return (
       <div className="space-y-6">
-        {/* Summary Cards — 5 metrics */}
+        {/* Summary Cards — New Revenue / Outstanding / Total Revenue / Payment Schedule / Total Expense */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-lg bg-[#10b981]/20">
+                <ArrowDownCircle className="h-5 w-5 text-[#10b981]" />
+              </div>
+            </div>
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>New Revenue</p>
+            <p className="text-2xl font-bold text-[#10b981]" data-testid="dashboard-new-revenue">{formatCurrency(newRev)}</p>
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>1st collection on new invoices</p>
+          </div>
+
+          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="p-2.5 rounded-lg bg-[#a855f7]/20">
+                <Target className="h-5 w-5 text-[#a855f7]" />
+              </div>
+            </div>
+            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Outstanding</p>
+            <p className="text-2xl font-bold text-[#a855f7]" data-testid="dashboard-outstanding-collected">{formatCurrency(outstandingCollected)}</p>
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>From payment schedule</p>
+          </div>
+
           <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="p-2.5 rounded-lg bg-[#22c55e]/20">
@@ -1030,17 +1057,8 @@ const ExpenseTab = () => {
               </div>
             </div>
             <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Revenue</p>
-            <p className="text-2xl font-bold text-[#22c55e]" data-testid="dashboard-total-revenue">{formatCurrency(revenue)}</p>
-          </div>
-
-          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-lg bg-[#f59e0b]/20">
-                <Clock className="h-5 w-5 text-[#f59e0b]" />
-              </div>
-            </div>
-            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Payment Due</p>
-            <p className="text-2xl font-bold text-[#f59e0b]" data-testid="dashboard-payment-due">{formatCurrency(dashboardData?.payment_due)}</p>
+            <p className="text-2xl font-bold text-[#22c55e]" data-testid="dashboard-total-revenue">{formatCurrency(totalRev)}</p>
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>New + Outstanding</p>
           </div>
 
           <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
@@ -1051,6 +1069,7 @@ const ExpenseTab = () => {
             </div>
             <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Payment Schedule</p>
             <p className="text-2xl font-bold text-[#6366f1]" data-testid="dashboard-payment-schedule">{formatCurrency(psTotal)}</p>
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>Balance left to collect</p>
           </div>
 
           <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
@@ -1061,18 +1080,6 @@ const ExpenseTab = () => {
             </div>
             <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Expense</p>
             <p className="text-2xl font-bold text-[#ef4444]" data-testid="dashboard-total-expense">{formatCurrency(expense)}</p>
-          </div>
-
-          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className={`p-2.5 rounded-lg ${balance >= 0 ? 'bg-[#22c55e]/20' : 'bg-[#ef4444]/20'}`}>
-                <PiggyBank className={`h-5 w-5 ${balance >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`} />
-              </div>
-            </div>
-            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Balance</p>
-            <p className={`text-2xl font-bold ${balance >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`} data-testid="dashboard-balance">
-              {formatCurrency(balance)}
-            </p>
           </div>
         </div>
 

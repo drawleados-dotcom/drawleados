@@ -179,6 +179,9 @@ async def collect_invoice(invoice_id: str, payload: InvoiceCollectPayload, reque
     total = float(inv.get("total_amount", 0))
     new_status = "paid" if paid_amount >= total - 0.01 else ("partial" if paid_amount > 0 else inv.get("status", "sent"))
     payment_date = payload.date or datetime.now(timezone.utc).date().isoformat()
+    # The FIRST collection on an invoice is "new revenue"; every subsequent
+    # collection (i.e. payment-schedule follow-ups) is "outstanding".
+    revenue_kind = "new" if float(inv.get("paid_amount", 0)) == 0 else "outstanding"
 
     await db.invoices.update_one(
         {"invoice_id": invoice_id},
@@ -208,6 +211,7 @@ async def collect_invoice(invoice_id: str, payload: InvoiceCollectPayload, reque
         "payment_mode": payload.payment_mode,
         "bank_id": payload.bank_id,
         "bank_label": (bank_doc or {}).get("account_holder") if bank_doc else None,
+        "revenue_kind": revenue_kind,
         "notes": (payload.notes or "").strip(),
         "created_by": user["user_id"],
         "created_at": datetime.now(timezone.utc),
@@ -314,9 +318,34 @@ async def bank_breakdown(request: Request):
     async for row in db.projects.aggregate(proj_pipeline):
         ps_amount = float(row.get("amount", 0))
 
+    # Revenue split — new (first collection per invoice) vs outstanding (subsequent collections)
+    rev_pipeline = [
+        {"$match": {"kind": "credit"}},
+        {"$group": {"_id": {"$ifNull": ["$revenue_kind", "new"]}, "amount": {"$sum": "$amount"}}},
+    ]
+    new_revenue = 0.0
+    outstanding_collected = 0.0
+    async for row in db.cashbook_entries.aggregate(rev_pipeline):
+        if row["_id"] == "outstanding":
+            outstanding_collected = float(row.get("amount", 0))
+        else:
+            new_revenue = float(row.get("amount", 0))
+
+    # Total expense — sum across cashbook debits
+    total_expense = 0.0
+    async for row in db.cashbook_entries.aggregate([
+        {"$match": {"kind": "debit"}},
+        {"$group": {"_id": None, "amount": {"$sum": "$amount"}}},
+    ]):
+        total_expense = float(row.get("amount", 0))
+
     return {
         "has_non_gst_banks": has_non_gst_banks,
         "bank_breakdown": out,
         "payment_schedule_total": ps_amount,
+        "new_revenue": new_revenue,
+        "outstanding_collected": outstanding_collected,
+        "total_revenue": new_revenue + outstanding_collected,
+        "total_expense": total_expense,
     }
 
