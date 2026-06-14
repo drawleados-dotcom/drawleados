@@ -349,3 +349,143 @@ async def bank_breakdown(request: Request):
         "total_expense": total_expense,
     }
 
+
+# ============== CASHBOOK V2 — gst_type-aware, per-bank breakdown ==============
+
+class CashbookEntryPayload(BaseModel):
+    kind: str  # "credit" | "debit"
+    gst_type: str  # "gst" | "non_gst"
+    amount: float
+    date: Optional[str] = None  # ISO date — defaults to today
+    payment_mode: str = "bank"   # "cash" | "cheque" | "bank" | "upi"
+    bank_id: Optional[str] = None
+    party: Optional[str] = ""    # "from" for credit, "to" for debit
+    category: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+@banks_router.get("/cashbook/entries")
+async def list_cashbook_entries(request: Request, gst_type: str):
+    """List all entries for one cashbook (GST or Non-GST) plus per-bank summary."""
+    await _get_user(request)
+    if gst_type not in ("gst", "non_gst"):
+        raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
+
+    entries = await db.cashbook_entries.find(
+        {"gst_type": gst_type}, {"_id": 0}
+    ).sort("date", -1).to_list(5000)
+    for e in entries:
+        if isinstance(e.get("created_at"), datetime):
+            e["created_at"] = e["created_at"].isoformat()
+
+    # Bank lookup so we can label rows + fill missing bank labels
+    banks = await db.finance_banks.find(
+        {"gst_type": gst_type, "is_deleted": {"$ne": True}},
+        {"_id": 0, "bank_id": 1, "account_holder": 1, "bank_name": 1},
+    ).to_list(500)
+    bank_by_id = {b["bank_id"]: b.get("account_holder") or b.get("bank_name") or "Bank" for b in banks}
+
+    # Per-bank credit / debit roll-ups
+    def per_bank_for(kind: str) -> list:
+        rollup: dict = {}
+        cash_total = 0.0
+        cheque_total = 0.0
+        upi_total = 0.0
+        for e in entries:
+            if e.get("kind") != kind:
+                continue
+            amt = float(e.get("amount", 0))
+            mode = (e.get("payment_mode") or "bank").lower()
+            if mode == "cash":
+                cash_total += amt
+            elif mode == "cheque":
+                cheque_total += amt
+            elif mode == "upi":
+                upi_total += amt
+            else:  # bank
+                bid = e.get("bank_id")
+                if bid:
+                    rollup[bid] = rollup.get(bid, 0.0) + amt
+        rows = []
+        for b in banks:
+            if b["bank_id"] in rollup:
+                rows.append({"bank_id": b["bank_id"], "label": bank_by_id[b["bank_id"]], "amount": rollup[b["bank_id"]]})
+        if cash_total > 0:
+            rows.append({"bank_id": "__cash__", "label": "Cash", "amount": cash_total})
+        if cheque_total > 0:
+            rows.append({"bank_id": "__cheque__", "label": "Cheque", "amount": cheque_total})
+        if upi_total > 0:
+            rows.append({"bank_id": "__upi__", "label": "UPI", "amount": upi_total})
+        return rows
+
+    income_rows = per_bank_for("credit")
+    expense_rows = per_bank_for("debit")
+    income_total = sum(r["amount"] for r in income_rows)
+    expense_total = sum(r["amount"] for r in expense_rows)
+
+    return {
+        "summary": {
+            "income": {"total": income_total, "rows": income_rows},
+            "expense": {"total": expense_total, "rows": expense_rows},
+            "balance": income_total - expense_total,
+        },
+        "entries": entries,
+        "banks": [{"bank_id": b["bank_id"], "label": bank_by_id[b["bank_id"]]} for b in banks],
+    }
+
+
+@banks_router.post("/cashbook/entries")
+async def add_cashbook_entry(payload: CashbookEntryPayload, request: Request):
+    user = await _get_user(request)
+    if payload.kind not in ("credit", "debit"):
+        raise HTTPException(status_code=400, detail="kind must be 'credit' or 'debit'")
+    if payload.gst_type not in ("gst", "non_gst"):
+        raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
+    if not payload.amount or payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be > 0")
+
+    bank_label = None
+    if payload.payment_mode == "bank":
+        if not payload.bank_id:
+            raise HTTPException(status_code=400, detail="bank_id required when payment_mode='bank'")
+        bank_doc = await db.finance_banks.find_one(
+            {"bank_id": payload.bank_id, "is_deleted": {"$ne": True}}, {"_id": 0}
+        )
+        if not bank_doc:
+            raise HTTPException(status_code=400, detail="Bank not found")
+        if (bank_doc.get("gst_type") or "").lower() != payload.gst_type:
+            raise HTTPException(status_code=400, detail=f"Selected bank is not a {payload.gst_type.upper()} bank")
+        bank_label = bank_doc.get("account_holder") or bank_doc.get("bank_name")
+
+    entry = {
+        "entry_id": f"cb_{uuid.uuid4().hex[:12]}",
+        "kind": payload.kind,
+        "gst_type": payload.gst_type,
+        "amount": float(payload.amount),
+        "date": payload.date or datetime.now(timezone.utc).date().isoformat(),
+        "payment_mode": payload.payment_mode,
+        "bank_id": payload.bank_id,
+        "bank_label": bank_label,
+        "from" if payload.kind == "credit" else "to": (payload.party or "").strip(),
+        "category": (payload.category or "").strip(),
+        "category_label": (payload.category or "").strip(),
+        "notes": (payload.notes or "").strip(),
+        "revenue_kind": "new" if payload.kind == "credit" else None,
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.cashbook_entries.insert_one(entry)
+    entry.pop("_id", None)
+    if isinstance(entry.get("created_at"), datetime):
+        entry["created_at"] = entry["created_at"].isoformat()
+    return entry
+
+
+@banks_router.delete("/cashbook/entries/{entry_id}")
+async def delete_cashbook_entry(entry_id: str, request: Request):
+    await _get_user(request)
+    res = await db.cashbook_entries.delete_one({"entry_id": entry_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    return {"message": "Entry removed"}
+
