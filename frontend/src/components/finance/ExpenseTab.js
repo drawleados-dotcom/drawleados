@@ -97,9 +97,7 @@ const PROJECT_TYPE_COLORS = {
 // Default tabs
 const DEFAULT_TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, isDefault: true },
-  { id: 'cashbook_gst', label: 'GST Cashbook', icon: Wallet, isDefault: true },
-  { id: 'cashbook_non_gst', label: 'Non-GST Cashbook', icon: Wallet, isDefault: true },
-  { id: 'cashbook', label: 'Cashbook (Legacy)', icon: Wallet, isDefault: false },
+  { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
   { id: 'budget', label: 'Budget', icon: Receipt, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
@@ -1854,7 +1852,6 @@ const ExpenseTab = () => {
       ) : (
         <>
           {activeTab === 'dashboard' && renderDashboard()}
-          {activeTab === 'cashbook' && renderCashbook()}
           {activeTab === 'expense' && renderExpense()}
           {activeTab === 'budget' && renderBudget()}
           {activeTab === 'invoice' && renderInvoice()}
@@ -1874,10 +1871,9 @@ const ExpenseTab = () => {
             />
           )}
           {activeTab === 'clients' && <ClientsTab />}
+          {activeTab === 'cashbook' && <CashbookSplit />}
           {activeTab === 'banks' && <BanksTab />}
           {activeTab === 'pipeline' && <PipelineTab />}
-          {activeTab === 'cashbook_gst' && <CashbookSplit gstType="gst" />}
-          {activeTab === 'cashbook_non_gst' && <CashbookSplit gstType="non_gst" />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}

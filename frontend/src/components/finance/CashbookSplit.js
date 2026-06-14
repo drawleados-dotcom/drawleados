@@ -23,12 +23,15 @@ const fmtDate = (iso) => {
 const PAYMENT_MODES = ['cash', 'cheque', 'bank', 'upi'];
 
 /**
- * gstType: 'gst' | 'non_gst'
+ * Single Cashbook with internal GST | Non-GST sub-tabs.
+ * Pass `gstType` to lock it to one type (used internally when toggled).
  */
-const CashbookSplit = ({ gstType }) => {
+const CashbookSplit = ({ gstType: lockedGstType }) => {
   const { isDark } = useTheme();
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
+  const [activeGstType, setActiveGstType] = useState(lockedGstType || 'gst');
+  const gstType = lockedGstType || activeGstType;
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#0c0a09]' : 'bg-gray-50';
@@ -128,6 +131,30 @@ const CashbookSplit = ({ gstType }) => {
 
   return (
     <div className="space-y-5" data-testid={`cashbook-${gstType}`}>
+      {/* GST / Non-GST sub-tabs (hidden when locked to one) */}
+      {!lockedGstType && (
+        <div className={`flex items-center gap-1 border-b ${borderColor}`}>
+          {[
+            { key: 'gst', label: 'GST' },
+            { key: 'non_gst', label: 'Non-GST' },
+          ].map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setActiveGstType(t.key)}
+              data-testid={`cashbook-subtab-${t.key}`}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                activeGstType === t.key
+                  ? 'border-[#6366f1] text-[#6366f1]'
+                  : `border-transparent ${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Global action buttons */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
