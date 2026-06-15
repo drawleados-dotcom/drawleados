@@ -1,6 +1,34 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Payroll lock + Expense Split tab UX ✅
+
+### A) Budget → Overhead → Payroll: fully locked
+- Payroll row now shows an **"Auto-locked"** label instead of the Edit button — no inline edit available.
+- Auto tag text updated to "Auto · Σ gross salary from Monthly Payroll · read-only".
+- `effectiveBudget()` always returns `payrollGrossTotal` for Payroll, so stale stored manual values from before this iteration are ignored.
+- Other sub-categories (Rent, Maintenance, etc.) keep their Edit button.
+
+### B) Expense Split: collapse menu → horizontal tab pills
+- Old expand/collapse-per-top layout removed.
+- Replaced with the same horizontal pill strip used in Master Expense & Budget: **All | Overhead (50%) | Marketing (30%) | Profit (5%) | Investment (15%)**.
+- "Loss" filtered out.
+- All view shows Grand Totals card (Allocated / Spent / Balance) + per-top summary rows.
+- Clicking a top pill opens its full editor: header with stats + Sub/Edit/Delete actions + progress bar + flat sub-categories list with inline edit / delete.
+
+### Files touched
+- `/app/frontend/src/components/finance/BudgetView.js` — Payroll lock logic + Auto-locked label.
+- `/app/frontend/src/components/finance/ExpenseSplitTab.js` — Replaced collapse menu with pill tabs (orderedCategories with TAB_ORDER + HIDE_NAMES, activeTopId state, All view + active-top editor, removed ChevronDown/Right imports).
+
+### Verification
+Testing agent → `/app/test_reports/iteration_76.json` — code-review pass on both files, every spec contract met. Runtime screenshots manually verified (Payroll Auto-locked, Expense Split pill strip with percentages, All Grand Totals ₹40,290/₹125/₹40,165, Overhead editor with 6 sub-categories).
+
+### Action item flagged
+- Legacy top-level Finance "Budget" tab (the old Salary/Office Expense/CEO grid) and the new inner Expense → Budget sub-tab share the same label. Consider renaming or removing the legacy tab to remove navigation ambiguity.
+
+---
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — HR Attendance Breaks + Payslip period flow ✅
 
 ### A) Attendance → Break Time column with segregated breaks popup

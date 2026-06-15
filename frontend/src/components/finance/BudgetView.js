@@ -90,13 +90,14 @@ const BudgetView = () => {
   const isAllTab = activeTopId === 'all';
   const activeTop = tops.find((t) => t.category_id === activeTopId) || null;
 
-  // Auto-budget rule: a sub-category literally named "Payroll" auto-uses the
-  // gross-salary total for the month UNLESS the user has manually saved a
-  // value (sub.budget > 0). This lets HR's payroll roll through into the
-  // finance Budget view without double-entry.
+  // Auto-budget rule: a sub-category literally named "Payroll" ALWAYS uses the
+  // gross-salary total for the month — even if a stale manual value lingers
+  // in `expense_sub_budgets` from before this iteration shipped (the Edit
+  // button is now hidden so users can't create new manual overrides for
+  // Payroll). Other sub-categories keep using their stored manual budget.
   const isPayrollSub = (s) => (s?.name || '').trim().toLowerCase() === 'payroll';
   const effectiveBudget = (s) => {
-    if (isPayrollSub(s) && (!s.budget || s.budget <= 0)) return payrollGrossTotal;
+    if (isPayrollSub(s)) return payrollGrossTotal;
     return Number(s.budget || 0);
   };
   // Per-top effective totals (includes auto Payroll injection).
