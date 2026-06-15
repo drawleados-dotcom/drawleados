@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Switch } from '../ui/switch';
 import { 
   Users, Search, Plus, Eye, Trash2, CreditCard, Edit,
-  Send, CheckCircle, Clock, FileText, Download, RefreshCw,
+  Send, CheckCircle, CheckCircle2, Clock, FileText, Download, RefreshCw,
   ChevronRight, User, Calendar, Settings, Timer
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -1157,7 +1157,11 @@ function SalaryPayslipView({
 
   const payslip = payslips.find(p => p.user_id === employee.user_id);
   
-  if (!payslip) {
+  // Per user request: always show the unified Summary cards + All Payslips table.
+  // The big comprehensive top card (the second return below) is now dead code — kept
+  // for reference only. Edit/Delete/Regenerate/Send-to-CEO/CEO-Approve all live inside
+  // the per-row View modal now.
+  if (true) {
     return (
       <div className="space-y-6">
         {/* Summary cards + filterable payslip table */}
@@ -1694,18 +1698,74 @@ function SalaryPayslipView({
                 </div>
               )}
 
-              <DialogFooter className="mt-4">
-                <Button variant="outline" onClick={() => setViewingPayslip(null)}>Close</Button>
-                <Button
-                  onClick={() => onDownloadPDF(viewingPayslip)}
-                  disabled={viewingPayslip.status !== 'generated'}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                  data-testid="payslip-view-download"
-                  title={viewingPayslip.status === 'generated' ? 'Download PDF' : 'Available after the payslip is generated'}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Download PDF
-                </Button>
+              <DialogFooter className="mt-4 flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setViewingPayslip(null)} className="mr-auto">Close</Button>
+
+                {/* Status-aware actions. Order: destructive → editorial → progression → download. */}
+                {viewingPayslip.status === 'draft' && (
+                  <>
+                    <Button
+                      onClick={() => { onDeletePayslip(viewingPayslip.payslip_id); setViewingPayslip(null); }}
+                      variant="ghost"
+                      className="text-red-400 hover:bg-red-500/10"
+                      data-testid="view-modal-delete-btn"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" /> Delete
+                    </Button>
+                    <Button
+                      onClick={() => { onEditPayslip(viewingPayslip); setViewingPayslip(null); }}
+                      variant="outline"
+                      data-testid="view-modal-edit-btn"
+                    >
+                      <Edit className="h-4 w-4 mr-2" /> Edit
+                    </Button>
+                    <Button
+                      onClick={() => { onRegeneratePayslip(viewingPayslip.payslip_id); }}
+                      variant="outline"
+                      data-testid="view-modal-regen-btn"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" /> Regenerate
+                    </Button>
+                    <Button
+                      onClick={() => { setReviewPayslip(viewingPayslip); setReviewType('ceo'); setShowReviewModal(true); setViewingPayslip(null); }}
+                      className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                      data-testid="view-modal-send-ceo-btn"
+                    >
+                      <Send className="h-4 w-4 mr-2" /> Send to CEO Review
+                    </Button>
+                  </>
+                )}
+
+                {viewingPayslip.status === 'ceo_review' && (
+                  <>
+                    <Button
+                      onClick={() => { setReviewPayslip(viewingPayslip); setReviewType('ceo-decision'); setShowReviewModal(true); setViewingPayslip(null); }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      data-testid="view-modal-ceo-approve-btn"
+                    >
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> CEO Approve / Reject
+                    </Button>
+                  </>
+                )}
+
+                {viewingPayslip.status === 'generated' && (
+                  <Button
+                    onClick={() => onDownloadPDF(viewingPayslip)}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    data-testid="payslip-view-download"
+                  >
+                    <Download className="h-4 w-4 mr-2" /> Download PDF
+                  </Button>
+                )}
+
+                {viewingPayslip.status === 'paid' && (
+                  <Button
+                    onClick={() => onDownloadPDF(viewingPayslip)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Download className="h-4 w-4 mr-2" /> Download PDF
+                  </Button>
+                )}
               </DialogFooter>
             </>
           )}
