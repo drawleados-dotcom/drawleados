@@ -115,6 +115,64 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   const _selectedTopCat = splitCategories.find((c) => c.category_id === splitTopId);
   const _selectedSubCat = _selectedTopCat?.sub_categories?.find((s) => s.category_id === splitSubId);
   const isPayrollMode = (_selectedSubCat?.name || '').toLowerCase().trim() === 'payroll';
+  // AI Credits flow — same name-match trick. When this sub-category is picked
+  // we hide the Amount / Date / Allocation fields and surface a project +
+  // credits picker that records one expense entry per selected credit row
+  // (each dated to its own credit date).
+  const isAICreditsMode = (_selectedSubCat?.name || '').toLowerCase().trim() === 'ai credits';
+  const [aiProjects, setAiProjects] = useState([]);
+  const [aiSelectedProjectId, setAiSelectedProjectId] = useState('');
+  const [aiCredits, setAiCredits] = useState([]);
+  const [aiSelectedCreditIds, setAiSelectedCreditIds] = useState([]);
+  const [aiLoadingCredits, setAiLoadingCredits] = useState(false);
+
+  // Load eligible projects whenever AI Credits flow becomes active.
+  useEffect(() => {
+    if (!isAICreditsMode) {
+      setAiProjects([]);
+      setAiSelectedProjectId('');
+      setAiCredits([]);
+      setAiSelectedCreditIds([]);
+      return;
+    }
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/api/finance/banks/ai-credits/eligible-projects`, { headers });
+        setAiProjects(r.data || []);
+      } catch (e) {
+        setAiProjects([]);
+      }
+    })();
+  }, [isAICreditsMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When project is picked, load its un-recorded credits.
+  useEffect(() => {
+    if (!isAICreditsMode || !aiSelectedProjectId) {
+      setAiCredits([]);
+      setAiSelectedCreditIds([]);
+      return;
+    }
+    (async () => {
+      setAiLoadingCredits(true);
+      try {
+        const r = await axios.get(
+          `${API}/api/finance/banks/ai-credits/eligible-credits/${aiSelectedProjectId}`,
+          { headers },
+        );
+        setAiCredits(r.data?.credits || []);
+        setAiSelectedCreditIds([]);
+      } catch (e) {
+        setAiCredits([]);
+      } finally {
+        setAiLoadingCredits(false);
+      }
+    })();
+  }, [aiSelectedProjectId, isAICreditsMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const aiSelectedTotal = aiCredits
+    .filter((c) => aiSelectedCreditIds.includes(c.id))
+    .reduce((acc, c) => acc + (Number(c.amount) || 0), 0);
+
   const selectedPayslip = payablePayslips.find((p) => p.payslip_id === selectedPayslipId) || null;
 
   const openAdd = async (kind) => {
@@ -210,6 +268,28 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   };
 
   const submitExpense = async () => {
+    // AI Credits flow — completely separate submit path (no amount/allocations).
+    if (isAICreditsMode) {
+      if (!aiSelectedProjectId) { toast.error('Pick a project'); return; }
+      if (aiSelectedCreditIds.length === 0) { toast.error('Select at least one credit row'); return; }
+      try {
+        const splitCategoryId = splitSubId || null;
+        const r = await axios.post(`${API}/api/finance/banks/ai-credits/record`, {
+          project_id: aiSelectedProjectId,
+          credit_ids: aiSelectedCreditIds,
+          gst_type: gstType,
+          split_category_id: splitCategoryId,
+          split_top_category_id: splitTopId || null,
+          notes: form.notes || '',
+        }, { headers });
+        toast.success(`${r.data?.rows_recorded || 0} credit row(s) recorded as expense`);
+        setModal(null);
+        load();
+      } catch (e) {
+        toast.error(e.response?.data?.detail || 'Failed to record AI credits');
+      }
+      return;
+    }
     if (!expenseTotalNum || expenseTotalNum <= 0) { toast.error('Enter total expense amount'); return; }
     if (!allocsBalanced) { toast.error(`Allocations must sum to ₹${expenseTotalNum.toLocaleString('en-IN')}`); return; }
     // Validate each row vs available
@@ -622,6 +702,7 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
               <p className={`text-xs ${textSecondary}`}>Split the amount across one or more payment sources. Each source must have enough balance.</p>
             </DialogHeader>
             <div className="space-y-3 mt-1">
+              {!isAICreditsMode && (
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className={textPrimary}>Total Amount *</Label>
@@ -647,7 +728,9 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                   <Input value={form.party} onChange={(e) => setForm({ ...form, party: e.target.value })} placeholder="Vendor" className={bgSecondary} />
                 </div>
               </div>
+              )}
 
+              {!isAICreditsMode && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <Label className={textPrimary}>Payment Sources *</Label>
@@ -703,6 +786,96 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                   <Plus className="h-3.5 w-3.5 mr-1" /> Add another source
                 </Button>
               </div>
+              )}
+
+              {/* AI Credits picker — shown when sub-category is "AI Credits".
+                  Replaces Total Amount + Allocations with a project + multi-row
+                  credits selector. Each selected credit becomes ONE expense
+                  entry dated to its own credit date. */}
+              {isAICreditsMode && (
+                <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary} space-y-3`} data-testid="ai-credits-picker">
+                  <div>
+                    <Label className={textPrimary}>Project *</Label>
+                    <select
+                      value={aiSelectedProjectId}
+                      onChange={(e) => setAiSelectedProjectId(e.target.value)}
+                      className={`w-full mt-1 h-9 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                      data-testid="ai-credits-project-select"
+                    >
+                      <option value="">— Choose project with pending credits —</option>
+                      {aiProjects.map((p) => (
+                        <option key={p.project_id} value={p.project_id}>
+                          {p.name} · {p.pending_count} row{p.pending_count === 1 ? '' : 's'} · ₹{Number(p.pending_amount || 0).toLocaleString('en-IN')}
+                        </option>
+                      ))}
+                    </select>
+                    {aiProjects.length === 0 && (
+                      <p className={`text-[11px] mt-1 ${textSecondary}`}>
+                        No project has pending credit rows. Add credits inside any project → Expense → Credits to populate this list.
+                      </p>
+                    )}
+                  </div>
+
+                  {aiSelectedProjectId && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <Label className={textPrimary}>Select credits to record as expense</Label>
+                        <span className={`text-xs ${textSecondary}`}>
+                          Selected: <b className="text-[#ef4444]">₹{aiSelectedTotal.toLocaleString('en-IN')}</b> · {aiSelectedCreditIds.length} row{aiSelectedCreditIds.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      {aiLoadingCredits ? (
+                        <p className={`text-xs italic ${textSecondary}`}>Loading credits…</p>
+                      ) : aiCredits.length === 0 ? (
+                        <p className={`text-xs italic ${textSecondary}`}>This project has no pending credit rows.</p>
+                      ) : (
+                        <div className={`rounded-lg border ${borderColor} divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'} max-h-64 overflow-y-auto`}>
+                          {/* Header row */}
+                          <div className={`flex items-center px-3 py-2 text-[10px] uppercase tracking-wide ${textSecondary}`}>
+                            <span className="w-8">
+                              <input
+                                type="checkbox"
+                                checked={aiCredits.length > 0 && aiSelectedCreditIds.length === aiCredits.length}
+                                onChange={(e) => setAiSelectedCreditIds(e.target.checked ? aiCredits.map((c) => c.id) : [])}
+                                className="h-4 w-4"
+                                data-testid="ai-credits-select-all"
+                              />
+                            </span>
+                            <span className="w-24">Date</span>
+                            <span className="flex-1">Credit</span>
+                            <span className="w-28 text-right">Amount</span>
+                          </div>
+                          {aiCredits.map((c) => {
+                            const checked = aiSelectedCreditIds.includes(c.id);
+                            return (
+                              <label
+                                key={c.id}
+                                className={`flex items-center px-3 py-2 text-sm cursor-pointer ${checked ? (isDark ? 'bg-[#27272a]' : 'bg-gray-100') : ''}`}
+                                data-testid={`ai-credit-row-${c.id}`}
+                              >
+                                <span className="w-8">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => setAiSelectedCreditIds(prev => e.target.checked ? [...prev, c.id] : prev.filter(x => x !== c.id))}
+                                    className="h-4 w-4"
+                                  />
+                                </span>
+                                <span className={`w-24 ${textSecondary}`}>{c.date || '—'}</span>
+                                <span className={`flex-1 ${textPrimary}`}>{c.label || 'Credit'}</span>
+                                <span className={`w-28 text-right font-medium ${textPrimary}`}>₹{Number(c.amount || 0).toLocaleString('en-IN')}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <p className={`text-[10px] mt-2 ${textSecondary}`}>
+                        Each selected row becomes one expense entry, dated to that credit&apos;s own date. No bank balance is deducted (pure ledger record).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Expense Split — Top Category + optional Sub Category */}
               <div>
@@ -877,7 +1050,7 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className={textPrimary}>Label / Description</Label>
-                  <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Auto from selection if empty" className={bgSecondary} />
+                  <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder={isAICreditsMode ? 'Auto = AI Credits · <credit label>' : 'Auto from selection if empty'} className={bgSecondary} disabled={isAICreditsMode} />
                 </div>
                 <div>
                   <Label className={textPrimary}>Notes</Label>
@@ -889,10 +1062,10 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
               <Button variant="ghost" onClick={() => setModal(null)} className={textSecondary}><X className="h-4 w-4 mr-1" /> Cancel</Button>
               <Button
                 onClick={submitExpense}
-                disabled={!allocsBalanced}
+                disabled={isAICreditsMode ? (aiSelectedCreditIds.length === 0) : !allocsBalanced}
                 className="bg-[#ef4444] hover:bg-[#dc2626] text-white disabled:opacity-40"
                 data-testid="expense-save-btn"
-              >Record Expense</Button>
+              >{isAICreditsMode ? `Mark ${aiSelectedCreditIds.length || ''} as Expense` : 'Record Expense'}</Button>
             </div>
           </DialogContent>
         </Dialog>

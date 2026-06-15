@@ -9,18 +9,31 @@ import { Plus, Trash2, Save, X, Pencil, TrendingDown } from 'lucide-react';
 const API = process.env.REACT_APP_BACKEND_URL;
 
 // Status workflow shared with the Payment Schedule rows for consistency.
+// Note: 'expense_record' is a terminal status set by the Finance "Mark as
+// Expense" flow (AI Credits sub-category). It's NOT part of the click-to-cycle
+// flow — rows in this status are read-only here.
 const STATUS_FLOW = ['created', 'raised', 'paid', 'declined'];
-const STATUS_LABEL = { created: 'Created', raised: 'Raised', paid: 'Paid', declined: 'Declined' };
+const STATUS_LABEL = {
+  created: 'Created',
+  raised: 'Raised',
+  paid: 'Paid',
+  declined: 'Declined',
+  expense_record: 'Expense Record',
+};
 const STATUS_STYLE = {
   created: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
   raised: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
   paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
   declined: 'bg-red-500/20 text-red-400 border-red-500/40',
+  expense_record: 'bg-purple-500/20 text-purple-400 border-purple-500/40',
 };
 const nextStatus = (s) => {
+  // Terminal status — don't cycle past it.
+  if (s === 'expense_record') return 'expense_record';
   const i = STATUS_FLOW.indexOf(s || 'created');
   return STATUS_FLOW[(i + 1) % STATUS_FLOW.length];
 };
+const isLocked = (row) => (row?.status === 'expense_record');
 
 const newRowId = () => `e_${Math.random().toString(36).slice(2, 10)}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -237,11 +250,12 @@ export default function ProjectExpenseTab({
               <tbody>
                 {list.map((row, idx) => {
                   const isEditing = editingId === row.id;
+                  const locked = isLocked(row);
                   return (
                     <tr key={row.id} className={`border-b ${borderColor}`} data-testid={`expense-row-${row.id}`}>
                       <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
                       <td className={`p-3 ${textPrimary}`}>
-                        {isEditing ? (
+                        {isEditing && !locked ? (
                           <Input
                             type="date"
                             value={editBuffer.date}
@@ -253,7 +267,7 @@ export default function ProjectExpenseTab({
                         )}
                       </td>
                       <td className={`p-3 ${textPrimary}`}>
-                        {isEditing ? (
+                        {isEditing && !locked ? (
                           <Input
                             value={editBuffer.label}
                             onChange={(e) => setEditBuffer(b => ({ ...b, label: e.target.value }))}
@@ -265,7 +279,7 @@ export default function ProjectExpenseTab({
                         )}
                       </td>
                       <td className={`p-3 text-right ${textPrimary} font-medium`}>
-                        {isEditing ? (
+                        {isEditing && !locked ? (
                           <Input
                             type="number" min="0"
                             value={editBuffer.amount}
@@ -279,22 +293,25 @@ export default function ProjectExpenseTab({
                       <td className="p-3">
                         {(() => {
                           const st = row.status || 'created';
+                          const clickable = canEdit && !isEditing && !locked;
                           return (
                             <button
                               type="button"
-                              onClick={() => cycleRowStatus(row)}
-                              disabled={!canEdit || isEditing}
-                              title={canEdit ? 'Click to advance status' : 'Read only'}
-                              className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[st]} ${canEdit && !isEditing ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
+                              onClick={() => clickable && cycleRowStatus(row)}
+                              disabled={!clickable}
+                              title={locked ? 'Already recorded as expense (read-only)' : clickable ? 'Click to advance status' : 'Read only'}
+                              className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[st] || STATUS_STYLE.created} ${clickable ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
                               data-testid={`expense-status-cycle-${row.id}`}
                             >
-                              {STATUS_LABEL[st]}
+                              {STATUS_LABEL[st] || 'Created'}
                             </button>
                           );
                         })()}
                       </td>
                       <td className="p-3 text-right">
-                        {isEditing ? (
+                        {locked ? (
+                          <span className={`text-[10px] ${textSecondary}`}>Locked</span>
+                        ) : isEditing ? (
                           <div className="inline-flex gap-1">
                             <button type="button" onClick={saveEdit} className="p-1 text-emerald-500 hover:text-emerald-400" title="Save" data-testid={`expense-save-edit-${row.id}`}>
                               <Save className="h-4 w-4" />

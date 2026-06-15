@@ -638,8 +638,12 @@ class GroupedExpensePayload(BaseModel):
 
 
 async def _balance_for(gst_type: str, source: str, bank_id: Optional[str] = None) -> float:
-    """Compute the available running balance for one source (Σ credits − Σ debits)."""
-    base = {"gst_type": gst_type}
+    """Compute the available running balance for one source (Σ credits − Σ debits).
+
+    Entries with payment_mode='ledger' are excluded — they are pure ledger
+    records (e.g. AI Credits recorded as expense) that don't move money.
+    """
+    base = {"gst_type": gst_type, "payment_mode": {"$ne": "ledger"}}
     if source == "bank":
         base["payment_mode"] = "bank"
         base["bank_id"] = bank_id
@@ -792,3 +796,175 @@ async def get_grouped_expense(group_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Group not found")
     return {"group_id": group_id, "total": rows[0].get("expense_group_total"), "entries": rows}
 
+
+
+# -----------------------------------------------------------------------------
+# AI Credits ledger flow
+# -----------------------------------------------------------------------------
+# When the user picks the "AI Credits" sub-category in the Add Expense popup,
+# they don't enter an amount/bank manually. Instead they pick a project, then
+# select one or more of that project's Credits rows. Each selected row is
+# recorded as a SEPARATE expense entry, each dated to its own credit date.
+# This is a pure ledger record — no bank/cash balance is deducted because the
+# AI credits have already been paid for outside the cashbook.
+#
+# A new cashbook entry payment_mode 'ledger' is introduced and explicitly
+# excluded from the balance calculations above (see `_balance_for`).
+# -----------------------------------------------------------------------------
+
+
+@banks_router.get("/ai-credits/eligible-projects")
+async def list_ai_credit_eligible_projects(request: Request):
+    """Return all projects that still have credit rows with status='created'."""
+    await _get_user(request)
+    cursor = db.projects.find(
+        {"project_expense.credits": {"$exists": True, "$ne": []}},
+        {"_id": 0, "project_id": 1, "name": 1, "project_expense": 1},
+    )
+    out = []
+    async for p in cursor:
+        creds = ((p.get("project_expense") or {}).get("credits") or [])
+        pending = [
+            c for c in creds
+            if (c.get("status") or "created") not in ("expense_record",)
+        ]
+        if not pending:
+            continue
+        out.append({
+            "project_id": p["project_id"],
+            "name": p.get("name") or "Untitled Project",
+            "pending_count": len(pending),
+            "pending_amount": float(sum(float(c.get("amount") or 0) for c in pending)),
+        })
+    out.sort(key=lambda x: x["name"].lower())
+    return out
+
+
+@banks_router.get("/ai-credits/eligible-credits/{project_id}")
+async def list_ai_credit_eligible_credits(project_id: str, request: Request):
+    """Return the credit rows for a project that haven't yet been recorded as expense."""
+    await _get_user(request)
+    proj = await db.projects.find_one(
+        {"project_id": project_id},
+        {"_id": 0, "project_id": 1, "name": 1, "project_expense": 1},
+    )
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    creds = ((proj.get("project_expense") or {}).get("credits") or [])
+    pending = [
+        c for c in creds
+        if (c.get("status") or "created") != "expense_record"
+    ]
+    return {
+        "project_id": project_id,
+        "project_name": proj.get("name") or "",
+        "credits": pending,
+    }
+
+
+class AICreditsRecordPayload(BaseModel):
+    project_id: str
+    credit_ids: List[str]
+    gst_type: str = "non_gst"  # Default to non-GST since these are usually internal expenses
+    split_category_id: Optional[str] = None       # AI Credits sub-category id
+    split_top_category_id: Optional[str] = None   # parent top category id
+    notes: Optional[str] = ""
+
+
+@banks_router.post("/ai-credits/record")
+async def record_ai_credits_as_expense(payload: AICreditsRecordPayload, request: Request):
+    """Mark selected project credit rows as company expense entries.
+
+    For each selected credit row this creates ONE cashbook_entry with
+    payment_mode='ledger' (no bank impact) dated to the credit's own date.
+    Also flips that credit row's status to 'expense_record' inside the
+    project document so the project UI shows it as already recorded.
+    """
+    user = await _get_user(request)
+    if not payload.credit_ids:
+        raise HTTPException(status_code=400, detail="Pick at least one credit row")
+    proj = await db.projects.find_one(
+        {"project_id": payload.project_id},
+        {"_id": 0, "project_id": 1, "name": 1, "project_expense": 1},
+    )
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_name = proj.get("name") or ""
+    creds = ((proj.get("project_expense") or {}).get("credits") or [])
+    by_id = {c.get("id"): c for c in creds if isinstance(c, dict)}
+
+    # Pre-validate every requested credit exists and isn't already recorded.
+    selected = []
+    for cid in payload.credit_ids:
+        c = by_id.get(cid)
+        if not c:
+            raise HTTPException(status_code=400, detail=f"Credit row {cid} not found")
+        if (c.get("status") or "created") == "expense_record":
+            raise HTTPException(status_code=400, detail=f"Credit row {cid} is already recorded")
+        amt = float(c.get("amount") or 0)
+        if amt <= 0:
+            raise HTTPException(status_code=400, detail=f"Credit row {cid} has zero amount")
+        selected.append(c)
+
+    group_id = f"aic_{uuid.uuid4().hex[:12]}"
+    total = float(sum(float(c.get("amount") or 0) for c in selected))
+    inserted = []
+    for c in selected:
+        amt = float(c.get("amount") or 0)
+        entry = {
+            "entry_id": f"cb_{uuid.uuid4().hex[:12]}",
+            "kind": "debit",
+            "gst_type": payload.gst_type if payload.gst_type in ("gst", "non_gst") else "non_gst",
+            "amount": amt,
+            "date": c.get("date") or datetime.now(timezone.utc).date().isoformat(),
+            "payment_mode": "ledger",  # excluded from bank balance computation
+            "bank_id": None,
+            "bank_label": None,
+            "to": project_name,
+            "category": f"AI Credits · {c.get('label') or 'Credit'}",
+            "category_label": "AI Credits",
+            "notes": (payload.notes or "").strip() or f"Project: {project_name} · Credit row {c.get('id')}",
+            "split_category_id": payload.split_category_id,
+            "split_top_category_id": payload.split_top_category_id,
+            "expense_group_id": group_id,
+            "expense_group_total": total,
+            "expense_source": "ai_credits",
+            "source_project_id": payload.project_id,
+            "source_credit_id": c.get("id"),
+            "created_by": user["user_id"],
+            "created_at": datetime.now(timezone.utc),
+        }
+        await db.cashbook_entries.insert_one(entry)
+        entry.pop("_id", None)
+        if isinstance(entry.get("created_at"), datetime):
+            entry["created_at"] = entry["created_at"].isoformat()
+        inserted.append(entry)
+
+    # Flip the credit row statuses on the project document.
+    selected_ids = {c.get("id") for c in selected}
+    new_creds = []
+    for c in creds:
+        if c.get("id") in selected_ids:
+            new_creds.append({
+                **c,
+                "status": "expense_record",
+                "recorded_expense_group_id": group_id,
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                "recorded_by": user["user_id"],
+            })
+        else:
+            new_creds.append(c)
+    new_state = {**(proj.get("project_expense") or {}), "credits": new_creds}
+    await db.projects.update_one(
+        {"project_id": payload.project_id},
+        {"$set": {"project_expense": new_state, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    return {
+        "expense_group_id": group_id,
+        "project_id": payload.project_id,
+        "total": total,
+        "rows_recorded": len(inserted),
+        "entries": inserted,
+    }

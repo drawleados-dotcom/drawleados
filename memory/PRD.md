@@ -1,6 +1,39 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — "AI Credits" sub-category flow: project credits → company expense ✅
+
+### What changed
+- A new specialized flow inside the existing **Cashbook → Add Expense** modal: when the user picks any sub-category whose name is literally **"AI Credits"** (case-insensitive), the entire Amount / Date / Payment-Sources area is replaced with a **Project + Credits picker**.
+- Project picker only lists projects with at least one pending credit row (status ≠ `expense_record`), showing pending row-count and amount.
+- Credits picker lists each pending credit row from the picked project with a checkbox, date, label, amount. A "Select all" checkbox is in the header. Live "Selected: ₹X · N rows" indicator.
+- Clicking **Mark N as Expense** records one cashbook entry per selected credit, each **dated to that credit's own date** (e.g. picking rows from 09-06-2026 and 15-06-2026 creates two ledger entries on those two dates).
+- The recorded entries use `payment_mode='ledger'` — explicitly excluded from `_balance_for()` so no bank/cash balance is deducted (pure ledger).
+- After recording, each selected credit row's status in the project document flips from `created` → `expense_record` (terminal, purple badge). Edit/Delete/Status-cycle controls become disabled on that row and an "Locked" label replaces the action icons.
+
+### Files touched / created
+- `/app/backend/banks_routes.py`
+  - `_balance_for` now excludes `payment_mode='ledger'` entries from balance math.
+  - Three new endpoints:
+    - `GET /api/finance/banks/ai-credits/eligible-projects` → projects with pending credits, plus count/amount summary.
+    - `GET /api/finance/banks/ai-credits/eligible-credits/{project_id}` → pending credit rows for a project.
+    - `POST /api/finance/banks/ai-credits/record` → for each credit row: insert one `cashbook_entry` (payment_mode='ledger', amount=credit.amount, date=credit.date, tagged with `expense_source='ai_credits'`, `source_project_id`, `source_credit_id`, shared `expense_group_id`) + flip project credit row status to `expense_record` (with `recorded_expense_group_id`, `recorded_at`, `recorded_by`).
+- `/app/frontend/src/components/finance/CashbookSplit.js`
+  - New `isAICreditsMode` flag (sub-category name == "ai credits"), state for `aiProjects / aiSelectedProjectId / aiCredits / aiSelectedCreditIds`, two `useEffect`s for fetching.
+  - `submitExpense` routes to the new endpoint when in AI Credits mode (skips amount/allocations validation).
+  - Total Amount, Date, To, Payment Sources blocks all hide; replaced by a project + credits picker UI inside the same dialog. Save button label flips to "Mark N as Expense" and is disabled until ≥1 row is selected.
+- `/app/frontend/src/components/projects/ProjectExpenseTab.js`
+  - `STATUS_LABEL` / `STATUS_STYLE` add `expense_record` (purple badge, "Expense Record"). `nextStatus` treats it as terminal (no cycling past). Edit / Delete / status-click all disabled for locked rows; "Locked" label shown in Actions column.
+
+### Verification (live, end-to-end)
+- Created the "AI Credits" sub-category under Investment (POST /finance/expense-split/categories).
+- Opened Add Expense → picked Investment → AI Credits sub-cat. The modal transformed: Project dropdown appeared showing "The Velli Shop · 1 row · ₹5,000". Picked it → credit row "2026-06-15 · Refund for late delivery · ₹5,000" appeared with checkbox.
+- Checked the row → button became "Mark 1 as Expense" → clicked → toast "1 credit row(s) recorded as expense".
+- Cashbook now shows a new Cash Out entry `2026-06-15 · The Velli Shop · Ledger · ₹5,000` (dated to the credit's date).
+- API check: project's credit row status flipped to `expense_record` with `recorded_expense_group_id`. Eligible-projects endpoint now returns `[]` (nothing pending).
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Project: new "Expense" tab with Credits & Other Expense ✅
 
 ### What changed
