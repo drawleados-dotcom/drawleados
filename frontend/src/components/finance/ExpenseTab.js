@@ -100,18 +100,14 @@ const PROJECT_TYPE_COLORS = {
   'Meta': { bg: '#cffafe', text: '#0891b2' },
 };
 
-// Default tabs
+// Default tabs (top-level). Banks lives under Cashbook, Payroll/Budget live
+// under Expense, and Clients/Projects live under Invoice now.
 const DEFAULT_TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, isDefault: true },
   { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
-  { id: 'budget', label: 'Budget', icon: Receipt, isDefault: true },
-  { id: 'payroll', label: 'Payroll', icon: Users, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
-  { id: 'clients', label: 'Clients', icon: Users, isDefault: true },
-  { id: 'banks', label: 'Banks', icon: Building2, isDefault: true },
   { id: 'pipeline', label: 'Pipeline', icon: TargetIcon, isDefault: true },
-  { id: 'projects', label: 'Projects', icon: FolderOpen, isDefault: true },
   { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
   { id: 'weekly', label: 'Week Wise', icon: Calendar, isDefault: true },
 ];
@@ -126,6 +122,30 @@ const ExpenseTab = () => {
     return saved ? [...DEFAULT_TABS, ...JSON.parse(saved)] : DEFAULT_TABS;
   });
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Backwards-compat: legacy deep links like /finance?tab=banks should land
+  // inside the new sub-tab location now that Banks/Payroll/Budget/Clients/Projects
+  // are nested under their parent tabs.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('tab');
+    if (!requested) return;
+    const map = {
+      banks: { parent: 'cashbook', set: setCashbookSubTab, sub: 'banks' },
+      payroll: { parent: 'expense', set: setExpenseSubTab, sub: 'payroll' },
+      budget: { parent: 'expense', set: setExpenseSubTab, sub: 'budget' },
+      clients: { parent: 'invoice', set: setInvoiceSubTab, sub: 'clients' },
+      projects: { parent: 'invoice', set: setInvoiceSubTab, sub: 'projects' },
+    };
+    const entry = map[requested];
+    if (entry) {
+      setActiveTab(entry.parent);
+      entry.set(entry.sub);
+    } else {
+      setActiveTab(requested);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [showAddTab, setShowAddTab] = useState(false);
   const [newTabName, setNewTabName] = useState('');
   
@@ -133,7 +153,9 @@ const ExpenseTab = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // 'categories' | 'split'
+  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll
+  const [cashbookSubTab, setCashbookSubTab] = useState('cashbook'); // cashbook | banks
+  const [invoiceSubTab, setInvoiceSubTab] = useState('invoice');   // invoice | projects | clients
   
   // Data state
   const [dashboardData, setDashboardData] = useState(null);
@@ -1860,52 +1882,103 @@ const ExpenseTab = () => {
       ) : (
         <>
           {activeTab === 'dashboard' && renderDashboard()}
+
+          {/* Cashbook with Banks sub-tab */}
+          {activeTab === 'cashbook' && (
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+                <button
+                  onClick={() => setCashbookSubTab('cashbook')}
+                  data-testid="cashbook-subtab-cashbook"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${cashbookSubTab === 'cashbook' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Cashbook
+                </button>
+                <button
+                  onClick={() => setCashbookSubTab('banks')}
+                  data-testid="cashbook-subtab-banks"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${cashbookSubTab === 'banks' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Banks
+                </button>
+              </div>
+              {cashbookSubTab === 'cashbook' && <CashbookSplit />}
+              {cashbookSubTab === 'banks' && <BanksTab />}
+            </div>
+          )}
+
+          {/* Expense with Master / Split / Budget / Payroll sub-tabs */}
           {activeTab === 'expense' && (
             <div className="space-y-3">
-              {/* Sub-tabs: Master Expense | Expense Split | Budget */}
               <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
                 <button
                   onClick={() => setExpenseSubTab('categories')}
                   data-testid="expense-subtab-categories"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    expenseSubTab === 'categories'
-                      ? 'bg-[#27272a] text-white'
-                      : 'text-[#a1a1aa] hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'categories' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
                 >
                   Master Expense
                 </button>
                 <button
                   onClick={() => setExpenseSubTab('split')}
                   data-testid="expense-subtab-split"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    expenseSubTab === 'split'
-                      ? 'bg-[#27272a] text-white'
-                      : 'text-[#a1a1aa] hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'split' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
                 >
                   Expense Split
                 </button>
                 <button
                   onClick={() => setExpenseSubTab('budget')}
                   data-testid="expense-subtab-budget"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    expenseSubTab === 'budget'
-                      ? 'bg-[#27272a] text-white'
-                      : 'text-[#a1a1aa] hover:text-white'
-                  }`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'budget' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
                 >
                   Budget
+                </button>
+                <button
+                  onClick={() => setExpenseSubTab('payroll')}
+                  data-testid="expense-subtab-payroll"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'payroll' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Payroll
                 </button>
               </div>
               {expenseSubTab === 'categories' && <MasterExpenseView />}
               {expenseSubTab === 'split' && <ExpenseSplitTab />}
               {expenseSubTab === 'budget' && <BudgetView />}
+              {expenseSubTab === 'payroll' && <PayrollTab />}
             </div>
           )}
-          {activeTab === 'budget' && renderBudget()}
-          {activeTab === 'payroll' && <PayrollTab />}
-          {activeTab === 'invoice' && renderInvoice()}
+
+          {/* Invoice with Projects + Clients sub-tabs */}
+          {activeTab === 'invoice' && (
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+                <button
+                  onClick={() => setInvoiceSubTab('invoice')}
+                  data-testid="invoice-subtab-invoice"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'invoice' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Invoice
+                </button>
+                <button
+                  onClick={() => setInvoiceSubTab('projects')}
+                  data-testid="invoice-subtab-projects"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'projects' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Projects
+                </button>
+                <button
+                  onClick={() => setInvoiceSubTab('clients')}
+                  data-testid="invoice-subtab-clients"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'clients' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Clients
+                </button>
+              </div>
+              {invoiceSubTab === 'invoice' && renderInvoice()}
+              {invoiceSubTab === 'projects' && <ProjectsTab />}
+              {invoiceSubTab === 'clients' && <ClientsTab />}
+            </div>
+          )}
+
           {activeTab === 'payment_schedule' && (
             <FinancePaymentScheduleTab isDark={isDark} token={token} />
           )}
@@ -1920,11 +1993,7 @@ const ExpenseTab = () => {
               borderColor={isDark ? 'border-[#27272a]' : 'border-gray-200'}
             />
           )}
-          {activeTab === 'clients' && <ClientsTab />}
-          {activeTab === 'cashbook' && <CashbookSplit />}
-          {activeTab === 'banks' && <BanksTab />}
           {activeTab === 'pipeline' && <PipelineTab />}
-          {activeTab === 'projects' && <ProjectsTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
       )}
@@ -2307,7 +2376,7 @@ const ExpenseTab = () => {
 
       {/* Add Debit Modal */}
       <Dialog open={showAddDebit} onOpenChange={setShowAddDebit}>
-        <DialogContent className={`max-w-xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>>
+        <DialogContent className={`max-w-xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Add Cash Out</DialogTitle>
             <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Record expense payment</DialogDescription>
