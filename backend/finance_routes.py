@@ -306,12 +306,19 @@ async def get_invoices(
             query["invoice_date"] = {"$lte": datetime.fromisoformat(to_date)}
     
     invoices = await db.invoices.find(query, {"_id": 0}).sort("invoice_date", -1).to_list(1000)
-    
-    # Enrich with items
-    for invoice in invoices:
-        items = await db.invoice_items.find({"invoice_id": invoice["invoice_id"]}, {"_id": 0}).to_list(100)
-        invoice["items"] = items
-    
+
+    # Batch-fetch items for all invoices in a single query and group by invoice_id.
+    if invoices:
+        inv_ids = [i["invoice_id"] for i in invoices]
+        items_rows = await db.invoice_items.find(
+            {"invoice_id": {"$in": inv_ids}}, {"_id": 0}
+        ).to_list(5000)
+        items_by_invoice = {}
+        for it in items_rows:
+            items_by_invoice.setdefault(it["invoice_id"], []).append(it)
+        for invoice in invoices:
+            invoice["items"] = items_by_invoice.get(invoice["invoice_id"], [])
+
     return invoices
 
 @finance_router.get("/invoices/{invoice_id}")

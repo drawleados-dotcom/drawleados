@@ -118,6 +118,14 @@ async def startup_tasks():
             ("leave_requests", [("user_id", 1), ("status", 1)], {}),
             ("wfh_requests", [("user_id", 1), ("status", 1)], {}),
             ("meetings", [("scheduled_at", 1)], {}),
+            # Payroll: speeds up "salary overview for all employees" (formerly N+1).
+            ("salary_history", [("user_id", 1), ("effective_from", -1)], {}),
+            ("payslips", [("month", 1), ("year", 1), ("user_id", 1)], {}),
+            ("cashbook_entries", [("kind", 1), ("gst_type", 1), ("date", -1)], {}),
+            ("cashbook_entries", [("split_category_id", 1)], {}),
+            ("expense_split_categories", [("parent_id", 1), ("is_deleted", 1)], {}),
+            ("invoice_requests", [("status", 1), ("is_deleted", 1)], {}),
+            ("lead_stages", [("order", 1), ("is_deleted", 1)], {}),
         ]
         for coll_name, keys, opts in idx_targets:
             try:

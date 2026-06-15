@@ -3192,16 +3192,19 @@ async def get_all_employees(request: Request):
         {"is_active": True},
         {"_id": 0, "password_hash": 0}
     ).to_list(500)
-    
-    # Get profiles
-    for emp in employees:
-        profile = await db.employee_profiles.find_one(
-            {"user_id": emp["user_id"]},
-            {"_id": 0}
-        )
-        if profile:
-            emp["profile"] = profile
-    
+
+    # Batch-load profiles in a single query.
+    if employees:
+        uids = [e["user_id"] for e in employees]
+        profile_rows = await db.employee_profiles.find(
+            {"user_id": {"$in": uids}}, {"_id": 0},
+        ).to_list(500)
+        profile_map = {p["user_id"]: p for p in profile_rows}
+        for emp in employees:
+            p = profile_map.get(emp["user_id"])
+            if p:
+                emp["profile"] = p
+
     return employees
 
 @hr_router.get("/team/attendance-overview")

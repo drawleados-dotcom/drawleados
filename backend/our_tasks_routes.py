@@ -770,36 +770,32 @@ async def get_tasks_by_date(date: str, request: Request):
             }
         
         tasks = await db.our_tasks.find(base_query, {"_id": 0}).sort("created_at", -1).to_list(100)
-        
-        # Add names and calculate day_seconds
-        for task in tasks:
-            if task.get("assigned_to"):
-                assigned_user = await db.users.find_one({"user_id": task["assigned_to"]}, {"name": 1, "_id": 0})
-                task["assigned_to_name"] = assigned_user.get("name") if assigned_user else "Unknown"
-            else:
-                task["assigned_to_name"] = None
-            
-            if task.get("assigned_by"):
-                assigned_by_user = await db.users.find_one({"user_id": task["assigned_by"]}, {"name": 1, "_id": 0})
-                task["assigned_by_name"] = assigned_by_user.get("name") if assigned_by_user else "Unknown"
-            else:
-                task["assigned_by_name"] = None
-            
-            if task.get("created_by"):
-                created_by_user = await db.users.find_one({"user_id": task["created_by"]}, {"name": 1, "_id": 0})
-                task["created_by_name"] = created_by_user.get("name") if created_by_user else "Unknown"
-            else:
-                task["created_by_name"] = None
-            
-            # Calculate day_seconds
-            day_seconds = 0
-            if task.get("time_tracking", {}).get("sessions"):
-                for session in task["time_tracking"]["sessions"]:
-                    session_start = session.get("start", "")
-                    if session_start.startswith(date):
+
+        # Batch-load all referenced users in a single query, then enrich.
+        if tasks:
+            uid_set = set()
+            for t in tasks:
+                for k in ("assigned_to", "assigned_by", "created_by"):
+                    if t.get(k):
+                        uid_set.add(t[k])
+            user_rows = await db.users.find(
+                {"user_id": {"$in": list(uid_set)}}, {"_id": 0, "user_id": 1, "name": 1},
+            ).to_list(500) if uid_set else []
+            name_by_uid = {u["user_id"]: u.get("name", "Unknown") for u in user_rows}
+
+            for task in tasks:
+                task["assigned_to_name"] = name_by_uid.get(task.get("assigned_to")) if task.get("assigned_to") else None
+                task["assigned_by_name"] = name_by_uid.get(task.get("assigned_by")) if task.get("assigned_by") else None
+                task["created_by_name"] = name_by_uid.get(task.get("created_by")) if task.get("created_by") else None
+
+                # Compute day_seconds from sessions
+                day_seconds = 0
+                sessions = task.get("time_tracking", {}).get("sessions") or []
+                for session in sessions:
+                    if (session.get("start") or "").startswith(date):
                         day_seconds += session.get("duration_seconds", 0)
-            task["day_seconds"] = day_seconds
-        
+                task["day_seconds"] = day_seconds
+
         return {"date": date, "is_future": is_future, "tasks": tasks}
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")

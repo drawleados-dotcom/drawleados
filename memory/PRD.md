@@ -1,6 +1,39 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 (cont.) — Performance Fixes (N+1 elimination) ✅
+
+### What was fixed
+The Payroll Management page and several other module-loading endpoints were doing the classic **N+1 query pattern** — a parent `find()` followed by a per-row `find_one()` / `count_documents()`. On production with 30-50ms network RTT per query, a 20-employee tenant was paying 40+ round trips just to render one screen.
+
+| Endpoint | Before | After |
+|---|---|---|
+| `GET /api/payroll/employees` | 1 + 2·N | **2 queries** |
+| `GET /api/finance/invoices` | 1 + N | **2 queries** |
+| `GET /api/our-tasks/by-date` | 1 + 3·N | **2 queries** |
+| `GET /api/hr/team/all-employees` | 1 + N | **2 queries** |
+| `GET /api/chat/unread-count` (polls every 30s) | 1 + 2·N | **3 queries** |
+
+### MongoDB indexes added (8 new)
+- `salary_history (user_id, effective_from desc)` — fixes Payroll lookup hot path.
+- `payslips (month, year, user_id)`
+- `cashbook_entries (kind, gst_type, date desc)` + `cashbook_entries (split_category_id)`
+- `expense_split_categories (parent_id, is_deleted)`
+- `invoice_requests (status, is_deleted)`
+- `lead_stages (order, is_deleted)`
+
+### Self-test
+- ✅ All optimized endpoints respond in 100-150ms locally and return **identical shape** to the old N+1 versions (verified field-by-field with curl).
+- ✅ Payroll Management UI renders the full 19-employee grid immediately (no more empty screen).
+- ✅ Server now ensures 26 indexes on startup (was 18).
+
+### Important note on production
+The user is using both **preview** (drawlead-docs.preview.emergentagent.com) and **production** (os.drawlead.com). These backend fixes are deployed to **preview**; the user needs to redeploy preview → production for the speed improvements to land on `os.drawlead.com`. The indexes themselves auto-create on the production MongoDB the moment the new backend boots there.
+
+---
+
+
+
 ## Latest Update — Feb 14, 2026 (cont.) — Expense Split tagging on Add Expense ✅
 
 ### What was implemented

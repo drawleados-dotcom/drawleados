@@ -284,28 +284,41 @@ async def mark_channel_read(channel_id: str, request: Request):
 
 @chat_router.get("/unread-count")
 async def get_total_unread_count(request: Request):
-    """Get total unread message count across all channels"""
+    """Get total unread message count across all channels.
+
+    Optimized: 3 queries total regardless of channel count (was 1 + 2·N).
+    """
     user = await get_current_user(request)
-    
-    channels = await db.chat_channels.find({}, {"channel_id": 1}).to_list(100)
-    
+
+    channels = await db.chat_channels.find({}, {"channel_id": 1, "_id": 0}).to_list(200)
+    if not channels:
+        return {"unread_count": 0}
+
+    chan_ids = [c["channel_id"] for c in channels]
+
+    # Batch-fetch this user's last-read marker per channel.
+    reads = await db.chat_read_status.find(
+        {"user_id": user["user_id"], "channel_id": {"$in": chan_ids}},
+        {"_id": 0, "channel_id": 1, "last_read_at": 1},
+    ).to_list(500)
+    last_read_by_chan = {r["channel_id"]: r["last_read_at"] for r in reads}
+
+    EPOCH = datetime.min.replace(tzinfo=timezone.utc)
+
+    # Single projection fetch of candidate message timestamps. Cheap because we
+    # only pull (channel_id, created_at) — no message bodies, no metadata.
+    msg_rows = await db.chat_messages.find(
+        {"channel_id": {"$in": chan_ids}, "user_id": {"$ne": user["user_id"]}},
+        {"_id": 0, "channel_id": 1, "created_at": 1},
+    ).to_list(50000)
+
     total_unread = 0
-    for channel in channels:
-        last_read = await db.chat_read_status.find_one({
-            "channel_id": channel["channel_id"],
-            "user_id": user["user_id"]
-        })
-        
-        last_read_time = last_read["last_read_at"] if last_read else datetime.min.replace(tzinfo=timezone.utc)
-        
-        unread = await db.chat_messages.count_documents({
-            "channel_id": channel["channel_id"],
-            "created_at": {"$gt": last_read_time},
-            "user_id": {"$ne": user["user_id"]}
-        })
-        
-        total_unread += unread
-    
+    for r in msg_rows:
+        cid = r.get("channel_id")
+        ca = r.get("created_at")
+        if ca and ca > last_read_by_chan.get(cid, EPOCH):
+            total_unread += 1
+
     return {"unread_count": total_unread}
 
 # ============== ONLINE STATUS ==============
