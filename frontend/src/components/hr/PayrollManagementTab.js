@@ -1028,30 +1028,134 @@ function SalaryPayslipView({
   };
   
   // Load previous payslips
+  const [allPayslips, setAllPayslips] = useState([]);
+  const [filterYear, setFilterYear] = useState('all');
+  const [filterMonth, setFilterMonth] = useState('all');
+
   useEffect(() => {
-    const loadPreviousPayslips = async () => {
+    const loadAllPayslips = async () => {
       try {
         const res = await axios.get(
           `${API}/api/payroll/employee-payslips/${employee.user_id}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        // Filter out current month's payslip
-        const prev = res.data.filter(p => !(p.month === payslipMonth && p.year === payslipYear));
+        const all = res.data || [];
+        setAllPayslips(all);
+        const prev = all.filter(p => !(p.month === payslipMonth && p.year === payslipYear));
         setPreviousPayslips(prev);
       } catch (error) {
         console.error('Error loading previous payslips:', error);
       }
     };
     if (employee?.user_id) {
-      loadPreviousPayslips();
+      loadAllPayslips();
     }
   }, [employee?.user_id, payslipMonth, payslipYear, token]);
-  
+
+  const filteredPayslips = allPayslips.filter((p) => {
+    if (filterYear !== 'all' && p.year !== parseInt(filterYear, 10)) return false;
+    if (filterMonth !== 'all' && p.month !== parseInt(filterMonth, 10)) return false;
+    return true;
+  });
+  const totalMonthsPaid = allPayslips.filter((p) => p.status === 'generated').length;
+  const totalSalaryPaid = allPayslips.filter((p) => p.status === 'generated').reduce((s, p) => s + Number(p.net_salary || 0), 0);
+  const fmtINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
+  const renderSummaryAndTable = () => (
+    <>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`} data-testid="summary-total-months">
+          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Total Working Months</p>
+          <p className={`text-2xl font-bold ${textPrimary}`}>{totalMonthsPaid}</p>
+          <p className={`text-[10px] ${textSecondary}`}>payslips finalised</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`} data-testid="summary-total-paid">
+          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Total Salary Paid</p>
+          <p className="text-2xl font-bold text-emerald-400">{fmtINR(totalSalaryPaid)}</p>
+          <p className={`text-[10px] ${textSecondary}`}>across generated payslips</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`}>
+          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Average / Month</p>
+          <p className={`text-2xl font-bold ${textPrimary}`}>{totalMonthsPaid > 0 ? fmtINR(totalSalaryPaid / totalMonthsPaid) : '—'}</p>
+          <p className={`text-[10px] ${textSecondary}`}>net salary average</p>
+        </div>
+      </div>
+      <Card className={`${bgCard} border ${borderColor}`} data-testid="payslip-list-card">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle className={`${textPrimary} text-lg`}>All Payslips</CardTitle>
+            <p className={`text-xs ${textSecondary}`}>{filteredPayslips.length} of {allPayslips.length} payslips</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`} data-testid="payslip-filter-month">
+              <option value="all">All months</option>
+              {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+            <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`} data-testid="payslip-filter-year">
+              <option value="all">All years</option>
+              {yearsForEmployee(employee).map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredPayslips.length === 0 ? (
+            <div className={`py-8 text-center ${textSecondary} text-sm`}>No payslips match your filters.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={`${bgSecondary}`}>
+                  <tr>
+                    <th className={`px-3 py-2 text-left text-xs font-medium ${textSecondary} uppercase`}>Month / Year</th>
+                    <th className={`px-3 py-2 text-left text-xs font-medium ${textSecondary} uppercase`}>Salary Date</th>
+                    <th className={`px-3 py-2 text-right text-xs font-medium ${textSecondary} uppercase`}>Working Days</th>
+                    <th className={`px-3 py-2 text-right text-xs font-medium ${textSecondary} uppercase`}>Present</th>
+                    <th className={`px-3 py-2 text-right text-xs font-medium ${textSecondary} uppercase`}>Net Days</th>
+                    <th className={`px-3 py-2 text-right text-xs font-medium ${textSecondary} uppercase`}>Per Day</th>
+                    <th className={`px-3 py-2 text-right text-xs font-medium ${textSecondary} uppercase`}>Net Salary</th>
+                    <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary} uppercase`}>Status</th>
+                    <th className={`px-3 py-2 text-center text-xs font-medium ${textSecondary} uppercase`}>Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#27272a]">
+                  {filteredPayslips.map((p) => {
+                    const wd = p.attendance?.total_working_days ?? p.total_working_days ?? 0;
+                    const present = p.attendance?.present_days ?? p.days_present ?? 0;
+                    const netDays = p.attendance?.days_paid ?? p.days_paid ?? (wd - (p.attendance?.absent_days ?? p.days_absent ?? 0));
+                    return (
+                      <tr key={p.payslip_id} className="hover:bg-[#27272a]/30 transition-colors" data-testid={`payslip-row-${p.payslip_id}`}>
+                        <td className={`px-3 py-2 font-medium ${textPrimary}`}>{months[p.month - 1]} {p.year}</td>
+                        <td className={`px-3 py-2 ${textSecondary}`}>{p.salary_date || p.created_at?.slice(0, 10) || '—'}</td>
+                        <td className={`px-3 py-2 text-right ${textPrimary}`}>{wd}</td>
+                        <td className={`px-3 py-2 text-right text-emerald-400`}>{present}</td>
+                        <td className={`px-3 py-2 text-right ${textPrimary}`}>{netDays}</td>
+                        <td className={`px-3 py-2 text-right ${textSecondary}`}>{fmtINR(p.per_day_salary)}</td>
+                        <td className={`px-3 py-2 text-right font-semibold text-emerald-400`}>{fmtINR(p.net_salary)}</td>
+                        <td className="px-3 py-2 text-center"><Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge></td>
+                        <td className="px-3 py-2 text-center">
+                          <Button onClick={() => setViewingPayslip(p)} size="sm" variant="ghost" className="text-[#a78bfa] hover:bg-[#a78bfa]/10 h-7 px-2" data-testid={`payslip-row-view-btn-${p.payslip_id}`}>
+                            <Eye className="h-3.5 w-3.5 mr-1" /> View
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
+  );
+
   const payslip = payslips.find(p => p.user_id === employee.user_id);
   
   if (!payslip) {
     return (
       <div className="space-y-6">
+        {/* Summary cards + filterable payslip table */}
+        {renderSummaryAndTable()}
+
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="py-12 text-center">
             <CreditCard className="h-12 w-12 text-[#3f3f46] mx-auto mb-4" />
@@ -1078,53 +1182,7 @@ function SalaryPayslipView({
           </CardContent>
         </Card>
         
-        {/* Previous Payslips for when no current payslip exists */}
-        {previousPayslips.length > 0 && (
-          <Card className={`${bgCard} border ${borderColor}`}>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className={`${textPrimary} text-lg`}>Previous Payslips</CardTitle>
-              <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{previousPayslips.length} records</Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {previousPayslips.slice(0, 6).map((p) => (
-                  <div key={p.payslip_id} className={`p-3 rounded-lg border ${borderColor} flex items-center justify-between`}>
-                    <div>
-                      <p className={`font-medium ${textPrimary}`}>{months[p.month - 1]} {p.year}</p>
-                      <p className={`text-sm ${p.net_salary >= 0 ? 'text-[#10b981]' : 'text-red-400'}`}>
-                        ₹{p.net_salary?.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
-                      <Button
-                        onClick={() => setViewingPayslip(p)}
-                        variant="ghost"
-                        size="sm"
-                        className="text-[#a78bfa]"
-                        data-testid={`payslip-view-${p.payslip_id}`}
-                        title="View details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {p.status === 'generated' && (
-                        <Button
-                          onClick={() => onDownloadPDF(p)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-[#6366f1]"
-                          title="Download PDF"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Previous Payslips superseded by the All Payslips table above. */}
 
         {/* Manual Payslip Modal — also needs to render in empty-state path */}
         <Dialog open={showManualModal} onOpenChange={setShowManualModal}>
@@ -1505,75 +1563,8 @@ function SalaryPayslipView({
         </CardContent>
       </Card>
       
-      {/* Previous Payslips Section */}
-      {previousPayslips.length > 0 && (
-        <Card className={`${bgCard} border ${borderColor}`}>
-          <CardHeader 
-            className="flex flex-row items-center justify-between cursor-pointer"
-            onClick={() => setShowPreviousPayslips(!showPreviousPayslips)}
-          >
-            <CardTitle className={`${textPrimary} text-lg flex items-center gap-2`}>
-              <Clock className="h-5 w-5" />
-              Previous Payslips
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{previousPayslips.length} records</Badge>
-              <ChevronRight className={`h-5 w-5 ${textSecondary} transition-transform ${showPreviousPayslips ? 'rotate-90' : ''}`} />
-            </div>
-          </CardHeader>
-          {showPreviousPayslips && (
-            <CardContent>
-              <div className="space-y-3">
-                {previousPayslips.map((p) => (
-                  <div key={p.payslip_id} className={`p-4 rounded-lg border ${borderColor} flex flex-col md:flex-row md:items-center justify-between gap-3`}>
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2 rounded-lg ${bgSecondary}`}>
-                        <Calendar className="h-5 w-5 text-[#6366f1]" />
-                      </div>
-                      <div>
-                        <p className={`font-medium ${textPrimary}`}>{months[p.month - 1]} {p.year}</p>
-                        <p className={`text-sm ${textSecondary}`}>Base: ₹{p.base_salary?.toLocaleString()}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col md:flex-row md:items-center gap-3">
-                      <div className="text-right">
-                        <p className={`text-xs ${textSecondary}`}>Net Salary</p>
-                        <p className={`text-lg font-bold ${p.net_salary >= 0 ? 'text-[#10b981]' : 'text-red-400'}`}>
-                          ₹{p.net_salary?.toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
-                        <Button
-                          onClick={() => setViewingPayslip(p)}
-                          variant="ghost"
-                          size="sm"
-                          className="text-[#a78bfa] hover:bg-[#a78bfa]/10"
-                          data-testid={`payslip-row-view-${p.payslip_id}`}
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
-                        </Button>
-                        {p.status === 'generated' && (
-                          <Button
-                            onClick={() => onDownloadPDF(p)}
-                            variant="ghost"
-                            size="sm"
-                            className="text-[#6366f1] hover:bg-[#6366f1]/10"
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      )}
+      {/* Summary cards + filterable payslip table (replaces "Previous Payslips" Section) */}
+      {renderSummaryAndTable()}
 
       {/* Manual Payslip Modal — matches Drawlead PDF design */}
       <Dialog open={showManualModal} onOpenChange={setShowManualModal}>
