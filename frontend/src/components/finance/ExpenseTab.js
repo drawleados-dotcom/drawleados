@@ -100,16 +100,12 @@ const PROJECT_TYPE_COLORS = {
   'Meta': { bg: '#cffafe', text: '#0891b2' },
 };
 
-// Default tabs (top-level). Banks lives under Cashbook, Payroll/Budget live
-// under Expense, and Clients/Projects live under Invoice now.
 const DEFAULT_TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, isDefault: true },
   { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'pipeline', label: 'Pipeline', icon: TargetIcon, isDefault: true },
-  { id: 'payment_schedule', label: 'Payment Schedule', icon: Wallet, isDefault: true },
-  { id: 'weekly', label: 'Week Wise', icon: Calendar, isDefault: true },
 ];
 
 const ExpenseTab = () => {
@@ -136,6 +132,8 @@ const ExpenseTab = () => {
       budget: { parent: 'expense', set: setExpenseSubTab, sub: 'budget' },
       clients: { parent: 'invoice', set: setInvoiceSubTab, sub: 'clients' },
       projects: { parent: 'invoice', set: setInvoiceSubTab, sub: 'projects' },
+      weekly: { parent: 'dashboard', set: setDashboardSubTab, sub: 'weekly' },
+      payment_schedule: { parent: 'dashboard', set: setDashboardSubTab, sub: 'payment_schedule' },
     };
     const entry = map[requested];
     if (entry) {
@@ -156,6 +154,7 @@ const ExpenseTab = () => {
   const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll
   const [cashbookSubTab, setCashbookSubTab] = useState('cashbook'); // cashbook | banks
   const [invoiceSubTab, setInvoiceSubTab] = useState('invoice');   // invoice | projects | clients
+  const [dashboardSubTab, setDashboardSubTab] = useState('dashboard'); // dashboard | weekly | payment_schedule
 
   // Dashboard period filter (date range). Empty = All Time.
   const _dt = new Date();
@@ -1987,7 +1986,48 @@ const ExpenseTab = () => {
         </div>
       ) : (
         <>
-          {activeTab === 'dashboard' && renderDashboard()}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+                <button
+                  onClick={() => setDashboardSubTab('dashboard')}
+                  data-testid="dashboard-subtab-dashboard"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'dashboard' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => setDashboardSubTab('weekly')}
+                  data-testid="dashboard-subtab-weekly"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'weekly' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Week Wise
+                </button>
+                <button
+                  onClick={() => setDashboardSubTab('payment_schedule')}
+                  data-testid="dashboard-subtab-payment-schedule"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'payment_schedule' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                >
+                  Payment Schedule
+                </button>
+              </div>
+              {dashboardSubTab === 'dashboard' && renderDashboard()}
+              {dashboardSubTab === 'weekly' && (
+                <WeekWiseTab
+                  isDark={isDark}
+                  bgCard={isDark ? 'bg-[#0a0a0a]' : 'bg-white'}
+                  bgSecondary={isDark ? 'bg-[#18181b]' : 'bg-gray-50'}
+                  bgInput={isDark ? 'bg-[#18181b]' : 'bg-white'}
+                  textPrimary={isDark ? 'text-[#fafafa]' : 'text-gray-900'}
+                  textSecondary={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}
+                  borderColor={isDark ? 'border-[#27272a]' : 'border-gray-200'}
+                />
+              )}
+              {dashboardSubTab === 'payment_schedule' && (
+                <FinancePaymentScheduleTab isDark={isDark} token={token} />
+              )}
+            </div>
+          )}
 
           {/* Cashbook with Banks sub-tab */}
           {activeTab === 'cashbook' && (
@@ -2086,20 +2126,6 @@ const ExpenseTab = () => {
             </div>
           )}
 
-          {activeTab === 'payment_schedule' && (
-            <FinancePaymentScheduleTab isDark={isDark} token={token} />
-          )}
-          {activeTab === 'weekly' && (
-            <WeekWiseTab
-              isDark={isDark}
-              bgCard={isDark ? 'bg-[#0a0a0a]' : 'bg-white'}
-              bgSecondary={isDark ? 'bg-[#18181b]' : 'bg-gray-50'}
-              bgInput={isDark ? 'bg-[#18181b]' : 'bg-white'}
-              textPrimary={isDark ? 'text-[#fafafa]' : 'text-gray-900'}
-              textSecondary={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}
-              borderColor={isDark ? 'border-[#27272a]' : 'border-gray-200'}
-            />
-          )}
           {activeTab === 'pipeline' && <PipelineTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
