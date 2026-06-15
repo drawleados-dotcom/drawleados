@@ -57,6 +57,12 @@ class SplitCategoryUpdate(BaseModel):
     order: Optional[int] = None
 
 
+class BudgetSetPayload(BaseModel):
+    amount: float = Field(ge=0)
+    month: int
+    year: int
+
+
 # -------- helpers --------
 async def _calc_income_for_period(month: int, year: int) -> float:
     """Total Income (credit) from cashbook_entries for the given month/year, GST + Non-GST."""
@@ -215,3 +221,88 @@ async def delete_split_category(category_id: str, request: Request):
         {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
     )
     return {"message": "Category deleted"}
+
+
+# -------- BUDGET ROUTES --------
+# Per-(sub_category, month, year) fixed budget amounts. Independent from the
+# %-of-income allocation — used by Expense → Budget sub-tab.
+
+@expense_split_router.get("/budgets")
+async def list_budgets(request: Request, month: Optional[int] = None, year: Optional[int] = None):
+    """Return all top + sub categories with the fixed Budget amount set for
+    the period plus the actual `spent` so the UI can render Allocated / Spent /
+    Balance per sub-category."""
+    await _get_user(request)
+    today = datetime.now(timezone.utc)
+    month = month or today.month
+    year = year or today.year
+
+    docs = await db.expense_split_categories.find(
+        {"is_deleted": {"$ne": True}}, {"_id": 0},
+    ).sort("order", 1).to_list(500)
+
+    # Fetch all budget amounts set for this period
+    budgets = await db.expense_sub_budgets.find(
+        {"month": month, "year": year}, {"_id": 0},
+    ).to_list(500)
+    budget_map = {b["category_id"]: float(b.get("amount") or 0.0) for b in budgets}
+
+    spent_map = await _calc_spent_per_category(month, year)
+
+    tops = [d for d in docs if not d.get("parent_id")]
+    subs_by_parent = {}
+    for d in docs:
+        if d.get("parent_id"):
+            subs_by_parent.setdefault(d["parent_id"], []).append(d)
+
+    result = []
+    for t in tops:
+        sub_list = []
+        for s in subs_by_parent.get(t["category_id"], []):
+            budget = budget_map.get(s["category_id"], 0.0)
+            spent = round(spent_map.get(s["category_id"], 0.0), 2)
+            sub_list.append({
+                **s,
+                "budget": round(budget, 2),
+                "spent": spent,
+                "balance": round(budget - spent, 2),
+                "over_budget": spent > budget and budget > 0,
+            })
+        top_budget = round(sum(s["budget"] for s in sub_list) + budget_map.get(t["category_id"], 0.0), 2)
+        top_spent = round(spent_map.get(t["category_id"], 0.0)
+                          + sum(s["spent"] for s in sub_list), 2)
+        result.append({
+            **t,
+            "budget": top_budget,
+            "spent": top_spent,
+            "balance": round(top_budget - top_spent, 2),
+            "over_budget": top_spent > top_budget and top_budget > 0,
+            "sub_categories": sub_list,
+        })
+
+    return {"month": month, "year": year, "categories": result}
+
+
+@expense_split_router.put("/budgets/{category_id}")
+async def set_budget(category_id: str, payload: BudgetSetPayload, request: Request):
+    """Upsert the Budget amount for one (sub) category for a given month/year."""
+    user = await _get_user(request)
+    cat = await db.expense_split_categories.find_one(
+        {"category_id": category_id, "is_deleted": {"$ne": True}}, {"_id": 0},
+    )
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    await db.expense_sub_budgets.update_one(
+        {"category_id": category_id, "month": payload.month, "year": payload.year},
+        {"$set": {
+            "category_id": category_id,
+            "month": int(payload.month),
+            "year": int(payload.year),
+            "amount": float(payload.amount),
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": user["user_id"],
+        }},
+        upsert=True,
+    )
+    return {"message": "Budget updated", "amount": float(payload.amount)}

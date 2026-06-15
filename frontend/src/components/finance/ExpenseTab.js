@@ -12,6 +12,8 @@ import WeekWiseTab from './WeekWiseTab';
 import ClientsTab from './ClientsTab';
 import ExpenseSplitTab from './ExpenseSplitTab';
 import MasterExpenseView from './MasterExpenseView';
+import BudgetView from './BudgetView';
+import PayrollTab from './PayrollTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
@@ -104,6 +106,7 @@ const DEFAULT_TABS = [
   { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
   { id: 'budget', label: 'Budget', icon: Receipt, isDefault: true },
+  { id: 'payroll', label: 'Payroll', icon: Users, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'clients', label: 'Clients', icon: Users, isDefault: true },
   { id: 'banks', label: 'Banks', icon: Building2, isDefault: true },
@@ -1859,7 +1862,7 @@ const ExpenseTab = () => {
           {activeTab === 'dashboard' && renderDashboard()}
           {activeTab === 'expense' && (
             <div className="space-y-3">
-              {/* Sub-tabs: Master Expense | Expense Split */}
+              {/* Sub-tabs: Master Expense | Expense Split | Budget */}
               <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
                 <button
                   onClick={() => setExpenseSubTab('categories')}
@@ -1883,11 +1886,25 @@ const ExpenseTab = () => {
                 >
                   Expense Split
                 </button>
+                <button
+                  onClick={() => setExpenseSubTab('budget')}
+                  data-testid="expense-subtab-budget"
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    expenseSubTab === 'budget'
+                      ? 'bg-[#27272a] text-white'
+                      : 'text-[#a1a1aa] hover:text-white'
+                  }`}
+                >
+                  Budget
+                </button>
               </div>
-              {expenseSubTab === 'categories' ? <MasterExpenseView /> : <ExpenseSplitTab />}
+              {expenseSubTab === 'categories' && <MasterExpenseView />}
+              {expenseSubTab === 'split' && <ExpenseSplitTab />}
+              {expenseSubTab === 'budget' && <BudgetView />}
             </div>
           )}
           {activeTab === 'budget' && renderBudget()}
+          {activeTab === 'payroll' && <PayrollTab />}
           {activeTab === 'invoice' && renderInvoice()}
           {activeTab === 'payment_schedule' && (
             <FinancePaymentScheduleTab isDark={isDark} token={token} />

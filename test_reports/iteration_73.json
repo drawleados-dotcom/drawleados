@@ -1,0 +1,34 @@
+{
+  "summary": "Verified the two new features end-to-end: (1) Finance & Billing → Payroll tab (mirror of HR Admin → Monthly Payroll) and (2) Finance → Expense → Budget sub-tab with editable per-sub-category budgets. Backend: 5/5 pytest tests pass (GET shape, auth-required, PUT upsert + top-sum, PUT 404 on invalid id, balance math + over_budget flip via cashbook debit tagged with split_category_id). Frontend: All required testids present, payroll renders 19 employee rows with View action; Budget sub-tab renders 4 top-category pills (Investment, Marketing, Overhead, Profit), inline Edit/Save/Cancel works, value persists across reload, Total Budget header re-sums correctly, Balance turns red when spent > budget.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_budget_and_payroll.py",
+    "/app/test_reports/pytest/iter73_budget.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Pre-existing note (not in this iteration's scope): top-level Finance tab 'Budget' (id=budget) is still a placeholder stub — confirmed by E1, user did not ask to remove it. The new Budget functionality lives correctly inside Expense → Budget sub-tab.",
+    "expense_split_routes.list_budgets: top_budget mixes Σ(sub budgets) + any budget stored directly on top category (budget_map.get(top_id)). With the current UI only writing to sub-categories this is harmless, but if someone PUTs a budget for a top category_id, the top header will double-count. Worth gating to subs-only when this gets extended."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_budget_and_payroll.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "vinoth@drawlead.com / Admin@123 (super_admin)",
+  "seed_data_creation": "Created 1 TEST cashbook debit (~₹50-79) tagged to esc_85f72f2209 (Return On Investment) in June 2026 for balance-math verification. Restored that sub-category's Budget back to ₹10,000 after testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest file at /app/backend/tests/test_budget_and_payroll.py covers /api/finance/expense-split/budgets GET+PUT and the spent-via-cashbook math. The balance-math test depends on at least one bank/cash source with ≥₹100 balance for non_gst or gst; will auto-skip otherwise. Use REACT_APP_BACKEND_URL env var when running pytest.",
+  "rca of the issue": "No issues found. Cashbook POST initially returned 422 in my first test because the endpoint expects {gst_type, allocations:[{source, bank_id?, amount}]} schema (GroupedExpensePayload) — fixed the test to use the correct payload; production code is correct."
+}
