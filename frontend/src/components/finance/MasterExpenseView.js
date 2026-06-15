@@ -44,6 +44,7 @@ const MasterExpenseView = () => {
   const [topCategories, setTopCategories] = useState([]);
   const [activeTopId, setActiveTopId] = useState(null);
   const [payrollApprovedTotal, setPayrollApprovedTotal] = useState(0);
+  const [payrollPaidTotal, setPayrollPaidTotal] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,11 +69,18 @@ const MasterExpenseView = () => {
       // and "paid" (paid = already disbursed via cashbook).
       const ps = await axios.get(`${API}/api/payroll/payslips?month=${month}&year=${year}`, { headers });
       const rows = ps.data || [];
+      // Grand = CEO-approved (status ∈ {generated, paid}) net salary sum.
       const approved = rows.filter((p) => ['generated', 'paid'].includes(p.status));
       const total = approved.reduce((s, p) => s + Number(p.net_salary || 0), 0);
       setPayrollApprovedTotal(total);
+      // Paid = already disbursed via Cashbook (status === 'paid').
+      const paid = rows
+        .filter((p) => p.status === 'paid')
+        .reduce((s, p) => s + Number(p.net_salary || 0), 0);
+      setPayrollPaidTotal(paid);
     } catch {
       setPayrollApprovedTotal(0);
+      setPayrollPaidTotal(0);
     }
   }, [month, year, token]);  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -218,16 +226,23 @@ const MasterExpenseView = () => {
             </div>
             <div className="divide-y divide-[#27272a]">
               {/* Special Payroll row for Overhead — always pinned first */}
-              {isOverhead && (
-                <div className="flex items-center gap-3 px-4 py-3" data-testid="master-overhead-payroll-row">
-                  <Users className="h-4 w-4 text-[#a78bfa]" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-[#fafafa]">Payroll</p>
-                    <p className="text-[10px] text-[#a1a1aa]">CEO-approved payslip total for {MONTHS[month-1]} {year}</p>
+              {isOverhead && (() => {
+                const grand = payrollApprovedTotal;
+                const paid = payrollPaidTotal;
+                const balance = grand - paid;
+                return (
+                  <div className="flex items-center gap-3 px-4 py-3" data-testid="master-overhead-payroll-row">
+                    <Users className="h-4 w-4 text-[#a78bfa]" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-[#fafafa]">Payroll</p>
+                      <p className="text-[10px] text-[#a1a1aa]">Pre-fixed · CEO-approved payslip total for {MONTHS[month-1]} {year}</p>
+                    </div>
+                    <Stat l="Grand" v={fmt(grand)} green={grand > 0} />
+                    <Stat l="Paid" v={fmt(paid)} />
+                    <Stat l="Balance" v={fmt(balance)} red={balance > 0} green={balance <= 0 && grand > 0} />
                   </div>
-                  <Stat l="Approved Total" v={fmt(payrollApprovedTotal)} green={payrollApprovedTotal > 0} />
-                </div>
-              )}
+                );
+              })()}
               {(activeTop?.sub_categories || []).length === 0 && !isOverhead && (
                 <div className="px-4 py-8 text-center text-xs text-[#71717a]">
                   No sub-categories for <b>{activeTop?.name}</b>. Add one from the Expense Split tab.

@@ -62,6 +62,12 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   // mark that payslip as `paid`.
   const [payablePayslips, setPayablePayslips] = useState([]);
   const [selectedPayslipId, setSelectedPayslipId] = useState('');
+  // Month/year filters inside the Payroll picker — let the user pick which
+  // pay period they're paying so the dropdown only shows that month's
+  // approved payslips.
+  const _today = new Date();
+  const [payrollPickMonth, setPayrollPickMonth] = useState(_today.getMonth() + 1);
+  const [payrollPickYear, setPayrollPickYear] = useState(_today.getFullYear());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -626,11 +632,10 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                     placeholder="10000"
                     className={bgSecondary}
                     autoFocus
-                    readOnly={!!selectedPayslipId}
                     data-testid="expense-total-input"
                   />
                   {selectedPayslipId && (
-                    <p className={`text-[10px] ${textSecondary} mt-1`}>Auto-filled from payslip — locked</p>
+                    <p className={`text-[10px] ${textSecondary} mt-1`}>Pre-filled from payslip Net Salary — edit if paying a different amount</p>
                   )}
                 </div>
                 <div>
@@ -788,52 +793,84 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
               {/* Payroll Payslip picker — only when Sub Category resolves to "Payroll" */}
               {isPayrollMode && (
                 <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="payroll-payslip-picker">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className={textPrimary}>Payslip to pay *</Label>
-                    <span className={`text-[10px] ${textSecondary}`}>
-                      {payablePayslips.length === 0 ? 'No CEO-approved payslips waiting' : `${payablePayslips.length} approved · unpaid`}
-                    </span>
+                  {/* Month / Year pick — drives the filtered payslip dropdown below */}
+                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                    <Label className={textPrimary}>Pay Period</Label>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={payrollPickMonth}
+                        onChange={(e) => { setPayrollPickMonth(parseInt(e.target.value)); setSelectedPayslipId(''); }}
+                        className={`h-8 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-xs`}
+                        data-testid="payroll-period-month"
+                      >
+                        {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                          <option key={i} value={i + 1}>{m}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={payrollPickYear}
+                        onChange={(e) => { setPayrollPickYear(parseInt(e.target.value)); setSelectedPayslipId(''); }}
+                        className={`h-8 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-xs`}
+                        data-testid="payroll-period-year"
+                      >
+                        {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <select
-                    value={selectedPayslipId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedPayslipId(id);
-                      const p = payablePayslips.find((x) => x.payslip_id === id);
-                      if (p) {
-                        const net = String(Number(p.net_salary) || 0);
-                        setExpenseTotal(net);
-                        // Reset allocs to a single row covering full net so the user
-                        // just needs to confirm the source.
-                        setAllocs([{ source: 'cash', bank_id: '', amount: net }]);
-                        setForm((f) => ({ ...f, party: p.employee_name || '' }));
-                      }
-                    }}
-                    className={`w-full h-9 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
-                    data-testid="payroll-payslip-select"
-                  >
-                    <option value="">— Pick employee / month —</option>
-                    {payablePayslips.map((p) => {
-                      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                      const period = `${months[(p.month || 1) - 1]} ${p.year}`;
-                      const net = Number(p.net_salary || 0).toLocaleString('en-IN');
-                      return (
-                        <option key={p.payslip_id} value={p.payslip_id}>
-                          {p.employee_name} · {period} · Net ₹{net}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  {selectedPayslip && (
-                    <p className={`text-[11px] mt-2 ${textSecondary}`}>
-                      Net salary locked at <b className="text-[#10b981]">₹{Number(selectedPayslip.net_salary || 0).toLocaleString('en-IN')}</b>. Saving this expense will mark the payslip as <b>PAID</b>.
-                    </p>
-                  )}
-                  {payablePayslips.length === 0 && (
-                    <p className={`text-[11px] mt-2 ${textSecondary}`}>
-                      No payslips are currently CEO-approved & unpaid. Once HR sends a payslip for CEO review and the CEO approves it in Operations → Approval → HR, it will appear here.
-                    </p>
-                  )}
+                  {(() => {
+                    const filtered = payablePayslips.filter((p) => p.month === payrollPickMonth && p.year === payrollPickYear);
+                    return (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <Label className={textPrimary}>Employee · Payslip *</Label>
+                          <span className={`text-[10px] ${textSecondary}`}>
+                            {filtered.length === 0 ? 'No CEO-approved payslips for this period' : `${filtered.length} approved · unpaid`}
+                          </span>
+                        </div>
+                        <select
+                          value={selectedPayslipId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setSelectedPayslipId(id);
+                            const p = filtered.find((x) => x.payslip_id === id);
+                            if (p) {
+                              const net = String(Number(p.net_salary) || 0);
+                              setExpenseTotal(net);
+                              setAllocs([{ source: 'cash', bank_id: '', amount: net }]);
+                              setForm((f) => ({ ...f, party: p.employee_name || '' }));
+                            }
+                          }}
+                          className={`w-full h-9 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                          data-testid="payroll-payslip-select"
+                        >
+                          <option value="">— Choose employee —</option>
+                          {filtered.map((p) => {
+                            const net = Number(p.net_salary || 0).toLocaleString('en-IN');
+                            return (
+                              <option key={p.payslip_id} value={p.payslip_id}>
+                                {p.employee_name} · Net ₹{net}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {selectedPayslip && (
+                          <p className={`text-[11px] mt-2 ${textSecondary}`}>
+                            Net salary <b className="text-[#10b981]">₹{Number(selectedPayslip.net_salary || 0).toLocaleString('en-IN')}</b> · Enter the actual amount being paid below (can be partial / variable). Saving will mark the payslip as <b>PAID</b>.
+                          </p>
+                        )}
+                        {filtered.length === 0 && payablePayslips.length > 0 && (
+                          <p className={`text-[11px] mt-2 ${textSecondary}`}>
+                            No CEO-approved payslip for this exact period — try a different month/year.
+                          </p>
+                        )}
+                        {payablePayslips.length === 0 && (
+                          <p className={`text-[11px] mt-2 ${textSecondary}`}>
+                            No payslips are currently CEO-approved & unpaid. Once HR sends a payslip for CEO review and the CEO approves it in Operations → Approval → HR, it will appear here.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
 
