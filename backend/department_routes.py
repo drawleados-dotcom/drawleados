@@ -13,6 +13,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import uuid
 
+from access import has_settings_access, has_operations_access
+
 department_router = APIRouter(prefix="/departments", tags=["departments"])
 
 # MongoDB connection
@@ -151,7 +153,7 @@ async def create_department(data: DepartmentCreate, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin"]:
+    if not has_settings_access(current_user):
         raise HTTPException(status_code=403, detail="Only admins can create departments")
     
     # Get max order
@@ -184,7 +186,7 @@ async def update_department(department_id: str, data: DepartmentUpdate, request:
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin"]:
+    if not has_settings_access(current_user):
         raise HTTPException(status_code=403, detail="Only admins can update departments")
     
     update_dict = data.model_dump(exclude_unset=True)
@@ -207,7 +209,7 @@ async def delete_department(department_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin"]:
+    if not has_settings_access(current_user):
         raise HTTPException(status_code=403, detail="Only admins can delete departments")
     
     await db.departments.update_one(
@@ -1292,7 +1294,7 @@ async def create_website_template(request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if not has_operations_access(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     data = await request.json()
@@ -1327,7 +1329,7 @@ async def update_website_template(template_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin", "project_manager"]:
+    if not has_operations_access(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     data = await request.json()
@@ -1348,7 +1350,7 @@ async def delete_website_template(template_id: str, request: Request):
     from server import get_current_user
     user = await get_current_user(request)
     
-    if user.role not in ["admin", "super_admin"]:
+    if not has_settings_access(user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     await db.website_templates.delete_one({"template_id": template_id})

@@ -1,6 +1,45 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 (cont.) — Module-aware RBAC sweep across backend ✅
+
+### What changed
+Created a centralised `access.py` with five predicates that honour BOTH `role` (legacy) AND `module_access` (designation-driven):
+- `is_admin(user)` — super_admin / admin
+- `has_hr_access(user)` — privileged role OR `hr_admin` / `hr_manager` in modules
+- `has_operations_access(user)` — privileged role OR `operations` / `our_tasks` in modules
+- `has_finance_access(user)` — privileged role OR `finance` in modules
+- `has_settings_access(user)` — privileged role OR `settings` in modules
+- `has_leads_access(user)` — privileged role OR `leads` in modules
+
+### Applied across
+- **payroll_routes.py** — 12+ HR-strict checks now honour `hr_admin` module_access (employees, salary history, payslip create/edit/regenerate/PDF, settings, payslip list, single payslip).
+- **hr_routes.py** — HR attendance endpoint + WFH view → `has_hr_access`.
+- **our_tasks_routes.py** — viewing another user's hours → `has_hr_access`.
+- **department_routes.py** — department CRUD → `has_settings_access`; website templates create/update → `has_operations_access`; template delete → `has_settings_access`.
+- **menu_order_routes.py** — menu order save → `has_settings_access`.
+- **leads_v2_routes.py** — admin lead operations → `is_admin`.
+
+### Left strict (intentionally — security-critical)
+- `server.py` user management endpoints (super_admin only).
+- `payroll_routes.py:463` super_admin/ceo only path.
+- `bde_routes.py` 567/644 owner-or-admin scope (different semantic).
+- `hr_routes.py` 3126/4231 reviewer scope (different semantic).
+- `db_admin_routes.py` (DB admin tool).
+
+### End-to-end verified
+A non-admin user (role="Content Writer") with `hr_admin` in `module_access` successfully calls:
+- `GET /api/payroll/employees` ✅
+- `GET /api/payroll/payslips` ✅
+- `GET /api/payroll/salary-history/{user_id}` ✅
+- `GET /api/hr/admin/employees` ✅
+
+Backend boots cleanly with the new helper.
+
+---
+
+
+
 ## Latest Update — Feb 14, 2026 (cont.) — Performance Fixes (N+1 elimination) ✅
 
 ### What was fixed

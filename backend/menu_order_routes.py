@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from typing import List
 from datetime import datetime, timezone
 
+from access import has_settings_access
+
 menu_order_router = APIRouter(prefix="/menu-order")
 db = None
 
@@ -56,8 +58,7 @@ async def get_menu_order(request: Request, department_id: str = ""):
 async def set_menu_order(payload: MenuOrderUpdate, request: Request):
     """Save the menu order for a department. Admin/Super-admin only."""
     user = await _get_user(request)
-    role = (user.get("role") or "").lower()
-    if role not in ("admin", "super_admin"):
+    if not has_settings_access(user):
         raise HTTPException(status_code=403, detail="Admin only")
     if not payload.department_id:
         raise HTTPException(status_code=400, detail="department_id required")

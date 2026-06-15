@@ -6,6 +6,8 @@ import uuid
 import httpx
 import asyncio
 
+from access import is_admin
+
 # Import notification service
 from notification_service import (
     notify_lead_assigned, notify_lead_closed, notify_lead_remark,
@@ -1070,8 +1072,7 @@ async def backfill_from_custom_fields(request: Request):
     """
     from server import get_current_user
     user = await get_current_user(request)
-    role = (user.role or "").lower()
-    if role not in ("super_admin", "admin"):
+    if not is_admin(user):
         raise HTTPException(status_code=403, detail="Admin only")
 
     cursor = db.leads_v2.find(

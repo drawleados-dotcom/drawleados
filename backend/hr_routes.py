@@ -10,6 +10,8 @@ import os
 import asyncio
 import logging
 
+from access import has_hr_access
+
 # Import notification service
 from notification_service import (
     notify_leave_request, notify_leave_decision,
@@ -920,7 +922,7 @@ async def get_employee_attendance(
     """HR-Admin: fetch a specific employee's attendance history for the given month."""
     from server import get_current_user
     requester = await get_current_user(request)
-    if requester.role not in {"super_admin", "admin", "hr_manager"}:
+    if not has_hr_access(requester):
         raise HTTPException(status_code=403, detail="HR Admin access required")
 
     now = datetime.now(timezone.utc)
@@ -4361,8 +4363,8 @@ async def get_wfh_request(wfh_id: str, request: Request):
     if not wfh:
         raise HTTPException(status_code=404, detail="WFH request not found")
     
-    # Only the employee or admin can view
-    if wfh["user_id"] != current_user.user_id and current_user.role not in ['super_admin', 'admin', 'hr_admin']:
+    # Only the employee or HR-privileged users can view
+    if wfh["user_id"] != current_user.user_id and not has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     return wfh

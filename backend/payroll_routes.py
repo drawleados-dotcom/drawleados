@@ -352,8 +352,13 @@ async def get_payslips(month: int, year: int, status: Optional[str] = None, requ
     
     query = {"month": month, "year": year}
     
-    # Non-admin users can only see approved payslips for themselves
-    if current_user.role not in ["admin", "super_admin", "hr_manager", "operations_admin", "ceo"]:
+    # Non-privileged users only see approved payslips for themselves.
+    # HR access (role OR hr_admin module), operations_admin, and CEO get the broader view.
+    is_privileged = (
+        _has_hr_access(current_user)
+        or current_user.role in ("operations_admin", "ceo")
+    )
+    if not is_privileged:
         query["user_id"] = current_user.user_id
         query["status"] = "generated"
     elif status:
@@ -382,8 +387,12 @@ async def get_payslip(payslip_id: str, request: Request):
     if not payslip:
         raise HTTPException(status_code=404, detail="Payslip not found")
     
-    # Check access
-    if current_user.role not in ["admin", "super_admin", "hr_manager", "operations_admin", "ceo"]:
+    # Check access — HR-privileged users + operations_admin + CEO can view all.
+    is_privileged = (
+        _has_hr_access(current_user)
+        or current_user.role in ("operations_admin", "ceo")
+    )
+    if not is_privileged:
         if payslip["user_id"] != current_user.user_id or payslip["status"] != "generated":
             raise HTTPException(status_code=403, detail="Not authorized")
     

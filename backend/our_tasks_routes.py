@@ -8,6 +8,8 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import uuid
 
+from access import has_hr_access, has_operations_access
+
 our_tasks_router = APIRouter(prefix="/our-tasks", tags=["Our Tasks"])
 
 # Models
@@ -344,9 +346,9 @@ async def get_work_hours_for_date(date: str, request: Request, user_id: Optional
     Date format: YYYY-MM-DD. Returns: {seconds, hours, formatted}."""
     from server import get_current_user, db
     requester = await get_current_user(request)
-    # Default to requester; allow admin/HR to query any user
+    # Default to requester; HR-privileged users can query any user's hours
     target = user_id or requester.user_id
-    if target != requester.user_id and requester.role not in {"super_admin", "admin", "hr_manager"}:
+    if target != requester.user_id and not has_hr_access(requester):
         raise HTTPException(status_code=403, detail="Cannot view other users' hours")
 
     try:
