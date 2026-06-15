@@ -464,6 +464,143 @@ async def add_operations_review(payslip_id: str, data: ReviewPayslipRequest, req
     return {"message": "Submitted for CEO review"}
 
 
+# ---- CEO access helper ----
+def _has_ceo_approval_access(user) -> bool:
+    """CEO approval allowed if role is super_admin/admin/ceo OR designation indicates CEO."""
+    role = (getattr(user, "role", None) or (user.get("role") if isinstance(user, dict) else "") or "").lower()
+    if role in ("super_admin", "admin", "ceo"):
+        return True
+    designation = (
+        getattr(user, "designation", None)
+        or (user.get("designation") if isinstance(user, dict) else "")
+        or ""
+    ).lower()
+    return designation == "ceo" or "chief executive" in designation
+
+
+@payroll_router.get("/approvals")
+async def get_pending_ceo_approvals(request: Request):
+    """List payslips waiting for CEO approval (status = ceo_review)."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not (_has_ceo_approval_access(current_user) or _has_hr_access(current_user)):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    rows = await db.payslips.find(
+        {"status": "ceo_review"}, {"_id": 0}
+    ).sort([("year", -1), ("month", -1), ("created_at", -1)]).to_list(500)
+    return rows
+
+
+@payroll_router.put("/payslip/{payslip_id}/approve")
+async def ceo_approve_payslip(payslip_id: str, request: Request):
+    """CEO approves a payslip → flips ceo_review to generated directly."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_ceo_approval_access(current_user):
+        raise HTTPException(status_code=403, detail="Only CEO can approve payslips")
+
+    now = datetime.now(timezone.utc)
+    result = await db.payslips.update_one(
+        {"payslip_id": payslip_id, "status": "ceo_review"},
+        {"$set": {
+            "status": "generated",
+            "ceo_review": {
+                "reviewer_id": current_user.user_id,
+                "reviewer_name": current_user.name,
+                "decision": "approved",
+                "reviewed_at": now,
+            },
+            "generated_by": current_user.user_id,
+            "generated_at": now,
+            "updated_at": now,
+        }},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Payslip not found or not awaiting CEO approval")
+    return {"message": "Payslip approved and generated"}
+
+
+@payroll_router.put("/payslip/{payslip_id}/reject")
+async def ceo_reject_payslip(payslip_id: str, data: ReviewPayslipRequest, request: Request):
+    """CEO rejects a payslip → sends it back to draft so HR can correct & resubmit."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_ceo_approval_access(current_user):
+        raise HTTPException(status_code=403, detail="Only CEO can reject payslips")
+
+    now = datetime.now(timezone.utc)
+    result = await db.payslips.update_one(
+        {"payslip_id": payslip_id, "status": "ceo_review"},
+        {"$set": {
+            "status": "draft",
+            "ceo_review": {
+                "reviewer_id": current_user.user_id,
+                "reviewer_name": current_user.name,
+                "decision": "rejected",
+                "review_text": (data.review_text or "").strip(),
+                "reviewed_at": now,
+            },
+            "updated_at": now,
+        }},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Payslip not found or not awaiting CEO approval")
+    return {"message": "Payslip rejected and sent back to draft"}
+
+
+@payroll_router.get("/payslips/payable")
+async def get_payable_payslips(request: Request):
+    """Generated (CEO-approved, not yet paid) payslips — feeds the Cashbook Payroll picker."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_hr_access(current_user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    rows = await db.payslips.find(
+        {"status": "generated"},
+        {"_id": 0, "payslip_id": 1, "user_id": 1, "employee_name": 1, "employee_id": 1,
+         "employee_designation": 1, "month": 1, "year": 1, "net_salary": 1, "base_salary": 1},
+    ).sort([("year", -1), ("month", -1), ("employee_name", 1)]).to_list(500)
+    return rows
+
+
+@payroll_router.put("/payslip/{payslip_id}/mark-paid")
+async def mark_payslip_paid(
+    payslip_id: str,
+    request: Request,
+    expense_group_id: Optional[str] = None,
+):
+    """Mark a generated payslip as paid (called from cashbook payroll expense flow)."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_hr_access(current_user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    now = datetime.now(timezone.utc)
+    update = {
+        "status": "paid",
+        "paid_by": current_user.user_id,
+        "paid_at": now,
+        "updated_at": now,
+    }
+    if expense_group_id:
+        update["paid_via_expense_group_id"] = expense_group_id
+
+    result = await db.payslips.update_one(
+        {"payslip_id": payslip_id, "status": "generated"},
+        {"$set": update},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Payslip not found or not in generated status")
+    return {"message": "Payslip marked as paid"}
+
+
 @payroll_router.put("/payslip/{payslip_id}/ceo-review")
 async def add_ceo_review(payslip_id: str, data: ReviewPayslipRequest, request: Request):
     """CEO adds review and approves - review text is optional"""

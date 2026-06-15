@@ -631,6 +631,9 @@ class GroupedExpensePayload(BaseModel):
     # Expense Split tagging — used to populate the budget's "Spent" column.
     split_category_id: Optional[str] = None       # sub-category if chosen, else top
     split_top_category_id: Optional[str] = None   # top category always (for rollup display)
+    # When this expense pays a payroll payslip, the cashbook entry flips that
+    # payslip's status to `paid` so the HR module stays in sync.
+    payslip_id: Optional[str] = None
     allocations: List[ExpenseAllocation]
 
 
@@ -749,6 +752,7 @@ async def add_grouped_expense(payload: GroupedExpensePayload, request: Request):
             "split_top_category_id": payload.split_top_category_id,
             "expense_group_id": group_id,
             "expense_group_total": total,
+            "payslip_id": payload.payslip_id,
             "created_by": user["user_id"],
             "created_at": datetime.now(timezone.utc),
         }
@@ -757,6 +761,19 @@ async def add_grouped_expense(payload: GroupedExpensePayload, request: Request):
         if isinstance(entry.get("created_at"), datetime):
             entry["created_at"] = entry["created_at"].isoformat()
         inserted.append(entry)
+
+    # If this expense was paying a generated payslip, flip it to paid.
+    if payload.payslip_id:
+        await db.payslips.update_one(
+            {"payslip_id": payload.payslip_id, "status": "generated"},
+            {"$set": {
+                "status": "paid",
+                "paid_by": user["user_id"],
+                "paid_at": datetime.now(timezone.utc),
+                "paid_via_expense_group_id": group_id,
+                "updated_at": datetime.now(timezone.utc),
+            }},
+        )
 
     return {"expense_group_id": group_id, "total": total, "entries": inserted}
 

@@ -57,6 +57,11 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   const [splitCategories, setSplitCategories] = useState([]); // top categories with .sub_categories
   const [splitTopId, setSplitTopId] = useState('');
   const [splitSubId, setSplitSubId] = useState('');
+  // Payroll linkage — when sub-category resolves to "Payroll" we let the user
+  // pick a generated (CEO-approved) payslip, auto-fill the amount, and on save
+  // mark that payslip as `paid`.
+  const [payablePayslips, setPayablePayslips] = useState([]);
+  const [selectedPayslipId, setSelectedPayslipId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,6 +76,37 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
   }, [gstType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
+
+  // When user picks a sub-category whose name is "Payroll", fetch the list of
+  // generated/unpaid payslips so they can pick exactly one to expense.
+  useEffect(() => {
+    if (!splitTopId || !splitSubId) {
+      setPayablePayslips([]);
+      setSelectedPayslipId('');
+      return;
+    }
+    const top = splitCategories.find((c) => c.category_id === splitTopId);
+    const sub = top?.sub_categories?.find((s) => s.category_id === splitSubId);
+    const isPayroll = (sub?.name || '').toLowerCase().trim() === 'payroll';
+    if (!isPayroll) {
+      setPayablePayslips([]);
+      setSelectedPayslipId('');
+      return;
+    }
+    (async () => {
+      try {
+        const r = await axios.get(`${API}/api/payroll/payslips/payable`, { headers });
+        setPayablePayslips(r.data || []);
+      } catch (e) {
+        setPayablePayslips([]);
+      }
+    })();
+    setSelectedPayslipId('');
+  }, [splitSubId, splitTopId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Active payslip-payroll flow flag
+  const selectedPayslip = payablePayslips.find((p) => p.payslip_id === selectedPayslipId) || null;
+  const isPayrollMode = payablePayslips.length > 0 || !!selectedPayslip;
 
   const openAdd = async (kind) => {
     setModal(kind);
@@ -109,6 +145,8 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
       }
       setSplitTopId('');
       setSplitSubId('');
+      setSelectedPayslipId('');
+      setPayablePayslips([]);
     }
   };
 
@@ -182,21 +220,27 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
       const derivedCategory = (form.category || '').trim()
         || (subCat ? `${topCat.name} › ${subCat.name}` : (topCat?.name || ''));
       const splitCategoryId = splitSubId || splitTopId || null;
+      // If this expense is tied to a payroll payslip, require an explicit selection.
+      if (isPayrollMode && !selectedPayslipId) {
+        toast.error('Pick the employee/payslip being paid');
+        return;
+      }
       await axios.post(`${API}/api/finance/banks/cashbook/expense`, {
         gst_type: gstType,
         date: form.date,
-        party: form.party,
+        party: form.party || (selectedPayslip ? selectedPayslip.employee_name : ''),
         category: derivedCategory,
         notes: form.notes,
         split_category_id: splitCategoryId,
         split_top_category_id: splitTopId || null,
+        payslip_id: selectedPayslipId || null,
         allocations: allocs.map((a) => ({
           source: a.source,
           bank_id: a.source === 'bank' ? a.bank_id : null,
           amount: parseFloat(a.amount) || 0,
         })),
       }, { headers });
-      toast.success('Expense recorded');
+      toast.success(selectedPayslipId ? 'Salary expense recorded · Payslip marked PAID' : 'Expense recorded');
       setModal(null);
       load();
     } catch (e) {
@@ -572,7 +616,19 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className={textPrimary}>Total Amount *</Label>
-                  <Input type="number" value={expenseTotal} onChange={(e) => setExpenseTotal(e.target.value)} placeholder="10000" className={bgSecondary} autoFocus data-testid="expense-total-input" />
+                  <Input
+                    type="number"
+                    value={expenseTotal}
+                    onChange={(e) => setExpenseTotal(e.target.value)}
+                    placeholder="10000"
+                    className={bgSecondary}
+                    autoFocus
+                    readOnly={!!selectedPayslipId}
+                    data-testid="expense-total-input"
+                  />
+                  {selectedPayslipId && (
+                    <p className={`text-[10px] ${textSecondary} mt-1`}>Auto-filled from payslip — locked</p>
+                  )}
                 </div>
                 <div>
                   <Label className={textPrimary}>Date *</Label>
@@ -680,6 +736,58 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                   </select>
                 </div>
               </div>
+
+              {/* Payroll Payslip picker — only when Sub Category resolves to "Payroll" */}
+              {isPayrollMode && (
+                <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="payroll-payslip-picker">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className={textPrimary}>Payslip to pay *</Label>
+                    <span className={`text-[10px] ${textSecondary}`}>
+                      {payablePayslips.length === 0 ? 'No CEO-approved payslips waiting' : `${payablePayslips.length} approved · unpaid`}
+                    </span>
+                  </div>
+                  <select
+                    value={selectedPayslipId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedPayslipId(id);
+                      const p = payablePayslips.find((x) => x.payslip_id === id);
+                      if (p) {
+                        const net = String(Number(p.net_salary) || 0);
+                        setExpenseTotal(net);
+                        // Reset allocs to a single row covering full net so the user
+                        // just needs to confirm the source.
+                        setAllocs([{ source: 'cash', bank_id: '', amount: net }]);
+                        setForm((f) => ({ ...f, party: p.employee_name || '' }));
+                      }
+                    }}
+                    className={`w-full h-9 px-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                    data-testid="payroll-payslip-select"
+                  >
+                    <option value="">— Pick employee / month —</option>
+                    {payablePayslips.map((p) => {
+                      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                      const period = `${months[(p.month || 1) - 1]} ${p.year}`;
+                      const net = Number(p.net_salary || 0).toLocaleString('en-IN');
+                      return (
+                        <option key={p.payslip_id} value={p.payslip_id}>
+                          {p.employee_name} · {period} · Net ₹{net}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {selectedPayslip && (
+                    <p className={`text-[11px] mt-2 ${textSecondary}`}>
+                      Net salary locked at <b className="text-[#10b981]">₹{Number(selectedPayslip.net_salary || 0).toLocaleString('en-IN')}</b>. Saving this expense will mark the payslip as <b>PAID</b>.
+                    </p>
+                  )}
+                  {payablePayslips.length === 0 && (
+                    <p className={`text-[11px] mt-2 ${textSecondary}`}>
+                      No payslips are currently CEO-approved & unpaid. Once HR sends a payslip for CEO review and the CEO approves it in Operations → Approval → HR, it will appear here.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>

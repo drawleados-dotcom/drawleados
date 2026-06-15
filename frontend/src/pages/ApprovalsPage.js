@@ -147,6 +147,70 @@ export default function ApprovalsPage({ embedded = false }) {
     hr: baseVisibleTaskApprovals.filter(t => (t.approval_request?.approver_role || '').toLowerCase() === 'hr').length,
   };
 
+  // ---- HR Payroll approvals (payslips waiting for CEO approval) ----
+  const [payrollApprovals, setPayrollApprovals] = useState([]);
+  const [payrollRejectTarget, setPayrollRejectTarget] = useState(null);
+  const [payrollRejectRemarks, setPayrollRejectRemarks] = useState('');
+  const [payrollActionBusy, setPayrollActionBusy] = useState(false);
+
+  const loadPayrollApprovals = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/payroll/approvals`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setPayrollApprovals(res.data || []);
+    } catch (error) {
+      // 403 is expected for non-CEO viewers — silent skip.
+      setPayrollApprovals([]);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadPayrollApprovals();
+  }, [loadPayrollApprovals]);
+
+  useAutoRefresh([loadPayrollApprovals]);
+
+  // Pump HR bucket count so it reflects payslips too
+  bucketCounts.hr = bucketCounts.hr + payrollApprovals.length;
+
+  const approvePayslip = async (payslipId) => {
+    setPayrollActionBusy(true);
+    try {
+      await axios.put(
+        `${API}/api/payroll/payslip/${payslipId}/approve`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      toast.success('Payslip approved & generated');
+      loadPayrollApprovals();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to approve payslip');
+    } finally {
+      setPayrollActionBusy(false);
+    }
+  };
+
+  const rejectPayslip = async () => {
+    if (!payrollRejectTarget) return;
+    setPayrollActionBusy(true);
+    try {
+      await axios.put(
+        `${API}/api/payroll/payslip/${payrollRejectTarget.payslip_id}/reject`,
+        { review_text: payrollRejectRemarks.trim() },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      toast.success('Payslip sent back to HR');
+      setPayrollRejectTarget(null);
+      setPayrollRejectRemarks('');
+      loadPayrollApprovals();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to reject payslip');
+    } finally {
+      setPayrollActionBusy(false);
+    }
+  };
+
   // Load approvals
   const loadApprovals = useCallback(async () => {
     try {
@@ -603,6 +667,95 @@ export default function ApprovalsPage({ embedded = false }) {
             </div>
           )}
 
+          {/* HR Payroll Approvals — only visible inside the HR bucket */}
+          {approverBucket === 'hr' && payrollApprovals.length > 0 && (
+            <div data-testid="payroll-approvals-section">
+              <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
+                <Briefcase className="h-4 w-4 text-[#f43f5e]" />
+                Payroll — Payslips awaiting CEO approval
+                <Badge className="bg-[#f43f5e]/20 text-[#f43f5e] ml-2">{payrollApprovals.length}</Badge>
+              </h3>
+              <div className="space-y-3">
+                {payrollApprovals.map((p) => {
+                  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                  const period = `${months[(p.month || 1) - 1]} ${p.year}`;
+                  return (
+                    <div
+                      key={p.payslip_id}
+                      className={`${bgCard} border ${borderColor} rounded-lg p-4`}
+                      data-testid={`payroll-approval-${p.payslip_id}`}
+                    >
+                      <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div className="flex-1 min-w-[260px]">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className={`font-semibold ${textPrimary}`}>{p.employee_name || '—'}</h4>
+                            {p.employee_id && (
+                              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px]">{p.employee_id}</Badge>
+                            )}
+                            {p.employee_designation && (
+                              <Badge className="bg-[#0ea5e9]/15 text-[#0ea5e9] text-[10px]">{p.employee_designation}</Badge>
+                            )}
+                            <Badge className="bg-[#f59e0b]/20 text-[#f59e0b] text-[10px]">{period}</Badge>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                            <div>
+                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Gross</p>
+                              <p className={`text-sm font-semibold ${textPrimary}`}>₹{Number(p.base_salary || 0).toLocaleString('en-IN')}</p>
+                            </div>
+                            <div>
+                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Earned</p>
+                              <p className={`text-sm font-semibold ${textPrimary}`}>₹{Number(p.calculation?.earned_salary || 0).toLocaleString('en-IN')}</p>
+                            </div>
+                            <div>
+                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Deductions</p>
+                              <p className={`text-sm font-semibold text-[#ef4444]`}>-₹{Number(p.deductions?.total_deductions || 0).toLocaleString('en-IN')}</p>
+                            </div>
+                            <div>
+                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Net Salary</p>
+                              <p className={`text-base font-bold text-[#10b981]`}>₹{Number(p.net_salary || 0).toLocaleString('en-IN')}</p>
+                            </div>
+                          </div>
+                          {p.hr_remarks && (
+                            <p className={`text-xs ${textSecondary} mt-3 italic`}>HR note: &ldquo;{p.hr_remarks}&rdquo;</p>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <Button
+                            size="sm"
+                            onClick={() => approvePayslip(p.payslip_id)}
+                            disabled={payrollActionBusy}
+                            className="bg-[#10b981] hover:bg-[#059669] text-white"
+                            data-testid={`payroll-approve-${p.payslip_id}`}
+                          >
+                            <Check className="h-3 w-3 mr-1" /> Approve & Generate
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => { setPayrollRejectTarget(p); setPayrollRejectRemarks(''); }}
+                            disabled={payrollActionBusy}
+                            className="border-[#ef4444] text-[#ef4444] hover:bg-[#ef4444]/10"
+                            data-testid={`payroll-reject-${p.payslip_id}`}
+                          >
+                            <X className="h-3 w-3 mr-1" /> Reject
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {approverBucket === 'hr' && payrollApprovals.length === 0 && visibleTaskApprovals.length === 0 && (
+            <div className={`text-center py-12 ${textSecondary} border ${borderColor} rounded-lg ${bgCard}`}>
+              <Briefcase className="h-10 w-10 mx-auto mb-2 opacity-40" />
+              <p className={`text-sm ${textPrimary}`}>No HR approvals pending</p>
+              <p className="text-xs mt-1">Payslips sent for CEO review will show up here.</p>
+            </div>
+          )}
+
           {loading ? (
             <div className={`text-center py-16 ${textSecondary}`}>
               <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin" />
@@ -761,6 +914,47 @@ export default function ApprovalsPage({ embedded = false }) {
                     data-testid="decision-reject-btn"
                   >
                     <X className="h-3 w-3 mr-1" /> Reject & Create Rework Task
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Payroll Reject Modal */}
+        {payrollRejectTarget && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !payrollActionBusy && setPayrollRejectTarget(null)}>
+            <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md mx-4`} onClick={(e) => e.stopPropagation()}>
+              <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
+                <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                  <AlertCircle className="h-4 w-4 text-[#ef4444]" /> Reject Payslip
+                </h3>
+                <button onClick={() => !payrollActionBusy && setPayrollRejectTarget(null)} className={textSecondary}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                <p className={`text-sm ${textSecondary}`}>
+                  {payrollRejectTarget.employee_name} · {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(payrollRejectTarget.month || 1) - 1]} {payrollRejectTarget.year}
+                </p>
+                <textarea
+                  value={payrollRejectRemarks}
+                  onChange={(e) => setPayrollRejectRemarks(e.target.value)}
+                  rows={4}
+                  placeholder="Reason for rejection (sent back to HR as draft)…"
+                  className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="payroll-reject-remarks"
+                />
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => setPayrollRejectTarget(null)} disabled={payrollActionBusy} className={textSecondary}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={rejectPayslip}
+                    disabled={payrollActionBusy || !payrollRejectRemarks.trim()}
+                    className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                    data-testid="payroll-reject-confirm"
+                  >
+                    <X className="h-3 w-3 mr-1" /> Reject Payslip
                   </Button>
                 </div>
               </div>
