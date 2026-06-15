@@ -11,6 +11,7 @@ import FinancePaymentScheduleTab from './FinancePaymentScheduleTab';
 import WeekWiseTab from './WeekWiseTab';
 import ClientsTab from './ClientsTab';
 import ExpenseSplitTab from './ExpenseSplitTab';
+import MasterExpenseView from './MasterExpenseView';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
@@ -1858,7 +1859,7 @@ const ExpenseTab = () => {
           {activeTab === 'dashboard' && renderDashboard()}
           {activeTab === 'expense' && (
             <div className="space-y-3">
-              {/* Sub-tabs: Categories | Expense Split */}
+              {/* Sub-tabs: Master Expense | Expense Split */}
               <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
                 <button
                   onClick={() => setExpenseSubTab('categories')}
@@ -1869,7 +1870,7 @@ const ExpenseTab = () => {
                       : 'text-[#a1a1aa] hover:text-white'
                   }`}
                 >
-                  Categories
+                  Master Expense
                 </button>
                 <button
                   onClick={() => setExpenseSubTab('split')}
@@ -1883,7 +1884,7 @@ const ExpenseTab = () => {
                   Expense Split
                 </button>
               </div>
-              {expenseSubTab === 'categories' ? renderExpense() : <ExpenseSplitTab />}
+              {expenseSubTab === 'categories' ? <MasterExpenseView /> : <ExpenseSplitTab />}
             </div>
           )}
           {activeTab === 'budget' && renderBudget()}
