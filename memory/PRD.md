@@ -1,6 +1,40 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — "All" tab + tab reorder + Cashbook Budget hint ✅
+
+### A) "All" tab in Master Expense and Budget
+- New first tab pinned in both views — shows Grand Totals card (Allocated/Spent/Balance for Master Expense; Budget/Paid/Balance for Budget) + per-top-category summary rows.
+- Testids: `master-tab-all`, `master-all-summary`, `master-all-row-<cat_id>`, `budget-tab-all`, `budget-all-summary`, `budget-all-row-<cat_id>`.
+
+### B) Tab order
+- Order pinned to: **All | Overhead | Marketing | Profit | Investment** in both Master Expense and Budget sub-tabs.
+- "Loss" top category is filtered out entirely from those tab strips (still survives in Expense Split as a config row, just not shown here).
+
+### C) Payroll-first inside Overhead
+- Budget → Overhead now lists the auto-fetched Payroll row before any other sub-categories (via a `.sort()` that pins `isPayrollSub`).
+- Master Expense already had the special Payroll pseudo row at the top of Overhead — confirmed.
+
+### D) Cashbook → Add Expense — Budget hint panel
+- New `cashbook-budget-hint` panel appears between Expense Category selects and the Payroll picker.
+- Shows: **Budget** for the chosen sub · **Paid So Far** · **Remaining** · **After this** (live computed as the user types into Total Amount).
+- Variable amounts allowed — Remaining/After-this flip from green to red when about to go over budget (verified RGB(239,68,68) on negative).
+- Works for any sub with a budget (Rent shows manual ₹23,000; Payroll shows auto ₹50,000.04).
+
+### Backend enhancement
+- `GET /api/finance/expense-split/budgets` now auto-computes the Payroll sub's budget on the server side from `payslips.base_salary` (falling back to `net_salary`), with manual `expense_sub_budgets` records still overriding. Adds `is_auto_budget` flag to the sub payload.
+- CashbookSplit and BudgetView both rely on this single source of truth now.
+
+### Verification
+Testing agent → `/app/test_reports/iteration_74.json` — Backend 4/4 new pytest pass (auto-value, is_auto_budget flag, manual override precedence, restore-to-auto, top sums with auto Payroll). Frontend 100% pass, all testids present, over-budget red flip verified. New pytest: `/app/backend/tests/test_payroll_auto_budget.py`.
+
+### Minor flag for follow-up
+- Auto budget shows as ₹50,000.04 because of float accumulation across payslips. Easy fix: round the published `budget` field once at the end.
+- Auto-detection is by sub name == "payroll" (case-insensitive). Renaming the seeded sub would silently turn off auto — would be safer to store an `auto_source: "payroll"` flag on the sub doc.
+
+---
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Budget Payroll Auto-fill ✅
 
 ### What changed
