@@ -518,7 +518,20 @@ export default function HRAdminPage() {
 
   const handleAddSalaryRecord = async () => {
     try {
-      await axios.post(`${API}/api/payroll/salary/add`, newSalaryRecord, { 
+      // If user picked "+ Add new reason…" + typed a custom label, treat as a free-text reason.
+      const payload = { ...newSalaryRecord };
+      if (payload.reason === '__custom__') {
+        const custom = (payload.reason_custom || '').trim();
+        if (!custom) {
+          toast.error('Please enter the custom reason');
+          return;
+        }
+        // Use a stable slug as id + the typed label as human label.
+        payload.reason = custom.toLowerCase().replace(/\s+/g, '_').slice(0, 32) || 'other';
+        payload.reason_label = custom;
+      }
+      delete payload.reason_custom;
+      await axios.post(`${API}/api/payroll/salary/add`, payload, { 
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success('Salary record added successfully!');

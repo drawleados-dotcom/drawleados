@@ -55,6 +55,7 @@ class AddSalaryRequest(BaseModel):
     amount: float
     effective_from: str
     reason: str
+    reason_label: Optional[str] = None  # human label for custom reasons
     notes: Optional[str] = ""
 
 class CreatePayslipRequest(BaseModel):
@@ -636,6 +637,7 @@ async def add_salary_record(salary_data: AddSalaryRequest, request: Request):
         "amount": salary_data.amount,
         "effective_from": effective_date,
         "reason": salary_data.reason,
+        "reason_label": salary_data.reason_label or salary_data.reason,
         "notes": salary_data.notes or "",
         "created_by": current_user.user_id,
         "created_at": datetime.now(timezone.utc)

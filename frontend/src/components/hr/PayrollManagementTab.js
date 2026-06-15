@@ -755,14 +755,32 @@ export default function PayrollManagementTab({
             <div>
               <Label className={textPrimary}>Reason *</Label>
               <select
-                value={newSalaryRecord.reason}
-                onChange={(e) => setNewSalaryRecord({...newSalaryRecord, reason: e.target.value})}
+                value={newSalaryRecord.reason === '__custom__' ? '__custom__' : newSalaryRecord.reason}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setNewSalaryRecord({ ...newSalaryRecord, reason: '__custom__', reason_custom: '' });
+                  } else {
+                    setNewSalaryRecord({ ...newSalaryRecord, reason: e.target.value, reason_custom: '' });
+                  }
+                }}
                 className={`w-full p-2 rounded-lg mt-1 ${bgInput} border ${borderColor} ${textPrimary}`}
+                data-testid="salary-record-reason-select"
               >
                 {hikeReasons.map((reason) => (
                   <option key={reason.id} value={reason.id}>{reason.label}</option>
                 ))}
+                <option value="__custom__">+ Add new reason…</option>
               </select>
+              {newSalaryRecord.reason === '__custom__' && (
+                <Input
+                  autoFocus
+                  placeholder="e.g. Internship, Bonus, Probation Confirmation"
+                  value={newSalaryRecord.reason_custom || ''}
+                  onChange={(e) => setNewSalaryRecord({ ...newSalaryRecord, reason_custom: e.target.value })}
+                  className={`${bgInput} border ${borderColor} ${textPrimary} mt-2`}
+                  data-testid="salary-record-reason-custom"
+                />
+              )}
             </div>
             <div>
               <Label className={textPrimary}>Notes (Optional)</Label>
@@ -1064,27 +1082,38 @@ function SalaryPayslipView({
     if (filterMonth !== 'all' && p.month !== parseInt(filterMonth, 10)) return false;
     return true;
   });
-  const totalMonthsPaid = allPayslips.filter((p) => p.status === 'generated').length;
-  const totalSalaryPaid = allPayslips.filter((p) => p.status === 'generated').reduce((s, p) => s + Number(p.net_salary || 0), 0);
+  const totalMonthsPaid = allPayslips.filter((p) => p.status === 'paid').length;
+  // Total Salary Paid = only what's been actually paid via Cashbook expense
+  // (status === 'paid', i.e. a debit linked to the payslip exists).
+  const totalSalaryPaid = allPayslips
+    .filter((p) => p.status === 'paid')
+    .reduce((s, p) => s + Number(p.net_salary || 0), 0);
+  // Total Salary = sum of every created payslip regardless of status.
+  const totalSalary = allPayslips.reduce((s, p) => s + Number(p.net_salary || 0), 0);
   const fmtINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
   const renderSummaryAndTable = () => (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`}>
+          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Payslips Created</p>
+          <p className={`text-2xl font-bold ${textPrimary}`}>{allPayslips.length}</p>
+          <p className={`text-[10px] ${textSecondary}`}>total entries</p>
+        </div>
+        <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`} data-testid="summary-total-salary">
+          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Total Salary</p>
+          <p className={`text-2xl font-bold ${textPrimary}`}>{fmtINR(totalSalary)}</p>
+          <p className={`text-[10px] ${textSecondary}`}>sum of all payslips</p>
+        </div>
         <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`} data-testid="summary-total-months">
-          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Total Working Months</p>
+          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Months Paid</p>
           <p className={`text-2xl font-bold ${textPrimary}`}>{totalMonthsPaid}</p>
-          <p className={`text-[10px] ${textSecondary}`}>payslips finalised</p>
+          <p className={`text-[10px] ${textSecondary}`}>via cashbook expense</p>
         </div>
         <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`} data-testid="summary-total-paid">
           <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Total Salary Paid</p>
           <p className="text-2xl font-bold text-emerald-400">{fmtINR(totalSalaryPaid)}</p>
-          <p className={`text-[10px] ${textSecondary}`}>across generated payslips</p>
-        </div>
-        <div className={`p-4 rounded-xl border ${borderColor} ${bgCard}`}>
-          <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-1`}>Average / Month</p>
-          <p className={`text-2xl font-bold ${textPrimary}`}>{totalMonthsPaid > 0 ? fmtINR(totalSalaryPaid / totalMonthsPaid) : '—'}</p>
-          <p className={`text-[10px] ${textSecondary}`}>net salary average</p>
+          <p className={`text-[10px] ${textSecondary}`}>only expense-recorded</p>
         </div>
       </div>
       <Card className={`${bgCard} border ${borderColor}`} data-testid="payslip-list-card">
@@ -1247,6 +1276,79 @@ function SalaryPayslipView({
                 {manualBusy ? 'Creating…' : 'Create Payslip'}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Comprehensive Payslip View Modal — opens from row View button */}
+        <Dialog open={!!viewingPayslip} onOpenChange={(o) => !o && setViewingPayslip(null)}>
+          <DialogContent className={`${bgCard} border ${borderColor} max-w-3xl max-h-[92vh] overflow-y-auto`} data-testid="payslip-view-modal">
+            {viewingPayslip && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
+                    <CreditCard className="h-5 w-5 text-[#a78bfa]" />
+                    Payslip — {months[viewingPayslip.month - 1]} {viewingPayslip.year}
+                  </DialogTitle>
+                  <DialogDescription className={textSecondary}>
+                    <Badge className={getStatusColor(viewingPayslip.status)}>{getStatusLabel(viewingPayslip.status)}</Badge>
+                  </DialogDescription>
+                </DialogHeader>
+                <div className={`p-3 rounded-lg ${bgSecondary} grid grid-cols-2 md:grid-cols-4 gap-3 mt-2`}>
+                  <KV l="Employee" v={viewingPayslip.employee_name || employee?.name} />
+                  <KV l="Employee ID" v={viewingPayslip.employee_id || '—'} />
+                  <KV l="Designation" v={viewingPayslip.designation || employee?.designation || '—'} />
+                  <KV l="Joining" v={viewingPayslip.joining_date || employee?.joining_date || '—'} />
+                </div>
+                {viewingPayslip.attendance && (
+                  <div className="mt-3">
+                    <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Monthly Summary</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <Stat l="Working Days" v={viewingPayslip.attendance?.total_working_days ?? viewingPayslip.total_working_days ?? '—'} />
+                      <Stat l="Absent" v={viewingPayslip.attendance?.absent_days ?? viewingPayslip.days_absent ?? 0} red />
+                      <Stat l="Paid Leave" v={viewingPayslip.attendance?.paid_leaves ?? viewingPayslip.paid_leaves ?? 0} />
+                      <Stat l="Extra Days" v={viewingPayslip.attendance?.extra_days ?? viewingPayslip.extra_days ?? 0} green />
+                    </div>
+                  </div>
+                )}
+                <div className="mt-3">
+                  <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Salary Breakdown</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    <Stat l="Gross" v={`₹${Number(viewingPayslip.base_salary ?? viewingPayslip.gross_salary ?? 0).toLocaleString('en-IN')}`} />
+                    <Stat l="Per Day" v={`₹${Number(viewingPayslip.per_day_salary ?? 0).toLocaleString('en-IN')}`} />
+                    <Stat l="Net Pay" v={`₹${Number(viewingPayslip.net_salary ?? 0).toLocaleString('en-IN')}`} green />
+                  </div>
+                </div>
+                <DialogFooter className="mt-4 flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => setViewingPayslip(null)} className="mr-auto">Close</Button>
+                  {viewingPayslip.status === 'draft' && (
+                    <>
+                      <Button onClick={() => { onDeletePayslip(viewingPayslip.payslip_id); setViewingPayslip(null); }} variant="ghost" className="text-red-400 hover:bg-red-500/10" data-testid="view-modal-delete-btn">
+                        <Trash2 className="h-4 w-4 mr-2" /> Delete
+                      </Button>
+                      <Button onClick={() => { onEditPayslip(viewingPayslip); setViewingPayslip(null); }} variant="outline" data-testid="view-modal-edit-btn">
+                        <Edit className="h-4 w-4 mr-2" /> Edit
+                      </Button>
+                      <Button onClick={() => { onRegeneratePayslip(viewingPayslip.payslip_id); }} variant="outline" data-testid="view-modal-regen-btn">
+                        <RefreshCw className="h-4 w-4 mr-2" /> Regenerate
+                      </Button>
+                      <Button onClick={() => { setReviewPayslip(viewingPayslip); setReviewType('ceo'); setShowReviewModal(true); setViewingPayslip(null); }} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="view-modal-send-ceo-btn">
+                        <Send className="h-4 w-4 mr-2" /> Send to CEO Review
+                      </Button>
+                    </>
+                  )}
+                  {viewingPayslip.status === 'ceo_review' && (
+                    <Button onClick={() => { setReviewPayslip(viewingPayslip); setReviewType('ceo-decision'); setShowReviewModal(true); setViewingPayslip(null); }} className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="view-modal-ceo-approve-btn">
+                      <CheckCircle2 className="h-4 w-4 mr-2" /> CEO Approve / Reject
+                    </Button>
+                  )}
+                  {(viewingPayslip.status === 'generated' || viewingPayslip.status === 'paid') && (
+                    <Button onClick={() => onDownloadPDF(viewingPayslip)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="payslip-view-download">
+                      <Download className="h-4 w-4 mr-2" /> Download PDF
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            )}
           </DialogContent>
         </Dialog>
       </div>
