@@ -1,6 +1,31 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — "Invoice req" 2-step flow + Invoice source tabs ✅
+
+### What changed
+- The green **Collect** button in the Finance Payment Schedule popup is now a blue **"Invoice req"** button. It no longer creates an income posting — it raises a **pending Invoice** that will later be matched to income via the existing Cashbook → Add Income invoice picker.
+- Backend: new `POST /api/projects/{project_id}/payment-schedule/{split_id}/invoice-req` endpoint creates the invoice with `status='pending'` and `source='payment_schedule'` (also seeds an `invoice_items` row), then flips the split's `invoice_raised=True` with `invoice_id` / `invoice_number` / `invoice_requested_at` / `invoice_requested_by` references. Same RBAC gate as the legacy Collect endpoint (Super Admin / Admin / Finance).
+- The split row in the popup now renders three mutually-exclusive states: `Collected` (legacy green) · **`Invoice Raised`** (new blue) · `Invoice req` button.
+- Invoice tab gets a new **source-filter pill strip** above the Invoice List table: **All · New Invoice · Payment Schedule Invoice**, each with a live count. Invoices with `source='payment_schedule'` go to the third pill; everything else (including legacy invoices without an explicit source) goes to "New Invoice". `All` is the union.
+- Cashbook → Add Income's invoice picker already supports single-invoice select + auto-fill balance-due + editable amount for partial payments — so the income side of the loop "just works" the moment an Invoice req invoice exists.
+
+### Files touched
+- `/app/backend/projects_routes.py` — new `request_invoice_for_split` endpoint after the legacy `collect`.
+- `/app/frontend/src/components/finance/FinancePaymentScheduleTab.js` — `handleCollect` renamed to `handleInvoiceReq`, hits the new endpoint, popup row renders the new "Invoice Raised" badge state and the new blue button; helper text updated.
+- `/app/frontend/src/components/finance/InvoicesTab.js` — `sourceFilter` state + the 3-pill strip rendered above the Invoice List table; `filteredInvoices` now also filters by source (invoices without a `source` value default to `'new'`).
+
+### Verification (live, end-to-end)
+- `curl POST .../payment-schedule/{split_id}/invoice-req` → returned `{invoice_id:'inv_...', invoice_number:'INV-2026-0016', status:'pending'}`.
+- Invoice document: `source='payment_schedule'`, `paid_amount=0`, `total_amount=9`, `status='pending'`.
+- Project doc: split now has `invoice_raised=True`, `invoice_id`, `invoice_number`.
+- UI screenshots: Invoice tab shows `All (6) · New Invoice (5) · Payment Schedule Invoice (1)`. Clicking each pill filters correctly. The popup row for the recorded split now shows the blue "Invoice Raised · 2026-06-15" badge with `INV-2026-0016` reference.
+
+### Backward compatibility
+- The old `POST .../collect` endpoint is left intact for now (still works, still posts income + marks `collected=True`). Legacy invoices without `source` automatically appear under the "New Invoice" pill so nothing regresses.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — "AI Credits" sub-category flow: project credits → company expense ✅
 
 ### What changed

@@ -23,6 +23,8 @@ const InvoicesTab = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [activeView, setActiveView] = useState('list');
+  // 'all' = both, 'new' = invoices NOT from payment schedule, 'payment_schedule' = ones raised via Payment Schedule
+  const [sourceFilter, setSourceFilter] = useState('all');
 
   // Sales → Finance bridge: pending Invoice Requests raised from Leads
   const [invoiceRequests, setInvoiceRequests] = useState([]);
@@ -187,8 +189,16 @@ const InvoicesTab = () => {
     const invoiceDate = new Date(invoice.invoice_date);
     const matchesMonth = monthFilter === 'all' || invoiceDate.getMonth().toString() === monthFilter;
     const matchesYear = invoiceDate.getFullYear().toString() === yearFilter;
-    
-    return matchesSearch && matchesMonth && matchesYear;
+
+    // Source filter: 'all' | 'new' | 'payment_schedule'.
+    // Invoices without an explicit `source` are legacy = treated as 'new'.
+    const src = invoice.source || 'new';
+    const matchesSource =
+      sourceFilter === 'all' ? true
+      : sourceFilter === 'payment_schedule' ? src === 'payment_schedule'
+      : src !== 'payment_schedule';
+
+    return matchesSearch && matchesMonth && matchesYear && matchesSource;
   });
 
   // Calculate month-wise report data
@@ -404,6 +414,36 @@ const InvoicesTab = () => {
 
         {/* Invoice List View */}
         <TabsContent value="list">
+          {/* Source filter pill strip: All · New Invoice · Payment Schedule Invoice */}
+          <div className="mb-3 flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'new', label: 'New Invoice' },
+                { id: 'payment_schedule', label: 'Payment Schedule Invoice' },
+              ].map((t) => {
+                const active = sourceFilter === t.id;
+                const count = invoices.filter((inv) => {
+                  const src = inv.source || 'new';
+                  if (t.id === 'all') return true;
+                  if (t.id === 'payment_schedule') return src === 'payment_schedule';
+                  return src !== 'payment_schedule';
+                }).length;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setSourceFilter(t.id)}
+                    data-testid={`invoice-source-tab-${t.id}`}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                  >
+                    {t.label}
+                    <span className="ml-1.5 text-[10px] opacity-70">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full" data-testid="invoices-table">

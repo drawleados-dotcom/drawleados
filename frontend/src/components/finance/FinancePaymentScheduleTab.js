@@ -64,19 +64,19 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
     return () => { active = false; };
   }, [token]);
 
-  const handleCollect = async (projectId, splitId) => {
+  const handleInvoiceReq = async (projectId, splitId) => {
     if (!canCollect) return;
     setCollectingId(splitId);
     try {
       const res = await axios.post(
-        `${API}/api/projects/${projectId}/payment-schedule/${splitId}/collect`,
+        `${API}/api/projects/${projectId}/payment-schedule/${splitId}/invoice-req`,
         {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      toast.success(`Collected · ${res.data.invoice_number}`);
+      toast.success(`Invoice raised · ${res.data.invoice_number}`);
       await loadProjects();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to collect');
+      toast.error(e.response?.data?.detail || 'Failed to raise invoice');
     } finally {
       setCollectingId(null);
     }
@@ -372,36 +372,25 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
                               {sp.invoice_number && (
                                 <Badge className="bg-blue-500/20 text-blue-400 pointer-events-none">{sp.invoice_number}</Badge>
                               )}
-                              {sp.invoice_id && (
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    try {
-                                      const res = await axios.get(`${API}/api/finance/invoices/${sp.invoice_id}/pdf-data`, { headers: { Authorization: `Bearer ${token}` } });
-                                      const w = window.open('', '_blank');
-                                      if (w) {
-                                        w.document.write(`<pre style="font-family:monospace;padding:20px;white-space:pre-wrap">${JSON.stringify(res.data, null, 2)}</pre>`);
-                                      }
-                                    } catch (e) {
-                                      toast.error('Failed to fetch invoice');
-                                    }
-                                  }}
-                                  className="text-xs text-[#6366f1] hover:underline flex items-center gap-1"
-                                  data-testid={`finance-pay-download-${sp.id}`}
-                                >
-                                  ⬇ Download
-                                </button>
+                            </div>
+                          ) : sp.invoice_raised ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge className="bg-blue-500/20 text-blue-400 pointer-events-none">
+                                Invoice Raised{sp.invoice_requested_at ? ` · ${sp.invoice_requested_at}` : ''}
+                              </Badge>
+                              {sp.invoice_number && (
+                                <span className={`text-xs ${textSecondary}`}>{sp.invoice_number}</span>
                               )}
                             </div>
                           ) : canCollect ? (
                             <Button
                               size="sm"
-                              onClick={() => handleCollect(selected.project_id, sp.id)}
+                              onClick={() => handleInvoiceReq(selected.project_id, sp.id)}
                               disabled={collectingId === sp.id}
-                              className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
-                              data-testid={`finance-pay-collect-${sp.id}`}
+                              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3"
+                              data-testid={`finance-pay-invoice-req-${sp.id}`}
                             >
-                              {collectingId === sp.id ? 'Collecting…' : 'Collect'}
+                              {collectingId === sp.id ? 'Raising…' : 'Invoice req'}
                             </Button>
                           ) : (
                             <Badge className="bg-amber-500/20 text-amber-400 pointer-events-none">Not collected</Badge>
@@ -413,7 +402,7 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
                 </table>
               </div>
               <p className={`text-xs ${textSecondary}`}>
-                Only Super Admin / Admin / Finance can mark a split as collected — that action creates an invoice and posts to Income automatically.
+                Only Super Admin / Admin / Finance can raise an invoice request — that creates a draft invoice under Invoice → Payment Schedule Invoice. Income is recorded later via Cashbook → Add Income.
               </p>
             </CardContent>
           </Card>

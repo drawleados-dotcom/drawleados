@@ -345,6 +345,117 @@ async def collect_payment_split(project_id: str, split_id: str, request: Request
     }
 
 
+@projects_router.post("/{project_id}/payment-schedule/{split_id}/invoice-req")
+async def request_invoice_for_split(project_id: str, split_id: str, request: Request):
+    """Raise an Invoice Request for a payment split (replaces the old "Collect" flow).
+
+    Creates an invoice in `pending` status (no income posted yet) tagged with
+    `source='payment_schedule'`. The split row is marked `invoice_raised=True`
+    so the UI can show a badge instead of the action button. Income is posted
+    later via Cashbook → Add Income → pick this invoice.
+    """
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    role = (user.role or "").lower()
+    if role not in ("super_admin", "admin", "finance"):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Finance can raise an invoice request")
+
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    sched = project.get("payment_schedule") or {}
+    splits = list(sched.get("splits") or [])
+    idx = next((i for i, s in enumerate(splits) if (s or {}).get("id") == split_id), -1)
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Split not found")
+    sp = splits[idx]
+    if sp.get("invoice_raised") or sp.get("collected"):
+        raise HTTPException(status_code=400, detail="Invoice already raised for this split")
+
+    amount = float(sp.get("amount") or 0)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Split has zero amount")
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+
+    invoice_id = f"inv_{uuid.uuid4().hex[:12]}"
+    try:
+        from finance_routes import generate_invoice_number
+        invoice_number = await generate_invoice_number(datetime.now(timezone.utc).year)
+    except Exception:
+        invoice_number = f"INV-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+
+    invoice_doc = {
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "client_name": project.get("name") or "Client",
+        "client_address": "",
+        "client_gstin": "",
+        "invoice_date": today_iso,
+        "due_date": sp.get("expected_date") or today_iso,
+        "subtotal": amount,
+        "discount_amount": 0.0,
+        "gst_rate": 0.0,
+        "gst_amount": 0.0,
+        "cgst_amount": 0.0,
+        "sgst_amount": 0.0,
+        "igst_amount": 0.0,
+        "total_amount": amount,
+        "paid_amount": 0.0,
+        "gst_type": "no_gst",
+        "notes": f"Auto-raised from payment schedule ({sp.get('label')})",
+        "payment_terms": sp.get("mode") or "",
+        "status": "pending",
+        "source": "payment_schedule",
+        "project_id": project_id,
+        "split_id": split_id,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "is_deleted": False,
+    }
+    await db.invoices.insert_one(invoice_doc)
+    # Also seed an invoice_items row so the invoice list / PDF works correctly.
+    await db.invoice_items.insert_one({
+        "item_id": f"item_{uuid.uuid4().hex[:12]}",
+        "invoice_id": invoice_id,
+        "service_name": sp.get("label") or "Payment",
+        "description": f"Project: {project.get('name')}",
+        "quantity": 1,
+        "rate": amount,
+        "discount_percent": 0.0,
+        "discount_amount": 0.0,
+        "amount_before_tax": amount,
+        "gst_rate": 0.0,
+        "gst_amount": 0.0,
+        "amount": amount,
+    })
+
+    # Flag the split as having a pending invoice.
+    splits[idx] = {
+        **sp,
+        "invoice_raised": True,
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "invoice_requested_at": today_iso,
+        "invoice_requested_by": user.user_id,
+    }
+    sched["splits"] = splits
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {"payment_schedule": sched, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {
+        "ok": True,
+        "invoice_id": invoice_id,
+        "invoice_number": invoice_number,
+        "split_id": split_id,
+        "amount": amount,
+        "status": "pending",
+    }
+
+
+
 @projects_router.post("/{project_id}/tasks")
 async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, request: Request):
     """Create a task and link it to a project. Task auto-appears in
