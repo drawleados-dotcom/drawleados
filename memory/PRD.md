@@ -1,6 +1,36 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Monthly Payroll Tab ✅
+
+### What was added
+New sub-tab **Monthly Payroll** inside HR Admin → Payroll Management, sitting between "All Employees" and "Employee Detail".
+
+**Top — Month Scheduler:**
+- ← / → arrows step through months (with year wrap-around at Jan ↔ Dec).
+- Month dropdown + Year dropdown for direct picking.
+- A "June 2026" style pill mirrors the active period.
+
+**Mid — 4 Summary cards (driven by the selected month's payslips):**
+- Total Employees — count of employee rows.
+- Total Amount Payable — Σ `net_salary` across every payslip that exists for the month.
+- Amounts Paid — Σ `net_salary` where `status ∈ {paid, generated}` (CEO-approved + already-paid both count as "ready to pay").
+- Balance — Payable − Paid (turns green when zero / negative).
+
+**Bottom — Per-Employee Row Table:**
+Columns: `Employee · Month/Year · Salary Date · Working Days · Present · Net Days · Per Day · Net Salary · Status · Action`.
+- One row per employee. If no payslip exists for that employee in the period, the row shows `—` in data cells and a `Not Created` status badge.
+- View button opens a payslip modal with attendance + salary breakdown and a Download PDF button (only when status is `generated` or `paid`).
+
+### Files touched
+- `/app/frontend/src/components/hr/PayrollManagementTab.js` — new subTab entry, IIFE rendering the Month Scheduler + Summary cards + Table inside `activeSubTab === 'monthly'`, plus a new `monthlyViewPayslip` state + dialog. Status helpers extended to cover `paid` and `not_created` labels/colors. Lucide icons added: `ChevronLeft`, `Wallet`, `Banknote`, `Scale`.
+
+### Verification
+Testing agent (`/app/test_reports/iteration_72.json`) — frontend 100% pass: tab visible at correct position, prev/next arrows + selects work, 4 summary cards verified (19 / ₹50,000 / ₹25,000 / ₹25,000 against live data), 19 rows with 2 View buttons + 17 Not Created rows, View modal opens with correct content, Download PDF correctly hidden for Draft, no regressions on sibling tabs. Fixed the only nit (a benign `<div>` inside `<p>` DOM-nesting warning in the View dialog).
+
+---
+
+
 ## Latest Update — Feb 15, 2026 — Payroll Lifecycle Phase 2 + Phase 3 ✅
 
 ### Phase 2 — CEO Approval Queue (Operations → Approval → HR)

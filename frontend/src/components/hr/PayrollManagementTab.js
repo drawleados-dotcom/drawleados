@@ -641,18 +641,21 @@ export default function PayrollManagementTab({
                   <FileText className="h-5 w-5 text-[#6366f1]" />
                   Payslip — {months[monthlyViewPayslip.month - 1]} {monthlyViewPayslip.year}
                 </DialogTitle>
-                <DialogDescription className={`flex items-center gap-2 ${textSecondary}`}>
-                  <Badge className={getStatusColor(monthlyViewPayslip.status)}>{getStatusLabel(monthlyViewPayslip.status)}</Badge>
-                  <span>·</span>
-                  <span>{monthlyViewPayslip.employee_name || '—'}</span>
-                  {monthlyViewPayslip.employee_id && (
-                    <>
-                      <span>·</span>
-                      <span>{monthlyViewPayslip.employee_id}</span>
-                    </>
-                  )}
+                <DialogDescription className={textSecondary}>
+                  Salary details for the selected month.
                 </DialogDescription>
               </DialogHeader>
+              <div className={`flex items-center gap-2 ${textSecondary} text-sm -mt-2`}>
+                <Badge className={getStatusColor(monthlyViewPayslip.status)}>{getStatusLabel(monthlyViewPayslip.status)}</Badge>
+                <span>·</span>
+                <span>{monthlyViewPayslip.employee_name || '—'}</span>
+                {monthlyViewPayslip.employee_id && (
+                  <>
+                    <span>·</span>
+                    <span>{monthlyViewPayslip.employee_id}</span>
+                  </>
+                )}
+              </div>
               <div className="space-y-4 py-2">
                 <div className="grid grid-cols-2 gap-3">
                   <div className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`}>
