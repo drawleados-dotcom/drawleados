@@ -572,16 +572,15 @@ const Layout = ({ children }) => {
               </nav>
             )}
             <ThemeToggle />
-            {isOperationsOnlyUser && (
-              <Button
-                size="sm"
-                onClick={async () => { try { await logout(); } finally { navigate('/login'); } }}
-                className="h-8 px-3 text-xs bg-[#ef4444] hover:bg-[#dc2626] text-white"
-                data-testid="header-logout-btn"
-              >
-                <LogOut className="h-3 w-3 mr-1" /> Logout
-              </Button>
-            )}
+            <Button
+              size="sm"
+              onClick={async () => { try { await logout(); } finally { navigate('/login'); } }}
+              className="h-8 px-3 text-xs bg-[#ef4444] hover:bg-[#dc2626] text-white"
+              data-testid="header-logout-btn"
+              title={`Sign out${user?.name ? ` (${user.name})` : ''}`}
+            >
+              <LogOut className="h-3 w-3 mr-1" /> Logout
+            </Button>
           </div>
         </header>
 

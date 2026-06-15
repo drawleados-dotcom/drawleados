@@ -905,15 +905,58 @@ function SalaryPayslipView({
       const r = await axios.get(`${API}/api/hr/admin/payslip/exists/${employee.user_id}/${payslipYear}/${payslipMonth}`, { headers });
       setExistsCheck(r.data || { exists: false, mode: null });
     } catch { setExistsCheck({ exists: false, mode: null }); }
+
+    // Hard-fetch the full employee profile so Employee ID, Designation and Joining
+    // Month/Year never come up empty — the parent listing may not include them.
+    let profile = {};
+    try {
+      const all = await axios.get(`${API}/api/hr/admin/employees`, { headers });
+      const me = (all.data || []).find((e) => e.user_id === employee.user_id);
+      profile = me?.profile || {};
+      // Merge top-level fields from `me` if they have what we need
+      if (me) {
+        profile = {
+          ...profile,
+          employee_id: profile.employee_id || me.employee_id || profile.emp_id || '',
+          designation: profile.designation || me.designation || '',
+          joining_date: profile.joining_date || me.joining_date || me.join_date || '',
+        };
+      }
+    } catch { profile = {}; }
+
+    // Normalise joining date to "DD MMM YYYY" if we have an ISO/date string.
+    const _months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const _fmtJoin = (raw) => {
+      if (!raw) return '';
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        return `${String(d.getDate()).padStart(2,'0')} ${_months[d.getMonth()]} ${d.getFullYear()}`;
+      }
+      return String(raw);
+    };
+
+    const joiningRaw =
+      employee.joining_date || employee.join_date ||
+      profile.joining_date || profile.join_date || profile.date_of_joining ||
+      employee.profile?.joining_date || employee.profile?.join_date || '';
+
+    const empIdRaw =
+      employee.employee_id || profile.employee_id ||
+      employee.profile?.employee_id || employee.emp_id || '';
+
+    const designationRaw =
+      employee.designation || profile.designation ||
+      employee.profile?.designation || '';
+
     const today = new Date();
     const salaryDate = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
     setManualForm({
-      employee_name: employee.name || '',
-      employee_id: employee.employee_id || employee.profile?.employee_id || '',
-      designation: employee.designation || employee.profile?.designation || '',
-      joining_date: employee.joining_date || employee.profile?.joining_date || '',
+      employee_name: employee.name || profile.name || '',
+      employee_id: empIdRaw,
+      designation: designationRaw,
+      joining_date: _fmtJoin(joiningRaw),
       total_working_days: 26, days_absent: 0, paid_leaves: 0, extra_days: 0,
-      gross_salary: employee.current_salary || 0,
+      gross_salary: employee.current_salary || profile.current_salary || 0,
       per_day_salary: 0, net_salary: 0,
       salary_date: salaryDate,
       authorized_by: 'Vinoth Kumar Babu', authorized_title: 'CEO & FOUNDER',
@@ -1089,7 +1132,7 @@ function SalaryPayslipView({
             <DialogHeader>
               <DialogTitle className={textPrimary}>Create Payslip — Manual</DialogTitle>
               <DialogDescription className={textSecondary}>
-                For {months[payslipMonth - 1]} {payslipYear} — fields auto-fill where possible, every field is editable.
+                For {months[payslipMonth - 1]} {payslipYear} — employee details auto-fill (locked). Edit Salary Date / amounts / summary as needed.
               </DialogDescription>
             </DialogHeader>
             {existsCheck.exists && (
@@ -1538,7 +1581,7 @@ function SalaryPayslipView({
           <DialogHeader>
             <DialogTitle className={textPrimary}>Create Payslip — Manual</DialogTitle>
             <DialogDescription className={textSecondary}>
-              For {months[payslipMonth - 1]} {payslipYear} — fields auto-fill where possible, every field is editable.
+              For {months[payslipMonth - 1]} {payslipYear} — employee details auto-fill (locked). Edit Salary Date / amounts / summary as needed.
             </DialogDescription>
           </DialogHeader>
 

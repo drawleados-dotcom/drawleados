@@ -1,6 +1,32 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 (cont.) — Hard-fix payslip auto-fill + topbar Logout ✅
+
+### What was hard-fixed
+The user reported (correctly) that even on the new code, **Employee ID** and **Joining Month / Year** in the Create Payslip modal stayed empty. Root cause: the form was reading `employee.joining_date` / `employee.employee_id`, but the parent payroll listing endpoint (`GET /api/payroll/employees`) doesn't include those fields — they live on the `employee_profiles` collection.
+
+**Fix in `openManualModal`:**
+1. Always issues `GET /api/hr/admin/employees` on open and pulls the matching employee's `.profile` block (which has `employee_id`, `joining_date`, `designation`, etc.).
+2. Falls back through a chain of field aliases: `joining_date` / `join_date` / `date_of_joining`; `employee_id` / `emp_id`; same for `designation`.
+3. Normalises the raw ISO `joining_date` (e.g. `2026-04-03`) into `"03 Apr 2026"` for display.
+4. Updates the helper-text under the modal title to truthfully say "employee details auto-fill (locked)" instead of "every field is editable".
+
+### Topbar Logout (always visible)
+- The header Logout button was only rendering for `isOperationsOnlyUser`. Made it **always visible** for every user, with `title="Sign out (User Name)"` tooltip showing who is currently logged in.
+
+### Verified on preview
+- Topbar now shows red **Logout** pill next to the theme toggle on every page.
+- Opening Vinothkumar Babu's detail correctly shows "Employee ID: EMP9EE662" (from `employee_profiles`).
+- Backend curl confirms `/api/hr/admin/employees` returns `profile.employee_id`, `profile.joining_date`, `profile.designation` for users with profiles.
+
+### Action required
+Click the **"Action required" / Deploy** button in your Drawlead OS tab on `os.drawlead.com` to push these fixes into production. Once redeployed, the modal will auto-fill all four employee fields and the Logout button will appear in your topbar.
+
+---
+
+
+
 ## Latest Update — Feb 14, 2026 (cont.) — Payslip Create Modal Auto-fill + View Popup ✅
 
 ### What changed
