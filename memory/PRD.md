@@ -1,6 +1,30 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Project: new "Expense" tab with Credits & Other Expense ✅
+
+### What changed
+- Added a third inner tab inside each project: **Tasks · Payment Schedule · Expense** (Expense uses `TrendingDown` icon, gated by the same visibility flag as Payment Schedule).
+- New `ProjectExpenseTab` component with two pill-strip sub-tabs: **Credits** and **Other Expense** (same pattern as Finance sub-tabs).
+- Both sub-tabs share the same UX:
+  - Two summary cards: `Total Credits/Other Expense` (count) and `Amount` (sum).
+  - Action row: "X rows" hint + green "+ Add Credits" / "+ Add Expense" button (super_admin only).
+  - Table columns: **S.No (auto) · Date · Credits/Expense (label) · Amount · Status · Actions**.
+  - Inline add: clicking "+ Add Credits" inserts a blank row with date prefilled to today, label/amount/save/cancel inline. Save validates `amount > 0`.
+  - Inline edit: pencil icon turns a row into editable inputs; save / cancel right there.
+  - Inline delete: trash icon.
+  - Status badge cycles **Created → Raised → Paid → Declined** on click (same flow as Payment Schedule rows).
+
+### Files touched / created
+- `/app/frontend/src/components/projects/ProjectExpenseTab.js` — **new** ~330-line component.
+- `/app/frontend/src/components/ProjectsPanel.js` — imported the new component + icon, added `expense` to `innerTabs`, added the render block (mirrors the Payment Schedule visibility gate).
+- `/app/backend/projects_routes.py` — `ProjectUpdate` model now also accepts `project_expense: Optional[dict]`. The existing PATCH `/api/projects/{project_id}` already handles arbitrary update_data, so the field is persisted on the project document under `project_expense.{credits|other_expenses}`.
+
+### Verification (live screenshots)
+- Opened a project → clicked **Expense** inner tab → Credits sub-tab → "+ Add Credits" → typed `Refund for late delivery` / `5000` → Save. Toast `Credit added` showed; row appears with `S.No 1 · 2026-06-15 · Refund for late delivery · INR 5,000 · Created`. Summary updated to `1 / INR 5,000`. Switched to Other Expense → empty state and `+ Add Expense` button render correctly.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Project Payment Schedule: Monthly cycle popup + status workflow ✅
 
 ### What changed

@@ -37,6 +37,7 @@ class ProjectUpdate(BaseModel):
     status: Optional[str] = None
     documents: Optional[List[dict]] = None
     payment_schedule: Optional[dict] = None
+    project_expense: Optional[dict] = None
 
 
 class ProjectTaskCreate(BaseModel):

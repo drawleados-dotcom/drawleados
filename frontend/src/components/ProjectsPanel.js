@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2 } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
+import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -562,6 +563,7 @@ export default function ProjectsPanel({
           const innerTabs = [
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
+            ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks
           if (!showPaymentSchedule && projectInnerTab === 'payment') {
@@ -601,6 +603,27 @@ export default function ProjectsPanel({
           if (!isPriv && psVisibility === 'hidden') return null;
           return (
             <PaymentScheduleTab
+              project={selectedProject}
+              onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+              isSuperAdmin={(currentUser?.role || '').toLowerCase() === 'super_admin'}
+              isDark={isDark}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          );
+        })()}
+
+        {projectInnerTab === 'expense' && (() => {
+          // Mirror Payment Schedule's visibility gate — Expense is the sibling tab.
+          const role = (currentUser?.role || '').toLowerCase();
+          const isPriv = role === 'super_admin' || role === 'admin';
+          const psVisibility = currentUser?.designation_config?.operations_payment_schedule || 'visible';
+          if (!isPriv && psVisibility === 'hidden') return null;
+          return (
+            <ProjectExpenseTab
               project={selectedProject}
               onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
               isSuperAdmin={(currentUser?.role || '').toLowerCase() === 'super_admin'}
