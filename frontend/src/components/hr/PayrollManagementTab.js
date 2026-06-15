@@ -9,7 +9,8 @@ import { Switch } from '../ui/switch';
 import { 
   Users, Search, Plus, Eye, Trash2, CreditCard, Edit,
   Send, CheckCircle, CheckCircle2, Clock, FileText, Download, RefreshCw,
-  ChevronRight, User, Calendar, Settings, Timer
+  ChevronRight, ChevronLeft, User, Calendar, Settings, Timer,
+  Wallet, Banknote, Scale
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -83,12 +84,15 @@ export default function PayrollManagementTab({
   const [showCreatePayslipModal, setShowCreatePayslipModal] = useState(false);
   const [createPayslipUserId, setCreatePayslipUserId] = useState('');
   const [hrRemarks, setHrRemarks] = useState('');
+
+  // Monthly Payroll tab — payslip viewer state (separate from the nested
+  // EmployeePayrollDetail viewer so this works at the top level).
+  const [monthlyViewPayslip, setMonthlyViewPayslip] = useState(null);
   
   // Payroll Settings state
   const [payrollSettings, setPayrollSettings] = useState({
     pf_enabled: true,
-    pf_percentage: 12.0,
-    professional_tax_enabled: true,
+    pf_percentage: 12.0,    professional_tax_enabled: true,
     professional_tax_amount: 200.0,
     professional_tax_threshold: 15000.0,
     standard_hours_per_day: 8.0
@@ -212,7 +216,9 @@ export default function PayrollManagementTab({
       'operations_review': 'bg-[#f59e0b]/20 text-[#f59e0b]',
       'ceo_review': 'bg-[#6366f1]/20 text-[#6366f1]',
       'approved': 'bg-[#10b981]/20 text-[#10b981]',
-      'generated': 'bg-[#14b8a6]/20 text-[#14b8a6]'
+      'generated': 'bg-[#14b8a6]/20 text-[#14b8a6]',
+      'paid': 'bg-[#a78bfa]/20 text-[#a78bfa]',
+      'not_created': 'bg-gray-500/15 text-gray-500',
     };
     return colors[status] || 'bg-gray-500/20 text-gray-400';
   };
@@ -223,7 +229,9 @@ export default function PayrollManagementTab({
       'operations_review': 'CEO Review',
       'ceo_review': 'CEO Review',
       'approved': 'Approved',
-      'generated': 'Generated'
+      'generated': 'Generated',
+      'paid': 'Paid',
+      'not_created': 'Not Created',
     };
     return labels[status] || status;
   };
@@ -284,6 +292,7 @@ export default function PayrollManagementTab({
 
   const subTabs = [
     { id: 'employees', label: 'All Employees' },
+    { id: 'monthly', label: 'Monthly Payroll' },
     { id: 'employee-detail', label: selectedEmployee ? `${selectedEmployee.name}` : 'Employee Detail', disabled: !selectedEmployee },
     { id: 'settings', label: 'Payroll Settings' },
   ];
@@ -425,6 +434,312 @@ export default function PayrollManagementTab({
           </div>
         </div>
       )}
+
+      {/* Monthly Payroll View */}
+      {activeSubTab === 'monthly' && (() => {
+        const fmtINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+        const stepMonth = (delta) => {
+          let m = payslipMonth + delta;
+          let y = payslipYear;
+          if (m < 1) { m = 12; y -= 1; }
+          if (m > 12) { m = 1; y += 1; }
+          setPayslipMonth(m);
+          setPayslipYear(y);
+          onRefreshPayslips && onRefreshPayslips();
+        };
+        // Build row per employee — payslip joined by user_id
+        const rows = (employees || []).map((emp) => {
+          const p = getEmployeePayslip(emp.user_id);
+          return { emp, p };
+        });
+        const totalEmployees = rows.length;
+        // Amount payable = Σ net_salary across all payslips that exist this month
+        const totalPayable = rows.reduce((s, r) => s + Number(r.p?.net_salary || 0), 0);
+        // "Paid" includes both `paid` (cashbook flushed) and `generated` (CEO-approved, ready to pay) per user request
+        const totalPaid = rows.reduce((s, r) => {
+          if (r.p && (r.p.status === 'paid' || r.p.status === 'generated')) {
+            return s + Number(r.p.net_salary || 0);
+          }
+          return s;
+        }, 0);
+        const balance = totalPayable - totalPaid;
+        const periodLabel = `${months[payslipMonth - 1]} ${payslipYear}`;
+
+        const summaryCards = [
+          { label: 'Total Employees', value: totalEmployees, accent: '#6366f1', Icon: Users, testId: 'monthly-card-total-employees' },
+          { label: 'Total Amount Payable', value: fmtINR(totalPayable), accent: '#f59e0b', Icon: Wallet, testId: 'monthly-card-payable' },
+          { label: 'Amounts Paid', value: fmtINR(totalPaid), accent: '#10b981', Icon: Banknote, testId: 'monthly-card-paid' },
+          { label: 'Balance', value: fmtINR(balance), accent: balance > 0 ? '#ef4444' : '#10b981', Icon: Scale, testId: 'monthly-card-balance' },
+        ];
+
+        return (
+          <div className="space-y-5" data-testid="monthly-payroll-tab">
+            {/* Month Scheduler */}
+            <div className={`${bgCard} border ${borderColor} rounded-xl p-4 flex flex-wrap items-center gap-3`}>
+              <Calendar className="h-4 w-4 text-[#6366f1]" />
+              <span className={`text-sm font-medium ${textPrimary}`}>Month Schedule:</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => stepMonth(-1)}
+                className={`h-9 w-9 p-0 ${textSecondary} hover:text-[#6366f1]`}
+                data-testid="monthly-prev-btn"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <select
+                value={payslipMonth}
+                onChange={(e) => { setPayslipMonth(parseInt(e.target.value)); onRefreshPayslips && onRefreshPayslips(); }}
+                className={`p-2 rounded-lg ${bgInput} border ${borderColor} ${textPrimary} text-sm min-w-[130px]`}
+                data-testid="monthly-month-select"
+              >
+                {months.map((m, i) => (
+                  <option key={i} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => stepMonth(1)}
+                className={`h-9 w-9 p-0 ${textSecondary} hover:text-[#6366f1]`}
+                data-testid="monthly-next-btn"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <select
+                value={payslipYear}
+                onChange={(e) => { setPayslipYear(parseInt(e.target.value)); onRefreshPayslips && onRefreshPayslips(); }}
+                className={`p-2 rounded-lg ${bgInput} border ${borderColor} ${textPrimary} text-sm min-w-[100px]`}
+                data-testid="monthly-year-select"
+              >
+                {yearsForEmployee(selectedEmployee).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <div className={`ml-auto px-3 py-1.5 rounded-lg bg-[#6366f1]/10 text-[#6366f1] text-sm font-semibold`}>
+                {periodLabel}
+              </div>
+            </div>
+
+            {/* Summary cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {summaryCards.map((c) => (
+                <div
+                  key={c.label}
+                  className={`${bgCard} border ${borderColor} rounded-xl p-4`}
+                  data-testid={c.testId}
+                >
+                  <div className="flex items-center justify-between">
+                    <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>{c.label}</p>
+                    <c.Icon className="h-4 w-4" style={{ color: c.accent }} />
+                  </div>
+                  <p
+                    className="text-2xl font-bold mt-2"
+                    style={{ color: c.accent, fontFamily: 'Plus Jakarta Sans' }}
+                  >
+                    {c.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Employee Payslip Rows */}
+            <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className={`${bgSecondary} ${textSecondary} uppercase text-[11px] tracking-wider`}>
+                    <tr>
+                      <th className="text-left px-4 py-3">Employee</th>
+                      <th className="text-left px-4 py-3">Month / Year</th>
+                      <th className="text-left px-4 py-3">Salary Date</th>
+                      <th className="text-right px-4 py-3">Working Days</th>
+                      <th className="text-right px-4 py-3">Present</th>
+                      <th className="text-right px-4 py-3">Net Days</th>
+                      <th className="text-right px-4 py-3">Per Day</th>
+                      <th className="text-right px-4 py-3">Net Salary</th>
+                      <th className="text-center px-4 py-3">Status</th>
+                      <th className="text-center px-4 py-3">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className={`text-center py-8 ${textSecondary}`}>No employees</td>
+                      </tr>
+                    ) : (
+                      rows.map(({ emp, p }) => {
+                        const status = p?.status || 'not_created';
+                        const salaryDate = p?.created_at
+                          ? new Date(p.created_at).toLocaleDateString('en-GB')
+                          : '—';
+                        const workingDays = p?.attendance?.total_working_days ?? '—';
+                        const present = p?.attendance?.days_present ?? '—';
+                        const netDays = p?.calculation?.days_paid ?? '—';
+                        const perDay = p?.calculation?.per_day_salary;
+                        const netSalary = p?.net_salary;
+                        return (
+                          <tr
+                            key={emp.user_id}
+                            className={`border-t ${borderColor} hover:bg-[#6366f1]/5 transition-colors`}
+                            data-testid={`monthly-row-${emp.user_id}`}
+                          >
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white text-[11px] font-semibold">
+                                  {emp.name?.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className={`text-sm font-medium ${textPrimary}`}>{emp.name}</p>
+                                  <p className={`text-[10px] ${textSecondary}`}>{emp.designation || '—'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className={`px-4 py-3 ${textPrimary}`}>{periodLabel}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{salaryDate}</td>
+                            <td className={`px-4 py-3 text-right ${textPrimary}`}>{workingDays}</td>
+                            <td className={`px-4 py-3 text-right text-[#10b981] font-medium`}>{present}</td>
+                            <td className={`px-4 py-3 text-right ${textPrimary}`}>{netDays}</td>
+                            <td className={`px-4 py-3 text-right ${textSecondary}`}>{perDay != null ? `₹${Number(perDay).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}</td>
+                            <td className={`px-4 py-3 text-right font-semibold text-[#10b981]`}>{netSalary != null ? fmtINR(netSalary) : '—'}</td>
+                            <td className="px-4 py-3 text-center">
+                              <Badge className={getStatusColor(status)}>{getStatusLabel(status)}</Badge>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {p ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setMonthlyViewPayslip(p)}
+                                  className="text-[#a78bfa] hover:bg-[#a78bfa]/10 h-7 px-2"
+                                  data-testid={`monthly-view-${emp.user_id}`}
+                                >
+                                  <Eye className="h-3.5 w-3.5 mr-1" /> View
+                                </Button>
+                              ) : (
+                                <span className={`text-xs ${textSecondary}`}>—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Monthly Payroll — Payslip View Modal */}
+      <Dialog open={!!monthlyViewPayslip} onOpenChange={(o) => !o && setMonthlyViewPayslip(null)}>
+        <DialogContent className={`${bgCard} border ${borderColor} max-w-2xl`}>
+          {monthlyViewPayslip && (
+            <>
+              <DialogHeader>
+                <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
+                  <FileText className="h-5 w-5 text-[#6366f1]" />
+                  Payslip — {months[monthlyViewPayslip.month - 1]} {monthlyViewPayslip.year}
+                </DialogTitle>
+                <DialogDescription className={`flex items-center gap-2 ${textSecondary}`}>
+                  <Badge className={getStatusColor(monthlyViewPayslip.status)}>{getStatusLabel(monthlyViewPayslip.status)}</Badge>
+                  <span>·</span>
+                  <span>{monthlyViewPayslip.employee_name || '—'}</span>
+                  {monthlyViewPayslip.employee_id && (
+                    <>
+                      <span>·</span>
+                      <span>{monthlyViewPayslip.employee_id}</span>
+                    </>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`}>
+                    <p className={`text-[10px] uppercase tracking-wide ${textSecondary}`}>Designation</p>
+                    <p className={`text-sm font-medium ${textPrimary}`}>{monthlyViewPayslip.employee_designation || '—'}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`}>
+                    <p className={`text-[10px] uppercase tracking-wide ${textSecondary}`}>Salary Date</p>
+                    <p className={`text-sm font-medium ${textPrimary}`}>{monthlyViewPayslip.created_at ? new Date(monthlyViewPayslip.created_at).toLocaleDateString('en-GB') : '—'}</p>
+                  </div>
+                </div>
+                {monthlyViewPayslip.attendance && (
+                  <div>
+                    <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Attendance</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { l: 'Working Days', v: monthlyViewPayslip.attendance?.total_working_days ?? '—' },
+                        { l: 'Present', v: monthlyViewPayslip.attendance?.days_present ?? '—', accent: '#10b981' },
+                        { l: 'Absent', v: monthlyViewPayslip.attendance?.absent_days ?? 0, accent: '#ef4444' },
+                        { l: 'Paid Leave', v: (monthlyViewPayslip.attendance?.casual_leaves ?? 0) + (monthlyViewPayslip.attendance?.sick_leaves ?? 0) },
+                      ].map((s) => (
+                        <div key={s.l} className={`p-2.5 rounded-lg ${bgSecondary} border ${borderColor} text-center`}>
+                          <p className={`text-[10px] uppercase ${textSecondary}`}>{s.l}</p>
+                          <p className="text-base font-bold mt-1" style={{ color: s.accent || undefined }}>{s.v}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Salary Breakdown</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className={`p-3 rounded-lg ${bgSecondary} border ${borderColor} text-center`}>
+                      <p className={`text-[10px] uppercase ${textSecondary}`}>Gross</p>
+                      <p className={`text-base font-bold ${textPrimary} mt-1`}>₹{Number(monthlyViewPayslip.base_salary || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary} border ${borderColor} text-center`}>
+                      <p className={`text-[10px] uppercase ${textSecondary}`}>Per Day</p>
+                      <p className={`text-base font-bold ${textPrimary} mt-1`}>₹{Number(monthlyViewPayslip.calculation?.per_day_salary || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div className={`p-3 rounded-lg ${bgSecondary} border ${borderColor} text-center`}>
+                      <p className={`text-[10px] uppercase ${textSecondary}`}>Net Pay</p>
+                      <p className={`text-base font-bold mt-1 text-[#10b981]`}>₹{Number(monthlyViewPayslip.net_salary || 0).toLocaleString('en-IN')}</p>
+                    </div>
+                  </div>
+                </div>
+                {monthlyViewPayslip.hr_remarks && (
+                  <div className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`}>
+                    <p className={`text-[10px] uppercase tracking-wide ${textSecondary}`}>HR Remarks</p>
+                    <p className={`text-sm ${textPrimary} italic mt-1`}>&ldquo;{monthlyViewPayslip.hr_remarks}&rdquo;</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setMonthlyViewPayslip(null)} className={borderColor}>Close</Button>
+                {monthlyViewPayslip.status === 'generated' || monthlyViewPayslip.status === 'paid' ? (
+                  <Button
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem('session_token');
+                        const res = await axios.get(`${API}/api/payroll/payslip/${monthlyViewPayslip.payslip_id}/pdf`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                          responseType: 'blob',
+                        });
+                        const url = URL.createObjectURL(res.data);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `payslip_${monthlyViewPayslip.employee_name || 'employee'}_${months[monthlyViewPayslip.month - 1]}_${monthlyViewPayslip.year}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(url);
+                      } catch (e) {
+                        toast.error('Failed to download PDF');
+                      }
+                    }}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    data-testid="monthly-view-download"
+                  >
+                    <Download className="h-4 w-4 mr-1" /> Download PDF
+                  </Button>
+                ) : null}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Employee Detail View */}
       {activeSubTab === 'employee-detail' && selectedEmployee && (
