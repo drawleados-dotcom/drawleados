@@ -25,6 +25,24 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
 
+# ---- Access helpers ----
+# Roles that always have HR / Payroll access by virtue of seniority.
+HR_PRIVILEGED_ROLES = {"admin", "super_admin", "hr_manager"}
+
+
+def _has_hr_access(user) -> bool:
+    """User can manage HR/Payroll if they have a privileged role OR their
+    designation grants 'hr_admin' in module_access. This matches the frontend's
+    gating logic so granting "HR Admin" via designation actually works."""
+    role = getattr(user, "role", None) or (user.get("role") if isinstance(user, dict) else None)
+    if role in HR_PRIVILEGED_ROLES:
+        return True
+    modules = getattr(user, "module_access", None)
+    if modules is None and isinstance(user, dict):
+        modules = user.get("module_access")
+    return "hr_admin" in (modules or [])
+
+
 # Pydantic Models
 class SalaryRecord(BaseModel):
     amount: float
@@ -94,7 +112,7 @@ async def update_payroll_settings(data: PayrollSettingsRequest, request: Request
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Only HR can update payroll settings")
     
     await db.payroll_settings.update_one(
@@ -173,7 +191,7 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Only HR can create payslips")
     
     # Check if payslip already exists for this month
@@ -387,7 +405,7 @@ async def submit_for_operations_review(payslip_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Only HR can submit for review")
     
     result = await db.payslips.update_one(
@@ -477,7 +495,7 @@ async def generate_payslip(payslip_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Only HR can generate payslips")
     
     result = await db.payslips.update_one(
@@ -503,7 +521,7 @@ async def get_employee_payslips(user_id: str, request: Request):
     current_user = await get_current_user(request)
     
     # Only HR/Admin can view other employee's payslips
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         if current_user.user_id != user_id:
             raise HTTPException(status_code=403, detail="Not authorized")
     
@@ -538,7 +556,7 @@ async def bulk_submit_for_operations(month: int, year: int, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Only HR can submit for review")
     
     result = await db.payslips.update_many(
@@ -557,8 +575,8 @@ async def get_salary_history(user_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    # Only admin or the user themselves can view
-    if current_user.role not in ["admin", "super_admin", "hr_manager"] and current_user.user_id != user_id:
+    # Only HR-privileged users or the user themselves can view
+    if not _has_hr_access(current_user) and current_user.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Get salary history sorted by effective_from date descending
@@ -587,7 +605,7 @@ async def add_salary_record(salary_data: AddSalaryRequest, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Verify user exists
@@ -626,7 +644,7 @@ async def delete_salary_record(record_id: str, request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
     
     result = await db.salary_history.delete_one({"record_id": record_id})
@@ -674,8 +692,8 @@ async def get_payroll_details(user_id: str, month: int, year: int, request: Requ
     from server import get_current_user
     current_user = await get_current_user(request)
     
-    # Only admin or the user themselves can view
-    if current_user.role not in ["admin", "super_admin", "hr_manager"] and current_user.user_id != user_id:
+    # Only HR-privileged users or the user themselves can view
+    if not _has_hr_access(current_user) and current_user.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     # Get the salary at that date
@@ -826,7 +844,7 @@ async def get_all_employees_salary(request: Request):
     from server import get_current_user
     current_user = await get_current_user(request)
 
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     # 1) All users — single round trip
@@ -904,7 +922,7 @@ async def generate_payslip_pdf(payslip_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Payslip not found")
     
     # Check access - only generated payslips can be downloaded
-    if current_user.role not in ["admin", "super_admin", "hr_manager"]:
+    if not _has_hr_access(current_user):
         if payslip["user_id"] != current_user.user_id or payslip["status"] != "generated":
             raise HTTPException(status_code=403, detail="Not authorized")
     
