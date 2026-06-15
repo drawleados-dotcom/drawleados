@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -1032,25 +1032,32 @@ function SalaryPayslipView({
   const [filterYear, setFilterYear] = useState('all');
   const [filterMonth, setFilterMonth] = useState('all');
 
-  useEffect(() => {
-    const loadAllPayslips = async () => {
-      try {
-        const res = await axios.get(
-          `${API}/api/payroll/employee-payslips/${employee.user_id}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        const all = res.data || [];
-        setAllPayslips(all);
-        const prev = all.filter(p => !(p.month === payslipMonth && p.year === payslipYear));
-        setPreviousPayslips(prev);
-      } catch (error) {
-        console.error('Error loading previous payslips:', error);
-      }
-    };
-    if (employee?.user_id) {
-      loadAllPayslips();
+  const loadAllPayslips = useCallback(async () => {
+    if (!employee?.user_id) return;
+    try {
+      const res = await axios.get(
+        `${API}/api/payroll/employee-payslips/${employee.user_id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const all = res.data || [];
+      setAllPayslips(all);
+      const prev = all.filter(p => !(p.month === payslipMonth && p.year === payslipYear));
+      setPreviousPayslips(prev);
+    } catch (error) {
+      console.error('Error loading previous payslips:', error);
     }
   }, [employee?.user_id, payslipMonth, payslipYear, token]);
+
+  useEffect(() => {
+    loadAllPayslips();
+  }, [loadAllPayslips, payslips?.length]);
+
+  // Listen for the cross-component refresh event fired after a payslip is created.
+  useEffect(() => {
+    const handler = () => loadAllPayslips();
+    window.addEventListener('hr-payslip-refresh', handler);
+    return () => window.removeEventListener('hr-payslip-refresh', handler);
+  }, [loadAllPayslips]);
 
   const filteredPayslips = allPayslips.filter((p) => {
     if (filterYear !== 'all' && p.year !== parseInt(filterYear, 10)) return false;
