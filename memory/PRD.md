@@ -1,6 +1,25 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Create Payslip: Salary Date now auto-defaults to 10th of next month ✅
+
+### What changed
+- The Create/Generate Payslip modal Salary Date now follows the business rule "salaries are released on the 10th of the month after the work period".
+- e.g. Payslip Period = **June 2026** → Salary Date defaults to **10/07/2026** (was previously today's date).
+- The field label now reads `Salary Date (release date — 10th of next month)` and a helper line below shows `Salary release month: July 2026` derived from whatever date is in the field.
+- Auto-recompute: any change to the Payslip Period (month or year dropdown) inside the modal automatically updates the Salary Date to the new "10th of next month". HR can still type a different date manually if needed.
+
+### Files touched
+- `/app/frontend/src/components/hr/PayrollManagementTab.js`
+  - `openManualModal` initial default uses payslip-period-next-month-10th instead of `today`.
+  - Added a `useEffect` watching `manualMonth/manualYear` to recompute `salary_date` while the modal is open.
+  - Both modal instances (manual + generate) updated to show new label + release-month hint.
+
+### Verification
+- Screenshot: opened Vinothkumar Babu → Generate Payslip → modal shows Period=June 2026 and Salary Date=10/07/2026, with "Salary release month: July 2026" rendered under the input.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Finance Dashboard: single-viewport compact layout ✅
 
 ### What changed

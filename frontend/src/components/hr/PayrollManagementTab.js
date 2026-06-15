@@ -1296,8 +1296,15 @@ function SalaryPayslipView({
       employee.designation || profile.designation ||
       employee.profile?.designation || '';
 
-    const today = new Date();
-    const salaryDate = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
+    // Salary release rule: payments go out on the 10th of the month AFTER the
+    // payslip period. e.g. payslip for June 2026 → salary date = 10/07/2026.
+    const _releaseDate = (() => {
+      const m = (payslipMonth || 1) + 1; // next month
+      const y = m > 12 ? (payslipYear + 1) : payslipYear;
+      const mm = m > 12 ? 1 : m;
+      return `10/${String(mm).padStart(2, '0')}/${y}`;
+    })();
+    const salaryDate = _releaseDate;
 
     // Default form (used as a fallback when preview fails or source !== generate)
     let nextForm = {
@@ -1358,6 +1365,17 @@ function SalaryPayslipView({
       return { ...prev, per_day_salary: per_day, net_salary: net };
     });
   }, [manualForm.gross_salary, manualForm.total_working_days, manualForm.days_absent, showManualModal]);
+
+  // When the Payslip Period changes inside the modal, reset the Salary Date to
+  // the 10th of the month AFTER the selected period (next-month-10th rule).
+  useEffect(() => {
+    if (!showManualModal) return;
+    const m = (manualMonth || 1) + 1;
+    const y = m > 12 ? (manualYear + 1) : manualYear;
+    const mm = m > 12 ? 1 : m;
+    const next = `10/${String(mm).padStart(2, '0')}/${y}`;
+    setManualForm((prev) => ({ ...prev, salary_date: next }));
+  }, [manualMonth, manualYear, showManualModal]);
 
   // When Salary Date changes, auto-fetch the gross salary that was effective for that month
   useEffect(() => {
@@ -1664,7 +1682,22 @@ function SalaryPayslipView({
                 <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} readOnly className="cursor-not-allowed opacity-90" /></div>
                 <div><Label className={textSecondary}>Designation</Label><Input value={manualForm.designation} readOnly className="cursor-not-allowed opacity-90" /></div>
                 <div><Label className={textSecondary}>Joining Month / Year</Label><Input value={manualForm.joining_date || ''} readOnly className="cursor-not-allowed opacity-90" /></div>
-                <div><Label className={textSecondary}>Salary Date</Label><Input placeholder="DD/MM/YYYY" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} data-testid="payslip-salary-date" /></div>
+                <div>
+                  <Label className={textSecondary}>Salary Date <span className="text-[10px] opacity-70">(release date — 10th of next month)</span></Label>
+                  <Input placeholder="DD/MM/YYYY" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} data-testid="payslip-salary-date" />
+                  {(() => {
+                    const m = String(manualForm.salary_date || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                    if (!m) return null;
+                    const mm = parseInt(m[2], 10);
+                    const yy = parseInt(m[3], 10);
+                    if (!mm || !yy || mm < 1 || mm > 12) return null;
+                    return (
+                      <p className={`text-[11px] mt-1 ${textSecondary}`} data-testid="payslip-salary-release-hint">
+                        Salary release month: <span className={`font-semibold ${textPrimary}`}>{months[mm - 1]} {yy}</span>
+                      </p>
+                    );
+                  })()}
+                </div>
                 <div><Label className={textSecondary}>Total Salary (Gross)</Label><Input type="number" value={manualForm.gross_salary} onChange={(e) => setManualForm(prev => ({ ...prev, gross_salary: e.target.value }))} data-testid="payslip-gross" /></div>
               </div>
               <div>
@@ -2176,7 +2209,22 @@ function SalaryPayslipView({
               <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} readOnly className="cursor-not-allowed opacity-90" /></div>
               <div><Label className={textSecondary}>Designation</Label><Input value={manualForm.designation} readOnly className="cursor-not-allowed opacity-90" /></div>
               <div><Label className={textSecondary}>Joining Month / Year</Label><Input value={manualForm.joining_date || ''} readOnly className="cursor-not-allowed opacity-90" /></div>
-              <div><Label className={textSecondary}>Salary Date</Label><Input placeholder="DD/MM/YYYY" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} /></div>
+              <div>
+                <Label className={textSecondary}>Salary Date <span className="text-[10px] opacity-70">(release date — 10th of next month)</span></Label>
+                <Input placeholder="DD/MM/YYYY" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} />
+                {(() => {
+                  const m = String(manualForm.salary_date || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                  if (!m) return null;
+                  const mm = parseInt(m[2], 10);
+                  const yy = parseInt(m[3], 10);
+                  if (!mm || !yy || mm < 1 || mm > 12) return null;
+                  return (
+                    <p className={`text-[11px] mt-1 ${textSecondary}`}>
+                      Salary release month: <span className={`font-semibold ${textPrimary}`}>{months[mm - 1]} {yy}</span>
+                    </p>
+                  );
+                })()}
+              </div>
               <div><Label className={textSecondary}>Total Salary (Gross)</Label><Input type="number" value={manualForm.gross_salary} onChange={(e) => setManualForm(prev => ({ ...prev, gross_salary: e.target.value }))} /></div>
             </div>
 
