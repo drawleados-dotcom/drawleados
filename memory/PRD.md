@@ -1,6 +1,34 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — HR Attendance Breaks + Payslip period flow ✅
+
+### A) Attendance → Break Time column with segregated breaks popup
+- New "Break Time" column added to the HR Admin → Attendance table (`EnhancedAttendanceTab` daily view + legacy `AllAttendanceTab` monthly view).
+- Cell shows `Σ duration (count)` as a purple link with a Coffee icon when the employee has at least one break, otherwise `-`.
+- Clicking opens a Dialog "Break Details — <employee>" listing every break as a card with category badge (Lunch / Breakfast / Tea / Other), start/end times, duration, and the optional reason (mandatory for `Other`).
+- Backend already stored a structured `attendance.breaks` array per day — no schema changes needed.
+
+### B) Create Payslip — Month/Year selector
+- Manual payslip modal now has a Period strip at the top with Month + Year selects (testids: `payslip-period-month`, `payslip-period-year`). Defaults to whatever month/year the page header shows, but freely editable so HR can create back-dated or future payslips.
+- `submitManualPayslip` now POSTs `month`/`year` taken from the modal's state instead of the parent page's state.
+
+### C) Generate Payslip → opens the same modal pre-filled from attendance
+- New backend endpoint `GET /api/hr/admin/payslip/preview/{user_id}/{year}/{month}` mirrors the auto-generate logic (attendance + leaves + salary_details) but **does not insert** anything — pure dry-run.
+- Frontend `openCreateModal` (Generate button) now delegates to `openManualModal({ source: 'generate' })`. It calls the preview endpoint, populates every field, and opens the same Drawlead-style modal with a "Refresh attendance" button next to the period strip so HR can change the month and re-pull preview data.
+- All fields stay editable, then the form POSTs to the existing `/api/hr/admin/payslip/manual` endpoint on save (so payslip ends up with `creation_mode: 'manual'`, same lifecycle as a hand-typed one).
+
+### Files touched
+- `/app/backend/hr_routes.py` — new `preview_payslip` route (~line 1750).
+- `/app/frontend/src/pages/HRAdminPage.js` — Break Time column in both attendance tabs + Break Detail dialog + Coffee icon import.
+- `/app/frontend/src/components/hr/PayrollManagementTab.js` — manualMonth / manualYear / manualSource state, modal Period strip with selectors + Refresh-attendance button, openCreateModal delegates to openManualModal with `source: 'generate'`, modal title flips based on source.
+
+### Verification
+Testing agent → `/app/test_reports/iteration_75.json` — Backend 4/4 pytest pass (preview shape, idempotency, 401/404 paths, no db insert). Frontend 7/7 pass: break column + popup, modal period selectors + persistence (modal Period=May 2026 with parent on June 2026 → payslip saved as `{month:5, year:2026, creation_mode:'manual'}`). New pytest: `/app/backend/tests/test_payslip_preview.py`.
+
+---
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — "All" tab + tab reorder + Cashbook Budget hint ✅
 
 ### A) "All" tab in Master Expense and Budget
