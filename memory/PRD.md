@@ -1,6 +1,27 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Payslip View modal: light-mode text + attendance stats + remove Regenerate ✅
+
+### What changed
+- Payslip View dialog (`viewingPayslip`) had hardcoded `text-[#fafafa]`/`bg-[#0c0a09]` on its `KV` / `Stat` tiles, causing white-on-white text in Light theme. Both helpers now accept `isDark` and switch palette correctly.
+- `SalaryPayslipView` derives `isDark` from the `bgCard` prop and passes it down to every KV/Stat in the modal.
+- Monthly Summary now renders unconditionally with the 5 stats requested: **Total Working Days, Present (= total − absent, computed), Paid Leave, Absent, Extra Days** — was previously gated on `viewingPayslip.attendance` and missing the Present stat.
+- **Removed** the Regenerate button from the draft-status footer (Edit + Delete + Send to CEO Review remain).
+
+### Files touched
+- `/app/frontend/src/components/hr/PayrollManagementTab.js`
+  - `KV` / `Stat` helpers extended with `isDark` prop.
+  - `SalaryPayslipView` derives `isDark` from `bgCard`.
+  - View-modal Monthly Summary block recomputes Present and shows 5 stats in a `md:grid-cols-5` grid.
+  - Removed `view-modal-regen-btn` Regenerate button.
+
+### Verification
+- Screenshot Light mode: employee fields & salary breakdown labels are dark/legible; 5-stat Monthly Summary row visible (Total Working Days 22 / Present 0 / Paid Leave 2 / Absent 22 / Extra Days 0); footer has Close · Delete · Edit · Send to CEO Review only.
+- Screenshot Dark mode: no regression, same layout in dark palette.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Create Payslip: Salary Date now auto-defaults to 10th of next month ✅
 
 ### What changed

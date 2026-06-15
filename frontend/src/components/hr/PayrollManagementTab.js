@@ -1208,6 +1208,9 @@ function SalaryPayslipView({
 }) {
   const API = process.env.REACT_APP_BACKEND_URL;
   const token = localStorage.getItem('session_token');
+  // Derive isDark from theme props so KV/Stat tiles in the View modal pick the
+  // right colors (white-mode previously rendered white text on white bg).
+  const isDark = !String(bgCard || '').includes('white');
   const [previousPayslips, setPreviousPayslips] = useState([]);
   const [showPreviousPayslips, setShowPreviousPayslips] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -1747,28 +1750,37 @@ function SalaryPayslipView({
                   </DialogDescription>
                 </DialogHeader>
                 <div className={`p-3 rounded-lg ${bgSecondary} grid grid-cols-2 md:grid-cols-4 gap-3 mt-2`}>
-                  <KV l="Employee" v={viewingPayslip.employee_name || employee?.name} />
-                  <KV l="Employee ID" v={viewingPayslip.employee_id || '—'} />
-                  <KV l="Designation" v={viewingPayslip.designation || employee?.designation || '—'} />
-                  <KV l="Joining" v={viewingPayslip.joining_date || employee?.joining_date || '—'} />
+                  <KV l="Employee" v={viewingPayslip.employee_name || employee?.name} isDark={isDark} />
+                  <KV l="Employee ID" v={viewingPayslip.employee_id || '—'} isDark={isDark} />
+                  <KV l="Designation" v={viewingPayslip.designation || employee?.designation || '—'} isDark={isDark} />
+                  <KV l="Joining" v={viewingPayslip.joining_date || employee?.joining_date || '—'} isDark={isDark} />
                 </div>
-                {viewingPayslip.attendance && (
-                  <div className="mt-3">
-                    <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Monthly Summary</p>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <Stat l="Working Days" v={viewingPayslip.attendance?.total_working_days ?? viewingPayslip.total_working_days ?? '—'} />
-                      <Stat l="Absent" v={viewingPayslip.attendance?.absent_days ?? viewingPayslip.days_absent ?? 0} red />
-                      <Stat l="Paid Leave" v={viewingPayslip.attendance?.paid_leaves ?? viewingPayslip.paid_leaves ?? 0} />
-                      <Stat l="Extra Days" v={viewingPayslip.attendance?.extra_days ?? viewingPayslip.extra_days ?? 0} green />
+                {(() => {
+                  const a = viewingPayslip.attendance || {};
+                  const totalWD = a.total_working_days ?? viewingPayslip.total_working_days ?? 0;
+                  const absent = a.absent_days ?? viewingPayslip.days_absent ?? 0;
+                  const paidLeave = a.paid_leaves ?? viewingPayslip.paid_leaves ?? 0;
+                  const extra = a.extra_days ?? viewingPayslip.extra_days ?? 0;
+                  const present = Math.max(0, Number(totalWD) - Number(absent));
+                  return (
+                    <div className="mt-3">
+                      <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Monthly Summary</p>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                        <Stat l="Total Working Days" v={totalWD || '—'} isDark={isDark} />
+                        <Stat l="Present" v={present} green isDark={isDark} />
+                        <Stat l="Paid Leave" v={paidLeave} isDark={isDark} />
+                        <Stat l="Absent" v={absent} red isDark={isDark} />
+                        <Stat l="Extra Days" v={extra} green isDark={isDark} />
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 <div className="mt-3">
                   <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Salary Breakdown</p>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    <Stat l="Gross" v={`₹${Number(viewingPayslip.base_salary ?? viewingPayslip.gross_salary ?? 0).toLocaleString('en-IN')}`} />
-                    <Stat l="Per Day" v={`₹${Number(viewingPayslip.per_day_salary ?? 0).toLocaleString('en-IN')}`} />
-                    <Stat l="Net Pay" v={`₹${Number(viewingPayslip.net_salary ?? 0).toLocaleString('en-IN')}`} green />
+                    <Stat l="Gross" v={`₹${Number(viewingPayslip.base_salary ?? viewingPayslip.gross_salary ?? 0).toLocaleString('en-IN')}`} isDark={isDark} />
+                    <Stat l="Per Day" v={`₹${Number(viewingPayslip.per_day_salary ?? 0).toLocaleString('en-IN')}`} isDark={isDark} />
+                    <Stat l="Net Pay" v={`₹${Number(viewingPayslip.net_salary ?? 0).toLocaleString('en-IN')}`} green isDark={isDark} />
                   </div>
                 </div>
                 <DialogFooter className="mt-4 flex-wrap gap-2">
@@ -1780,9 +1792,6 @@ function SalaryPayslipView({
                       </Button>
                       <Button onClick={() => { onEditPayslip(viewingPayslip); setViewingPayslip(null); }} variant="outline" data-testid="view-modal-edit-btn">
                         <Edit className="h-4 w-4 mr-2" /> Edit
-                      </Button>
-                      <Button onClick={() => { onRegeneratePayslip(viewingPayslip.payslip_id); }} variant="outline" data-testid="view-modal-regen-btn">
-                        <RefreshCw className="h-4 w-4 mr-2" /> Regenerate
                       </Button>
                       <Button onClick={() => { setReviewPayslip(viewingPayslip); setReviewType('ceo'); setShowReviewModal(true); setViewingPayslip(null); }} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="view-modal-send-ceo-btn">
                         <Send className="h-4 w-4 mr-2" /> Send to CEO Review
@@ -2401,16 +2410,16 @@ function SalaryPayslipView({
 }
 
 // Small read-only stat tiles for the payslip view modal.
-const KV = ({ l, v }) => (
+const KV = ({ l, v, isDark = true }) => (
   <div>
-    <p className="text-[10px] uppercase tracking-wide text-[#71717a]">{l}</p>
-    <p className="text-sm font-medium text-[#fafafa] break-words">{v ?? '—'}</p>
+    <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>{l}</p>
+    <p className={`text-sm font-medium break-words ${isDark ? 'text-[#fafafa]' : 'text-gray-900'}`}>{v ?? '—'}</p>
   </div>
 );
-const Stat = ({ l, v, red, green }) => (
-  <div className="p-2 rounded-md bg-[#0c0a09] border border-[#27272a]">
-    <p className="text-[10px] uppercase tracking-wide text-[#71717a]">{l}</p>
-    <p className={`text-sm font-semibold ${red ? 'text-red-400' : green ? 'text-emerald-400' : 'text-[#fafafa]'}`}>{v}</p>
+const Stat = ({ l, v, red, green, isDark = true }) => (
+  <div className={`p-2 rounded-md border ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-gray-50 border-gray-200'}`}>
+    <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>{l}</p>
+    <p className={`text-sm font-semibold ${red ? (isDark ? 'text-red-400' : 'text-red-600') : green ? (isDark ? 'text-emerald-400' : 'text-emerald-600') : (isDark ? 'text-[#fafafa]' : 'text-gray-900')}`}>{v}</p>
   </div>
 );
 
