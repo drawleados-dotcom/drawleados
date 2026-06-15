@@ -32,6 +32,10 @@ const BudgetView = () => {
   const [loading, setLoading] = useState(true);
   const [tops, setTops] = useState([]);
   const [activeTopId, setActiveTopId] = useState(null);
+  // Sum of gross (base_salary) across every payslip for the selected month —
+  // used as the auto-budget for any sub-category literally named "Payroll".
+  // User can still hit Edit to override.
+  const [payrollGrossTotal, setPayrollGrossTotal] = useState(0);
 
   // Inline editing state — keyed by category_id
   const [editingId, setEditingId] = useState(null);
@@ -41,16 +45,26 @@ const BudgetView = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(
-        `${API}/api/finance/expense-split/budgets?month=${month}&year=${year}`,
-        { headers },
-      );
-      const cats = res.data?.categories || [];
+      const [bRes, pRes] = await Promise.all([
+        axios.get(`${API}/api/finance/expense-split/budgets?month=${month}&year=${year}`, { headers }),
+        axios.get(`${API}/api/payroll/payslips?month=${month}&year=${year}`, { headers }).catch(() => ({ data: [] })),
+      ]);
+      const cats = bRes.data?.categories || [];
       setTops(cats);
       setActiveTopId((prev) => {
         if (prev && cats.find((c) => c.category_id === prev)) return prev;
         return cats[0]?.category_id || null;
       });
+      // Sum gross (base_salary) of every payslip — drafts + reviews + paid all
+      // count toward the "grand salary" the user wants to compare against.
+      // Fall back to net_salary on payslips that were entered without a stored
+      // gross (e.g. manually-created ones) so the auto value stays meaningful.
+      const grossTotal = (pRes.data || []).reduce((s, p) => {
+        const gross = Number(p.base_salary || 0);
+        const net = Number(p.net_salary || 0);
+        return s + (gross > 0 ? gross : net);
+      }, 0);
+      setPayrollGrossTotal(grossTotal);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to load budgets');
     } finally {
@@ -61,6 +75,22 @@ const BudgetView = () => {
   useEffect(() => { load(); }, [load]);
 
   const activeTop = tops.find((t) => t.category_id === activeTopId) || null;
+
+  // Auto-budget rule: a sub-category literally named "Payroll" auto-uses the
+  // gross-salary total for the month UNLESS the user has manually saved a
+  // value (sub.budget > 0). This lets HR's payroll roll through into the
+  // finance Budget view without double-entry.
+  const isPayrollSub = (s) => (s?.name || '').trim().toLowerCase() === 'payroll';
+  const effectiveBudget = (s) => {
+    if (isPayrollSub(s) && (!s.budget || s.budget <= 0)) return payrollGrossTotal;
+    return Number(s.budget || 0);
+  };
+  // Recompute the active top's header so Total Budget / Balance reflect the
+  // auto-injected Payroll figure.
+  const activeSubs = activeTop?.sub_categories || [];
+  const totalBudgetForTop = activeSubs.reduce((s, c) => s + effectiveBudget(c), 0);
+  const totalSpentForTop = activeTop ? Number(activeTop.spent || 0) : 0;
+  const totalBalanceForTop = totalBudgetForTop - totalSpentForTop;
 
   const startEdit = (sub) => {
     setEditingId(sub.category_id);
@@ -165,9 +195,9 @@ const BudgetView = () => {
                 <p className="text-lg font-bold text-[#fafafa]">{activeTop.name}</p>
               </div>
               <div className="flex items-center gap-4">
-                <Stat l="Total Budget" v={fmt(activeTop.budget)} />
-                <Stat l="Spent" v={fmt(activeTop.spent)} red={activeTop.over_budget} />
-                <Stat l="Balance" v={fmt(activeTop.balance)} green={activeTop.balance >= 0} red={activeTop.balance < 0} />
+                <Stat l="Total Budget" v={fmt(totalBudgetForTop)} />
+                <Stat l="Spent" v={fmt(totalSpentForTop)} red={totalSpentForTop > totalBudgetForTop && totalBudgetForTop > 0} />
+                <Stat l="Balance" v={fmt(totalBalanceForTop)} green={totalBalanceForTop >= 0} red={totalBalanceForTop < 0} />
               </div>
             </div>
           )}
@@ -187,11 +217,21 @@ const BudgetView = () => {
               {(activeTop?.sub_categories || []).map((s) => {
                 const isEditing = editingId === s.category_id;
                 const isSaving = savingId === s.category_id;
+                const isPayroll = isPayrollSub(s);
+                const usingAutoBudget = isPayroll && (!s.budget || s.budget <= 0);
+                const displayBudget = effectiveBudget(s);
+                const displayBalance = displayBudget - Number(s.spent || 0);
+                const displayOver = Number(s.spent || 0) > displayBudget && displayBudget > 0;
                 return (
                   <div key={s.category_id} className="grid grid-cols-12 items-center gap-3 px-4 py-3" data-testid={`budget-sub-${s.category_id}`}>
                     <div className="col-span-4 flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                      <p className="text-sm text-[#fafafa]">{s.name}</p>
+                      <div>
+                        <p className="text-sm text-[#fafafa]">{s.name}</p>
+                        {usingAutoBudget && (
+                          <p className="text-[10px] text-[#a78bfa]" data-testid={`budget-auto-tag-${s.category_id}`}>Auto · Σ gross salary for {MONTHS[month - 1]}</p>
+                        )}
+                      </div>
                     </div>
                     <div className="col-span-3 text-right">
                       <p className="text-[10px] uppercase tracking-wide text-[#71717a]">Budget</p>
@@ -206,15 +246,15 @@ const BudgetView = () => {
                         />
                       ) : (
                         <p className="text-sm font-semibold text-[#fafafa]">
-                          <IndianRupee className="inline h-3 w-3 -mt-0.5" />{String(fmt(s.budget)).replace(/^₹/, '')}
+                          <IndianRupee className="inline h-3 w-3 -mt-0.5" />{String(fmt(displayBudget)).replace(/^₹/, '')}
                         </p>
                       )}
                     </div>
                     <div className="col-span-2 text-right">
-                      <Stat l="Spent" v={fmt(s.spent)} red={s.over_budget} />
+                      <Stat l="Spent" v={fmt(s.spent)} red={displayOver} />
                     </div>
                     <div className="col-span-2 text-right">
-                      <Stat l="Balance" v={fmt(s.balance)} green={s.balance >= 0} red={s.balance < 0} />
+                      <Stat l="Balance" v={fmt(displayBalance)} green={displayBalance >= 0} red={displayBalance < 0} />
                     </div>
                     <div className="col-span-1 flex items-center justify-end gap-1">
                       {isEditing ? (
@@ -243,7 +283,7 @@ const BudgetView = () => {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => startEdit(s)}
+                          onClick={() => startEdit({ ...s, budget: displayBudget })}
                           className="h-7 px-2 text-[#a78bfa] hover:bg-[#a78bfa]/10"
                           data-testid={`budget-edit-${s.category_id}`}
                         >

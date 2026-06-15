@@ -1,6 +1,52 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Budget Payroll Auto-fill ✅
+
+### What changed
+- In **Finance → Expense → Budget → Overhead**, the **Payroll** sub-category's Budget value is now auto-filled with the grand salary for the selected month: `Σ base_salary` across every payslip for the period (with `net_salary` as a fallback when `base_salary` is unrecorded, so manually-entered payslips still count).
+- The row shows a purple "Auto · Σ gross salary for June" tag so it's obvious the value is computed.
+- The **Edit** button stays available — the user can still override the auto value with a fixed budget. Once a manual budget is saved (>0), it takes precedence over the auto value.
+- The active Top-Category header (Total Budget / Spent / Balance) now re-sums sub-budgets using the effective values, so the Overhead total includes the auto Payroll figure too.
+- Balance = Auto Budget − Spent reflects exactly what the user asked for: "how we paid against the total grand salary".
+
+### Files touched
+- `/app/frontend/src/components/finance/BudgetView.js` — added `payrollGrossTotal` state fetched from `/api/payroll/payslips`, `isPayrollSub`/`effectiveBudget` helpers, "Auto" tag rendering, and header re-computation using effective values.
+
+### Verified
+Overhead screenshot shows Payroll Budget = ₹50,000 auto-filled (₹25,000 Saranya + ₹25,000 Vinothkumar), Rent ₹23,000 manual, Total Budget header rolls up to ₹73,000 correctly. Backend unchanged — all backend tests from iteration_73 still apply.
+
+---
+
+
+## Latest Update — Feb 15, 2026 (cont.) — Finance Payroll tab + Expense Budget sub-tab ✅
+
+### 1) Finance → Payroll tab (top-level)
+- New `PayrollTab.js` (replaces the placeholder) — read-only mirror of HR Admin → Payroll Management → Monthly Payroll.
+- Month scheduler with ◀/▶ arrows + Month + Year selects + "June 2026" period pill.
+- 4 KPI cards: Total Employees · Total Amount Payable · Amounts Paid (paid + generated) · Balance.
+- Per-employee table with status badges and a View modal that includes Download PDF for generated/paid status.
+- Wired into `ExpenseTab.js` DEFAULT_TABS between Budget and Invoice.
+
+### 2) Expense → Budget sub-tab
+- New `BudgetView.js` rendered as the 3rd sub-tab inside Expense (next to Master Expense & Expense Split).
+- Same layout as Master Expense (horizontal top-category pills + sub-category rows) but each sub has an **editable Budget amount** for the selected month/year.
+- Inline Edit/Save/Cancel per sub-category.
+- Header card on the active top: Total Budget (= Σ subs) · Spent · Balance — Balance turns red when over budget.
+- Spent is computed live from `cashbook_entries` tagged with `split_category_id` for the period (same mechanism Master Expense already uses).
+
+### Backend (new)
+- New endpoints in `/app/backend/expense_split_routes.py`:
+  - `GET /api/finance/expense-split/budgets?month=&year=` — returns full hierarchy with `budget / spent / balance / over_budget` for every (sub)category.
+  - `PUT /api/finance/expense-split/budgets/{category_id}` body `{ amount, month, year }` — upserts an `expense_sub_budgets` row.
+- New collection `expense_sub_budgets` keyed by `(category_id, month, year)`.
+
+### Verification
+Testing agent → `/app/test_reports/iteration_73.json` — Backend 5/5 pytest pass (GET shape, auth, PUT upsert + top-sum, 404 path, balance math + over_budget flip via cashbook debit). Frontend all testids verified, persistence + reload + over-budget flag confirmed. New pytest file: `/app/backend/tests/test_budget_and_payroll.py`.
+
+---
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Monthly Payroll Tab ✅
 
 ### What was added
