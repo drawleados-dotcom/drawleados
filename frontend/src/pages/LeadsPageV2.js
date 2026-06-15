@@ -3,6 +3,7 @@ import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
@@ -58,6 +59,13 @@ const LeadsPageV2 = () => {
   // Data state
   const [leads, setLeads] = useState([]);
   const [stages, setStages] = useState([]);
+  // Mini popup for stages that need a date+time — Appointment / Appointment
+  // Reschedule / Followup / Prospect Followup. Stores the target stage and a
+  // working date+time before commit.
+  const [stageDateModal, setStageDateModal] = useState(null);
+  const [stageDateValue, setStageDateValue] = useState('');
+  const [stageTimeValue, setStageTimeValue] = useState('');
+  const [stageDateSaving, setStageDateSaving] = useState(false);
   const [customFields, setCustomFields] = useState([]);
   const [stats, setStats] = useState({ total: 0, by_stage: {} });
   const [sheetsConfig, setSheetsConfig] = useState(null);
@@ -810,20 +818,23 @@ const LeadsPageV2 = () => {
     // Filter by lead owner if filterLeadOwner is set
     if (filterLeadOwner && lead.lead_owner !== filterLeadOwner) return false;
     
-    // Filter by date range
-    if ((dateRange.from || dateRange.to) && lead.created_at) {
-      const created = new Date(lead.created_at);
-      created.setHours(0, 0, 0, 0);
-      if (dateRange.from) {
-        const from = new Date(dateRange.from);
-        from.setHours(0, 0, 0, 0);
-        if (created < from) return false;
-      }
-      if (dateRange.to) {
-        const to = new Date(dateRange.to);
-        to.setHours(23, 59, 59, 999);
-        if (created > to) return false;
-      }
+    // Filter by date range — match if any of created_at / appointment_at /
+    // followup_at falls inside the selected window. This way picking "this
+    // week" surfaces leads that have meetings/follow-ups scheduled there too.
+    if (dateRange.from || dateRange.to) {
+      const candidates = [lead.created_at, lead.appointment_at, lead.followup_at].filter(Boolean);
+      const from = dateRange.from ? new Date(dateRange.from) : null;
+      if (from) from.setHours(0, 0, 0, 0);
+      const to = dateRange.to ? new Date(dateRange.to) : null;
+      if (to) to.setHours(23, 59, 59, 999);
+      const inRange = candidates.some((d) => {
+        const dt = new Date(d);
+        if (isNaN(dt)) return false;
+        if (from && dt < from) return false;
+        if (to && dt > to) return false;
+        return true;
+      });
+      if (!inRange) return false;
     }
     
     // Filter by search term
@@ -1322,6 +1333,18 @@ const LeadsPageV2 = () => {
                     />
                   </div>
                 </div>
+                {/* Quick Remarks — top-level note about anything on this lead */}
+                <div>
+                  <label className={`text-sm ${textSecondary} block mb-1`}>Remarks</label>
+                  <textarea
+                    value={leadForm.notes || ''}
+                    onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })}
+                    placeholder="Write anything about this lead — call summary, blockers, next move…"
+                    rows={3}
+                    className={`w-full px-3 py-2 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm focus:outline-none focus:ring-2 focus:ring-[#6366f1]/40`}
+                    data-testid="lead-remarks-input"
+                  />
+                </div>
               </TabsContent>
               
               {/* Lead Details Tab */}
@@ -1579,6 +1602,9 @@ const LeadsPageV2 = () => {
                 <div className="flex flex-wrap gap-2">
                   {stages.map((stage) => {
                     const isCurrent = leadForm.stage_id === stage.stage_id;
+                    const stageNameLower = (stage.name || '').toLowerCase().trim();
+                    const needsAppointment = stageNameLower === 'appoinment' || stageNameLower === 'appointment' || stageNameLower === 'appointment reshuedule' || stageNameLower === 'appointment reschedule' || stageNameLower === 'appointment rescheule';
+                    const needsFollowup = stageNameLower === 'followup' || stageNameLower === 'follow-up' || stageNameLower === 'prospect followup' || stageNameLower === 'follow up';
                     return (
                       <button
                         key={stage.stage_id}
@@ -1586,6 +1612,22 @@ const LeadsPageV2 = () => {
                         data-testid={`stage-tab-${stage.stage_id}`}
                         onClick={async () => {
                           if (isCurrent) return;
+                          // Open mini date/time popup for Appointment & Followup stages.
+                          if (needsAppointment || needsFollowup) {
+                            const existingISO = needsAppointment
+                              ? (editingLead?.appointment_at || '')
+                              : (editingLead?.followup_at || '');
+                            const ex = existingISO ? new Date(existingISO) : null;
+                            const today = new Date();
+                            const initialDate = (ex && !isNaN(ex)) ? ex.toISOString().slice(0, 10) : today.toISOString().slice(0, 10);
+                            const initialTime = (ex && !isNaN(ex))
+                              ? `${String(ex.getHours()).padStart(2, '0')}:${String(ex.getMinutes()).padStart(2, '0')}`
+                              : '10:00';
+                            setStageDateValue(initialDate);
+                            setStageTimeValue(initialTime);
+                            setStageDateModal({ stage, kind: needsAppointment ? 'appointment' : 'followup' });
+                            return;
+                          }
                           try {
                             await axios.put(
                               `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
@@ -1597,8 +1639,6 @@ const LeadsPageV2 = () => {
                             toast.success(`Moved to ${stage.name}`);
                             loadLeads();
                             loadStats();
-                            // If moving into the fixed "Invoice Raise" stage, close the
-                            // Edit Lead modal and pop the dedicated billing-request modal.
                             const stageName = (stage.name || '').toLowerCase().trim();
                             if (stageName === 'invoice raise' || stageName === 'invoice_raise' || stageName === 'invoiceraise') {
                               const leadForRaise = { ...editingLead, stage_id: stage.stage_id };
@@ -2116,6 +2156,90 @@ const LeadsPageV2 = () => {
             onSubmitted={() => { loadLeads(); }}
           />
         )}
+
+        {/* Appointment / Followup mini date+time popup */}
+        {stageDateModal && (
+          <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4" onClick={() => !stageDateSaving && setStageDateModal(null)}>
+            <div
+              className={`${bgCard} rounded-xl border ${borderColor} w-full max-w-sm shadow-xl`}
+              onClick={(e) => e.stopPropagation()}
+              data-testid="stage-date-modal"
+            >
+              <div className={`px-5 py-4 border-b ${borderColor} flex items-center justify-between`}>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" style={{ color: stageDateModal.stage.color }} />
+                  <h3 className={`text-sm font-semibold ${textPrimary}`}>
+                    {stageDateModal.kind === 'appointment' ? 'Set Appointment Date & Time' : 'Set Follow-up Date & Time'}
+                  </h3>
+                </div>
+                <button onClick={() => !stageDateSaving && setStageDateModal(null)} className={textSecondary}><X className="h-4 w-4" /></button>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <p className={`text-xs ${textSecondary}`}>
+                  Moving to <b style={{ color: stageDateModal.stage.color }}>{stageDateModal.stage.name}</b>. Pick when this should happen.
+                </p>
+                <div>
+                  <Label className={textPrimary}>Date</Label>
+                  <Input
+                    type="date"
+                    value={stageDateValue}
+                    onChange={(e) => setStageDateValue(e.target.value)}
+                    className={`${bgSecondary} border-${borderColor} ${textPrimary}`}
+                    data-testid="stage-date-input"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Time</Label>
+                  <Input
+                    type="time"
+                    value={stageTimeValue}
+                    onChange={(e) => setStageTimeValue(e.target.value)}
+                    className={`${bgSecondary} border-${borderColor} ${textPrimary}`}
+                    data-testid="stage-time-input"
+                  />
+                </div>
+              </div>
+              <div className={`px-5 py-3 border-t ${borderColor} flex justify-end gap-2`}>
+                <Button variant="outline" onClick={() => setStageDateModal(null)} disabled={stageDateSaving}>Cancel</Button>
+                <Button
+                  data-testid="stage-date-save"
+                  disabled={!stageDateValue || !stageTimeValue || stageDateSaving}
+                  onClick={async () => {
+                    setStageDateSaving(true);
+                    const stage = stageDateModal.stage;
+                    const isAppt = stageDateModal.kind === 'appointment';
+                    // Build local datetime as ISO string so backend stores it verbatim.
+                    const iso = new Date(`${stageDateValue}T${stageTimeValue}:00`).toISOString();
+                    try {
+                      await axios.put(
+                        `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
+                        {
+                          stage_id: stage.stage_id,
+                          ...(isAppt ? { appointment_at: iso } : { followup_at: iso }),
+                        },
+                        { headers },
+                      );
+                      const patch = isAppt ? { appointment_at: iso } : { followup_at: iso };
+                      setLeadForm({ ...leadForm, stage_id: stage.stage_id });
+                      setEditingLead({ ...editingLead, stage_id: stage.stage_id, ...patch });
+                      toast.success(`Moved to ${stage.name}`);
+                      setStageDateModal(null);
+                      loadLeads();
+                      loadStats();
+                    } catch (e) {
+                      toast.error('Failed to change stage');
+                    } finally {
+                      setStageDateSaving(false);
+                    }
+                  }}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                >
+                  {stageDateSaving ? 'Saving…' : 'Confirm & Move'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
@@ -2219,6 +2343,8 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                 <th className="px-4 py-3 text-left font-medium">Contact</th>
                 <th className="px-4 py-3 text-left font-medium">Source</th>
                 <th className="px-4 py-3 text-left font-medium">Stage</th>
+                <th className="px-4 py-3 text-left font-medium">Appointment</th>
+                <th className="px-4 py-3 text-left font-medium">Follow-up</th>
                 <th className="px-4 py-3 text-left font-medium">Created</th>
                 <th className="px-4 py-3 text-center font-medium">Actions</th>
               </tr>
@@ -2285,6 +2411,34 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                       >
                         {stage?.name || 'Unknown'}
                       </span>
+                    </td>
+
+                    {/* Appointment Column — shown for any lead with appointment_at */}
+                    <td className={`px-4 py-4 ${textSecondary}`} data-testid={`lead-appointment-${lead.lead_id}`}>
+                      {lead.appointment_at ? (
+                        <div>
+                          <p className={`text-sm ${textPrimary}`}>
+                            {new Date(lead.appointment_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                          <p className="text-xs">
+                            {new Date(lead.appointment_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      ) : <span>-</span>}
+                    </td>
+
+                    {/* Follow-up Column */}
+                    <td className={`px-4 py-4 ${textSecondary}`} data-testid={`lead-followup-${lead.lead_id}`}>
+                      {lead.followup_at ? (
+                        <div>
+                          <p className={`text-sm ${textPrimary}`}>
+                            {new Date(lead.followup_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                          <p className="text-xs">
+                            {new Date(lead.followup_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      ) : <span>-</span>}
                     </td>
 
                     {/* Created Column */}

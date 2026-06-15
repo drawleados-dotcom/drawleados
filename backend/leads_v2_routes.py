@@ -473,15 +473,28 @@ async def permanent_delete_lead(lead_id: str, request: Request):
     return {"message": "Lead permanently deleted", "lead_id": lead_id}
 
 @leads_v2_router.put("/leads/{lead_id}/stage")
-async def update_lead_stage(lead_id: str, stage_data: Dict[str, str], request: Request):
-    """Update lead stage (for drag-drop)"""
+async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: Request):
+    """Update lead stage (for drag-drop). Optional `appointment_at` (ISO) is
+    stored when moving into an Appointment / Appointment Reschedule stage and
+    `followup_at` for Followup / Prospect Followup stages — both drive the new
+    columns in the leads table and the date filter."""
     current_user = await get_current_user_from_request(request)
     
     lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
-    
+
+    update_doc = {
+        "stage_id": stage_data["stage_id"],
+        "updated_at": datetime.now(timezone.utc),
+    }
+    # Optional date-time payload from the new appointment/followup mini-popup.
+    if stage_data.get("appointment_at"):
+        update_doc["appointment_at"] = stage_data["appointment_at"]
+    if stage_data.get("followup_at"):
+        update_doc["followup_at"] = stage_data["followup_at"]
+
     await db.leads_v2.update_one(
         {"lead_id": lead_id},
-        {"$set": {"stage_id": stage_data["stage_id"], "updated_at": datetime.now(timezone.utc)}}
+        {"$set": update_doc},
     )
     
     # Check if moved to "Deal Closed" or "Won" stage
