@@ -1,6 +1,35 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 — Payroll Lifecycle Phase 2 + Phase 3 ✅
+
+### Phase 2 — CEO Approval Queue (Operations → Approval → HR)
+- New backend endpoints in `/app/backend/payroll_routes.py`:
+  - `GET /api/payroll/approvals` — lists payslips with `status=ceo_review`.
+  - `PUT /api/payroll/payslip/{id}/approve` — only CEO/super_admin/admin (or `designation=CEO`) can call; flips `ceo_review → generated` directly (skips the legacy `approved` intermediate state) and stamps `ceo_review.decision='approved'` + `generated_at`.
+  - `PUT /api/payroll/payslip/{id}/reject` — flips `ceo_review → draft` and stores the rejection remarks in `ceo_review.decision='rejected'` so HR can correct & resubmit.
+  - `GET /api/payroll/payslips/payable` — HR-only; returns all generated/unpaid payslips for the Cashbook picker.
+  - `PUT /api/payroll/payslip/{id}/mark-paid` — direct mark-as-paid endpoint (optional helper; the cashbook flow handles this inline now).
+  - New `_has_ceo_approval_access` helper covers role=ceo OR designation=CEO.
+- New UI section in `/app/frontend/src/pages/ApprovalsPage.js` (inside the HR bucket): `payroll-approvals-section` with one card per pending payslip showing employee name + ID + designation, period badge, and a 4-column financial grid (Gross / Earned / Deductions / Net). Approve & Generate / Reject buttons. Reject opens a remarks modal (`payroll-reject-remarks`, `payroll-reject-confirm`). HR badge count now includes payroll approvals.
+
+### Phase 3 — Cashbook → Payroll linkage
+- `GroupedExpensePayload` (in `/app/backend/banks_routes.py`) gained an optional `payslip_id` field. When the expense is saved with `payslip_id`, the linked payslip is updated to `status=paid` with `paid_via_expense_group_id`, `paid_by`, `paid_at`.
+- `/app/frontend/src/components/finance/CashbookSplit.js` Add Expense modal now:
+  - Detects when the chosen Sub-Category's name is "Payroll" (case-insensitive) and fetches generated/unpaid payslips via `GET /api/payroll/payslips/payable`.
+  - Renders `payroll-payslip-picker` with a dropdown listing each payslip as "Employee · Mon Year · Net ₹X".
+  - On selection: auto-fills and read-only-locks the Total Amount, sets the allocation row to the full net, and pre-fills the "To (party)" field with the employee name.
+  - On save, passes `payslip_id` to the cashbook endpoint so the payslip flips to `paid` atomically.
+  - Empty-state ("No payslips currently CEO-approved & unpaid") shows up the moment the user picks the Payroll sub-category even when zero payslips are payable.
+
+### Verification
+- Testing agent: `/app/test_reports/iteration_71.json` — backend 7/7 pytest, frontend Playwright both flows verified end-to-end. Approve/Reject toasts fire, rows disappear, and the Cashbook payroll picker auto-fills + locks the amount.
+- New backend test suite: `/app/backend/tests/test_payroll_phase2_phase3.py`.
+- Seed dependency: an Expense Split sub-category literally named "Payroll" must exist (already seeded as `esc_d21473b90d` under the Overhead top category for the user's tenant).
+
+---
+
+
 ## Latest Update — Feb 14, 2026 (cont.) — Hard-fix payslip auto-fill + topbar Logout ✅
 
 ### What was hard-fixed

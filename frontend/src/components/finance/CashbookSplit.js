@@ -104,9 +104,12 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
     setSelectedPayslipId('');
   }, [splitSubId, splitTopId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Active payslip-payroll flow flag
+  // Active payslip-payroll flow flag (purely based on the picked sub-category name,
+  // so the empty-state message stays visible even when zero payslips are payable).
+  const _selectedTopCat = splitCategories.find((c) => c.category_id === splitTopId);
+  const _selectedSubCat = _selectedTopCat?.sub_categories?.find((s) => s.category_id === splitSubId);
+  const isPayrollMode = (_selectedSubCat?.name || '').toLowerCase().trim() === 'payroll';
   const selectedPayslip = payablePayslips.find((p) => p.payslip_id === selectedPayslipId) || null;
-  const isPayrollMode = payablePayslips.length > 0 || !!selectedPayslip;
 
   const openAdd = async (kind) => {
     setModal(kind);
