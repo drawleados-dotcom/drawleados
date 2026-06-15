@@ -1988,29 +1988,18 @@ const ExpenseTab = () => {
         <>
           {activeTab === 'dashboard' && (
             <div className="space-y-3">
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
-                <button
-                  onClick={() => setDashboardSubTab('dashboard')}
-                  data-testid="dashboard-subtab-dashboard"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'dashboard' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Dashboard
-                </button>
-                <button
-                  onClick={() => setDashboardSubTab('weekly')}
-                  data-testid="dashboard-subtab-weekly"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'weekly' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Week Wise
-                </button>
-                <button
-                  onClick={() => setDashboardSubTab('payment_schedule')}
-                  data-testid="dashboard-subtab-payment-schedule"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'payment_schedule' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Payment Schedule
-                </button>
-              </div>
+              {(() => {
+                const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
+                const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+                const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+                return (
+                  <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
+                    <button onClick={() => setDashboardSubTab('dashboard')} data-testid="dashboard-subtab-dashboard" className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'dashboard' ? activeCls : idleCls}`}>Dashboard</button>
+                    <button onClick={() => setDashboardSubTab('weekly')} data-testid="dashboard-subtab-weekly" className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'weekly' ? activeCls : idleCls}`}>Week Wise</button>
+                    <button onClick={() => setDashboardSubTab('payment_schedule')} data-testid="dashboard-subtab-payment-schedule" className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'payment_schedule' ? activeCls : idleCls}`}>Payment Schedule</button>
+                  </div>
+                );
+              })()}
               {dashboardSubTab === 'dashboard' && renderDashboard()}
               {dashboardSubTab === 'weekly' && (
                 <WeekWiseTab
@@ -2030,101 +2019,116 @@ const ExpenseTab = () => {
           )}
 
           {/* Cashbook with Banks sub-tab */}
-          {activeTab === 'cashbook' && (
-            <div className="space-y-3">
-              {renderCashInTotalBook()}
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
-                <button
-                  onClick={() => setCashbookSubTab('cashbook')}
-                  data-testid="cashbook-subtab-cashbook"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${cashbookSubTab === 'cashbook' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Cashbook
-                </button>
-                <button
-                  onClick={() => setCashbookSubTab('banks')}
-                  data-testid="cashbook-subtab-banks"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${cashbookSubTab === 'banks' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Banks
-                </button>
+          {activeTab === 'cashbook' && (() => {
+            const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
+            const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+            const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+            return (
+              <div className="space-y-3">
+                {renderCashInTotalBook()}
+                <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
+                  <button
+                    onClick={() => setCashbookSubTab('cashbook')}
+                    data-testid="cashbook-subtab-cashbook"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${cashbookSubTab === 'cashbook' ? activeCls : idleCls}`}
+                  >
+                    Cashbook
+                  </button>
+                  <button
+                    onClick={() => setCashbookSubTab('banks')}
+                    data-testid="cashbook-subtab-banks"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${cashbookSubTab === 'banks' ? activeCls : idleCls}`}
+                  >
+                    Banks
+                  </button>
+                </div>
+                {cashbookSubTab === 'cashbook' && <CashbookSplit />}
+                {cashbookSubTab === 'banks' && <BanksTab />}
               </div>
-              {cashbookSubTab === 'cashbook' && <CashbookSplit />}
-              {cashbookSubTab === 'banks' && <BanksTab />}
-            </div>
-          )}
+            );
+          })()}
 
           {/* Expense with Master / Split / Budget / Payroll sub-tabs */}
-          {activeTab === 'expense' && (
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
-                <button
-                  onClick={() => setExpenseSubTab('categories')}
-                  data-testid="expense-subtab-categories"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'categories' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Master Expense
-                </button>
-                <button
-                  onClick={() => setExpenseSubTab('split')}
-                  data-testid="expense-subtab-split"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'split' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Expense Split
-                </button>
-                <button
-                  onClick={() => setExpenseSubTab('budget')}
-                  data-testid="expense-subtab-budget"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'budget' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Budget
-                </button>
-                <button
-                  onClick={() => setExpenseSubTab('payroll')}
-                  data-testid="expense-subtab-payroll"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'payroll' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Payroll
-                </button>
+          {activeTab === 'expense' && (() => {
+            const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
+            const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+            const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+            return (
+              <div className="space-y-3">
+                <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
+                  <button
+                    onClick={() => setExpenseSubTab('categories')}
+                    data-testid="expense-subtab-categories"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'categories' ? activeCls : idleCls}`}
+                  >
+                    Master Expense
+                  </button>
+                  <button
+                    onClick={() => setExpenseSubTab('split')}
+                    data-testid="expense-subtab-split"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'split' ? activeCls : idleCls}`}
+                  >
+                    Expense Split
+                  </button>
+                  <button
+                    onClick={() => setExpenseSubTab('budget')}
+                    data-testid="expense-subtab-budget"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'budget' ? activeCls : idleCls}`}
+                  >
+                    Budget
+                  </button>
+                  <button
+                    onClick={() => setExpenseSubTab('payroll')}
+                    data-testid="expense-subtab-payroll"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'payroll' ? activeCls : idleCls}`}
+                  >
+                    Payroll
+                  </button>
+                </div>
+                {expenseSubTab === 'categories' && <MasterExpenseView />}
+                {expenseSubTab === 'split' && <ExpenseSplitTab />}
+                {expenseSubTab === 'budget' && <BudgetView />}
+                {expenseSubTab === 'payroll' && <PayrollTab />}
               </div>
-              {expenseSubTab === 'categories' && <MasterExpenseView />}
-              {expenseSubTab === 'split' && <ExpenseSplitTab />}
-              {expenseSubTab === 'budget' && <BudgetView />}
-              {expenseSubTab === 'payroll' && <PayrollTab />}
-            </div>
-          )}
+            );
+          })()}
 
           {/* Invoice with Projects + Clients sub-tabs */}
-          {activeTab === 'invoice' && (
-            <div className="space-y-3">
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
-                <button
-                  onClick={() => setInvoiceSubTab('invoice')}
-                  data-testid="invoice-subtab-invoice"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'invoice' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Invoice
-                </button>
-                <button
-                  onClick={() => setInvoiceSubTab('projects')}
-                  data-testid="invoice-subtab-projects"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'projects' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Projects
-                </button>
-                <button
-                  onClick={() => setInvoiceSubTab('clients')}
-                  data-testid="invoice-subtab-clients"
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'clients' ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
-                >
-                  Clients
-                </button>
+          {activeTab === 'invoice' && (() => {
+            const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
+            const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+            const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+            return (
+              <div className="space-y-3">
+                <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
+                  <button
+                    onClick={() => setInvoiceSubTab('invoice')}
+                    data-testid="invoice-subtab-invoice"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'invoice' ? activeCls : idleCls}`}
+                  >
+                    Invoice
+                  </button>
+                  <button
+                    onClick={() => setInvoiceSubTab('projects')}
+                    data-testid="invoice-subtab-projects"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'projects' ? activeCls : idleCls}`}
+                  >
+                    Projects
+                  </button>
+                  <button
+                    onClick={() => setInvoiceSubTab('clients')}
+                    data-testid="invoice-subtab-clients"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${invoiceSubTab === 'clients' ? activeCls : idleCls}`}
+                  >
+                    Clients
+                  </button>
+                </div>
+                {invoiceSubTab === 'invoice' && renderInvoice()}
+                {invoiceSubTab === 'projects' && <ProjectsTab />}
+                {invoiceSubTab === 'clients' && <ClientsTab />}
               </div>
-              {invoiceSubTab === 'invoice' && renderInvoice()}
-              {invoiceSubTab === 'projects' && <ProjectsTab />}
-              {invoiceSubTab === 'clients' && <ClientsTab />}
-            </div>
-          )}
+            );
+          })()}
 
           {activeTab === 'pipeline' && <PipelineTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}

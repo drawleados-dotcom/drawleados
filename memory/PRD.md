@@ -1,6 +1,21 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Finance sub-tab strips: full Light/Dark theme support ✅
+
+### What changed
+- The inner pill-strip sub-tabs inside Finance (Cashbook → `Cashbook | Banks`, Expense → `Master Expense | Expense Split | Budget | Payroll`, Invoice → `Invoice | Projects | Clients`) were hardcoded to dark-only classes (`bg-[#18181b]`, `bg-[#27272a]`, `text-[#a1a1aa]`).
+- All three strips now read `isDark` and switch between the same `pillBox` / `activeCls` / `idleCls` pattern that the Dashboard sub-tab strip already uses.
+
+### Files touched
+- `/app/frontend/src/components/finance/ExpenseTab.js` (Cashbook, Expense, Invoice sub-tab blocks)
+
+### Verification
+- Screenshot tool — Light mode: Cashbook, Expense, Invoice sub-tab pills render on a white container with proper gray-on-light contrast; active pill uses gray-100 / gray-900 (not black-on-black).
+- Screenshot tool — Dark mode: no regression, active pill stays `bg-[#27272a] text-white`, idle stays `text-[#a1a1aa]`.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Lead module: Stage date popup + Remarks + new columns ✅
 
 ### What changed
