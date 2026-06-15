@@ -1107,6 +1107,36 @@ const ExpenseTab = () => {
       <div className="space-y-6">
         {Filter}
 
+        {/* Cash in Book — quick three-pill view: All vs GST vs Non-GST */}
+        {(() => {
+          const gstTotal = Number(bankBreakdown?.bank_breakdown?.gst?.total || 0);
+          const nonGstTotal = Number(bankBreakdown?.bank_breakdown?.non_gst?.total || 0);
+          const allTotal = gstTotal + nonGstTotal;
+          const Pill = ({ label, sub, value, accent, testId }) => (
+            <div className={`flex-1 min-w-[180px] p-4 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
+              <div className="flex items-center justify-between">
+                <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
+                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
+              </div>
+              <p className="text-xl font-bold mt-1.5" style={{ color: accent }}>{formatCurrency(value)}</p>
+              {sub && <p className={`text-[10px] mt-0.5 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
+            </div>
+          );
+          return (
+            <div data-testid="cash-in-book-strip">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Book</h3>
+                <p className={`text-[10px] ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>Snapshot — independent of period filter</p>
+              </div>
+              <div className="flex gap-3 flex-wrap">
+                <Pill label="All" sub="GST + Non-GST" value={allTotal} accent="#6366f1" testId="cash-in-book-all" />
+                <Pill label="GST" sub="GST bank accounts" value={gstTotal} accent="#22c55e" testId="cash-in-book-gst" />
+                <Pill label="Other Banks" sub="Non-GST bank accounts" value={nonGstTotal} accent="#f59e0b" testId="cash-in-book-nongst" />
+              </div>
+            </div>
+          );
+        })()}
+
         {/* INCOME */}
         <div>
           <h3 className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Income</h3>
