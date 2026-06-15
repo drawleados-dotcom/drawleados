@@ -16,7 +16,23 @@ import axios from 'axios';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const years = [2023, 2024, 2025, 2026, 2027];
+const DEFAULT_YEARS = [2023, 2024, 2025, 2026, 2027];
+
+// Build the year dropdown options. When an employee is in context, restrict
+// the lower bound to their joining year — payslips can't predate joining.
+const yearsForEmployee = (employee) => {
+  const currentYear = new Date().getFullYear();
+  let startYear = 2023;
+  const raw = employee?.joining_date || employee?.join_date || employee?.profile?.joining_date;
+  if (raw) {
+    // Try a few date formats: "DD MMM YYYY" / "DD/MM/YYYY" / ISO
+    const isoMatch = String(raw).match(/(\d{4})/);
+    if (isoMatch) startYear = Math.max(2020, parseInt(isoMatch[1], 10));
+  }
+  const out = [];
+  for (let y = startYear; y <= currentYear + 1; y++) out.push(y);
+  return out.length ? out : DEFAULT_YEARS;
+};
 
 export default function PayrollManagementTab({
   employees,
@@ -303,7 +319,7 @@ export default function PayrollManagementTab({
               }}
               className={`p-2 rounded-lg ${bgInput} border ${borderColor} ${textPrimary}`}
             >
-              {years.map(y => (
+              {yearsForEmployee(selectedEmployee).map(y => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
@@ -864,6 +880,8 @@ function SalaryPayslipView({
   // Manual payslip modal (matches Drawlead PDF)
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualBusy, setManualBusy] = useState(false);
+  // Comprehensive view of a single payslip with Download button
+  const [viewingPayslip, setViewingPayslip] = useState(null);
   const [existsCheck, setExistsCheck] = useState({ exists: false, mode: null });
   const [manualForm, setManualForm] = useState({
     employee_name: '', employee_id: '', designation: '', joining_date: '',
@@ -915,6 +933,24 @@ function SalaryPayslipView({
       return { ...prev, per_day_salary: per_day, net_salary: net };
     });
   }, [manualForm.gross_salary, manualForm.total_working_days, manualForm.days_absent, showManualModal]);
+
+  // When Salary Date changes, auto-fetch the gross salary that was effective for that month
+  useEffect(() => {
+    if (!showManualModal || !employee?.user_id || !manualForm.salary_date) return;
+    // salary_date is DD/MM/YYYY — parse to month/year
+    const m = String(manualForm.salary_date).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return;
+    const mm = parseInt(m[2], 10);
+    const yy = parseInt(m[3], 10);
+    if (!mm || !yy) return;
+    const headers = { Authorization: `Bearer ${token}` };
+    axios.get(`${API}/api/payroll/salary-at-date/${employee.user_id}?month=${mm}&year=${yy}`, { headers })
+      .then((res) => {
+        const sal = Number(res.data?.salary || 0);
+        if (sal > 0) setManualForm(prev => ({ ...prev, gross_salary: sal }));
+      })
+      .catch(() => {/* keep current gross */});
+  }, [manualForm.salary_date, employee?.user_id, showManualModal, token, API]);
 
   const submitManualPayslip = async () => {
     setManualBusy(true);
@@ -1018,12 +1054,23 @@ function SalaryPayslipView({
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
+                      <Button
+                        onClick={() => setViewingPayslip(p)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-[#a78bfa]"
+                        data-testid={`payslip-view-${p.payslip_id}`}
+                        title="View details"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       {p.status === 'generated' && (
                         <Button
                           onClick={() => onDownloadPDF(p)}
                           variant="ghost"
                           size="sm"
                           className="text-[#6366f1]"
+                          title="Download PDF"
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -1052,12 +1099,12 @@ function SalaryPayslipView({
             )}
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div><Label className={textSecondary}>Employee Name</Label><Input value={manualForm.employee_name} onChange={(e) => setManualForm(prev => ({ ...prev, employee_name: e.target.value }))} /></div>
-                <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} onChange={(e) => setManualForm(prev => ({ ...prev, employee_id: e.target.value }))} /></div>
-                <div><Label className={textSecondary}>Designation</Label><Input value={manualForm.designation} onChange={(e) => setManualForm(prev => ({ ...prev, designation: e.target.value }))} /></div>
-                <div><Label className={textSecondary}>Joining Month / Year</Label><Input placeholder="25th Aug 2025" value={manualForm.joining_date || ''} onChange={(e) => setManualForm(prev => ({ ...prev, joining_date: e.target.value }))} /></div>
-                <div><Label className={textSecondary}>Salary Date</Label><Input placeholder="10/06/2026" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} /></div>
-                <div><Label className={textSecondary}>Total Salary (Gross)</Label><Input type="number" value={manualForm.gross_salary} onChange={(e) => setManualForm(prev => ({ ...prev, gross_salary: e.target.value }))} /></div>
+                <div><Label className={textSecondary}>Employee Name</Label><Input value={manualForm.employee_name} readOnly className="cursor-not-allowed opacity-90" /></div>
+                <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} readOnly className="cursor-not-allowed opacity-90" /></div>
+                <div><Label className={textSecondary}>Designation</Label><Input value={manualForm.designation} readOnly className="cursor-not-allowed opacity-90" /></div>
+                <div><Label className={textSecondary}>Joining Month / Year</Label><Input value={manualForm.joining_date || ''} readOnly className="cursor-not-allowed opacity-90" /></div>
+                <div><Label className={textSecondary}>Salary Date</Label><Input placeholder="DD/MM/YYYY" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} data-testid="payslip-salary-date" /></div>
+                <div><Label className={textSecondary}>Total Salary (Gross)</Label><Input type="number" value={manualForm.gross_salary} onChange={(e) => setManualForm(prev => ({ ...prev, gross_salary: e.target.value }))} data-testid="payslip-gross" /></div>
               </div>
               <div>
                 <h4 className={`text-sm font-semibold ${textPrimary} mb-2`}>Monthly Summary</h4>
@@ -1454,6 +1501,16 @@ function SalaryPayslipView({
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge className={getStatusColor(p.status)}>{getStatusLabel(p.status)}</Badge>
+                        <Button
+                          onClick={() => setViewingPayslip(p)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-[#a78bfa] hover:bg-[#a78bfa]/10"
+                          data-testid={`payslip-row-view-${p.payslip_id}`}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
                         {p.status === 'generated' && (
                           <Button
                             onClick={() => onDownloadPDF(p)}
@@ -1493,11 +1550,11 @@ function SalaryPayslipView({
 
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div><Label className={textSecondary}>Employee Name</Label><Input value={manualForm.employee_name} onChange={(e) => setManualForm(prev => ({ ...prev, employee_name: e.target.value }))} /></div>
-              <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} onChange={(e) => setManualForm(prev => ({ ...prev, employee_id: e.target.value }))} /></div>
-              <div><Label className={textSecondary}>Designation</Label><Input value={manualForm.designation} onChange={(e) => setManualForm(prev => ({ ...prev, designation: e.target.value }))} /></div>
-              <div><Label className={textSecondary}>Joining Month / Year</Label><Input placeholder="25th Aug 2025" value={manualForm.joining_date || ''} onChange={(e) => setManualForm(prev => ({ ...prev, joining_date: e.target.value }))} /></div>
-              <div><Label className={textSecondary}>Salary Date</Label><Input placeholder="10/06/2026" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} /></div>
+              <div><Label className={textSecondary}>Employee Name</Label><Input value={manualForm.employee_name} readOnly className="cursor-not-allowed opacity-90" /></div>
+              <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} readOnly className="cursor-not-allowed opacity-90" /></div>
+              <div><Label className={textSecondary}>Designation</Label><Input value={manualForm.designation} readOnly className="cursor-not-allowed opacity-90" /></div>
+              <div><Label className={textSecondary}>Joining Month / Year</Label><Input value={manualForm.joining_date || ''} readOnly className="cursor-not-allowed opacity-90" /></div>
+              <div><Label className={textSecondary}>Salary Date</Label><Input placeholder="DD/MM/YYYY" value={manualForm.salary_date} onChange={(e) => setManualForm(prev => ({ ...prev, salary_date: e.target.value }))} /></div>
               <div><Label className={textSecondary}>Total Salary (Gross)</Label><Input type="number" value={manualForm.gross_salary} onChange={(e) => setManualForm(prev => ({ ...prev, gross_salary: e.target.value }))} /></div>
             </div>
 
@@ -1535,9 +1592,101 @@ function SalaryPayslipView({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Comprehensive Payslip View Modal — opened from the row View button */}
+      <Dialog open={!!viewingPayslip} onOpenChange={(o) => !o && setViewingPayslip(null)}>
+        <DialogContent className={`${bgCard} border ${borderColor} max-w-3xl max-h-[92vh] overflow-y-auto`} data-testid="payslip-view-modal">
+          {viewingPayslip && (
+            <>
+              <DialogHeader>
+                <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
+                  <CreditCard className="h-5 w-5 text-[#a78bfa]" />
+                  Payslip — {months[viewingPayslip.month - 1]} {viewingPayslip.year}
+                </DialogTitle>
+                <DialogDescription className={textSecondary}>
+                  <Badge className={getStatusColor(viewingPayslip.status)}>{getStatusLabel(viewingPayslip.status)}</Badge>
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Employee block */}
+              <div className={`p-3 rounded-lg ${bgSecondary} grid grid-cols-2 md:grid-cols-4 gap-3 mt-2`}>
+                <KV l="Employee" v={viewingPayslip.employee_name || employee?.name} />
+                <KV l="Employee ID" v={viewingPayslip.employee_id || '—'} />
+                <KV l="Designation" v={viewingPayslip.designation || employee?.designation || '—'} />
+                <KV l="Joining" v={viewingPayslip.joining_date || employee?.joining_date || '—'} />
+              </div>
+
+              {/* Attendance summary */}
+              {viewingPayslip.attendance && (
+                <div className="mt-3">
+                  <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Monthly Summary</p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <Stat l="Working Days" v={viewingPayslip.attendance?.total_working_days ?? viewingPayslip.total_working_days ?? '—'} />
+                    <Stat l="Absent" v={viewingPayslip.attendance?.absent_days ?? viewingPayslip.days_absent ?? 0} red />
+                    <Stat l="Paid Leave" v={viewingPayslip.attendance?.paid_leaves ?? viewingPayslip.paid_leaves ?? 0} />
+                    <Stat l="Extra Days" v={viewingPayslip.attendance?.extra_days ?? viewingPayslip.extra_days ?? 0} green />
+                  </div>
+                </div>
+              )}
+
+              {/* Salary breakdown */}
+              <div className="mt-3">
+                <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Salary Breakdown</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  <Stat l="Gross" v={`₹${Number(viewingPayslip.base_salary ?? viewingPayslip.gross_salary ?? 0).toLocaleString('en-IN')}`} />
+                  <Stat l="Per Day" v={`₹${Number(viewingPayslip.per_day_salary ?? 0).toLocaleString('en-IN')}`} />
+                  <Stat l="Net Pay" v={`₹${Number(viewingPayslip.net_salary ?? 0).toLocaleString('en-IN')}`} green />
+                </div>
+              </div>
+
+              {/* Authorisation */}
+              {(viewingPayslip.authorized_by || viewingPayslip.authorized_title) && (
+                <div className={`mt-3 p-3 rounded-lg ${bgSecondary} flex items-center justify-between`}>
+                  <div>
+                    <p className={`text-xs ${textSecondary}`}>Authorized By</p>
+                    <p className={`text-sm ${textPrimary}`}>{viewingPayslip.authorized_by || '—'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-xs ${textSecondary}`}>Title</p>
+                    <p className={`text-sm ${textPrimary}`}>{viewingPayslip.authorized_title || '—'}</p>
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter className="mt-4">
+                <Button variant="outline" onClick={() => setViewingPayslip(null)}>Close</Button>
+                <Button
+                  onClick={() => onDownloadPDF(viewingPayslip)}
+                  disabled={viewingPayslip.status !== 'generated'}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  data-testid="payslip-view-download"
+                  title={viewingPayslip.status === 'generated' ? 'Download PDF' : 'Available after the payslip is generated'}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download PDF
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
+// Small read-only stat tiles for the payslip view modal.
+const KV = ({ l, v }) => (
+  <div>
+    <p className="text-[10px] uppercase tracking-wide text-[#71717a]">{l}</p>
+    <p className="text-sm font-medium text-[#fafafa] break-words">{v ?? '—'}</p>
+  </div>
+);
+const Stat = ({ l, v, red, green }) => (
+  <div className="p-2 rounded-md bg-[#0c0a09] border border-[#27272a]">
+    <p className="text-[10px] uppercase tracking-wide text-[#71717a]">{l}</p>
+    <p className={`text-sm font-semibold ${red ? 'text-red-400' : green ? 'text-emerald-400' : 'text-[#fafafa]'}`}>{v}</p>
+  </div>
+);
 
 // Salary History View Component
 function SalaryHistoryView({

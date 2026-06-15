@@ -1,6 +1,33 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 14, 2026 (cont.) — Payslip Create Modal Auto-fill + View Popup ✅
+
+### What changed
+**1) Create Payslip — Manual modal:**
+- **Employee Name / Employee ID / Designation / Joining Month Year** are now **read-only** (auto-filled from the employee record, no edit). The `cursor-not-allowed opacity-90` class makes the disabled state obvious.
+- **Salary Date** is editable (DD/MM/YYYY). When changed, the modal auto-fetches the gross salary that was effective for that month via `GET /api/payroll/salary-at-date/{user_id}?month=X&year=Y` and pre-fills **Total Salary (Gross)**. Existing per-day & net-pay computation logic remains and recomputes.
+- **Total Net Pay** is already shown alongside Per Day Salary in the modal.
+
+**2) Year selector**
+- Was a hardcoded `[2023, 2024, 2025, 2026, 2027]`. Replaced with `yearsForEmployee(employee)` which parses the employee's joining date and lists years from that year forward (capped at current year + 1).
+
+**3) View / Download flow on payslip rows**
+- Added an **Eye / View** button next to the existing Download button on every payslip row (both in the empty-state "Previous Payslips" list and in the expanded "Previous Payslips" section under the current payslip card).
+- Built a new comprehensive **Payslip View Modal** that opens from the View button. It shows: status badge, employee block (Name / ID / Designation / Joining), Monthly Summary (Working Days, Absent, Paid Leave, Extra Days), Salary Breakdown (Gross, Per Day, Net Pay), and Authorization (signed by / title).
+- The View Modal's footer has a **Download PDF** button which is enabled only when the payslip status is `generated` (so we don't try to render a PDF for a draft).
+
+### Files touched
+- `frontend/src/components/hr/PayrollManagementTab.js` — `yearsForEmployee` helper, readOnly form fields in both Manual modals (single-employee + all-employees views), Salary-Date → fetch effect, View button on payslip rows, new `viewingPayslip` state and the comprehensive view dialog. Two small presentational helpers `KV` and `Stat` for the view modal grid.
+
+### Self-test
+- ✅ Backend `GET /api/payroll/salary-at-date/{user_id}?month=6&year=2026` returns the salary effective at that date (verified with Vinothkumar's record: ₹25,000 from 17 Apr 2026 performance hike).
+- ✅ Frontend compiles cleanly with only pre-existing exhaustive-deps warnings.
+
+---
+
+
+
 ## Latest Update — Feb 14, 2026 (cont.) — Module-aware RBAC sweep across backend ✅
 
 ### What changed
