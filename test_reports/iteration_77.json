@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 77 — Frontend-only verification of new Tax view inside Finance → Expense → Budget (BudgetView.js). All 8 acceptance criteria from the review request verified successfully via Playwright: (1) Tax pill rendered as the LAST pill with data-testid budget-tab-esc_a50ca38eff after Investment; Loss hidden. (2) Clicking Tax renders [data-testid='budget-tax-view'] with header 'Tax Invoices · June 2026' and the active-top header card switches to three stats: Grand Income / Tax Income / Net Income. (3) Invoice table renders 3 June-2026 rows (budget-tax-row-<invoice_id>); columns Invoice/Client | View | Total | Tax % | Tax Amount | Paid Balance. (4) View link anchor budget-tax-view-<invoice_id> has correct href='/finance?tab=invoice&invoice_id=<id>' and target='_blank' for all 3 rows. (5) Math verified against live API: INV-2026-0007 (total ₹11,800, tax ₹1,800, paid 600) → taxPaid=(600/11800)*1800=91.52→₹92, taxBalance=1708.47→₹1,708 RED, matches UI exactly; INV-2026-0008 (total ₹1,180, tax ₹180, paid 1180 full) → ₹0 GREEN, matches. (6) Header totals: Grand ₹1,18,12,980, Tax ₹1,980, Net ₹1,18,11,000 — exact match. (7) Totals row appears (3 rows present): Totals ₹1,18,12,980 / ₹1,980 / ₹1,708. (8) Changing month from June→January re-fetches and updates header to 'Tax Invoices · January 2026' with 0 rows (June-2026 invoices no longer shown). (9) Switching Tax→Overhead removes budget-tax-view entirely and the header reverts to Total Budget / Spent / Balance — Tax-specific labels confined to the Tax pill as designed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BudgetView.js TAB_ORDER now includes 'tax' at index 4 — orderTops sorts deterministically so Tax always renders last among visible pills. Loss still filtered via HIDE_NAMES.",
+    "isTaxTop guard at line 110 uses case-insensitive trim match on activeTop.name === 'tax' — safe against casing/whitespace drift in seed data.",
+    "Header conditional at line 288–306 cleanly forks between (Grand/Tax/Net Income) for Tax and (Total Budget/Spent/Balance) for everything else — no leakage when switching pills (verified at runtime).",
+    "Sub-rows correctly suppressed when isTaxTop (line 408 guard: !isAllTab && !isTaxTop) — no editable budget rows pollute the Tax view.",
+    "Invoice fetch effect at line 95–106 uses correct half-open date window [YYYY-MM-01, next-month-01) which is what the backend supports, and handles December wraparound (month===12 ? year+1 : year).",
+    "Proportional tax-paid math at line 350 — taxPaid = (paid_amount/total_amount)*tax — matches the spec exactly. Math.max(0, tax - taxPaid) prevents negative balance for overpaid invoices. Red/green color toggle on taxBalance > 0 is wired correctly.",
+    "Totals row only renders when taxInvoices.length > 1 (line 380 guard) — correct UX (no need to show totals for a single row).",
+    "Minor (non-blocking): The 'Paid {fmt(taxPaid)}' subtext shows the *proportional* tax paid amount, not the literal invoice paid_amount. For INV-2026-0007 with paid=600, total=11800, tax=1800, this shows '₹92' (= 91.52 rounded). The review-request example wording 'paid_amount 92' is ambiguous — the actual paid_amount is 600 and 92 is the rendered proportional value. Confirmed implementation is consistent with the spec formula; just calling out for the next agent in case wording is misread.",
+    "Anchor uses href + target=_blank + rel=noreferrer — verified in DOM; clicking opens new tab as required (test asserts on anchor attributes, not navigation, per review-request guidance).",
+    "Backend /api/finance/invoices?from_date&to_date filter works correctly — January 2026 returns 0 rows, June 2026 returns exactly the 3 seeded invoices, confirming the date window is respected."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped — frontend only)", "frontend": "100% — all 8 acceptance criteria pass"},
+  "test_credentials": "vinoth@drawlead.com / Admin@123 (super_admin)",
+  "seed_data_creation": "None — used existing June-2026 invoice seeds (INV-2026-0014, INV-2026-0007, INV-2026-0008).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "To reach BudgetView reliably: login → /finance → click TOP-LEVEL 'Expense' tab (NOT 'Budget' top tab which is a legacy grid) → then click the inner 'Budget' sub-tab (the second 'Budget' button on the page, lower y-coordinate). budget-view container then becomes visible. Inner sub-tab buttons still lack data-testid (carry-over note from iteration 76 — recommendation still open: add expense-subtab-budget / expense-subtab-master / expense-subtab-split testids to avoid the duplicate-label disambiguation hack). Tax pill testid is budget-tab-esc_a50ca38eff. Seed invoices for June 2026 give Grand ₹1,18,12,980 / Tax ₹1,980 / Net ₹1,18,11,000.",
+  "rca of the issue": "No issue. Feature works end-to-end. Live API & UI verified to match the proportional-tax formula and the header summary math."
+}
