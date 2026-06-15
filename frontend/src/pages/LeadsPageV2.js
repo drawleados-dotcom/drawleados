@@ -2157,89 +2157,84 @@ const LeadsPageV2 = () => {
           />
         )}
 
-        {/* Appointment / Followup mini date+time popup */}
-        {stageDateModal && (
-          <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4" onClick={() => !stageDateSaving && setStageDateModal(null)}>
-            <div
-              className={`${bgCard} rounded-xl border ${borderColor} w-full max-w-sm shadow-xl`}
-              onClick={(e) => e.stopPropagation()}
-              data-testid="stage-date-modal"
-            >
-              <div className={`px-5 py-4 border-b ${borderColor} flex items-center justify-between`}>
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" style={{ color: stageDateModal.stage.color }} />
-                  <h3 className={`text-sm font-semibold ${textPrimary}`}>
+        {/* Appointment / Followup mini date+time popup — Radix Dialog so it
+            sits on top of Edit Lead and doesn't get pointer-blocked. */}
+        <Dialog open={!!stageDateModal} onOpenChange={(o) => !o && !stageDateSaving && setStageDateModal(null)}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-sm`} data-testid="stage-date-modal">
+            {stageDateModal && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" style={{ color: stageDateModal.stage.color }} />
                     {stageDateModal.kind === 'appointment' ? 'Set Appointment Date & Time' : 'Set Follow-up Date & Time'}
-                  </h3>
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <p className={`text-xs ${textSecondary}`}>
+                    Moving to <b style={{ color: stageDateModal.stage.color }}>{stageDateModal.stage.name}</b>. Pick when this should happen.
+                  </p>
+                  <div>
+                    <Label className={textPrimary}>Date</Label>
+                    <Input
+                      type="date"
+                      value={stageDateValue}
+                      onChange={(e) => setStageDateValue(e.target.value)}
+                      className={bgSecondary}
+                      data-testid="stage-date-input"
+                    />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Time</Label>
+                    <Input
+                      type="time"
+                      value={stageTimeValue}
+                      onChange={(e) => setStageTimeValue(e.target.value)}
+                      className={bgSecondary}
+                      data-testid="stage-time-input"
+                    />
+                  </div>
                 </div>
-                <button onClick={() => !stageDateSaving && setStageDateModal(null)} className={textSecondary}><X className="h-4 w-4" /></button>
-              </div>
-              <div className="px-5 py-4 space-y-3">
-                <p className={`text-xs ${textSecondary}`}>
-                  Moving to <b style={{ color: stageDateModal.stage.color }}>{stageDateModal.stage.name}</b>. Pick when this should happen.
-                </p>
-                <div>
-                  <Label className={textPrimary}>Date</Label>
-                  <Input
-                    type="date"
-                    value={stageDateValue}
-                    onChange={(e) => setStageDateValue(e.target.value)}
-                    className={`${bgSecondary} border-${borderColor} ${textPrimary}`}
-                    data-testid="stage-date-input"
-                  />
-                </div>
-                <div>
-                  <Label className={textPrimary}>Time</Label>
-                  <Input
-                    type="time"
-                    value={stageTimeValue}
-                    onChange={(e) => setStageTimeValue(e.target.value)}
-                    className={`${bgSecondary} border-${borderColor} ${textPrimary}`}
-                    data-testid="stage-time-input"
-                  />
-                </div>
-              </div>
-              <div className={`px-5 py-3 border-t ${borderColor} flex justify-end gap-2`}>
-                <Button variant="outline" onClick={() => setStageDateModal(null)} disabled={stageDateSaving}>Cancel</Button>
-                <Button
-                  data-testid="stage-date-save"
-                  disabled={!stageDateValue || !stageTimeValue || stageDateSaving}
-                  onClick={async () => {
-                    setStageDateSaving(true);
-                    const stage = stageDateModal.stage;
-                    const isAppt = stageDateModal.kind === 'appointment';
-                    // Build local datetime as ISO string so backend stores it verbatim.
-                    const iso = new Date(`${stageDateValue}T${stageTimeValue}:00`).toISOString();
-                    try {
-                      await axios.put(
-                        `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
-                        {
-                          stage_id: stage.stage_id,
-                          ...(isAppt ? { appointment_at: iso } : { followup_at: iso }),
-                        },
-                        { headers },
-                      );
-                      const patch = isAppt ? { appointment_at: iso } : { followup_at: iso };
-                      setLeadForm({ ...leadForm, stage_id: stage.stage_id });
-                      setEditingLead({ ...editingLead, stage_id: stage.stage_id, ...patch });
-                      toast.success(`Moved to ${stage.name}`);
-                      setStageDateModal(null);
-                      loadLeads();
-                      loadStats();
-                    } catch (e) {
-                      toast.error('Failed to change stage');
-                    } finally {
-                      setStageDateSaving(false);
-                    }
-                  }}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                >
-                  {stageDateSaving ? 'Saving…' : 'Confirm & Move'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setStageDateModal(null)} disabled={stageDateSaving}>Cancel</Button>
+                  <Button
+                    data-testid="stage-date-save"
+                    disabled={!stageDateValue || !stageTimeValue || stageDateSaving}
+                    onClick={async () => {
+                      setStageDateSaving(true);
+                      const stage = stageDateModal.stage;
+                      const isAppt = stageDateModal.kind === 'appointment';
+                      const iso = new Date(`${stageDateValue}T${stageTimeValue}:00`).toISOString();
+                      try {
+                        await axios.put(
+                          `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
+                          {
+                            stage_id: stage.stage_id,
+                            ...(isAppt ? { appointment_at: iso } : { followup_at: iso }),
+                          },
+                          { headers },
+                        );
+                        const patch = isAppt ? { appointment_at: iso } : { followup_at: iso };
+                        setLeadForm({ ...leadForm, stage_id: stage.stage_id });
+                        setEditingLead({ ...editingLead, stage_id: stage.stage_id, ...patch });
+                        toast.success(`Moved to ${stage.name}`);
+                        setStageDateModal(null);
+                        loadLeads();
+                        loadStats();
+                      } catch (e) {
+                        toast.error('Failed to change stage');
+                      } finally {
+                        setStageDateSaving(false);
+                      }
+                    }}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  >
+                    {stageDateSaving ? 'Saving…' : 'Confirm & Move'}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
