@@ -1,6 +1,38 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Project Payment Schedule: Monthly cycle popup + status workflow ✅
+
+### What changed
+- In `Edit Payment Schedule` modal, choosing **Duration = Monthly** now auto-opens a new "Add Monthly Cycle" popup. A "+ Add monthly cycle" inline link is also rendered after the first generation so HR can add additional months **manually** (no auto-fill of multiple months).
+- The Monthly Cycle popup asks:
+  - **Payment Type**: Pre-paid (invoice at start of month) / Post-paid (invoice at end / next month)
+  - **Period Start** + **Period End** (auto = last day of month)
+  - **Invoice Date** + **Due Date** (auto = invoice + 7 days, recomputed when invoice date changes)
+  - **Amount** + **Discount**
+  - Live "Net for this cycle" preview
+- Click **Generate** → adds exactly one row to the Splits table with label `Pre-paid · Jun 2026` (or Post-paid), net amount, expected_date = invoice_date, and `status: 'created'`. Stores `billing_type, period_start, period_end, invoice_date, due_date, discount` on the row for later invoice automation.
+- Removed the inline **Paid checkbox** from each splits-row editor.
+- Splits table **Status column** is now a click-to-cycle badge: **Created → Raised → Paid → Declined → Created**. Click the badge (super_admin only) to advance state. `collected` flag is kept in sync with `status === 'paid'` so existing dashboards/totals remain correct.
+- Totals card "Collected" now uses `isPaid(sp)` = `status === 'paid' || legacy collected`.
+
+### Files touched
+- `/app/frontend/src/components/projects/PaymentScheduleTab.js`
+  - New constants `STATUS_FLOW / STATUS_LABEL / STATUS_STYLE / nextStatus / isPaid`.
+  - Extended `emptySplit()` with `status, billing_type, period_start, period_end, invoice_date, due_date, discount`.
+  - Added `showMonthly` / `monthly` state + `generateMonthlyRow` + monthly cycle modal JSX.
+  - Replaced `toggleCollected` with `cycleStatus` (Created → Raised → Paid → Declined cycle, keeps `collected` in sync).
+  - Removed inline Paid checkbox; expanded `expected_date` to `md:col-span-3`.
+  - Auto-open Monthly popup from Duration `<select>` onChange when value becomes `monthly`.
+
+### Verification
+- Screenshot: opened Edit Payment Schedule → clicked Recurring → set Duration = Monthly → "Add Monthly Cycle" popup auto-opened with Pre-paid selected, both date pairs auto-populated, Amount/Discount inputs visible, "Net for this cycle" live, and the Generate / Cancel buttons rendered with the manual-only hint at the bottom.
+
+### Future hook (not in this iteration, per backlog)
+- "Raise" status currently flips via badge cycle. Next step (per user note): the Finance Payment Schedule row should expose a "Raise Invoice" action that creates an Invoice record and a "Mark Paid" action that records a Cashbook entry.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Payslip View modal: light-mode text + attendance stats + remove Regenerate ✅
 
 ### What changed

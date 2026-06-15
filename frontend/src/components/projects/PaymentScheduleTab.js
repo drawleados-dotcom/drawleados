@@ -11,6 +11,27 @@ import { Plus, Trash2, Wallet, X, Lock } from 'lucide-react';
 const API = process.env.REACT_APP_BACKEND_URL;
 const MODES = ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Card', 'Other'];
 
+// Status workflow for each split/cycle row.
+// Click the badge to cycle: Created → Raised → Paid → Declined → Created
+const STATUS_FLOW = ['created', 'raised', 'paid', 'declined'];
+const STATUS_LABEL = {
+  created: 'Created',
+  raised: 'Raised',
+  paid: 'Paid',
+  declined: 'Declined',
+};
+const STATUS_STYLE = {
+  created: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
+  raised: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
+  paid: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+  declined: 'bg-red-500/20 text-red-400 border-red-500/40',
+};
+const nextStatus = (s) => {
+  const i = STATUS_FLOW.indexOf(s || 'created');
+  return STATUS_FLOW[(i + 1) % STATUS_FLOW.length];
+};
+const isPaid = (sp) => (sp.status === 'paid') || (!sp.status && !!sp.collected);
+
 const emptySplit = () => ({
   id: `s_${Math.random().toString(36).slice(2, 10)}`,
   label: 'Advance',
@@ -19,18 +40,62 @@ const emptySplit = () => ({
   percentage: 0,
   mode: 'UPI',
   expected_date: '',
-  collected: false,
+  collected: false,            // legacy field — kept for back-compat
   collected_date: '',
   notes: '',
+  // New monthly-cycle fields (optional for one-time rows)
+  status: 'created',           // 'created' | 'raised' | 'paid' | 'declined'
+  billing_type: '',            // 'pre_paid' | 'post_paid' (only for Monthly cycles)
+  period_start: '',
+  period_end: '',
+  invoice_date: '',
+  due_date: '',
+  discount: 0,
 });
 
 const emptySchedule = () => ({
   type: 'one_time',         // 'one_time' | 'recurring'
-  recurrence: 'monthly',    // 'monthly' | 'quarterly' | 'yearly' (only when recurring)
+  recurrence: '',           // 'monthly' | 'quarterly' | 'yearly' (only when recurring)
   total_amount: 0,
   currency: 'INR',
   splits: [emptySplit()],
 });
+
+// Build a fresh "Monthly cycle" form state for the popup.
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const lastDayOfMonth = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return end.toISOString().slice(0, 10);
+};
+const addDays = (iso, days) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const monthLabel = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+};
+const emptyMonthlyCycle = (amountDefault = 0) => {
+  const start = todayIso();
+  const end = lastDayOfMonth(start);
+  return {
+    billing_type: 'pre_paid',  // 'pre_paid' | 'post_paid'
+    period_start: start,
+    period_end: end,
+    invoice_date: start,
+    due_date: addDays(start, 7),
+    amount: amountDefault || 0,
+    discount: 0,
+  };
+};
 
 export default function PaymentScheduleTab({
   project,
@@ -47,6 +112,9 @@ export default function PaymentScheduleTab({
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(emptySchedule());
+  // Monthly cycle popup state — auto-opens when Duration changes to "Monthly".
+  const [showMonthly, setShowMonthly] = useState(false);
+  const [monthly, setMonthly] = useState(emptyMonthlyCycle());
   const token = typeof window !== 'undefined' ? localStorage.getItem('session_token') : null;
   const headers = { Authorization: `Bearer ${token}` };
   const canEdit = !!isSuperAdmin;
@@ -57,7 +125,7 @@ export default function PaymentScheduleTab({
     const s = schedule;
     if (!s) return { total: 0, collected: 0, balance: 0 };
     const total = Number(s.total_amount) || (s.splits || []).reduce((acc, sp) => acc + (Number(sp.amount) || 0), 0);
-    const collected = (s.splits || []).filter(sp => sp.collected).reduce((acc, sp) => acc + (Number(sp.amount) || 0), 0);
+    const collected = (s.splits || []).filter(isPaid).reduce((acc, sp) => acc + (Number(sp.amount) || 0), 0);
     return { total, collected, balance: total - collected };
   }, [schedule]);
 
@@ -100,15 +168,21 @@ export default function PaymentScheduleTab({
     }
   };
 
-  // Quick toggle for "collected" — only super_admin
-  const toggleCollected = async (splitId) => {
+  // Click the status badge to cycle: Created → Raised → Paid → Declined → Created.
+  const cycleStatus = async (splitId) => {
     if (!canEdit || !schedule) return;
     const next = JSON.parse(JSON.stringify(schedule));
-    next.splits = (next.splits || []).map((sp) =>
-      sp.id === splitId
-        ? { ...sp, collected: !sp.collected, collected_date: !sp.collected ? new Date().toISOString().slice(0, 10) : '' }
-        : sp
-    );
+    next.splits = (next.splits || []).map((sp) => {
+      if (sp.id !== splitId) return sp;
+      const ns = nextStatus(sp.status || 'created');
+      return {
+        ...sp,
+        status: ns,
+        // Keep the legacy `collected` flag in sync so older reports/dashboards keep working.
+        collected: ns === 'paid',
+        collected_date: ns === 'paid' ? new Date().toISOString().slice(0, 10) : '',
+      };
+    });
     try {
       const res = await axios.patch(
         `${API}/api/projects/${project.project_id}`,
@@ -119,6 +193,34 @@ export default function PaymentScheduleTab({
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to update');
     }
+  };
+
+  // Generate a single split row from the Monthly cycle popup.
+  const generateMonthlyRow = () => {
+    const m = monthly;
+    const baseAmt = Number(m.amount) || 0;
+    const disc = Number(m.discount) || 0;
+    const net = Math.max(0, baseAmt - disc);
+    const tag = m.billing_type === 'post_paid' ? 'Post-paid' : 'Pre-paid';
+    const label = `${tag} · ${monthLabel(m.period_start) || 'Cycle'}`;
+    const row = {
+      ...emptySplit(),
+      label,
+      amount_type: 'amount',
+      amount: net,
+      mode: 'UPI',
+      expected_date: m.invoice_date || '',
+      status: 'created',
+      billing_type: m.billing_type,
+      period_start: m.period_start,
+      period_end: m.period_end,
+      invoice_date: m.invoice_date,
+      due_date: m.due_date,
+      discount: disc,
+    };
+    setDraft(d => ({ ...d, splits: [...(d.splits || []), row] }));
+    setShowMonthly(false);
+    toast.success(`Added ${label} (${net.toLocaleString()})`);
   };
 
   return (
@@ -223,21 +325,21 @@ export default function PaymentScheduleTab({
                         <td className={`p-3 ${textPrimary}`}>{sp.mode || '—'}</td>
                         <td className={`p-3 ${textPrimary}`}>{sp.expected_date || '—'}</td>
                         <td className="p-3">
-                          <button
-                            type="button"
-                            onClick={() => toggleCollected(sp.id)}
-                            disabled={!canEdit}
-                            data-testid={`payment-collected-toggle-${sp.id}`}
-                            className={`px-2 py-1 rounded-md text-xs font-medium ${
-                              sp.collected
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : 'bg-amber-500/20 text-amber-400'
-                            } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
-                          >
-                            {sp.collected
-                              ? `Collected${sp.collected_date ? ` · ${sp.collected_date}` : ''}`
-                              : 'Not collected'}
-                          </button>
+                          {(() => {
+                            const st = sp.status || (sp.collected ? 'paid' : 'created');
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => cycleStatus(sp.id)}
+                                disabled={!canEdit}
+                                data-testid={`payment-status-cycle-${sp.id}`}
+                                title={canEdit ? 'Click to advance status' : 'Read only'}
+                                className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[st]} ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
+                              >
+                                {STATUS_LABEL[st]}
+                              </button>
+                            );
+                          })()}
                         </td>
                       </tr>
                     ))}
@@ -303,14 +405,32 @@ export default function PaymentScheduleTab({
                     <Label className={textPrimary}>Duration</Label>
                     <select
                       value={draft.recurrence}
-                      onChange={(e) => setDraft(d => ({ ...d, recurrence: e.target.value }))}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setDraft(d => ({ ...d, recurrence: v }));
+                        if (v === 'monthly' && canEdit) {
+                          setMonthly(emptyMonthlyCycle(Number(draft.total_amount) || 0));
+                          setShowMonthly(true);
+                        }
+                      }}
                       className={`w-full mt-1 px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary}`}
                       data-testid="payment-recurrence"
                     >
+                      <option value="">Select…</option>
                       <option value="monthly">Monthly</option>
                       <option value="quarterly">Quarterly</option>
                       <option value="yearly">Yearly</option>
                     </select>
+                    {draft.recurrence === 'monthly' && (
+                      <button
+                        type="button"
+                        onClick={() => { setMonthly(emptyMonthlyCycle(Number(draft.total_amount) || 0)); setShowMonthly(true); }}
+                        className="mt-1 text-[11px] text-[#10b981] hover:underline"
+                        data-testid="open-monthly-cycle-popup"
+                      >
+                        + Add monthly cycle
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -412,20 +532,8 @@ export default function PaymentScheduleTab({
                           const v = e.target.value;
                           setDraft(d => ({ ...d, splits: d.splits.map(s => s.id === sp.id ? { ...s, expected_date: v } : s) }));
                         }}
-                        className={`md:col-span-2 ${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
+                        className={`md:col-span-3 ${isDark ? 'bg-[#18181b]' : 'bg-white'} border ${borderColor} ${textPrimary}`}
                       />
-                      <label className="md:col-span-1 flex items-center gap-1 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={!!sp.collected}
-                          onChange={(e) => {
-                            const v = e.target.checked;
-                            setDraft(d => ({ ...d, splits: d.splits.map(s => s.id === sp.id ? { ...s, collected: v, collected_date: v ? new Date().toISOString().slice(0, 10) : '' } : s) }));
-                          }}
-                          className="h-4 w-4 text-[#10b981] rounded"
-                        />
-                        <span className={textSecondary}>Paid</span>
-                      </label>
                       <button
                         type="button"
                         onClick={() => setDraft(d => ({ ...d, splits: d.splits.filter(s => s.id !== sp.id) }))}
@@ -452,6 +560,150 @@ export default function PaymentScheduleTab({
                   {saving ? 'Saving…' : 'Save'}
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Monthly Cycle popup — opened when Duration is set to "Monthly".
+          Adds ONE row at a time on Generate (no auto-fill of multiple months). */}
+      {showMonthly && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[80] p-4"
+          onClick={() => setShowMonthly(false)}
+          data-testid="monthly-cycle-modal"
+        >
+          <Card
+            className={`${bgCard} border ${borderColor} w-full max-w-lg`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className={`text-base font-semibold ${textPrimary}`}>Add Monthly Cycle</h3>
+                <button onClick={() => setShowMonthly(false)} className={textSecondary} data-testid="monthly-cycle-close">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Pre-paid vs Post-paid */}
+              <div>
+                <Label className={textPrimary}>Payment Type</Label>
+                <div className="flex gap-2 mt-1">
+                  {[
+                    { id: 'pre_paid', label: 'Pre-paid', hint: 'Invoice at start of month' },
+                    { id: 'post_paid', label: 'Post-paid', hint: 'Invoice at end / next month' },
+                  ].map(t => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setMonthly(m => ({ ...m, billing_type: t.id }))}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm border text-left ${
+                        monthly.billing_type === t.id
+                          ? 'bg-[#10b981] border-[#10b981] text-white'
+                          : isDark
+                            ? 'bg-[#27272a] border-[#3f3f46] text-[#fafafa]'
+                            : 'bg-gray-100 border-gray-200 text-gray-700'
+                      }`}
+                      data-testid={`monthly-billing-${t.id}`}
+                    >
+                      <div className="font-medium">{t.label}</div>
+                      <div className="text-[10px] opacity-80">{t.hint}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Period Start</Label>
+                  <Input
+                    type="date"
+                    value={monthly.period_start}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setMonthly(m => ({ ...m, period_start: v, period_end: lastDayOfMonth(v), invoice_date: m.billing_type === 'pre_paid' ? v : lastDayOfMonth(v), due_date: addDays(m.billing_type === 'pre_paid' ? v : lastDayOfMonth(v), 7) }));
+                    }}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    data-testid="monthly-period-start"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Period End</Label>
+                  <Input
+                    type="date"
+                    value={monthly.period_end}
+                    onChange={(e) => setMonthly(m => ({ ...m, period_end: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    data-testid="monthly-period-end"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Invoice Date</Label>
+                  <Input
+                    type="date"
+                    value={monthly.invoice_date}
+                    onChange={(e) => setMonthly(m => ({ ...m, invoice_date: e.target.value, due_date: addDays(e.target.value, 7) }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    data-testid="monthly-invoice-date"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Due Date</Label>
+                  <Input
+                    type="date"
+                    value={monthly.due_date}
+                    onChange={(e) => setMonthly(m => ({ ...m, due_date: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    data-testid="monthly-due-date"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Amount</Label>
+                  <Input
+                    type="number" min="0"
+                    value={monthly.amount}
+                    onChange={(e) => setMonthly(m => ({ ...m, amount: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    placeholder="0"
+                    data-testid="monthly-amount"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Discount</Label>
+                  <Input
+                    type="number" min="0"
+                    value={monthly.discount}
+                    onChange={(e) => setMonthly(m => ({ ...m, discount: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary} mt-1`}
+                    placeholder="0 (flat)"
+                    data-testid="monthly-discount"
+                  />
+                </div>
+              </div>
+
+              {/* Live preview of net amount */}
+              <div className={`p-2.5 rounded-lg border ${borderColor} ${bgSecondary} flex items-center justify-between`}>
+                <p className={`text-xs ${textSecondary}`}>Net for this cycle</p>
+                <p className={`text-sm font-semibold ${textPrimary}`}>
+                  {(schedule?.currency || 'INR')} {Math.max(0, (Number(monthly.amount) || 0) - (Number(monthly.discount) || 0)).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowMonthly(false)} className={`flex-1 ${borderColor}`}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={generateMonthlyRow}
+                  className="flex-1 bg-[#10b981] hover:bg-[#059669] text-white"
+                  data-testid="monthly-generate-btn"
+                >
+                  <Plus className="h-4 w-4 mr-1" /> Generate
+                </Button>
+              </div>
+              <p className={`text-[10px] ${textSecondary} text-center`}>
+                Generates a single row. Click &quot;+ Add monthly cycle&quot; again for additional months.
+              </p>
             </CardContent>
           </Card>
         </div>
