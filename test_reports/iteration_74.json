@@ -1,0 +1,35 @@
+{
+  "summary": "End-to-end verification of iteration 74: (A) 'All' first tab in both Master Expense and Budget views, (B) tab order All|Overhead|Marketing|Profit|Investment with Loss hidden, (C) Payroll row pinned first inside Budget→Overhead (already done for Master Expense), (D) Cashbook Add-Expense Budget hint panel. Backend: 4/4 new pytest cases pass for the auto-computed Payroll budget (auto value, is_auto_budget flag, manual override precedence, restore to auto, top-budget includes auto Payroll). All 5/5 existing budget tests still pass. Frontend: every required testid present (master-tab-all, master-all-summary, master-all-row-*, master-overhead-payroll-row, budget-tab-all, budget-all-summary, budget-all-row-*, cashbook-budget-hint, payroll-payslip-picker). UI matches the screenshots in the brief — Master All Grand Totals ₹40,290/₹125/₹40,165; Budget All ₹83,000/₹125/₹82,875 with Overhead ₹73,000 (auto Payroll ₹50,000.04 + Rent ₹23,000); Budget→Overhead lists Payroll first then Rent; Cashbook hint shows Budget/Paid/Remaining and adds After-this with green→red flip when over-budget (verified rgb(239,68,68) on '-27,000').",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_payroll_auto_budget.py",
+    "/app/test_reports/pytest/iter74_payroll_auto.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "expense_split_routes.list_budgets currently identifies the auto-budget sub by case-insensitive name == 'payroll'. If anyone renames the seeded sub (e.g. 'Payroll - Salaries') the auto computation silently turns off. Safer to tag via a dedicated flag (e.g. category.auto_source == 'payroll') stored on the sub-category document.",
+    "Floating-point precision: auto budget shows as ₹50,000.04 due to summing floats. Consider rounding base_salary/net_salary to int (paise) on payslip generation, or applying round(payroll_auto_total, 2) before publishing the field — currently it does round(budget,2) per sub, but the original 0.04 leak from accumulated floats remains visible in the hint panel.",
+    "Pre-existing (carried from iteration 73): top-level Finance tab 'Budget' (id=budget) is still a placeholder stub. The new Budget lives correctly inside Expense → Budget sub-tab."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_payroll_auto_budget.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "vinoth@drawlead.com / Admin@123 (super_admin)",
+  "seed_data_creation": "None added in this iteration. Tests put/restore the Payroll budget back to auto (amount=0) so no residual manual override is left behind.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New backend pytest file: /app/backend/tests/test_payroll_auto_budget.py — needs REACT_APP_BACKEND_URL env var set before invocation (e.g. export REACT_APP_BACKEND_URL=https://drawlead-docs.preview.emergentagent.com). The auto Payroll budget for June 2026 is ₹50,000.04 (sum of base_salary/net_salary across seeded payslips). The Cashbook Add-Expense modal uses native <select> elements (data-testid='expense-split-top-select' / 'expense-split-sub-select') — when scripting, set value directly and dispatch 'change' rather than relying on select_option(label=...) because options include suffixes like ' (50%)' / ' (0%)'.",
+  "rca of the issue": "No issues found. Feature working as specified by E1."
+}

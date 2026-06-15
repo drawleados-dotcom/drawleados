@@ -22,6 +22,18 @@ const API = process.env.REACT_APP_BACKEND_URL;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
+// Match Master Expense — pin All/Overhead/Marketing/Profit/Investment.
+const TAB_ORDER = ['overhead', 'marketing', 'profit', 'investment'];
+const HIDE_NAMES = new Set(['loss']);
+const orderTops = (tops) => {
+  const visible = (tops || []).filter((t) => !HIDE_NAMES.has((t.name || '').trim().toLowerCase()));
+  const idx = (t) => {
+    const i = TAB_ORDER.indexOf((t.name || '').trim().toLowerCase());
+    return i === -1 ? 999 : i;
+  };
+  return [...visible].sort((a, b) => idx(a) - idx(b));
+};
+
 const BudgetView = () => {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -49,11 +61,12 @@ const BudgetView = () => {
         axios.get(`${API}/api/finance/expense-split/budgets?month=${month}&year=${year}`, { headers }),
         axios.get(`${API}/api/payroll/payslips?month=${month}&year=${year}`, { headers }).catch(() => ({ data: [] })),
       ]);
-      const cats = bRes.data?.categories || [];
+      const cats = orderTops(bRes.data?.categories || []);
       setTops(cats);
       setActiveTopId((prev) => {
+        if (prev === 'all') return 'all';
         if (prev && cats.find((c) => c.category_id === prev)) return prev;
-        return cats[0]?.category_id || null;
+        return 'all';
       });
       // Sum gross (base_salary) of every payslip — drafts + reviews + paid all
       // count toward the "grand salary" the user wants to compare against.
@@ -74,6 +87,7 @@ const BudgetView = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  const isAllTab = activeTopId === 'all';
   const activeTop = tops.find((t) => t.category_id === activeTopId) || null;
 
   // Auto-budget rule: a sub-category literally named "Payroll" auto-uses the
@@ -85,8 +99,10 @@ const BudgetView = () => {
     if (isPayrollSub(s) && (!s.budget || s.budget <= 0)) return payrollGrossTotal;
     return Number(s.budget || 0);
   };
-  // Recompute the active top's header so Total Budget / Balance reflect the
-  // auto-injected Payroll figure.
+  // Per-top effective totals (includes auto Payroll injection).
+  const effectiveTopBudget = (top) =>
+    (top.sub_categories || []).reduce((s, c) => s + effectiveBudget(c), 0);
+  // Active top header.
   const activeSubs = activeTop?.sub_categories || [];
   const totalBudgetForTop = activeSubs.reduce((s, c) => s + effectiveBudget(c), 0);
   const totalSpentForTop = activeTop ? Number(activeTop.spent || 0) : 0;
@@ -169,8 +185,16 @@ const BudgetView = () => {
 
       {!loading && tops.length > 0 && (
         <>
-          {/* Dynamic top-category sub-tabs */}
+          {/* Dynamic top-category sub-tabs (All pinned first) */}
           <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a] flex-wrap" data-testid="budget-tabs">
+            <button
+              onClick={() => setActiveTopId('all')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isAllTab ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+              data-testid="budget-tab-all"
+            >
+              <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle bg-[#10b981]" />
+              All
+            </button>
             {tops.map((c) => {
               const active = c.category_id === activeTopId;
               return (
@@ -187,8 +211,55 @@ const BudgetView = () => {
             })}
           </div>
 
+          {/* ALL view — grand totals + per-top summary rows */}
+          {isAllTab && (() => {
+            const totals = tops.map((t) => ({
+              t,
+              budget: effectiveTopBudget(t),
+              spent: Number(t.spent || 0),
+            })).map((r) => ({ ...r, balance: r.budget - r.spent }));
+            const grandBudget = totals.reduce((s, r) => s + r.budget, 0);
+            const grandSpent = totals.reduce((s, r) => s + r.spent, 0);
+            const grandBalance = grandBudget - grandSpent;
+            return (
+              <>
+                <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3" data-testid="budget-all-summary">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">All Categories</p>
+                    <p className="text-lg font-bold text-[#fafafa]">Grand Totals <span className="text-xs font-mono text-[#a1a1aa]">({MONTHS[month - 1]} {year})</span></p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <Stat l="Total Budget" v={fmt(grandBudget)} />
+                    <Stat l="Paid / Spent" v={fmt(grandSpent)} red={grandSpent > grandBudget && grandBudget > 0} />
+                    <Stat l="Balance" v={fmt(grandBalance)} green={grandBalance >= 0} red={grandBalance < 0} />
+                  </div>
+                </div>
+                <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
+                    <p className="text-sm font-medium text-[#fafafa]">Top Categories</p>
+                    <span className="text-xs text-[#a1a1aa]">{tops.length} groups</span>
+                  </div>
+                  <div className="divide-y divide-[#27272a]">
+                    {totals.map(({ t, budget, spent, balance }) => (
+                      <div key={t.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`budget-all-row-${t.category_id}`}>
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-[#fafafa]">{t.name}</p>
+                          <p className="text-[10px] text-[#a1a1aa]">{(t.sub_categories || []).length} sub-categories</p>
+                        </div>
+                        <Stat l="Budget" v={fmt(budget)} />
+                        <Stat l="Paid" v={fmt(spent)} red={spent > budget && budget > 0} />
+                        <Stat l="Balance" v={fmt(balance)} green={balance >= 0} red={balance < 0} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+
           {/* Active top header */}
-          {activeTop && (
+          {!isAllTab && activeTop && (
             <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">Top Category</p>
@@ -202,7 +273,8 @@ const BudgetView = () => {
             </div>
           )}
 
-          {/* Sub-categories — Budget editable */}
+          {/* Sub-categories — Budget editable (hidden in All view) */}
+          {!isAllTab && (
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
               <p className="text-sm font-medium text-[#fafafa]">Sub-Categories — Budget for {MONTHS[month - 1]} {year}</p>
@@ -214,7 +286,16 @@ const BudgetView = () => {
                   No sub-categories for <b>{activeTop?.name}</b>. Add one from the Expense Split tab.
                 </div>
               )}
-              {(activeTop?.sub_categories || []).map((s) => {
+              {(activeTop?.sub_categories || [])
+                // Pin "Payroll" sub-category to the top inside Overhead so the
+                // auto-fetched row is the first thing users see.
+                .slice()
+                .sort((a, b) => {
+                  const ap = isPayrollSub(a) ? 0 : 1;
+                  const bp = isPayrollSub(b) ? 0 : 1;
+                  return ap - bp;
+                })
+                .map((s) => {
                 const isEditing = editingId === s.category_id;
                 const isSaving = savingId === s.category_id;
                 const isPayroll = isPayrollSub(s);
@@ -296,6 +377,7 @@ const BudgetView = () => {
               })}
             </div>
           </div>
+          )}
         </>
       )}
     </div>

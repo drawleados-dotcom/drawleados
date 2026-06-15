@@ -139,7 +139,7 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
       try {
         const now = new Date();
         const r3 = await axios.get(
-          `${API}/api/finance/expense-split/categories?month=${now.getMonth() + 1}&year=${now.getFullYear()}`,
+          `${API}/api/finance/expense-split/budgets?month=${now.getMonth() + 1}&year=${now.getFullYear()}`,
           { headers },
         );
         setSplitCategories(r3.data?.categories || []);
@@ -739,6 +739,51 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                   </select>
                 </div>
               </div>
+
+              {/* Budget hint — shows the picked sub-category's monthly budget,
+                  spent so far and remaining balance. Helps users size variable
+                  expenses (e.g. partial Rent payment). */}
+              {(() => {
+                const topCat = splitCategories.find((c) => c.category_id === splitTopId);
+                const subCat = topCat?.sub_categories?.find((s) => s.category_id === splitSubId);
+                if (!subCat) return null;
+                const budget = Number(subCat.budget || 0);
+                const spent = Number(subCat.spent || 0);
+                const remaining = budget - spent;
+                if (budget <= 0) return null;
+                const entered = parseFloat(expenseTotal) || 0;
+                const afterThis = remaining - entered;
+                return (
+                  <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="cashbook-budget-hint">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>Budget for {subCat.name}</p>
+                        <p className={`text-[10px] ${textSecondary}`}>This month · enter any amount (variable allowed)</p>
+                      </div>
+                      <div className="flex items-center gap-4 text-right">
+                        <div>
+                          <p className={`text-[10px] uppercase ${textSecondary}`}>Budget</p>
+                          <p className={`text-sm font-semibold ${textPrimary}`}>{fmt(budget)}</p>
+                        </div>
+                        <div>
+                          <p className={`text-[10px] uppercase ${textSecondary}`}>Paid so far</p>
+                          <p className={`text-sm font-semibold ${textPrimary}`}>{fmt(spent)}</p>
+                        </div>
+                        <div>
+                          <p className={`text-[10px] uppercase ${textSecondary}`}>Remaining</p>
+                          <p className={`text-sm font-semibold`} style={{ color: remaining > 0 ? '#10b981' : '#ef4444' }}>{fmt(remaining)}</p>
+                        </div>
+                        {entered > 0 && (
+                          <div>
+                            <p className={`text-[10px] uppercase ${textSecondary}`}>After this</p>
+                            <p className={`text-sm font-semibold`} style={{ color: afterThis >= 0 ? '#10b981' : '#ef4444' }}>{fmt(afterThis)}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Payroll Payslip picker — only when Sub Category resolves to "Payroll" */}
               {isPayrollMode && (

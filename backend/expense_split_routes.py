@@ -249,6 +249,19 @@ async def list_budgets(request: Request, month: Optional[int] = None, year: Opti
 
     spent_map = await _calc_spent_per_category(month, year)
 
+    # Auto-budget for any sub-category literally named "Payroll" — sum gross
+    # (falling back to net when gross is missing) across every payslip for the
+    # period. Manually-set budgets always take precedence over this.
+    payroll_auto_total = 0.0
+    payslips = await db.payslips.find(
+        {"month": month, "year": year},
+        {"_id": 0, "base_salary": 1, "net_salary": 1},
+    ).to_list(500)
+    for p in payslips:
+        gross = float(p.get("base_salary") or 0)
+        net = float(p.get("net_salary") or 0)
+        payroll_auto_total += gross if gross > 0 else net
+
     tops = [d for d in docs if not d.get("parent_id")]
     subs_by_parent = {}
     for d in docs:
@@ -259,7 +272,9 @@ async def list_budgets(request: Request, month: Optional[int] = None, year: Opti
     for t in tops:
         sub_list = []
         for s in subs_by_parent.get(t["category_id"], []):
-            budget = budget_map.get(s["category_id"], 0.0)
+            manual = budget_map.get(s["category_id"], 0.0)
+            is_payroll = (s.get("name") or "").strip().lower() == "payroll"
+            budget = manual if manual > 0 else (payroll_auto_total if is_payroll else 0.0)
             spent = round(spent_map.get(s["category_id"], 0.0), 2)
             sub_list.append({
                 **s,
@@ -267,6 +282,7 @@ async def list_budgets(request: Request, month: Optional[int] = None, year: Opti
                 "spent": spent,
                 "balance": round(budget - spent, 2),
                 "over_budget": spent > budget and budget > 0,
+                "is_auto_budget": is_payroll and manual <= 0 and budget > 0,
             })
         top_budget = round(sum(s["budget"] for s in sub_list) + budget_map.get(t["category_id"], 0.0), 2)
         top_spent = round(spent_map.get(t["category_id"], 0.0)

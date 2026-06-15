@@ -19,6 +19,19 @@ const API = process.env.REACT_APP_BACKEND_URL;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
+// Pin Overhead/Marketing/Profit/Investment in that exact order; hide "Loss"
+// entirely. Anything else falls to the end.
+const TAB_ORDER = ['overhead', 'marketing', 'profit', 'investment'];
+const HIDE_NAMES = new Set(['loss']);
+const orderTops = (tops) => {
+  const visible = (tops || []).filter((t) => !HIDE_NAMES.has((t.name || '').trim().toLowerCase()));
+  const idx = (t) => {
+    const i = TAB_ORDER.indexOf((t.name || '').trim().toLowerCase());
+    return i === -1 ? 999 : i;
+  };
+  return [...visible].sort((a, b) => idx(a) - idx(b));
+};
+
 const MasterExpenseView = () => {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -39,9 +52,9 @@ const MasterExpenseView = () => {
         `${API}/api/finance/expense-split/categories?month=${month}&year=${year}`,
         { headers },
       );
-      const cats = res.data?.categories || [];
+      const cats = orderTops(res.data?.categories || []);
       setTopCategories(cats);
-      if (!activeTopId && cats.length > 0) setActiveTopId(cats[0].category_id);
+      if (!activeTopId) setActiveTopId('all');
     } catch (e) {
       toast.error('Failed to load Master Expense');
     } finally {
@@ -67,6 +80,11 @@ const MasterExpenseView = () => {
 
   const activeTop = topCategories.find((c) => c.category_id === activeTopId);
   const isOverhead = (activeTop?.name || '').trim().toLowerCase() === 'overhead';
+  const isAllTab = activeTopId === 'all';
+  // Grand totals across every visible top category (used by the "All" tab)
+  const grandAllocated = topCategories.reduce((s, c) => s + Number(c.allocated || 0), 0);
+  const grandSpent = topCategories.reduce((s, c) => s + Number(c.spent || 0), 0);
+  const grandBalance = grandAllocated - grandSpent;
 
   return (
     <div className="space-y-4">
@@ -112,8 +130,17 @@ const MasterExpenseView = () => {
 
       {!loading && topCategories.length > 0 && (
         <>
-          {/* Dynamic top-category sub-tabs */}
+          {/* Dynamic top-category sub-tabs (All pinned first) */}
           <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a] flex-wrap" data-testid="master-tabs">
+            <button
+              key="all"
+              onClick={() => setActiveTopId('all')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isAllTab ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+              data-testid="master-tab-all"
+            >
+              <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle bg-[#6366f1]" />
+              All
+            </button>
             {topCategories.map((c) => {
               const active = c.category_id === activeTopId;
               return (
@@ -130,8 +157,45 @@ const MasterExpenseView = () => {
             })}
           </div>
 
+          {/* ALL view — grand totals + per-top summary row */}
+          {isAllTab && (
+            <>
+              <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3" data-testid="master-all-summary">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">All Categories</p>
+                  <p className="text-lg font-bold text-[#fafafa]">Grand Totals <span className="text-xs font-mono text-[#a1a1aa]">({MONTHS[month-1]} {year})</span></p>
+                </div>
+                <div className="flex items-center gap-4">
+                  <Stat l="Allocated" v={fmt(grandAllocated)} />
+                  <Stat l="Spent" v={fmt(grandSpent)} red={grandSpent > grandAllocated && grandAllocated > 0} />
+                  <Stat l="Balance" v={fmt(grandBalance)} red={grandBalance < 0} green={grandBalance >= 0} />
+                </div>
+              </div>
+              <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
+                  <p className="text-sm font-medium text-[#fafafa]">Top Categories</p>
+                  <span className="text-xs text-[#a1a1aa]">{topCategories.length} groups</span>
+                </div>
+                <div className="divide-y divide-[#27272a]">
+                  {topCategories.map((c) => (
+                    <div key={c.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`master-all-row-${c.category_id}`}>
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-[#fafafa]">{c.name}</p>
+                        <p className="text-[10px] text-[#a1a1aa]">{c.percent}% of Income · {(c.sub_categories || []).length} sub-categories</p>
+                      </div>
+                      <Stat l="Allocated" v={fmt(c.allocated)} />
+                      <Stat l="Spent" v={fmt(c.spent)} red={c.over_budget} />
+                      <Stat l="Balance" v={fmt(c.balance)} red={c.balance < 0} green={c.balance >= 0} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
           {/* Active top — header card */}
-          {activeTop && (
+          {!isAllTab && activeTop && (
             <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
               <div>
                 <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">Top Category</p>
@@ -145,14 +209,15 @@ const MasterExpenseView = () => {
             </div>
           )}
 
-          {/* Sub-categories list */}
+          {/* Sub-categories list (hidden in All view) */}
+          {!isAllTab && (
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
               <p className="text-sm font-medium text-[#fafafa]">Sub-Expenses</p>
               <span className="text-xs text-[#a1a1aa]">{MONTHS[month-1]} {year}</span>
             </div>
             <div className="divide-y divide-[#27272a]">
-              {/* Special Payroll row for Overhead */}
+              {/* Special Payroll row for Overhead — always pinned first */}
               {isOverhead && (
                 <div className="flex items-center gap-3 px-4 py-3" data-testid="master-overhead-payroll-row">
                   <Users className="h-4 w-4 text-[#a78bfa]" />
@@ -168,7 +233,11 @@ const MasterExpenseView = () => {
                   No sub-categories for <b>{activeTop?.name}</b>. Add one from the Expense Split tab.
                 </div>
               )}
-              {(activeTop?.sub_categories || []).map((s) => (
+              {(activeTop?.sub_categories || [])
+                // Hide any manually-created "Payroll" sub when on Overhead since the
+                // pinned special row above already represents it.
+                .filter((s) => !(isOverhead && (s.name || '').trim().toLowerCase() === 'payroll'))
+                .map((s) => (
                 <div key={s.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`master-sub-${s.category_id}`}>
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
                   <p className="flex-1 text-sm text-[#fafafa]">{s.name}</p>
@@ -177,6 +246,7 @@ const MasterExpenseView = () => {
               ))}
             </div>
           </div>
+          )}
         </>
       )}
     </div>
