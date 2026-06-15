@@ -1177,6 +1177,16 @@ const ExpenseTab = () => {
   };
 
   // Reusable "Cash in Total Book" panel — used on Cashbook header.
+  const [cashBookOpen, setCashBookOpen] = useState(() => {
+    try { return localStorage.getItem('cash_in_total_book_open') === '1'; } catch { return false; }
+  });
+  const toggleCashBook = () => {
+    setCashBookOpen((p) => {
+      const next = !p;
+      try { localStorage.setItem('cash_in_total_book_open', next ? '1' : '0'); } catch {}
+      return next;
+    });
+  };
   const renderCashInTotalBook = () => {
     const has2col = !!bankBreakdown?.has_non_gst_banks;
     const bd = bankBreakdown?.bank_breakdown || {
@@ -1214,19 +1224,40 @@ const ExpenseTab = () => {
     );
     return (
       <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid="cashbook-totalbook">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Total Book</h3>
+        <button
+          onClick={toggleCashBook}
+          className="w-full flex items-center justify-between gap-3 flex-wrap"
+          data-testid="cashbook-totalbook-toggle"
+        >
           <div className="flex items-center gap-2">
-            <span className={`text-xs uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>GST + Non-GST</span>
-            <span className="text-xl font-bold text-[#6366f1]">{formatCurrency(Number(bd?.gst?.total || 0) + Number(bd?.non_gst?.total || 0))}</span>
+            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-transform ${cashBookOpen ? 'rotate-90' : ''} ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>
+              <ChevronRight className="h-4 w-4" />
+            </span>
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Total Book</h3>
           </div>
-        </div>
-        <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4`}>
-          <BankColumn title="GST Accounts" color="#22c55e" data={bd.gst} testId="bank-col-gst" />
-          {has2col && bd.non_gst && (
-            <BankColumn title="Non-GST Accounts" color="#f59e0b" data={bd.non_gst} testId="bank-col-non-gst" />
-          )}
-        </div>
+          <div className="flex items-center gap-4 ml-auto">
+            <div className="text-right">
+              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>GST</p>
+              <p className="text-base font-bold text-[#22c55e]">{formatCurrency(Number(bd?.gst?.total || 0))}</p>
+            </div>
+            <div className="text-right">
+              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Non-GST</p>
+              <p className="text-base font-bold text-[#f59e0b]">{formatCurrency(Number(bd?.non_gst?.total || 0))}</p>
+            </div>
+            <div className="text-right">
+              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total</p>
+              <p className="text-xl font-bold text-[#6366f1]">{formatCurrency(Number(bd?.gst?.total || 0) + Number(bd?.non_gst?.total || 0))}</p>
+            </div>
+          </div>
+        </button>
+        {cashBookOpen && (
+          <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4 mt-4 pt-4 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`} data-testid="cashbook-totalbook-details">
+            <BankColumn title="GST Accounts" color="#22c55e" data={bd.gst} testId="bank-col-gst" />
+            {has2col && bd.non_gst && (
+              <BankColumn title="Non-GST Accounts" color="#f59e0b" data={bd.non_gst} testId="bank-col-non-gst" />
+            )}
+          </div>
+        )}
       </div>
     );
   };
