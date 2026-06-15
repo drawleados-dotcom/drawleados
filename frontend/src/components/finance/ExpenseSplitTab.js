@@ -82,8 +82,12 @@ const ExpenseSplitTab = () => {
 
   const submitAdd = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
-    const pct = parseFloat(form.percent);
-    if (Number.isNaN(pct) || pct < 0) { toast.error('Enter a valid percentage'); return; }
+    // Percent only required for TOP categories. Sub-categories save with 0.
+    let pct = 0;
+    if (!addModal?.parent_id) {
+      pct = parseFloat(form.percent);
+      if (Number.isNaN(pct) || pct < 0) { toast.error('Enter a valid percentage'); return; }
+    }
     setSaving(true);
     try {
       await axios.post(`${API}/api/finance/expense-split/categories`, {
@@ -108,14 +112,17 @@ const ExpenseSplitTab = () => {
   };
 
   const saveEdit = async (cat) => {
-    const pct = parseFloat(editForm.percent);
-    if (!editForm.name.trim() || Number.isNaN(pct) || pct < 0) {
-      toast.error('Invalid name or percent'); return;
+    if (!editForm.name.trim()) { toast.error('Name is required'); return; }
+    // Sub-categories no longer carry a percent — only validate it for top categories.
+    const isTop = !cat.parent_id;
+    let pct;
+    if (isTop) {
+      pct = parseFloat(editForm.percent);
+      if (Number.isNaN(pct) || pct < 0) { toast.error('Invalid percent'); return; }
     }
     try {
-      await axios.put(`${API}/api/finance/expense-split/categories/${cat.category_id}`, {
-        name: editForm.name.trim(), percent: pct,
-      }, { headers });
+      const payload = isTop ? { name: editForm.name.trim(), percent: pct } : { name: editForm.name.trim() };
+      await axios.put(`${API}/api/finance/expense-split/categories/${cat.category_id}`, payload, { headers });
       toast.success('Updated');
       setEditing(null);
       load();
@@ -220,8 +227,6 @@ const ExpenseSplitTab = () => {
 
         {!loading && categories.map((cat) => {
           const isOpen = expanded[cat.category_id];
-          const subPctTotal = (cat.sub_categories || []).reduce((s, x) => s + Number(x.percent || 0), 0);
-          const subsOver = subPctTotal > 100;
           return (
             <div key={cat.category_id} className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid={`split-top-${cat.category_id}`}>
               {/* Top row */}
@@ -282,14 +287,9 @@ const ExpenseSplitTab = () => {
                 </div>
               </div>
 
-              {/* Sub-categories */}
+              {/* Sub-categories — name + spent only (no percentage allocation) */}
               {isOpen && (
                 <div className="border-t border-[#27272a] bg-[#0c0a09]">
-                  {subsOver && (
-                    <div className="px-4 py-2 text-[11px] text-red-400 bg-red-500/5 border-b border-red-500/20 flex items-center gap-2">
-                      <AlertTriangle className="h-3 w-3" /> Sub-categories total {subPctTotal.toFixed(1)}% — over 100% of {cat.name}&apos;s bucket.
-                    </div>
-                  )}
                   {(cat.sub_categories || []).length === 0 ? (
                     <div className="px-4 py-4 text-center text-xs text-[#71717a]">
                       No sub-categories. <button onClick={() => openAdd(cat)} className="text-[#a78bfa] hover:underline">Add one</button>
@@ -303,25 +303,14 @@ const ExpenseSplitTab = () => {
                             <div className="flex-1 flex items-center gap-2">
                               <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                                 className="h-7 bg-[#18181b] border-[#27272a] text-[#fafafa] text-xs" />
-                              <Input type="number" value={editForm.percent} onChange={(e) => setEditForm({ ...editForm, percent: e.target.value })}
-                                className="h-7 w-16 bg-[#18181b] border-[#27272a] text-[#fafafa] text-xs" />
-                              <span className="text-xs text-[#a1a1aa]">% of {cat.name}</span>
                               <Button size="sm" onClick={() => saveEdit(sub)} className="bg-emerald-600 hover:bg-emerald-700 h-6 px-2"><Check className="h-3 w-3" /></Button>
                               <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-6 px-2 text-[#a1a1aa]"><X className="h-3 w-3" /></Button>
                             </div>
                           ) : (
-                            <>
-                              <span className="text-sm text-[#fafafa]">{sub.name}</span>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-[#27272a] text-[#a1a1aa]">{sub.percent}%</span>
-                              {sub.over_budget && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-400">OVER</span>
-                              )}
-                            </>
+                            <span className="text-sm text-[#fafafa]">{sub.name}</span>
                           )}
                           <div className="ml-auto flex items-center gap-4 text-xs">
-                            <Stat l="Alloc" v={fmt(sub.allocated)} compact />
-                            <Stat l="Spent" v={fmt(sub.spent)} red={sub.over_budget} compact />
-                            <Stat l="Bal" v={fmt(sub.balance)} red={sub.balance < 0} compact />
+                            <Stat l="Spent" v={fmt(sub.spent)} compact />
                           </div>
                           <div className="flex items-center gap-1 ml-2">
                             {editing !== sub.category_id && (
@@ -360,32 +349,34 @@ const ExpenseSplitTab = () => {
                 data-testid="split-name-input"
               />
             </div>
-            <div>
-              <Label className="text-[#fafafa]">
-                Percent *{' '}
-                <span className="text-[#71717a] text-xs font-normal">
-                  ({addModal?.parent_id ? `of ${addModal.parent_name}'s bucket` : 'of Income'})
-                </span>
-              </Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  value={form.percent}
-                  onChange={(e) => setForm({ ...form, percent: e.target.value })}
-                  placeholder="e.g. 30"
-                  step="0.1"
-                  min="0"
-                  className="bg-[#0c0a09] border-[#27272a] text-[#fafafa]"
-                  data-testid="split-percent-input"
-                />
-                <span className="text-[#a1a1aa]">%</span>
+            {/* Percentage is only meaningful for TOP categories — sub-categories are
+                just nominal buckets that roll their spend up to the parent. */}
+            {!addModal?.parent_id && (
+              <div>
+                <Label className="text-[#fafafa]">
+                  Percent *{' '}
+                  <span className="text-[#71717a] text-xs font-normal">(of Income)</span>
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    value={form.percent}
+                    onChange={(e) => setForm({ ...form, percent: e.target.value })}
+                    placeholder="e.g. 30"
+                    step="0.1"
+                    min="0"
+                    className="bg-[#0c0a09] border-[#27272a] text-[#fafafa]"
+                    data-testid="split-percent-input"
+                  />
+                  <span className="text-[#a1a1aa]">%</span>
+                </div>
+                {form.percent && (
+                  <p className="text-xs text-[#a1a1aa] mt-1">
+                    = {fmt((income * parseFloat(form.percent || 0)) / 100)} for {months[month - 1].l} {year}
+                  </p>
+                )}
               </div>
-              {form.percent && !addModal?.parent_id && (
-                <p className="text-xs text-[#a1a1aa] mt-1">
-                  = {fmt((income * parseFloat(form.percent || 0)) / 100)} for {months[month - 1].l} {year}
-                </p>
-              )}
-            </div>
+            )}
             <div>
               <Label className="text-[#fafafa]">Color</Label>
               <div className="flex gap-2 flex-wrap mt-1">
