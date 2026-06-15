@@ -156,6 +156,12 @@ const ExpenseTab = () => {
   const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll
   const [cashbookSubTab, setCashbookSubTab] = useState('cashbook'); // cashbook | banks
   const [invoiceSubTab, setInvoiceSubTab] = useState('invoice');   // invoice | projects | clients
+
+  // Dashboard period filter (date range). Empty = All Time.
+  const _dt = new Date();
+  const _from = new Date(_dt.getFullYear(), _dt.getMonth(), 1).toISOString().slice(0, 10);
+  const _to = new Date(_dt.getFullYear(), _dt.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const [dashFilter, setDashFilter] = useState({ from: _from, to: _to });
   
   // Data state
   const [dashboardData, setDashboardData] = useState(null);
@@ -287,11 +293,39 @@ const ExpenseTab = () => {
         headers: { Authorization: `Bearer ${token}` },
         params: { month: selectedMonth, year: selectedYear }
       });
-      setDashboardData(res.data);
+      // Augment summary with per-top-category expense + tax_income from invoices.
+      let extra = { tax_income: 0, expense_by_top: [] };
+      try {
+        const params = new URLSearchParams();
+        if (dashFilter.from) params.set('from_date', dashFilter.from);
+        if (dashFilter.to) {
+          const nextDay = new Date(dashFilter.to);
+          nextDay.setDate(nextDay.getDate() + 1);
+          params.set('to_date', nextDay.toISOString().slice(0, 10));
+        }
+        const invRes = await axios.get(`${API}/api/finance/invoices?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const invs = Array.isArray(invRes.data) ? invRes.data : (invRes.data?.invoices || []);
+        extra.tax_income = invs.reduce((s, i) => s + Number(i.cgst || 0) + Number(i.sgst || 0) + Number(i.igst || 0), 0);
+      } catch { /* ignore tax fetch errors */ }
+      try {
+        // Pick month/year for /budgets — use dashFilter.from when present.
+        const ref = dashFilter.from ? new Date(dashFilter.from) : new Date(selectedYear, selectedMonth - 1, 1);
+        const m = ref.getMonth() + 1;
+        const y = ref.getFullYear();
+        const catRes = await axios.get(`${API}/api/finance/expense-split/budgets?month=${m}&year=${y}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        extra.expense_by_top = (catRes.data?.categories || []).map((c) => ({
+          category_id: c.category_id, name: c.name, color: c.color, spent: c.spent,
+        }));
+      } catch { /* ignore category fetch errors */ }
+      setDashboardData({ ...(res.data || {}), ...extra });
     } catch (error) {
       console.error('Error loading dashboard:', error);
     }
-  }, [token, selectedMonth, selectedYear]);
+  }, [token, selectedMonth, selectedYear, dashFilter.from, dashFilter.to]);
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -1002,147 +1036,103 @@ const ExpenseTab = () => {
         ? bankBreakdown.total_expense
         : (dashboardData?.total_expense || 0)
     );
-    const psTotal = Number(bankBreakdown?.payment_schedule_total || 0);
-    const has2col = !!bankBreakdown?.has_non_gst_banks;
-    const bd = bankBreakdown?.bank_breakdown || {
-      gst: { banks: [], cash: 0, cheque: 0, upi: 0, bank_total: 0, total: 0 },
-      non_gst: null,
-    };
+    // Tax Income from current-month invoices, plus per-top-category expense
+    // totals from /budgets (already used by Master Expense / Budget views).
+    const taxIncome = Number(dashboardData?.tax_income || 0);
+    const topCatRows = Array.isArray(dashboardData?.expense_by_top) ? dashboardData.expense_by_top : [];
+    const ORDER = ['overhead', 'marketing', 'investment', 'profit', 'tax'];
+    const sortedTops = [...topCatRows]
+      .filter((c) => (c.name || '').toLowerCase() !== 'loss')
+      .sort((a, b) => {
+        const ai = ORDER.indexOf((a.name || '').toLowerCase()); const bi = ORDER.indexOf((b.name || '').toLowerCase());
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      });
 
-    const BankColumn = ({ title, color, data, testId }) => (
-      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-gray-50 border-gray-200'}`} data-testid={testId}>
-        <div className="flex items-center justify-between mb-4">
-          <h4 className={`text-sm font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>{title}</h4>
-          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-        </div>
+    const Filter = (
+      <div className={`flex items-center gap-2 flex-wrap p-3 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid="dashboard-filters">
+        <Calendar className={`h-4 w-4 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`} />
+        <span className={`text-xs uppercase tracking-wider mr-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Period</span>
+        <Input
+          type="date"
+          value={dashFilter.from || ''}
+          onChange={(e) => setDashFilter({ ...dashFilter, from: e.target.value })}
+          className={`h-8 text-xs w-[150px] ${isDark ? 'bg-[#0c0a09] border-[#27272a] text-[#fafafa]' : ''}`}
+          data-testid="dashboard-date-from"
+        />
+        <span className={`text-xs ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>→</span>
+        <Input
+          type="date"
+          value={dashFilter.to || ''}
+          onChange={(e) => setDashFilter({ ...dashFilter, to: e.target.value })}
+          className={`h-8 text-xs w-[150px] ${isDark ? 'bg-[#0c0a09] border-[#27272a] text-[#fafafa]' : ''}`}
+          data-testid="dashboard-date-to"
+        />
+        <Button size="sm" variant="ghost" className="h-8 text-xs" data-testid="dashboard-filter-today"
+          onClick={() => { const t = new Date().toISOString().slice(0, 10); setDashFilter({ from: t, to: t }); }}>Today</Button>
+        <Button size="sm" variant="ghost" className="h-8 text-xs" data-testid="dashboard-filter-week"
+          onClick={() => {
+            // Tue → Mon (Finance Week-Wise convention)
+            const t = new Date(); const day = t.getDay();
+            const back = day >= 2 ? day - 2 : day + 5;
+            const from = new Date(t); from.setDate(t.getDate() - back);
+            const to = new Date(from); to.setDate(from.getDate() + 6);
+            setDashFilter({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) });
+          }}>This Week (Tue–Mon)</Button>
+        <Button size="sm" variant="ghost" className="h-8 text-xs" data-testid="dashboard-filter-month"
+          onClick={() => {
+            const t = new Date();
+            const from = new Date(t.getFullYear(), t.getMonth(), 1);
+            const to = new Date(t.getFullYear(), t.getMonth() + 1, 0);
+            setDashFilter({ from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) });
+          }}>This Month</Button>
+        <Button size="sm" variant="ghost" className="h-8 text-xs" data-testid="dashboard-filter-all"
+          onClick={() => setDashFilter({ from: '', to: '' })}>All Time</Button>
+      </div>
+    );
 
-        <div className="space-y-2">
-          {/* Per-bank rows */}
-          {(data?.banks || []).length === 0 ? (
-            <p className={`text-xs italic ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>
-              No bank accounts yet — add one in the Banks tab.
-            </p>
-          ) : (
-            (data.banks || []).map((b) => (
-              <div key={b.bank_id} className="flex items-center justify-between" data-testid={`bank-row-${b.bank_id}`}>
-                <span className={`text-sm ${isDark ? 'text-[#d4d4d8]' : 'text-gray-700'} truncate`}>{b.label}</span>
-                <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(b.amount)}</span>
-              </div>
-            ))
-          )}
-
-          {/* Cash + Cheque + UPI (only show UPI if non-zero) */}
-          <div className={`pt-2 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} space-y-2`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cash</span>
-              <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cash)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cheque</span>
-              <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cheque)}</span>
-            </div>
-            {(Number(data?.upi || 0) > 0) && (
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>UPI</span>
-                <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.upi)}</span>
-              </div>
-            )}
+    const Card = ({ label, value, accent, sub, testId, Icon }) => (
+      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="p-2.5 rounded-lg" style={{ backgroundColor: `${accent}22` }}>
+            {Icon && <Icon className="h-5 w-5" style={{ color: accent }} />}
           </div>
-
-          {/* Total */}
-          <div className={`pt-2.5 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} flex items-center justify-between`}>
-            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</span>
-            <span className="text-lg font-bold" style={{ color }}>{formatCurrency(data?.total)}</span>
-          </div>
         </div>
+        <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
+        <p className="text-2xl font-bold" style={{ color: accent }}>{formatCurrency(value)}</p>
+        {sub && <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
       </div>
     );
 
     return (
       <div className="space-y-6">
-        {/* Summary Cards — New Revenue / Outstanding / Total Revenue / Payment Schedule / Total Expense */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-lg bg-[#10b981]/20">
-                <ArrowDownCircle className="h-5 w-5 text-[#10b981]" />
-              </div>
-            </div>
-            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>New Revenue</p>
-            <p className="text-2xl font-bold text-[#10b981]" data-testid="dashboard-new-revenue">{formatCurrency(newRev)}</p>
-            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>1st collection on new invoices</p>
-          </div>
+        {Filter}
 
-          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-lg bg-[#a855f7]/20">
-                <Target className="h-5 w-5 text-[#a855f7]" />
-              </div>
-            </div>
-            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Outstanding</p>
-            <p className="text-2xl font-bold text-[#a855f7]" data-testid="dashboard-outstanding-collected">{formatCurrency(outstandingCollected)}</p>
-            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>From payment schedule</p>
-          </div>
-
-          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-lg bg-[#22c55e]/20">
-                <TrendingUp className="h-5 w-5 text-[#22c55e]" />
-              </div>
-            </div>
-            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Revenue</p>
-            <p className="text-2xl font-bold text-[#22c55e]" data-testid="dashboard-total-revenue">{formatCurrency(totalRev)}</p>
-            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>New + Outstanding</p>
-          </div>
-
-          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-lg bg-[#6366f1]/20">
-                <Wallet className="h-5 w-5 text-[#6366f1]" />
-              </div>
-            </div>
-            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Payment Schedule</p>
-            <p className="text-2xl font-bold text-[#6366f1]" data-testid="dashboard-payment-schedule">{formatCurrency(psTotal)}</p>
-            <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>Balance left to collect</p>
-          </div>
-
-          <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="p-2.5 rounded-lg bg-[#ef4444]/20">
-                <TrendingDown className="h-5 w-5 text-[#ef4444]" />
-              </div>
-            </div>
-            <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total Expense</p>
-            <p className="text-2xl font-bold text-[#ef4444]" data-testid="dashboard-total-expense">{formatCurrency(expense)}</p>
+        {/* INCOME */}
+        <div>
+          <h3 className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Income</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card label="New Revenue" value={newRev} accent="#10b981" sub="1st collection on new invoices" testId="dashboard-new-revenue" Icon={ArrowDownCircle} />
+            <Card label="Outstanding" value={outstandingCollected} accent="#a855f7" sub="From payment schedule" testId="dashboard-outstanding-collected" Icon={Target} />
+            <Card label="Tax Amount" value={taxIncome} accent="#f59e0b" sub="GST collected on invoices" testId="dashboard-tax-income" Icon={Receipt} />
+            <Card label="Total Revenue" value={totalRev} accent="#22c55e" sub="New + Outstanding" testId="dashboard-total-revenue" Icon={TrendingUp} />
           </div>
         </div>
 
-        {/* Banks — Cash / Cheque / Bank / Total by GST type */}
-        <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Total Book</h3>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>GST + Non-GST</span>
-              <span className="text-xl font-bold text-[#6366f1]" data-testid="dashboard-banks-combined-total">
-                {formatCurrency(Number(bd?.gst?.total || 0) + Number(bd?.non_gst?.total || 0))}
-              </span>
-            </div>
-          </div>
-          <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4`} data-testid="dashboard-banks-grid">
-            <BankColumn
-              title="GST Accounts"
-              color="#22c55e"
-              data={bd.gst}
-              testId="bank-col-gst"
-            />
-            {has2col && bd.non_gst && (
-              <BankColumn
-                title="Non-GST Accounts"
-                color="#f59e0b"
-                data={bd.non_gst}
-                testId="bank-col-non-gst"
+        {/* EXPENSE */}
+        <div>
+          <h3 className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+            <Card label="Total Expense" value={expense} accent="#ef4444" testId="dashboard-total-expense" Icon={TrendingDown} />
+            {sortedTops.map((c) => (
+              <Card
+                key={c.category_id}
+                label={c.name}
+                value={Number(c.spent || 0)}
+                accent={c.color || '#71717a'}
+                testId={`dashboard-expense-${(c.name || '').toLowerCase()}`}
+                Icon={TrendingDown}
               />
-            )}
+            ))}
           </div>
         </div>
 
@@ -1151,6 +1141,61 @@ const ExpenseTab = () => {
           <Button onClick={exportDashboard} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
             <Download className="h-4 w-4 mr-2" /> Export Dashboard
           </Button>
+        </div>
+      </div>
+    );
+  };
+
+  // Reusable "Cash in Total Book" panel — used on Cashbook header.
+  const renderCashInTotalBook = () => {
+    const has2col = !!bankBreakdown?.has_non_gst_banks;
+    const bd = bankBreakdown?.bank_breakdown || {
+      gst: { banks: [], cash: 0, cheque: 0, upi: 0, bank_total: 0, total: 0 },
+      non_gst: null,
+    };
+    const BankColumn = ({ title, color, data, testId }) => (
+      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-gray-50 border-gray-200'}`} data-testid={testId}>
+        <div className="flex items-center justify-between mb-4">
+          <h4 className={`text-sm font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>{title}</h4>
+          <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+        </div>
+        <div className="space-y-2">
+          {(data?.banks || []).length === 0 ? (
+            <p className={`text-xs italic ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No bank accounts yet.</p>
+          ) : (data.banks || []).map((b) => (
+            <div key={b.bank_id} className="flex items-center justify-between">
+              <span className={`text-sm ${isDark ? 'text-[#d4d4d8]' : 'text-gray-700'} truncate`}>{b.label}</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(b.amount)}</span>
+            </div>
+          ))}
+          <div className={`pt-2 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} space-y-2`}>
+            <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cash</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cash)}</span></div>
+            <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cheque</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cheque)}</span></div>
+            {(Number(data?.upi || 0) > 0) && (
+              <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>UPI</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.upi)}</span></div>
+            )}
+          </div>
+          <div className={`pt-2.5 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} flex items-center justify-between`}>
+            <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</span>
+            <span className="text-lg font-bold" style={{ color }}>{formatCurrency(data?.total)}</span>
+          </div>
+        </div>
+      </div>
+    );
+    return (
+      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid="cashbook-totalbook">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Total Book</h3>
+          <div className="flex items-center gap-2">
+            <span className={`text-xs uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>GST + Non-GST</span>
+            <span className="text-xl font-bold text-[#6366f1]">{formatCurrency(Number(bd?.gst?.total || 0) + Number(bd?.non_gst?.total || 0))}</span>
+          </div>
+        </div>
+        <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4`}>
+          <BankColumn title="GST Accounts" color="#22c55e" data={bd.gst} testId="bank-col-gst" />
+          {has2col && bd.non_gst && (
+            <BankColumn title="Non-GST Accounts" color="#f59e0b" data={bd.non_gst} testId="bank-col-non-gst" />
+          )}
         </div>
       </div>
     );
@@ -1886,6 +1931,7 @@ const ExpenseTab = () => {
           {/* Cashbook with Banks sub-tab */}
           {activeTab === 'cashbook' && (
             <div className="space-y-3">
+              {renderCashInTotalBook()}
               <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
                 <button
                   onClick={() => setCashbookSubTab('cashbook')}
