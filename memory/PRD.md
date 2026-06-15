@@ -1,6 +1,23 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Finance Dashboard: single-viewport compact layout ✅
+
+### What changed
+- Finance → Dashboard previously needed page scroll to view all blocks (Cash in Book, Income 4 cards, Expense 6 cards). Now everything fits in one ~900px viewport.
+- Reduced `Card` padding `p-5 → p-2.5`, value font `text-2xl → text-base`, label `text-sm → text-[11px]`, icon `h-5 → h-3.5`, and moved label/icon to a single row to halve vertical height.
+- Cash in Book `Pill`: `p-4 → p-2.5`, value `text-xl → text-base`, sub `text-[10px] → text-[9px]`.
+- Outer container spacing `space-y-6 → space-y-2.5`, section heading `text-base mb-3 → text-xs mb-1.5`, grid gaps `gap-4/gap-3 → gap-2`.
+- Export button moved inline to the Expense section header (compact icon button) — removed the dedicated bottom export row.
+
+### Files touched
+- `/app/frontend/src/components/finance/ExpenseTab.js` (`renderDashboard`)
+
+### Verification
+- Screenshot at 1440×900: all three sections (Cash in Book / Income / Expense) + filter row + sub-tabs all visible with no scroll, both Light and Dark themes.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Finance sub-tab strips: full Light/Dark theme support ✅
 
 ### What changed

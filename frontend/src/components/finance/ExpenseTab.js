@@ -1089,21 +1089,22 @@ const ExpenseTab = () => {
       </div>
     );
 
+    // Compact card — used in dense single-viewport dashboard.
     const Card = ({ label, value, accent, sub, testId, Icon }) => (
-      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="p-2.5 rounded-lg" style={{ backgroundColor: `${accent}22` }}>
-            {Icon && <Icon className="h-5 w-5" style={{ color: accent }} />}
+      <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="p-1.5 rounded-md" style={{ backgroundColor: `${accent}22` }}>
+            {Icon && <Icon className="h-3.5 w-3.5" style={{ color: accent }} />}
           </div>
+          <p className={`text-[11px] font-medium leading-tight truncate ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
         </div>
-        <p className={`text-sm font-medium mb-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
-        <p className="text-2xl font-bold" style={{ color: accent }}>{formatCurrency(value)}</p>
-        {sub && <p className={`text-[10px] mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
+        <p className="text-base font-bold leading-tight" style={{ color: accent }}>{formatCurrency(value)}</p>
+        {sub && <p className={`text-[9px] mt-0.5 leading-tight truncate ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
       </div>
     );
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-2.5">
         {Filter}
 
         {/* Cash in Book — quick three-pill view: All vs GST vs Non-GST */}
@@ -1112,22 +1113,22 @@ const ExpenseTab = () => {
           const nonGstTotal = Number(bankBreakdown?.bank_breakdown?.non_gst?.total || 0);
           const allTotal = gstTotal + nonGstTotal;
           const Pill = ({ label, sub, value, accent, testId }) => (
-            <div className={`flex-1 min-w-[180px] p-4 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
+            <div className={`flex-1 min-w-[160px] p-2.5 rounded-lg border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
               <div className="flex items-center justify-between">
-                <p className={`text-xs uppercase tracking-wide ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
-                <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: accent }} />
+                <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
+                <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accent }} />
               </div>
-              <p className="text-xl font-bold mt-1.5" style={{ color: accent }}>{formatCurrency(value)}</p>
-              {sub && <p className={`text-[10px] mt-0.5 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
+              <p className="text-base font-bold mt-0.5 leading-tight" style={{ color: accent }}>{formatCurrency(value)}</p>
+              {sub && <p className={`text-[9px] leading-tight ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
             </div>
           );
           return (
             <div data-testid="cash-in-book-strip">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Book</h3>
-                <p className={`text-[10px] ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>Snapshot — independent of period filter</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <h3 className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Book</h3>
+                <p className={`text-[9px] ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>Snapshot — independent of period filter</p>
               </div>
-              <div className="flex gap-3 flex-wrap">
+              <div className="flex gap-2 flex-wrap">
                 <Pill label="All" sub="GST + Non-GST" value={allTotal} accent="#6366f1" testId="cash-in-book-all" />
                 <Pill label="GST" sub="GST bank accounts" value={gstTotal} accent="#22c55e" testId="cash-in-book-gst" />
                 <Pill label="Other Banks" sub="Non-GST bank accounts" value={nonGstTotal} accent="#f59e0b" testId="cash-in-book-nongst" />
@@ -1138,8 +1139,10 @@ const ExpenseTab = () => {
 
         {/* INCOME */}
         <div>
-          <h3 className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Income</h3>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <h3 className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Income</h3>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             <Card label="New Revenue" value={newRev} accent="#10b981" sub="1st collection on new invoices" testId="dashboard-new-revenue" Icon={ArrowDownCircle} />
             <Card label="Outstanding" value={outstandingCollected} accent="#a855f7" sub="From payment schedule" testId="dashboard-outstanding-collected" Icon={Target} />
             <Card label="Tax Amount" value={taxIncome} accent="#f59e0b" sub="GST collected on invoices" testId="dashboard-tax-income" Icon={Receipt} />
@@ -1149,8 +1152,13 @@ const ExpenseTab = () => {
 
         {/* EXPENSE */}
         <div>
-          <h3 className={`text-base font-semibold mb-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense</h3>
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <h3 className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense</h3>
+            <Button onClick={exportDashboard} variant="outline" size="sm" className={`h-7 text-[11px] ${isDark ? 'border-[#3f3f46]' : ''}`} data-testid="dashboard-export-btn">
+              <Download className="h-3 w-3 mr-1" /> Export
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
             <Card label="Total Expense" value={expense} accent="#ef4444" testId="dashboard-total-expense" Icon={TrendingDown} />
             {sortedTops.map((c) => (
               <Card
@@ -1163,13 +1171,6 @@ const ExpenseTab = () => {
               />
             ))}
           </div>
-        </div>
-
-        {/* Export Button */}
-        <div className="flex justify-end">
-          <Button onClick={exportDashboard} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
-            <Download className="h-4 w-4 mr-2" /> Export Dashboard
-          </Button>
         </div>
       </div>
     );
