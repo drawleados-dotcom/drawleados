@@ -87,14 +87,7 @@ const LeadsPageV2 = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
-  const [dateRange, setDateRange] = useState(() => {
-    // Default to TODAY (00:00 → 23:59:59 local time) so the board shows only today's leads.
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-    return { from: start, to: end };
-  }); // Custom date range filter — defaults to Today
+  const [dateRange, setDateRange] = useState({ from: undefined, to: undefined }); // Default: All Time
   const [showDatePopover, setShowDatePopover] = useState(false);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showStagesModal, setShowStagesModal] = useState(false);
@@ -1067,6 +1060,24 @@ const LeadsPageV2 = () => {
                   <Button
                     size="sm"
                     variant="ghost"
+                    data-testid="date-preset-this-week"
+                    onClick={() => {
+                      // Tuesday → Monday (matches Finance Week-Wise convention).
+                      const t = new Date();
+                      const day = t.getDay(); // 0=Sun..6=Sat, Tue=2
+                      const back = day >= 2 ? day - 2 : day + 5;
+                      const from = new Date(t);
+                      from.setHours(0, 0, 0, 0);
+                      from.setDate(t.getDate() - back);
+                      const to = new Date(from);
+                      to.setDate(from.getDate() + 6);
+                      to.setHours(23, 59, 59, 999);
+                      setDateRange({ from, to });
+                    }}
+                  >This Week (Tue–Mon)</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     data-testid="date-preset-week"
                     onClick={() => {
                       const t = new Date();
@@ -1084,6 +1095,12 @@ const LeadsPageV2 = () => {
                       setDateRange({ from: m, to: t });
                     }}
                   >This Month</Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="date-preset-all"
+                    onClick={() => setDateRange({ from: undefined, to: undefined })}
+                  >All Time</Button>
                 </div>
                 <div className="flex gap-1">
                   <Button
