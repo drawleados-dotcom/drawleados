@@ -1,6 +1,29 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Budget Tax View ✅
+
+### What was added
+- **Finance → Expense → Budget → Tax** pill now opens a dedicated invoice-driven view (no editable budget rows).
+- Header switches from `Total Budget / Spent / Balance` to:
+  - **Grand Income** = Σ total_amount of all GST invoices for the month
+  - **Tax Income** = Σ (cgst + sgst + igst)
+  - **Net Income** = Grand − Tax (taxable base)
+- Tax Invoices table with columns: `Invoice/Client · View · Total Amount · Tax % · Tax Amount · Paid Balance`.
+- `Paid Balance` = `Tax Amount − Tax Paid So Far` where Tax Paid So Far = `(paid_amount / total_amount) × tax_amount` (proportional). Green when ₹0, red when still owed. The literal proportional amount appears as `Paid ₹X` subtext under each row.
+- Footer Totals row when ≥ 2 invoices.
+- View link opens the invoice in a new tab.
+- `TAB_ORDER` updated so Tax always sits last in the pill strip.
+
+### Files touched
+- `/app/frontend/src/components/finance/BudgetView.js` — new state `taxInvoices` + fetch effect, `isTaxTop` flag, conditional header (Grand/Tax/Net Income vs Total Budget/Spent/Balance), new `budget-tax-view` block with the invoices table, sub-rows now also gated by `!isTaxTop`.
+
+### Verification
+Testing agent → `/app/test_reports/iteration_77.json` — 8/8 frontend acceptance criteria pass. Math verified against live data: INV-2026-0007 (paid 600 of 11800, tax 1800) → taxPaid ₹92, taxBalance ₹1,708 red; INV-2026-0008 (full payment) → ₹0 green. Header Grand ₹1,18,12,980 / Tax ₹1,980 / Net ₹1,18,11,000 matches expected math. Switching month resets the table (January 2026 shows 0 rows), switching to another top reverts the header. Backend untouched — uses existing `/api/finance/invoices?from_date&to_date`.
+
+---
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Payroll lock + Expense Split tab UX ✅
 
 ### A) Budget → Overhead → Payroll: fully locked
