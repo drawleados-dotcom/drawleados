@@ -1,6 +1,32 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Lead module: Stage date popup + Remarks + new columns ✅
+
+### What changed
+1. **Mini date+time popup before Appointment / Reschedule / Followup**
+   - Clicking any of these stage pills in Edit Lead → Move To Stage no longer commits instantly. A small modal asks for Date + Time first.
+   - Confirm & Move PUTs the stage along with `appointment_at` (for Appointment / Appointment Reshuedule / Appointment Reschedule) or `followup_at` (for Followup / Follow-up / Prospect Followup).
+   - Case-insensitive name matching tolerates the production seed typos ("Appoinment", "Appointment Reshuedule").
+2. **Two new columns in the leads table**: `Appointment` and `Follow-up` — each shows date + time when set, `-` otherwise.
+3. **Date range filter widened**: now matches if EITHER `created_at`, `appointment_at`, or `followup_at` falls in the picked window.
+4. **Remarks textarea** added to the bottom of the Basic Details tab in Edit Lead, bound to the existing `notes` field. Placeholder text: "Write anything about this lead — call summary, blockers, next move…"
+
+### Files touched
+- `/app/backend/leads_v2_routes.py` — `update_lead_stage` widened to `Dict[str, Any]`; `appointment_at` / `followup_at` merged into the `$set` when present. Backwards compatible.
+- `/app/frontend/src/pages/LeadsPageV2.js` — new state + popup component, click interception in the Move-to-Stage pill strip, two new `<th>`/`<td>` columns, date filter expanded to any-of-three, Remarks textarea in Basic Details. Label import added.
+- `/app/backend/tests/test_lead_stage_datetime.py` — 4 pytest covering legacy stage-only update, appointment_at persists, followup_at persists, notes-as-remarks persists.
+
+### Verification
+Testing agent → `/app/test_reports/iteration_78.json`. Backend 4/4 pytest pass. Frontend ~85% — table columns, Remarks bind+persist across modal reopen, stage-date-modal opens for Followup pill, bypass for Prospect/Lead/Qualified verified, date filter clear restores all leads. Only flag: Playwright fill quirk on type=date/time inputs prevented the agent from observing the Confirm & Move close in one run; backend direct tests confirm persistence. Manual screenshots already showed end-to-end success.
+
+### Pre-existing nits flagged by tester
+- Avatar fallback shows "AUNDEFINED" for leads without proper initials — separate bug, not from this iteration.
+- Default leads date filter is today-only — long-standing default.
+
+---
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Budget Tax View ✅
 
 ### What was added
