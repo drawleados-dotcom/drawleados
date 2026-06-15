@@ -1746,6 +1746,85 @@ async def set_salary_details(user_id: str, request: Request, salary_data: dict):
 
 # ============== PAYSLIP ROUTES ==============
 
+@hr_router.get("/admin/payslip/preview/{user_id}/{year}/{month}")
+async def preview_payslip(user_id: str, year: int, month: int, request: Request):
+    """Same computation as /admin/payslip/generate but ONLY returns the payload
+    so HR can review/edit in the modal before persisting."""
+    from server import get_current_user
+    await get_current_user(request)
+
+    employee = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    profile = await db.employee_profiles.find_one({"user_id": user_id}, {"_id": 0}) or {}
+    salary = await db.salary_details.find_one({"user_id": user_id}, {"_id": 0}) or {}
+
+    start_date = datetime(year, month, 1, tzinfo=timezone.utc)
+    end_date = datetime(year + (1 if month == 12 else 0), 1 if month == 12 else month + 1, 1, tzinfo=timezone.utc)
+    attendance_records = await db.attendance.find({
+        "user_id": user_id,
+        "date": {"$gte": start_date, "$lt": end_date},
+        "approval_status": {"$in": ["auto", "approved"]},
+    }, {"_id": 0}).to_list(50)
+
+    calendar = await db.hr_calendar.find_one({"month": month, "year": year}, {"_id": 0}) or {}
+    total_working_days = calendar.get("working_days", 22)
+    days_present = len(attendance_records)
+
+    leaves = await db.leave_requests.find({
+        "user_id": user_id,
+        "status": "approved",
+        "start_date": {"$lte": end_date},
+        "end_date": {"$gte": start_date},
+    }, {"_id": 0}).to_list(20)
+    paid_leaves = len([l for l in leaves if l.get("leave_type") in ["casual", "sick", "earned"]])
+    days_absent = max(0, total_working_days - days_present - paid_leaves)
+
+    total_extra_hours = sum(r.get("extra_hours", 0) for r in attendance_records)
+    extra_days = int(total_extra_hours / 9)
+
+    basic = float(salary.get("basic_salary") or 0)
+    hra = float(salary.get("hra") or 0)
+    conveyance = float(salary.get("conveyance") or 0)
+    medical = float(salary.get("medical") or 0)
+    special = float(salary.get("special_allowance") or 0)
+    gross = basic + hra + conveyance + medical + special
+    # If no salary_details record exists yet, fall back to the user-level
+    # current_salary so the modal isn't blank.
+    if gross <= 0:
+        gross = float(employee.get("current_salary") or 0)
+
+    per_day = round(gross / total_working_days, 2) if total_working_days > 0 else 0
+    effective_days = days_present + paid_leaves + extra_days
+    actual_gross = per_day * min(effective_days, total_working_days)
+    net_salary = round(actual_gross, 2)
+
+    today = datetime.now(timezone.utc)
+    salary_date = f"{today.day:02d}/{month:02d}/{year}"
+
+    return {
+        "user_id": user_id,
+        "employee_name": employee.get("name", "") or profile.get("name", ""),
+        "employee_id": profile.get("employee_id", ""),
+        "designation": profile.get("designation", "") or employee.get("designation", "") or employee.get("role", ""),
+        "joining_date": profile.get("joining_date") or employee.get("joining_date") or "",
+        "month": month,
+        "year": year,
+        "total_working_days": total_working_days,
+        "days_present": days_present,
+        "days_absent": days_absent,
+        "paid_leaves": paid_leaves,
+        "extra_days": extra_days,
+        "gross_salary": round(gross, 2),
+        "per_day_salary": per_day,
+        "net_salary": net_salary,
+        "salary_date": salary_date,
+        "authorized_by": "Vinoth Kumar Babu",
+        "authorized_title": "CEO & FOUNDER",
+        "source": "attendance",
+    }
+
+
 @hr_router.post("/admin/payslip/generate")
 async def generate_payslip(request: Request, payslip_data: dict):
     """Generate payslip for an employee (HR Admin)"""

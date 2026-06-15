@@ -17,7 +17,7 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check, Network
+  ChevronDown, Check, Network, Coffee
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -4576,7 +4576,26 @@ function ApprovalsTab({ pendingApprovals, onApproveAttendance, onApprovePermissi
 // ============== ALL ATTENDANCE TAB ==============
 function AllAttendanceTab({ records, month, year, setMonth, setYear, onRefresh, formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  
+  // Segregated break details viewer — opens when user clicks the "View" link
+  // in the Break Time column.
+  const [breakDetail, setBreakDetail] = useState(null);
+  const fmtBreakDur = (mins) => {
+    const m = Number(mins || 0);
+    if (m <= 0) return '0m';
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return h > 0 ? `${h}h ${r}m` : `${r}m`;
+  };
+  const categoryLabel = (c) => ({
+    lunch: 'Lunch', breakfast: 'Breakfast', tea: 'Tea Break', other: 'Other',
+  })[(c || '').toLowerCase()] || (c || '—');
+  const categoryColor = (c) => ({
+    lunch: 'bg-[#f59e0b]/20 text-[#f59e0b]',
+    breakfast: 'bg-[#10b981]/20 text-[#10b981]',
+    tea: 'bg-[#6366f1]/20 text-[#6366f1]',
+    other: 'bg-[#a78bfa]/20 text-[#a78bfa]',
+  })[(c || '').toLowerCase()] || 'bg-gray-500/20 text-gray-400';
+
   return (
     <div className="space-y-6">
       {/* Filters */}
@@ -4629,6 +4648,7 @@ function AllAttendanceTab({ records, month, year, setMonth, setYear, onRefresh, 
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Login</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Logout</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Lunch</th>
+                  <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Break Time</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Permission</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Work Hrs</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Extra</th>
@@ -4650,6 +4670,23 @@ function AllAttendanceTab({ records, month, year, setMonth, setYear, onRefresh, 
                     <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in)}</td>
                     <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out)}</td>
                     <td className={`p-3 ${textSecondary}`}>{record.lunch_duration ? `${record.lunch_duration}m` : '-'}</td>
+                    <td className={`p-3 ${textSecondary}`}>
+                      {(() => {
+                        const breaks = Array.isArray(record.breaks) ? record.breaks : [];
+                        const totalMin = breaks.reduce((s, b) => s + Number(b.duration_minutes || 0), 0);
+                        if (breaks.length === 0) return <span>-</span>;
+                        return (
+                          <button
+                            onClick={() => setBreakDetail({ record, breaks, total: totalMin })}
+                            className="text-[#a78bfa] hover:underline inline-flex items-center gap-1"
+                            data-testid={`attendance-break-view-${record.attendance_id || record._id || record.user_id}`}
+                          >
+                            <Coffee className="h-3 w-3" />
+                            {fmtBreakDur(totalMin)} <span className="text-[10px] opacity-70">({breaks.length})</span>
+                          </button>
+                        );
+                      })()}
+                    </td>
                     <td className={`p-3 ${textSecondary}`}>{record.permission_hours ? `${record.permission_hours}h` : '-'}</td>
                     <td className={`p-3 font-medium ${textPrimary}`}>{record.total_hours?.toFixed(2) || '-'}</td>
                     <td className={`p-3 font-medium text-[#10b981]`}>{record.extra_hours?.toFixed(2) || '-'}</td>
@@ -4668,7 +4705,7 @@ function AllAttendanceTab({ records, month, year, setMonth, setYear, onRefresh, 
                 ))}
                 {records.length === 0 && (
                   <tr>
-                    <td colSpan={9} className={`p-8 text-center ${textSecondary}`}>
+                    <td colSpan={10} className={`p-8 text-center ${textSecondary}`}>
                       No attendance records found for this month
                     </td>
                   </tr>
@@ -4678,6 +4715,45 @@ function AllAttendanceTab({ records, month, year, setMonth, setYear, onRefresh, 
           </div>
         </CardContent>
       </Card>
+
+      {/* Segregated Breaks View Modal */}
+      <Dialog open={!!breakDetail} onOpenChange={(o) => !o && setBreakDetail(null)}>
+        <DialogContent className={`${bgCard} border ${borderColor} max-w-lg`}>
+          {breakDetail && (
+            <>
+              <DialogHeader>
+                <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
+                  <Coffee className="h-5 w-5 text-[#a78bfa]" />
+                  Break Details — {breakDetail.record.employee_name || breakDetail.record.user_name}
+                </DialogTitle>
+                <DialogDescription className={textSecondary}>
+                  {formatDate(breakDetail.record.date)} · {breakDetail.breaks.length} break{breakDetail.breaks.length === 1 ? '' : 's'} · Total {fmtBreakDur(breakDetail.total)}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 mt-2 max-h-[60vh] overflow-y-auto">
+                {breakDetail.breaks.map((b, i) => (
+                  <div key={b.break_id || i} className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`} data-testid={`attendance-break-row-${i}`}>
+                    <div className="flex items-center justify-between">
+                      <Badge className={categoryColor(b.category)}>{categoryLabel(b.category)}</Badge>
+                      <span className={`text-xs ${textPrimary} font-medium`}>{fmtBreakDur(b.duration_minutes)}</span>
+                    </div>
+                    <div className={`flex items-center gap-3 mt-2 text-xs ${textSecondary}`}>
+                      <span>Out: <b className={textPrimary}>{formatTime(b.start_time) || '—'}</b></span>
+                      <span>In: <b className={textPrimary}>{formatTime(b.end_time) || '— (in progress)'}</b></span>
+                    </div>
+                    {b.reason && (
+                      <p className={`text-xs ${textSecondary} mt-1 italic`}>Reason: &ldquo;{b.reason}&rdquo;</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBreakDetail(null)} className={borderColor}>Close</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -5554,6 +5630,24 @@ function EnhancedAttendanceTab({
   const [employeeRecords, setEmployeeRecords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dayRecords, setDayRecords] = useState([]);
+  // Segregated breaks viewer state — opens from the Break Time column.
+  const [breakDetail, setBreakDetail] = useState(null);
+  const fmtBreakDur = (mins) => {
+    const m = Number(mins || 0);
+    if (m <= 0) return '0m';
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return h > 0 ? `${h}h ${r}m` : `${r}m`;
+  };
+  const breakCatLabel = (c) => ({
+    lunch: 'Lunch', breakfast: 'Breakfast', tea: 'Tea Break', other: 'Other',
+  })[(c || '').toLowerCase()] || (c || '—');
+  const breakCatColor = (c) => ({
+    lunch: 'bg-[#f59e0b]/20 text-[#f59e0b]',
+    breakfast: 'bg-[#10b981]/20 text-[#10b981]',
+    tea: 'bg-[#6366f1]/20 text-[#6366f1]',
+    other: 'bg-[#a78bfa]/20 text-[#a78bfa]',
+  })[(c || '').toLowerCase()] || 'bg-gray-500/20 text-gray-400';
 
   const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -5660,7 +5754,9 @@ function EnhancedAttendanceTab({
         checkOut,
         totalLoginHours,
         workedHours,
-        workLocation: record?.work_location || record?.work_mode || 'office'
+        workLocation: record?.work_location || record?.work_mode || 'office',
+        breaks: record?.breaks || [],
+        record,
       };
     });
     
@@ -5847,6 +5943,7 @@ function EnhancedAttendanceTab({
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Check Out</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`} data-testid="th-total-login-hour">Total Login Hour</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Worked Hours</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Break Time</th>
                   <th className={`px-4 py-3 text-right text-xs font-medium ${textSecondary} uppercase`}>Details</th>
                 </tr>
               </thead>
@@ -5872,6 +5969,23 @@ function EnhancedAttendanceTab({
                       {emp.totalLoginHours ? `${emp.totalLoginHours}h` : '-'}
                     </td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.workedHours ? `${emp.workedHours}h` : '-'}</td>
+                    <td className={`px-4 py-3 ${textSecondary}`}>
+                      {(() => {
+                        const breaks = Array.isArray(emp.breaks) ? emp.breaks : [];
+                        const totalMin = breaks.reduce((s, b) => s + Number(b.duration_minutes || 0), 0);
+                        if (breaks.length === 0) return <span>-</span>;
+                        return (
+                          <button
+                            onClick={() => setBreakDetail({ record: emp.record, employee: emp, breaks, total: totalMin })}
+                            className="text-[#a78bfa] hover:underline inline-flex items-center gap-1"
+                            data-testid={`attendance-break-view-${emp.user_id}`}
+                          >
+                            <Coffee className="h-3 w-3" />
+                            {fmtBreakDur(totalMin)} <span className="text-[10px] opacity-70">({breaks.length})</span>
+                          </button>
+                        );
+                      })()}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <Button
                         size="sm"
@@ -5889,6 +6003,45 @@ function EnhancedAttendanceTab({
           </div>
         </CardContent>
       </Card>
+
+      {/* Segregated Breaks View Modal */}
+      <Dialog open={!!breakDetail} onOpenChange={(o) => !o && setBreakDetail(null)}>
+        <DialogContent className={`${bgCard} border ${borderColor} max-w-lg`}>
+          {breakDetail && (
+            <>
+              <DialogHeader>
+                <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
+                  <Coffee className="h-5 w-5 text-[#a78bfa]" />
+                  Break Details — {breakDetail.employee?.name || '—'}
+                </DialogTitle>
+                <DialogDescription className={textSecondary}>
+                  {selectedDate} · {breakDetail.breaks.length} break{breakDetail.breaks.length === 1 ? '' : 's'} · Total {fmtBreakDur(breakDetail.total)}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2 mt-2 max-h-[60vh] overflow-y-auto">
+                {breakDetail.breaks.map((b, i) => (
+                  <div key={b.break_id || i} className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`} data-testid={`attendance-break-row-${i}`}>
+                    <div className="flex items-center justify-between">
+                      <Badge className={breakCatColor(b.category)}>{breakCatLabel(b.category)}</Badge>
+                      <span className={`text-xs ${textPrimary} font-medium`}>{fmtBreakDur(b.duration_minutes)}</span>
+                    </div>
+                    <div className={`flex items-center gap-3 mt-2 text-xs ${textSecondary}`}>
+                      <span>Out: <b className={textPrimary}>{formatTime(b.start_time) || '—'}</b></span>
+                      <span>In: <b className={textPrimary}>{formatTime(b.end_time) || '— (in progress)'}</b></span>
+                    </div>
+                    {b.reason && (
+                      <p className={`text-xs ${textSecondary} mt-1 italic`}>Reason: &ldquo;{b.reason}&rdquo;</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBreakDetail(null)} className={borderColor}>Close</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Employee Detail Modal */}
       {showDetailModal && selectedEmployee && (

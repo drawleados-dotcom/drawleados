@@ -1215,6 +1215,12 @@ function SalaryPayslipView({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // Manual payslip modal (matches Drawlead PDF)
   const [showManualModal, setShowManualModal] = useState(false);
+  // Month/year selectors INSIDE the modal so HR can create or generate for any
+  // period — defaults to whatever was chosen on the page header but is freely
+  // editable per the user's request "Create Payslip can ask the months and year".
+  const [manualMonth, setManualMonth] = useState(payslipMonth);
+  const [manualYear, setManualYear] = useState(payslipYear);
+  const [manualSource, setManualSource] = useState('manual'); // 'manual' | 'generate'
   const [manualBusy, setManualBusy] = useState(false);
   // Comprehensive view of a single payslip with Download button
   const [viewingPayslip, setViewingPayslip] = useState(null);
@@ -1228,15 +1234,21 @@ function SalaryPayslipView({
   
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   
-  // Helper function to open create modal
+  // Helper function to open create modal (legacy — simple form). Now delegates
+  // to openManualModal in "generate" mode so HR sees attendance-driven data
+  // pre-filled but still editable before saving.
   const openCreateModal = () => {
-    setCreateUserId(employee.user_id);
-    setShowCreateModal(true);
+    openManualModal({ source: 'generate' });
   };
 
-  // Open manual payslip modal (HR types every field)
-  const openManualModal = async () => {
+  // Open manual payslip modal (HR types every field).
+  // When opts.source === 'generate' we pre-fill from the attendance/salary
+  // preview endpoint so HR can review the auto numbers and tweak them.
+  const openManualModal = async (opts = {}) => {
     const headers = { Authorization: `Bearer ${token}` };
+    // Reset month/year selectors to the parent's currently-selected period.
+    setManualMonth(payslipMonth);
+    setManualYear(payslipYear);
     try {
       const r = await axios.get(`${API}/api/hr/admin/payslip/exists/${employee.user_id}/${payslipYear}/${payslipMonth}`, { headers });
       setExistsCheck(r.data || { exists: false, mode: null });
@@ -1286,7 +1298,9 @@ function SalaryPayslipView({
 
     const today = new Date();
     const salaryDate = `${String(today.getDate()).padStart(2,'0')}/${String(today.getMonth()+1).padStart(2,'0')}/${today.getFullYear()}`;
-    setManualForm({
+
+    // Default form (used as a fallback when preview fails or source !== generate)
+    let nextForm = {
       employee_name: employee.name || profile.name || '',
       employee_id: empIdRaw,
       designation: designationRaw,
@@ -1296,7 +1310,39 @@ function SalaryPayslipView({
       per_day_salary: 0, net_salary: 0,
       salary_date: salaryDate,
       authorized_by: 'Vinoth Kumar Babu', authorized_title: 'CEO & FOUNDER',
-    });
+    };
+
+    // Generate mode → pre-fill from /api/hr/admin/payslip/preview which mirrors
+    // the auto-generate flow (attendance + leaves + salary_details).
+    if (opts.source === 'generate') {
+      try {
+        const prev = await axios.get(
+          `${API}/api/hr/admin/payslip/preview/${employee.user_id}/${payslipYear}/${payslipMonth}`,
+          { headers },
+        );
+        const d = prev.data || {};
+        nextForm = {
+          ...nextForm,
+          employee_name: d.employee_name || nextForm.employee_name,
+          employee_id: d.employee_id || nextForm.employee_id,
+          designation: d.designation || nextForm.designation,
+          joining_date: _fmtJoin(d.joining_date) || nextForm.joining_date,
+          total_working_days: d.total_working_days ?? nextForm.total_working_days,
+          days_absent: d.days_absent ?? 0,
+          paid_leaves: d.paid_leaves ?? 0,
+          extra_days: d.extra_days ?? 0,
+          gross_salary: d.gross_salary || nextForm.gross_salary,
+          per_day_salary: d.per_day_salary || 0,
+          net_salary: d.net_salary || 0,
+          salary_date: d.salary_date || nextForm.salary_date,
+        };
+      } catch (e) {
+        toast.message('No attendance preview available — defaults loaded', { description: 'Edit fields manually then submit.' });
+      }
+    }
+
+    setManualSource(opts.source || 'manual');
+    setManualForm(nextForm);
     setShowManualModal(true);
   };
 
@@ -1337,8 +1383,8 @@ function SalaryPayslipView({
       const headers = { Authorization: `Bearer ${token}` };
       await axios.post(`${API}/api/hr/admin/payslip/manual`, {
         user_id: employee.user_id,
-        month: payslipMonth,
-        year: payslipYear,
+        month: manualMonth,
+        year: manualYear,
         ...manualForm,
       }, { headers });
       toast.success('Manual payslip created');
@@ -1546,17 +1592,73 @@ function SalaryPayslipView({
         <Dialog open={showManualModal} onOpenChange={setShowManualModal}>
           <DialogContent className={`${bgCard} border ${borderColor} max-w-3xl max-h-[90vh] overflow-y-auto`}>
             <DialogHeader>
-              <DialogTitle className={textPrimary}>Create Payslip — Manual</DialogTitle>
+              <DialogTitle className={textPrimary}>
+                {manualSource === 'generate' ? 'Generate Payslip — Review & Edit' : 'Create Payslip — Manual'}
+              </DialogTitle>
               <DialogDescription className={textSecondary}>
-                For {months[payslipMonth - 1]} {payslipYear} — employee details auto-fill (locked). Edit Salary Date / amounts / summary as needed.
+                {manualSource === 'generate'
+                  ? `Auto-filled from attendance for ${months[manualMonth - 1]} ${manualYear}. Adjust any field before saving.`
+                  : `Employee details auto-fill (locked). Edit Salary Date / amounts / summary as needed.`}
               </DialogDescription>
             </DialogHeader>
             {existsCheck.exists && (
               <div className="p-3 rounded-lg bg-[#ef4444]/15 text-[#ef4444] text-sm">
-                A <strong>{existsCheck.mode}</strong> payslip already exists for {months[payslipMonth - 1]} {payslipYear}. Submitting will fail until it is deleted.
+                A <strong>{existsCheck.mode}</strong> payslip already exists for {months[manualMonth - 1]} {manualYear}. Submitting will fail until it is deleted.
               </div>
             )}
             <div className="space-y-4">
+              {/* Period picker — user can choose any past/future month/year */}
+              <div className={`flex items-center gap-3 p-3 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                <Calendar className="h-4 w-4 text-[#6366f1]" />
+                <Label className={`${textPrimary} text-sm`}>Payslip Period:</Label>
+                <select
+                  value={manualMonth}
+                  onChange={(e) => setManualMonth(parseInt(e.target.value))}
+                  className={`p-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                  data-testid="payslip-period-month"
+                >
+                  {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                </select>
+                <select
+                  value={manualYear}
+                  onChange={(e) => setManualYear(parseInt(e.target.value))}
+                  className={`p-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                  data-testid="payslip-period-year"
+                >
+                  {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+                {manualSource === 'generate' && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      const headers = { Authorization: `Bearer ${token}` };
+                      try {
+                        const prev = await axios.get(`${API}/api/hr/admin/payslip/preview/${employee.user_id}/${manualYear}/${manualMonth}`, { headers });
+                        const d = prev.data || {};
+                        setManualForm((f) => ({
+                          ...f,
+                          total_working_days: d.total_working_days ?? f.total_working_days,
+                          days_absent: d.days_absent ?? 0,
+                          paid_leaves: d.paid_leaves ?? 0,
+                          extra_days: d.extra_days ?? 0,
+                          gross_salary: d.gross_salary || f.gross_salary,
+                          per_day_salary: d.per_day_salary || 0,
+                          net_salary: d.net_salary || 0,
+                          salary_date: d.salary_date || f.salary_date,
+                        }));
+                        toast.success(`Re-pulled attendance for ${months[manualMonth - 1]} ${manualYear}`);
+                      } catch {
+                        toast.error('Failed to refresh attendance data');
+                      }
+                    }}
+                    className="text-[#10b981] ml-auto"
+                    data-testid="payslip-refresh-attendance"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" /> Refresh attendance
+                  </Button>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div><Label className={textSecondary}>Employee Name</Label><Input value={manualForm.employee_name} readOnly className="cursor-not-allowed opacity-90" /></div>
                 <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} readOnly className="cursor-not-allowed opacity-90" /></div>
@@ -2001,19 +2103,74 @@ function SalaryPayslipView({
       <Dialog open={showManualModal} onOpenChange={setShowManualModal}>
         <DialogContent className={`${bgCard} border ${borderColor} max-w-3xl max-h-[90vh] overflow-y-auto`}>
           <DialogHeader>
-            <DialogTitle className={textPrimary}>Create Payslip — Manual</DialogTitle>
+            <DialogTitle className={textPrimary}>
+              {manualSource === 'generate' ? 'Generate Payslip — Review & Edit' : 'Create Payslip — Manual'}
+            </DialogTitle>
             <DialogDescription className={textSecondary}>
-              For {months[payslipMonth - 1]} {payslipYear} — employee details auto-fill (locked). Edit Salary Date / amounts / summary as needed.
+              {manualSource === 'generate'
+                ? `Auto-filled from attendance for ${months[manualMonth - 1]} ${manualYear}. Adjust any field before saving.`
+                : `Employee details auto-fill (locked). Edit Salary Date / amounts / summary as needed.`}
             </DialogDescription>
           </DialogHeader>
 
           {existsCheck.exists && (
             <div className="p-3 rounded-lg bg-[#ef4444]/15 text-[#ef4444] text-sm">
-              A <strong>{existsCheck.mode}</strong> payslip already exists for {months[payslipMonth - 1]} {payslipYear}. Submitting will fail until it is deleted.
+              A <strong>{existsCheck.mode}</strong> payslip already exists for {months[manualMonth - 1]} {manualYear}. Submitting will fail until it is deleted.
             </div>
           )}
 
           <div className="space-y-4">
+            {/* Period picker — choose any past/future month/year for the payslip */}
+            <div className={`flex items-center gap-3 p-3 rounded-lg border ${borderColor} ${bgSecondary}`}>
+              <Calendar className="h-4 w-4 text-[#6366f1]" />
+              <Label className={`${textPrimary} text-sm`}>Payslip Period:</Label>
+              <select
+                value={manualMonth}
+                onChange={(e) => setManualMonth(parseInt(e.target.value))}
+                className={`p-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                data-testid="payslip-period-month-2"
+              >
+                {months.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+              </select>
+              <select
+                value={manualYear}
+                onChange={(e) => setManualYear(parseInt(e.target.value))}
+                className={`p-2 rounded border ${borderColor} ${bgCard} ${textPrimary} text-sm`}
+                data-testid="payslip-period-year-2"
+              >
+                {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+              {manualSource === 'generate' && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={async () => {
+                    const headers = { Authorization: `Bearer ${token}` };
+                    try {
+                      const prev = await axios.get(`${API}/api/hr/admin/payslip/preview/${employee.user_id}/${manualYear}/${manualMonth}`, { headers });
+                      const d = prev.data || {};
+                      setManualForm((f) => ({
+                        ...f,
+                        total_working_days: d.total_working_days ?? f.total_working_days,
+                        days_absent: d.days_absent ?? 0,
+                        paid_leaves: d.paid_leaves ?? 0,
+                        extra_days: d.extra_days ?? 0,
+                        gross_salary: d.gross_salary || f.gross_salary,
+                        per_day_salary: d.per_day_salary || 0,
+                        net_salary: d.net_salary || 0,
+                        salary_date: d.salary_date || f.salary_date,
+                      }));
+                      toast.success(`Re-pulled attendance for ${months[manualMonth - 1]} ${manualYear}`);
+                    } catch {
+                      toast.error('Failed to refresh attendance data');
+                    }
+                  }}
+                  className="text-[#10b981] ml-auto"
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" /> Refresh attendance
+                </Button>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div><Label className={textSecondary}>Employee Name</Label><Input value={manualForm.employee_name} readOnly className="cursor-not-allowed opacity-90" /></div>
               <div><Label className={textSecondary}>Employee ID</Label><Input value={manualForm.employee_id} readOnly className="cursor-not-allowed opacity-90" /></div>
