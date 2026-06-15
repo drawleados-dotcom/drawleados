@@ -11,7 +11,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import {
-  Plus, ChevronDown, ChevronRight, Edit2, Trash2, Check, X,
+  Plus, Edit2, Trash2, Check, X,
   Layers, AlertTriangle, TrendingUp, Loader2,
 } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -46,7 +46,7 @@ const ExpenseSplitTab = () => {
   const [income, setIncome] = useState(0);
   const [categories, setCategories] = useState([]);
   const [totalPct, setTotalPct] = useState(0);
-  const [expanded, setExpanded] = useState({});
+  const [activeTopId, setActiveTopId] = useState('all');
 
   // Add modal — used for both top + sub
   const [addModal, setAddModal] = useState(null); // { parent_id?, parent_name? } or null
@@ -56,6 +56,19 @@ const ExpenseSplitTab = () => {
   // Inline edit row
   const [editing, setEditing] = useState(null); // category_id
   const [editForm, setEditForm] = useState({ name: '', percent: '' });
+
+  // Same ordering convention as Master Expense / Budget — pin
+  // Overhead | Marketing | Profit | Investment, hide "Loss".
+  const TAB_ORDER = ['overhead', 'marketing', 'profit', 'investment'];
+  const HIDE_NAMES = new Set(['loss']);
+  const orderedCategories = (() => {
+    const visible = (categories || []).filter((c) => !HIDE_NAMES.has((c.name || '').trim().toLowerCase()));
+    const idx = (c) => {
+      const i = TAB_ORDER.indexOf((c.name || '').trim().toLowerCase());
+      return i === -1 ? 999 : i;
+    };
+    return [...visible].sort((a, b) => idx(a) - idx(b));
+  })();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -206,7 +219,7 @@ const ExpenseSplitTab = () => {
         </div>
       )}
 
-      {/* Categories */}
+      {/* Categories — horizontal pills like Master Expense */}
       <div className="space-y-3">
         {loading && (
           <div className="text-center py-12 text-[#a1a1aa]">
@@ -214,7 +227,7 @@ const ExpenseSplitTab = () => {
             Loading…
           </div>
         )}
-        {!loading && categories.length === 0 && (
+        {!loading && orderedCategories.length === 0 && (
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-12 text-center" data-testid="split-empty">
             <Layers className="h-10 w-10 mx-auto text-[#52525b] mb-3" />
             <p className="text-[#fafafa] font-medium mb-1">No top categories yet</p>
@@ -225,108 +238,168 @@ const ExpenseSplitTab = () => {
           </div>
         )}
 
-        {!loading && categories.map((cat) => {
-          const isOpen = expanded[cat.category_id];
+        {!loading && orderedCategories.length > 0 && (() => {
+          const activeTop = activeTopId === 'all' ? null : orderedCategories.find((c) => c.category_id === activeTopId);
+          const isAllTab = activeTopId === 'all' || !activeTop;
+          const totalAllocated = orderedCategories.reduce((s, c) => s + Number(c.allocated || 0), 0);
+          const totalSpentAll = orderedCategories.reduce((s, c) => s + Number(c.spent || 0), 0);
+          const totalBalanceAll = totalAllocated - totalSpentAll;
           return (
-            <div key={cat.category_id} className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid={`split-top-${cat.category_id}`}>
-              {/* Top row */}
-              <div className="flex items-center gap-3 p-3">
+            <>
+              {/* Tab pills */}
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a] flex-wrap" data-testid="split-tabs">
                 <button
-                  onClick={() => setExpanded({ ...expanded, [cat.category_id]: !isOpen })}
-                  className="text-[#a1a1aa] hover:text-[#fafafa]"
-                  data-testid={`split-expand-${cat.category_id}`}
+                  onClick={() => setActiveTopId('all')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isAllTab ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                  data-testid="split-tab-all"
                 >
-                  {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle bg-[#a78bfa]" />
+                  All
                 </button>
-                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-
-                {editing === cat.category_id ? (
-                  <div className="flex-1 flex items-center gap-2">
-                    <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                      className="h-8 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-sm" />
-                    <Input type="number" value={editForm.percent} onChange={(e) => setEditForm({ ...editForm, percent: e.target.value })}
-                      className="h-8 w-20 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-sm" />
-                    <span className="text-xs text-[#a1a1aa]">%</span>
-                    <Button size="sm" onClick={() => saveEdit(cat)} className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2"><Check className="h-3.5 w-3.5" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-7 px-2 text-[#a1a1aa]"><X className="h-3.5 w-3.5" /></Button>
-                  </div>
-                ) : (
-                  <>
-                    <span className="font-semibold text-[#fafafa]">{cat.name}</span>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-[#27272a] text-[#a1a1aa]">{cat.percent}%</span>
-                    {cat.over_budget && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-400">OVER BUDGET</span>
-                    )}
-                  </>
-                )}
-
-                <div className="ml-auto flex items-center gap-4 text-xs">
-                  <Stat l="Allocated" v={fmt(cat.allocated)} />
-                  <Stat l="Spent" v={fmt(cat.spent)} red={cat.over_budget} />
-                  <Stat l="Balance" v={fmt(cat.balance)} red={cat.balance < 0} />
-                </div>
-
-                <div className="flex items-center gap-1 ml-2">
-                  <Button size="sm" variant="ghost" onClick={() => openAdd(cat)} className="text-[#a1a1aa] hover:text-[#fafafa] h-7 w-7 p-0" title="Add Sub Category" data-testid={`split-add-sub-${cat.category_id}`}>
-                    <Plus className="h-3.5 w-3.5" />
-                  </Button>
-                  {editing !== cat.category_id && (
-                    <Button size="sm" variant="ghost" onClick={() => startEdit(cat)} className="text-[#a1a1aa] hover:text-[#fafafa] h-7 w-7 p-0" title="Edit"><Edit2 className="h-3.5 w-3.5" /></Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => remove(cat)} className="text-red-400 hover:bg-red-500/10 h-7 w-7 p-0" title="Delete"><Trash2 className="h-3.5 w-3.5" /></Button>
-                </div>
+                {orderedCategories.map((c) => {
+                  const active = c.category_id === activeTopId;
+                  return (
+                    <button
+                      key={c.category_id}
+                      onClick={() => setActiveTopId(c.category_id)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                      data-testid={`split-tab-${c.category_id}`}
+                    >
+                      <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle" style={{ backgroundColor: c.color }} />
+                      {c.name} <span className="opacity-70">({c.percent}%)</span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* Progress bar */}
-              <div className="px-3 pb-2">
-                <div className="h-1.5 rounded-full bg-[#27272a] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${cat.over_budget ? 'bg-red-500' : 'bg-emerald-500'}`}
-                    style={{ width: `${Math.min(100, (cat.spent / Math.max(cat.allocated || 1, 1)) * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              {/* Sub-categories — name + spent only (no percentage allocation) */}
-              {isOpen && (
-                <div className="border-t border-[#27272a] bg-[#0c0a09]">
-                  {(cat.sub_categories || []).length === 0 ? (
-                    <div className="px-4 py-4 text-center text-xs text-[#71717a]">
-                      No sub-categories. <button onClick={() => openAdd(cat)} className="text-[#a78bfa] hover:underline">Add one</button>
+              {/* ALL view — grand totals + per-top row summary */}
+              {isAllTab && (
+                <>
+                  <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3" data-testid="split-all-summary">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">All Categories</p>
+                      <p className="text-lg font-bold text-[#fafafa]">Grand Totals <span className="text-xs font-mono text-[#a1a1aa]">({months[month - 1].l} {year})</span></p>
                     </div>
-                  ) : (
+                    <div className="flex items-center gap-4 text-xs">
+                      <Stat l="Allocated" v={fmt(totalAllocated)} />
+                      <Stat l="Spent" v={fmt(totalSpentAll)} red={totalSpentAll > totalAllocated && totalAllocated > 0} />
+                      <Stat l="Balance" v={fmt(totalBalanceAll)} red={totalBalanceAll < 0} />
+                    </div>
+                  </div>
+                  <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
+                      <p className="text-sm font-medium text-[#fafafa]">Top Categories</p>
+                      <span className="text-xs text-[#a1a1aa]">{orderedCategories.length} groups</span>
+                    </div>
                     <div className="divide-y divide-[#27272a]">
-                      {(cat.sub_categories || []).map((sub) => (
-                        <div key={sub.category_id} className="flex items-center gap-3 px-4 py-2.5 pl-10" data-testid={`split-sub-${sub.category_id}`}>
-                          <span className="w-2 h-2 rounded-full flex-shrink-0 opacity-60" style={{ backgroundColor: sub.color }} />
-                          {editing === sub.category_id ? (
-                            <div className="flex-1 flex items-center gap-2">
-                              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                className="h-7 bg-[#18181b] border-[#27272a] text-[#fafafa] text-xs" />
-                              <Button size="sm" onClick={() => saveEdit(sub)} className="bg-emerald-600 hover:bg-emerald-700 h-6 px-2"><Check className="h-3 w-3" /></Button>
-                              <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-6 px-2 text-[#a1a1aa]"><X className="h-3 w-3" /></Button>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-[#fafafa]">{sub.name}</span>
-                          )}
-                          <div className="ml-auto flex items-center gap-4 text-xs">
-                            <Stat l="Spent" v={fmt(sub.spent)} compact />
+                      {orderedCategories.map((c) => (
+                        <div key={c.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`split-all-row-${c.category_id}`}>
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-[#fafafa]">{c.name}</p>
+                            <p className="text-[10px] text-[#a1a1aa]">{c.percent}% of Income · {(c.sub_categories || []).length} sub-categories</p>
                           </div>
-                          <div className="flex items-center gap-1 ml-2">
-                            {editing !== sub.category_id && (
-                              <Button size="sm" variant="ghost" onClick={() => startEdit(sub)} className="text-[#a1a1aa] hover:text-[#fafafa] h-6 w-6 p-0"><Edit2 className="h-3 w-3" /></Button>
-                            )}
-                            <Button size="sm" variant="ghost" onClick={() => remove(sub)} className="text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button>
-                          </div>
+                          <Stat l="Allocated" v={fmt(c.allocated)} />
+                          <Stat l="Spent" v={fmt(c.spent)} red={c.over_budget} />
+                          <Stat l="Balance" v={fmt(c.balance)} red={c.balance < 0} />
                         </div>
                       ))}
                     </div>
-                  )}
+                  </div>
+                </>
+              )}
+
+              {/* Active top — full editor (rename / re-percent / delete / sub list) */}
+              {!isAllTab && activeTop && (
+                <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid={`split-top-${activeTop.category_id}`}>
+                  {/* Top row header */}
+                  <div className="flex items-center gap-3 p-4 border-b border-[#27272a]">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: activeTop.color }} />
+                    {editing === activeTop.category_id ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          className="h-8 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-sm max-w-[200px]" />
+                        <Input type="number" value={editForm.percent} onChange={(e) => setEditForm({ ...editForm, percent: e.target.value })}
+                          className="h-8 w-20 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-sm" />
+                        <span className="text-xs text-[#a1a1aa]">%</span>
+                        <Button size="sm" onClick={() => saveEdit(activeTop)} className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2"><Check className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-7 px-2 text-[#a1a1aa]"><X className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex-1">
+                          <p className="text-base font-bold text-[#fafafa]">{activeTop.name}</p>
+                          <p className="text-[10px] text-[#a1a1aa]">{activeTop.percent}% of Income</p>
+                        </div>
+                        {activeTop.over_budget && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-400">OVER BUDGET</span>
+                        )}
+                      </>
+                    )}
+                    <div className="flex items-center gap-4 text-xs">
+                      <Stat l="Allocated" v={fmt(activeTop.allocated)} />
+                      <Stat l="Spent" v={fmt(activeTop.spent)} red={activeTop.over_budget} />
+                      <Stat l="Balance" v={fmt(activeTop.balance)} red={activeTop.balance < 0} />
+                    </div>
+                    <div className="flex items-center gap-1 ml-2">
+                      <Button size="sm" variant="ghost" onClick={() => openAdd(activeTop)} className="text-[#a1a1aa] hover:text-[#fafafa] h-7 px-2" title="Add Sub Category" data-testid={`split-add-sub-${activeTop.category_id}`}>
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Sub
+                      </Button>
+                      {editing !== activeTop.category_id && (
+                        <Button size="sm" variant="ghost" onClick={() => startEdit(activeTop)} className="text-[#a1a1aa] hover:text-[#fafafa] h-7 w-7 p-0" title="Edit"><Edit2 className="h-3.5 w-3.5" /></Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => remove(activeTop)} className="text-red-400 hover:bg-red-500/10 h-7 w-7 p-0" title="Delete"><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="px-4 py-2 border-b border-[#27272a]">
+                    <div className="h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${activeTop.over_budget ? 'bg-red-500' : 'bg-emerald-500'}`}
+                        style={{ width: `${Math.min(100, (activeTop.spent / Math.max(activeTop.allocated || 1, 1)) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sub-categories — flat list */}
+                  <div>
+                    {(activeTop.sub_categories || []).length === 0 ? (
+                      <div className="px-4 py-8 text-center text-xs text-[#71717a]">
+                        No sub-categories yet. <button onClick={() => openAdd(activeTop)} className="text-[#a78bfa] hover:underline">Add one</button>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-[#27272a]">
+                        {(activeTop.sub_categories || []).map((sub) => (
+                          <div key={sub.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`split-sub-${sub.category_id}`}>
+                            <span className="w-2 h-2 rounded-full flex-shrink-0 opacity-70" style={{ backgroundColor: sub.color }} />
+                            {editing === sub.category_id ? (
+                              <div className="flex-1 flex items-center gap-2">
+                                <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                  className="h-7 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-xs" />
+                                <Button size="sm" onClick={() => saveEdit(sub)} className="bg-emerald-600 hover:bg-emerald-700 h-6 px-2"><Check className="h-3 w-3" /></Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-6 px-2 text-[#a1a1aa]"><X className="h-3 w-3" /></Button>
+                              </div>
+                            ) : (
+                              <span className="flex-1 text-sm text-[#fafafa]">{sub.name}</span>
+                            )}
+                            <Stat l="Spent" v={fmt(sub.spent)} compact red={sub.over_budget} />
+                            <div className="flex items-center gap-1 ml-2">
+                              {editing !== sub.category_id && (
+                                <Button size="sm" variant="ghost" onClick={() => startEdit(sub)} className="text-[#a1a1aa] hover:text-[#fafafa] h-6 w-6 p-0"><Edit2 className="h-3 w-3" /></Button>
+                              )}
+                              <Button size="sm" variant="ghost" onClick={() => remove(sub)} className="text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-            </div>
+            </>
           );
-        })}
+        })()}
       </div>
 
       {/* Add Modal */}

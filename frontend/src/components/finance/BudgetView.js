@@ -299,7 +299,6 @@ const BudgetView = () => {
                 const isEditing = editingId === s.category_id;
                 const isSaving = savingId === s.category_id;
                 const isPayroll = isPayrollSub(s);
-                const usingAutoBudget = isPayroll && (!s.budget || s.budget <= 0);
                 const displayBudget = effectiveBudget(s);
                 const displayBalance = displayBudget - Number(s.spent || 0);
                 const displayOver = Number(s.spent || 0) > displayBudget && displayBudget > 0;
@@ -309,14 +308,16 @@ const BudgetView = () => {
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                       <div>
                         <p className="text-sm text-[#fafafa]">{s.name}</p>
-                        {usingAutoBudget && (
-                          <p className="text-[10px] text-[#a78bfa]" data-testid={`budget-auto-tag-${s.category_id}`}>Auto · Σ gross salary for {MONTHS[month - 1]}</p>
+                        {isPayroll && (
+                          <p className="text-[10px] text-[#a78bfa]" data-testid={`budget-auto-tag-${s.category_id}`}>
+                            Auto · Σ gross salary from Monthly Payroll · read-only
+                          </p>
                         )}
                       </div>
                     </div>
                     <div className="col-span-3 text-right">
                       <p className="text-[10px] uppercase tracking-wide text-[#71717a]">Budget</p>
-                      {isEditing ? (
+                      {isEditing && !isPayroll ? (
                         <Input
                           type="number"
                           value={editValue}
@@ -338,7 +339,11 @@ const BudgetView = () => {
                       <Stat l="Balance" v={fmt(displayBalance)} green={displayBalance >= 0} red={displayBalance < 0} />
                     </div>
                     <div className="col-span-1 flex items-center justify-end gap-1">
-                      {isEditing ? (
+                      {isPayroll ? (
+                        <span className={`text-[10px] text-[#a78bfa]`} data-testid={`budget-locked-${s.category_id}`}>
+                          Auto-locked
+                        </span>
+                      ) : isEditing ? (
                         <>
                           <Button
                             size="sm"
