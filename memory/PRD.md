@@ -1,6 +1,35 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Meeting task grouping in "Assign to Team" + Approve-All cascade ✅
+
+### Problem
+When a meeting is assigned to 10 members, the "Assign to Team" tab listed it 10–12 times (one row per assignee) — confirmed in production screenshot. Each assignee got their own `our_tasks` row with `assigned_to=<that_user>`. Goal: collapse into a single row with the assignee names + a popup that shows everyone and approves the whole group in one click.
+
+### What changed
+- **Backend** (`/app/backend/our_tasks_routes.py`):
+  - New helper `_meeting_siblings_query(task)` returns a query that matches all sibling meeting-family rows. Uses `meeting_group_id` when present; falls back to the legacy heuristic `(type ∈ {meeting, team_meeting, client_meeting}) AND task_name AND created_by AND due_date`.
+  - New `GET /api/our-tasks/tasks/{task_id}/meeting-group` returns `{is_meeting_group, meeting_group_id, members:[{task_id, assigned_to, assigned_to_name, status, approval_request}]}` with names resolved via `db.users`. **Lazy backfill**: when ≥2 siblings match the heuristic and no `meeting_group_id` is stored, it generates one `mtg_xxx` id and writes it back to all siblings (subsequent calls hit the O(1) path).
+  - New `POST /api/our-tasks/tasks/{task_id}/group-status` with body `{status}` cascades the same status to every sibling in one Mongo `update_many`. Same backfill if no group_id yet.
+- **Frontend** (`/app/frontend/src/pages/OurTasksPage.js`):
+  - New `displayTasks` derived from `filteredTasks` — only in `assign_to_team` view. Meeting-family tasks (`type ∈ {meeting, team_meeting, client_meeting}`) are bucketed by `meeting_group_id` (or the legacy heuristic key) into a single "lead" task carrying `_group_members[]` and `_group_size`.
+  - The row's Created/Assigned column renders an **"N members"** blue badge + first three names + `+N more` + "by <creator>" when `_group_size > 1`.
+  - The existing Task Detail modal now shows a **"Members (N)"** block listing each assignee with their per-task status, plus an emerald **"Approve All"** button that calls the new `/group-status` endpoint with `status: 'completed'` and refreshes the list.
+  - Imported `Check` icon from lucide-react.
+
+### Files touched
+- `/app/backend/our_tasks_routes.py` (additions after the existing endpoints).
+- `/app/frontend/src/pages/OurTasksPage.js` (state pipeline + table cell + modal block).
+
+### Verification (live, end-to-end)
+- `GET /api/our-tasks/tasks/tsk_3a55e2343609/meeting-group` → returned 3 sibling members with `is_meeting_group=true` and an auto-assigned `meeting_group_id=mtg_2304f1b88ad6`. Re-checking the DB confirms all three sibling tasks now share that ID.
+- UI screenshot in the Assign-to-Team tab: the prior 3 "Requirement Call" duplicate rows collapsed into **one row** with a "3 members" badge and inline names `Vinothkumar Babu, —, Saranya · by Saranya`. Click opens a popup with the **Members (3)** list + Approve All button.
+
+### Type-family treatment
+- The Type dropdown keeps the three options (`Meeting`, `Team Meeting`, `Client Meeting`). For listing / grouping / filtering, all three are treated as a single "meeting" family (`MEETING_FAMILY` in backend, `MEETING_FAMILY_FE` in frontend).
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — "Invoice req" 2-step flow + Invoice source tabs ✅
 
 ### What changed

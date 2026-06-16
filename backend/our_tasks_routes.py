@@ -1105,3 +1105,129 @@ async def decide_task_approval(task_id: str, payload: dict, request: Request):
     updated = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
     return updated
 
+
+
+# -----------------------------------------------------------------------------
+# Meeting group helpers — collapse duplicate Meeting/Team-Meeting/Client-Meeting
+# tasks that were created one-per-assignee. Two siblings belong to the same
+# meeting group when ANY of these is true:
+#   1. They share a non-empty `meeting_group_id`.
+#   2. type ∈ {meeting, team_meeting, client_meeting} AND task_name AND
+#      due_date AND created_by all match (legacy heuristic).
+# -----------------------------------------------------------------------------
+MEETING_FAMILY = {"meeting", "team_meeting", "client_meeting"}
+
+
+async def _meeting_siblings_query(task: dict) -> Optional[dict]:
+    t = (task.get("type") or "").lower()
+    if t not in MEETING_FAMILY:
+        return None
+    gid = task.get("meeting_group_id")
+    if gid:
+        return {"meeting_group_id": gid}
+    # Heuristic fallback for legacy duplicates that share creator + name + date.
+    name = task.get("task_name")
+    creator = task.get("created_by")
+    due_date = task.get("due_date")
+    if not (name and creator):
+        return None
+    return {
+        "type": {"$in": list(MEETING_FAMILY)},
+        "task_name": name,
+        "created_by": creator,
+        "due_date": due_date or None,
+    }
+
+
+@our_tasks_router.get("/tasks/{task_id}/meeting-group")
+async def get_meeting_group(task_id: str, request: Request):
+    """Return all sibling meeting tasks (one row per assignee), each with name + status."""
+    from server import get_current_user, db
+    await get_current_user(request)
+    task = await db.our_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    query = await _meeting_siblings_query(task)
+    if not query:
+        # Not a meeting — return itself as a group of 1.
+        return {
+            "is_meeting_group": False,
+            "meeting_group_id": None,
+            "members": [{
+                "task_id": task["task_id"],
+                "assigned_to": task.get("assigned_to"),
+                "assigned_to_name": task.get("assigned_to_name") or "—",
+                "status": task.get("status") or "pending",
+            }],
+        }
+    siblings = []
+    async for sib in db.our_tasks.find(query, {"_id": 0}):
+        siblings.append(sib)
+    # Lazy backfill: if heuristic matched ≥2 siblings without a stored group_id,
+    # write one shared id back so future cascades are O(1) lookups.
+    if siblings and not task.get("meeting_group_id"):
+        gid = f"mtg_{uuid.uuid4().hex[:12]}"
+        sibling_ids = [s["task_id"] for s in siblings]
+        await db.our_tasks.update_many(
+            {"task_id": {"$in": sibling_ids}},
+            {"$set": {"meeting_group_id": gid}},
+        )
+        for s in siblings:
+            s["meeting_group_id"] = gid
+    # Resolve assignee names for any sibling missing them.
+    user_ids = list({s.get("assigned_to") for s in siblings if s.get("assigned_to")})
+    name_map = {}
+    if user_ids:
+        async for u in db.users.find({"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1}):
+            name_map[u["user_id"]] = u.get("name") or "—"
+    members = [
+        {
+            "task_id": s["task_id"],
+            "assigned_to": s.get("assigned_to"),
+            "assigned_to_name": s.get("assigned_to_name") or name_map.get(s.get("assigned_to"), "—"),
+            "status": s.get("status") or "pending",
+            "approval_request": s.get("approval_request"),
+        }
+        for s in siblings
+    ]
+    members.sort(key=lambda m: (m["assigned_to_name"] or "").lower())
+    return {
+        "is_meeting_group": len(members) > 1,
+        "meeting_group_id": siblings[0].get("meeting_group_id") if siblings else None,
+        "members": members,
+    }
+
+
+class GroupStatusPayload(BaseModel):
+    status: str  # e.g. 'completed', 'approved' (mapped to operations approval)
+
+
+@our_tasks_router.post("/tasks/{task_id}/group-status")
+async def cascade_group_status(task_id: str, payload: GroupStatusPayload, request: Request):
+    """Cascade a status change to every sibling task in the same meeting group.
+
+    Used by "Approve All" / "Mark all complete" inside the Assign-to-Team
+    meeting-group popup. Returns the count of tasks updated.
+    """
+    from server import get_current_user, db
+    await get_current_user(request)
+    task = await db.our_tasks.find_one({"task_id": task_id})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    query = await _meeting_siblings_query(task)
+    if not query:
+        # Not a meeting — fall back to single-task update.
+        await db.our_tasks.update_one(
+            {"task_id": task_id},
+            {"$set": {"status": payload.status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        return {"updated": 1}
+    res = await db.our_tasks.update_many(
+        query,
+        {"$set": {"status": payload.status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    # Also auto-stamp a group_id if missing so future calls hit the O(1) path.
+    if not task.get("meeting_group_id"):
+        gid = f"mtg_{uuid.uuid4().hex[:12]}"
+        await db.our_tasks.update_many(query, {"$set": {"meeting_group_id": gid}})
+    return {"updated": res.modified_count}

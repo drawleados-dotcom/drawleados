@@ -13,7 +13,7 @@ import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video, ListChecks, ShieldCheck, Crown
+  Repeat, Video, ListChecks, ShieldCheck, Crown, Check
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -1005,6 +1005,50 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     return true;
   });
 
+  // Collapse duplicate Meeting/Team-Meeting/Client-Meeting tasks (one row per
+  // assignee) into a single grouped row in the "Assign to Team" view. Each
+  // collapsed row carries `_group_members` describing all assignees and
+  // `_group_size` for the UI badge. Outside the assign_to_team tab we render
+  // the raw list (My Tasks must still show only the user's own row).
+  const MEETING_FAMILY_FE = new Set(['meeting', 'team_meeting', 'client_meeting']);
+  const displayTasks = (() => {
+    if (mainTab !== 'assign_to_team') return filteredTasks;
+    const groups = new Map();
+    const out = [];
+    for (const t of filteredTasks) {
+      const type = (t.type || '').toLowerCase();
+      if (!MEETING_FAMILY_FE.has(type)) {
+        out.push(t);
+        continue;
+      }
+      // Group key: stored meeting_group_id if set, else heuristic.
+      const key = t.meeting_group_id
+        || `mtg::${t.task_name || ''}::${t.due_date || ''}::${t.due_time || ''}::${t.created_by || ''}`;
+      if (!groups.has(key)) {
+        const member = {
+          task_id: t.task_id,
+          assigned_to: t.assigned_to,
+          assigned_to_name: t.assigned_to_name || '—',
+          status: t.status || 'pending',
+        };
+        const lead = { ...t, _group_members: [member], _group_size: 1, _group_key: key };
+        groups.set(key, lead);
+        out.push(lead);
+      } else {
+        const lead = groups.get(key);
+        lead._group_members.push({
+          task_id: t.task_id,
+          assigned_to: t.assigned_to,
+          assigned_to_name: t.assigned_to_name || '—',
+          status: t.status || 'pending',
+        });
+        lead._group_size = lead._group_members.length;
+      }
+    }
+    return out;
+  })();
+
+
   // Reset filters
   const resetFilters = () => {
     setFilters({
@@ -1530,7 +1574,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     <tr>
                       <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
                     </tr>
-                  ) : filteredTasks.length === 0 ? (
+                  ) : displayTasks.length === 0 ? (
                     <tr>
                       <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
@@ -1542,7 +1586,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         </p>
                       </td>
                     </tr>
-                  ) : filteredTasks.map(task => (
+                  ) : displayTasks.map(task => (
                     <tr 
                       key={task.task_id} 
                       className={`${bgCard} hover:${bgSecondary} cursor-pointer transition-colors`}
@@ -1581,8 +1625,22 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       </td>
                       <td className={`px-4 py-3 text-sm`}>
                         <div className="space-y-1">
-                          {/* Show if created by them or assigned to them */}
-                          {task.created_by === user?.user_id ? (
+                          {/* Meeting group: collapsed row shows all assignees with a count badge.
+                              View popup (eye icon) lets the user approve all in one shot. */}
+                          {task._group_size > 1 ? (
+                            <div className="flex flex-col gap-1">
+                              <Badge className="bg-blue-500/20 text-blue-400 text-[10px] w-fit" data-testid={`meeting-group-badge-${task.task_id}`}>
+                                {task._group_size} members
+                              </Badge>
+                              <p className={`text-xs ${textPrimary} leading-tight`}>
+                                {task._group_members.slice(0, 3).map(m => m.assigned_to_name || '—').join(', ')}
+                                {task._group_size > 3 && (
+                                  <span className={textSecondary}> +{task._group_size - 3} more</span>
+                                )}
+                              </p>
+                              <p className={`text-[10px] ${textSecondary}`}>by {task.created_by_name || '—'}</p>
+                            </div>
+                          ) : task.created_by === user?.user_id ? (
                             <div>
                               <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs mb-1">Created by you</Badge>
                               <p className={`text-xs ${textSecondary}`}>{formatDate(task.created_at)}</p>
@@ -2381,6 +2439,55 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       <Link className="h-4 w-4 flex-shrink-0" />
                       {viewingTask.work_link}
                     </a>
+                  </div>
+                )}
+
+                {/* Meeting Group Members — shown when this is a collapsed
+                    meeting row (multiple assignees). Each member shows their
+                    own status. "Approve All" cascades operations-approval. */}
+                {viewingTask._group_size > 1 && (
+                  <div className={`p-4 rounded-lg ${bgSecondary}`} data-testid="meeting-group-members">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <p className={`text-xs ${textSecondary} flex items-center gap-1`}>
+                        <Users className="h-3 w-3" /> Members ({viewingTask._group_size})
+                      </p>
+                      <Button
+                        size="sm"
+                        className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 h-7 text-xs"
+                        data-testid="meeting-group-approve-all"
+                        onClick={async () => {
+                          try {
+                            const r = await axios.post(
+                              `${API}/api/our-tasks/tasks/${viewingTask.task_id}/group-status`,
+                              { status: 'completed' },
+                              { headers },
+                            );
+                            toast.success(`Marked ${r.data?.updated || 0} member tasks complete`);
+                            setShowTaskDetailModal(false);
+                            setViewingTask(null);
+                            loadTasks();
+                          } catch (e) {
+                            toast.error(e.response?.data?.detail || 'Failed to cascade');
+                          }
+                        }}
+                      >
+                        <Check className="h-3 w-3 mr-1" /> Approve All
+                      </Button>
+                    </div>
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                      {(viewingTask._group_members || []).map((m) => (
+                        <div
+                          key={m.task_id}
+                          className={`flex items-center justify-between px-3 py-2 rounded ${bgCard} border ${borderColor}`}
+                          data-testid={`meeting-group-member-${m.task_id}`}
+                        >
+                          <p className={`text-sm ${textPrimary}`}>{m.assigned_to_name || '—'}</p>
+                          <Badge className={`text-[10px] ${statusColors[m.status] || statusColors.pending}`}>
+                            {(m.status || 'pending').replace('_', ' ')}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
