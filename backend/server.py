@@ -1001,6 +1001,12 @@ async def get_me(user: User = Depends(get_current_user)):
     if extra:
         data["department"] = extra.get("department", "")
         data["designation"] = extra.get("designation", "")
+    # Enrich with the per-user Clock-In/Out + Break time-entry mode.
+    cm = await db.users.find_one(
+        {"user_id": user.user_id},
+        {"_id": 0, "clock_mode": 1},
+    )
+    data["clock_mode"] = (cm or {}).get("clock_mode") or "auto"
     # Enrich with the designation's operations_* config (per-sub-tab access)
     desg_title = (data.get("designation") or "").strip()
     user_modules = data.get("module_access") or []
@@ -1192,6 +1198,25 @@ async def update_user(user_id: str, update_data: Dict[str, Any], current_user: U
     
     return await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
 
+@api_router.put("/users/me/clock-mode")
+async def update_my_clock_mode(payload: Dict[str, Any], current_user: User = Depends(get_current_user)):
+    """Per-user toggle for Clock In/Out + Break In/Out time entry mode.
+
+    - `auto` (default): the existing button submits instantly with the server's
+      current time, skipping the modal.
+    - `manual`: the existing date+time picker modal opens and the user can pick
+      any time (also lets them back-fill missed entries earlier today).
+    """
+    mode = (payload.get("clock_mode") or "auto").strip().lower()
+    if mode not in ("auto", "manual"):
+        raise HTTPException(status_code=400, detail="clock_mode must be 'auto' or 'manual'")
+    await db.users.update_one(
+        {"user_id": current_user.user_id},
+        {"$set": {"clock_mode": mode}},
+    )
+    return {"clock_mode": mode}
+
+
 @api_router.delete("/users/{user_id}")
 async def deactivate_user(user_id: str, current_user: User = Depends(get_current_user)):
     """Deactivate user"""
@@ -1202,7 +1227,6 @@ async def deactivate_user(user_id: str, current_user: User = Depends(get_current
         {"user_id": user_id},
         {"$set": {"is_active": False}}
     )
-    
     return {"message": "User deactivated"}
 
 

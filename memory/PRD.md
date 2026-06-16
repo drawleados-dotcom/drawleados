@@ -1,6 +1,36 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 15, 2026 (cont.) — Per-user Clock-In time entry mode (Auto / Manual) ✅
+
+### Problem
+Every Clock In / Clock Out / Break In click opened a 3-field time-picker modal that defaulted to 9:00 AM (not the current time), forcing users to manually adjust on every clock event. Wanted: Auto mode (one tap = instant submit with server time) and Manual mode (modal with date+time picker to back-fill missed entries).
+
+### What changed
+- **Backend** (`/app/backend/server.py`):
+  - New endpoint `PUT /api/users/me/clock-mode` accepts `{clock_mode: "auto"|"manual"}` and stores it on the current user's document.
+  - `GET /api/auth/me` now returns `clock_mode` (defaults to `"auto"`).
+- **Settings page** (`/app/frontend/src/pages/SettingsPage.js`): new **"Login Setting"** tab with `Clock` icon.
+- **New component** `/app/frontend/src/components/settings/LoginSettingTab.js`: explanation card + main Switch (Auto/Manual) + two info cards explaining each mode. Toggle writes to the new endpoint and refreshes `/auth/me` via `useAuth().refreshUser()`.
+- **AuthContext** (`/app/frontend/src/contexts/AuthContext.js`): exposes `refreshUser` (alias for `checkAuth`) so child components can pull a fresh `/auth/me` after they change a profile setting.
+- **Layout topbar** (`/app/frontend/src/components/Layout.js`):
+  - Added three "quick-submit" helpers `quickClockIn / quickClockOut / quickBreakIn` that hit the existing attendance endpoints with the current local time formatted by `formatTimeForAPI(...getCurrentTimeParts())`.
+  - Top-level dispatchers `handleClockInClick / handleClockOutClick / handleBreakInClick` pick the quick path when `user.clock_mode === 'auto'`, otherwise fall back to the existing modal. Break Out always uses the modal because it needs a category/reason.
+  - Clock In also falls back to the modal in Auto mode when it's outside working hours so the user can supply the required reason.
+
+### Files touched
+- `/app/backend/server.py` — new endpoint + enriched `/auth/me`.
+- `/app/frontend/src/contexts/AuthContext.js` — `refreshUser` alias.
+- `/app/frontend/src/pages/SettingsPage.js` — new "Login Setting" tab trigger + content.
+- `/app/frontend/src/components/settings/LoginSettingTab.js` — **new** component.
+- `/app/frontend/src/components/Layout.js` — quick-submit helpers and dispatcher routing.
+
+### Verification (live)
+- `curl PUT /api/users/me/clock-mode {"clock_mode":"manual"}` → `{"clock_mode":"manual"}`. Subsequent `/auth/me` returns `clock_mode: manual`. Reset to auto → returns `auto`.
+- UI screenshot trio: Settings → Login Setting tab visible · toggle flipped → toast confirmed · the Clock In button on the topbar now opens the date+time picker modal in Manual mode (and in Auto mode would submit instantly).
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Meeting task grouping in "Assign to Team" + Approve-All cascade ✅
 
 ### Problem

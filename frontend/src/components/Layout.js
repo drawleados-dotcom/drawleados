@@ -159,6 +159,62 @@ const Layout = ({ children }) => {
     return currentMinutes < loginMinutes || currentMinutes > logoutMinutes;
   };
 
+  // Per-user time-entry mode: 'auto' skips the modal entirely and submits the
+  // current server time directly; 'manual' opens the existing date+time picker.
+  const isAutoMode = ((user?.clock_mode || 'auto').toLowerCase()) === 'auto';
+
+  // Quick-submit helpers for Auto mode (no modal) — record current local time.
+  const quickClockIn = async () => {
+    if (isOutsideWorkingHours()) {
+      // Auto mode still needs a reason for outside-hours, so fall back to the
+      // modal in that case so the user can fill it in.
+      openClockInModal();
+      return;
+    }
+    setLoading(true);
+    try {
+      const { hour, minute, period } = getCurrentTimeParts();
+      await axios.post(`${API}/api/hr/attendance/clock-in`, {
+        time: formatTimeForAPI(hour, minute, period),
+        work_mode: 'office',
+        outside_hours_reason: null,
+      }, { headers });
+      toast.success('Clocked in');
+      loadTodayAttendance();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to clock in');
+    }
+    setLoading(false);
+  };
+  const quickClockOut = async () => {
+    setLoading(true);
+    try {
+      const { hour, minute, period } = getCurrentTimeParts();
+      await axios.put(`${API}/api/hr/attendance/clock-out`, {
+        time: formatTimeForAPI(hour, minute, period),
+      }, { headers });
+      toast.success('Clocked out');
+      loadTodayAttendance();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to clock out');
+    }
+    setLoading(false);
+  };
+  const quickBreakIn = async () => {
+    setLoading(true);
+    try {
+      const { hour, minute, period } = getCurrentTimeParts();
+      await axios.post(`${API}/api/hr/attendance/break-in`, {
+        time: formatTimeForAPI(hour, minute, period),
+      }, { headers });
+      toast.success('Back from break');
+      loadTodayAttendance();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to end break');
+    }
+    setLoading(false);
+  };
+
   // Initialize modal times when opening
   const openClockInModal = () => {
     const { hour, minute, period } = getCurrentTimeParts();
@@ -183,6 +239,15 @@ const Layout = ({ children }) => {
     setBreakInData({ hour, minute, period });
     setShowBreakInModal(true);
   };
+
+  // Top-level dispatchers used by the topbar buttons — pick instant vs modal
+  // based on the user's clock_mode preference.
+  const handleClockInClick = () => (isAutoMode ? quickClockIn() : openClockInModal());
+  const handleClockOutClick = () => (isAutoMode ? quickClockOut() : openClockOutModal());
+  const handleBreakInClick = () => (isAutoMode ? quickBreakIn() : openBreakInModal());
+  // Break Out always needs the modal because the user must pick a category
+  // (lunch / tea / other / reason). Even in Auto mode this is required.
+  const handleBreakOutClick = () => openBreakOutModal();
 
   // Handle Clock In
   const handleClockIn = async () => {
@@ -481,7 +546,7 @@ const Layout = ({ children }) => {
               {!todayAttendance?.clock_in && (
                 <Button
                   size="sm"
-                  onClick={openClockInModal}
+                  onClick={handleClockInClick}
                   className="h-8 px-3 text-xs bg-[#10b981] hover:bg-[#059669] text-white"
                 >
                   <LogIn className="h-3 w-3 mr-1" />
@@ -493,7 +558,7 @@ const Layout = ({ children }) => {
               {isClockedOut && (
                 <Button
                   size="sm"
-                  onClick={openClockInModal}
+                  onClick={handleClockInClick}
                   className="h-8 px-3 text-xs bg-[#10b981] hover:bg-[#059669] text-white"
                 >
                   <LogIn className="h-3 w-3 mr-1" />
@@ -508,7 +573,7 @@ const Layout = ({ children }) => {
                   {!isOnBreak && (
                     <Button
                       size="sm"
-                      onClick={openBreakOutModal}
+                      onClick={handleBreakOutClick}
                       className="h-8 px-3 text-xs bg-[#f59e0b] hover:bg-[#d97706] text-white"
                       data-testid="break-out-btn"
                     >
@@ -521,7 +586,7 @@ const Layout = ({ children }) => {
                   {isOnBreak && (
                     <Button
                       size="sm"
-                      onClick={openBreakInModal}
+                      onClick={handleBreakInClick}
                       className="h-8 px-3 text-xs bg-[#8b5cf6] hover:bg-[#7c3aed] text-white animate-pulse"
                       data-testid="break-in-btn"
                     >
@@ -532,7 +597,7 @@ const Layout = ({ children }) => {
                   
                   <Button
                     size="sm"
-                    onClick={openClockOutModal}
+                    onClick={handleClockOutClick}
                     className="h-8 px-3 text-xs bg-[#ef4444] hover:bg-[#dc2626] text-white"
                   >
                     <LogOut className="h-3 w-3 mr-1" />

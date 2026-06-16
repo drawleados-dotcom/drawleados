@@ -13,7 +13,7 @@ import { Label } from '../components/ui/label';
 import { Checkbox } from '../components/ui/checkbox';
 import { 
   Users, Shield, Building2, Plus, Search, Edit, Trash2, 
-  Layers, Tag, Layout as LayoutIcon, Database, Plug, Menu as MenuIcon
+  Layers, Tag, Layout as LayoutIcon, Database, Plug, Menu as MenuIcon, Clock as ClockIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +23,7 @@ import StatusManagementTab from '../components/settings/StatusManagementTab';
 import DatabaseToolsTab from '../components/hr/DatabaseToolsTab';
 import IntegrationsTab from '../components/settings/IntegrationsTab';
 import MenuSettingsTab from '../components/settings/MenuSettingsTab';
+import LoginSettingTab from '../components/settings/LoginSettingTab';
 
 const SettingsPage = () => {
   const { isDark } = useTheme();
@@ -266,6 +267,14 @@ const SettingsPage = () => {
               <MenuIcon className="h-4 w-4 mr-2" />
               Menu
             </TabsTrigger>
+            <TabsTrigger
+              value="login"
+              data-testid="settings-login-tab"
+              className="data-[state=active]:bg-[#6366f1] data-[state=active]:text-white"
+            >
+              <ClockIcon className="h-4 w-4 mr-2" />
+              Login Setting
+            </TabsTrigger>
             {isSuperAdmin && (
               <TabsTrigger
                 value="integrations"
@@ -305,6 +314,17 @@ const SettingsPage = () => {
           {/* Menu Layout Tab Content */}
           <TabsContent value="menu" className="mt-6">
             <MenuSettingsTab
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          </TabsContent>
+
+          {/* Login Setting (per-user clock-in time entry mode) */}
+          <TabsContent value="login" className="mt-6">
+            <LoginSettingTab
               bgCard={bgCard}
               bgSecondary={bgSecondary}
               textPrimary={textPrimary}
