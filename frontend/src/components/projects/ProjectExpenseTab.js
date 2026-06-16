@@ -74,9 +74,11 @@ export default function ProjectExpenseTab({
 
   const list = subTab === 'credits' ? credits : others;
   const totals = useMemo(() => {
-    const count = list.length;
+    // "Total Credits" sums the numeric Credits column values (e.g. 50+100+50+100=300),
+    // not just the row count. Falls back to 0 for non-numeric labels.
+    const count = list.reduce((acc, r) => acc + (parseFloat(r.label) || 0), 0);
     const amount = list.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
-    return { count, amount };
+    return { count, amount, rows: list.length };
   }, [list]);
 
   const persist = async (nextList) => {
@@ -200,7 +202,7 @@ export default function ProjectExpenseTab({
           <CardContent className="p-4">
             <p className={`text-xs ${textSecondary}`}>Total {subTabLabel}</p>
             <p className={`text-2xl font-bold ${textPrimary}`} data-testid="expense-total-count">
-              {totals.count}
+              {Number(totals.count || 0).toLocaleString()}
             </p>
           </CardContent>
         </Card>
