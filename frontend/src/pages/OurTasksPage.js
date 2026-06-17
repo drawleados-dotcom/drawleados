@@ -1048,6 +1048,22 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     return out;
   })();
 
+  // Summary cards derived from the SAME filtered pool that drives the table.
+  // This way, picking a department / person / project / category / status in
+  // the filter bar automatically rolls the numbers up in the five summary cards
+  // (Worked Hours · To-Do · Pending · Awaiting Ops · Awaiting CEO).
+  const filterScopedSummary = (() => {
+    const wsec = filteredTasks.reduce((s, t) => s + Number(t?.time_tracking?.total_seconds || 0), 0);
+    const fmtH = (sec) => `${Math.floor(sec/3600)}h ${Math.floor((sec%3600)/60)}m`;
+    return {
+      worked_hours: { formatted: fmtH(wsec) },
+      total_to_do: filteredTasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length,
+      pending: filteredTasks.filter(t => t.status === 'pending').length,
+      awaiting_ops: filteredTasks.filter(t => t.approval_request?.status === 'pending_ops' || t.approval_request?.queue === 'operations').length,
+      awaiting_ceo: filteredTasks.filter(t => t.approval_request?.status === 'pending_ceo' || t.approval_request?.queue === 'ceo').length,
+    };
+  })();
+
 
   // Reset filters
   const resetFilters = () => {
@@ -1163,11 +1179,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         )}
 
         {/* Operations Summary Cards — Feb 2026
-            5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO */}
+            5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO.
+            Now driven by `filterScopedSummary` so the numbers always reflect
+            the active filter bar (date, project, person, department, category,
+            status) — see useMemo above. */}
         <OperationsSummaryCards
-          summary={tabScopedSummary}
+          summary={filterScopedSummary}
           summaryDate={summaryDate}
-          onDateChange={setSummaryDate}
+          onDateChange={(d) => {
+            // Keep the legacy summary date in sync AND push the same date into
+            // the table date filter so the cards and the table stay aligned.
+            setSummaryDate(d);
+            setFilters(prev => ({ ...prev, dateFilter: 'single', singleDate: d }));
+          }}
           activeFilter={filter}
           onCardClick={(key) => {
             // 'todo'  -> show all (open + in progress + others)
