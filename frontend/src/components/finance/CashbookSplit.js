@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, TrendingUp, TrendingDown, Loader2, Trash2, X, Eye, AlertCircle } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Loader2, Trash2, X, Eye, AlertCircle, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -384,6 +384,65 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
     }
   };
 
+  // ------- EDIT ENTRY (popup) ----------------------------------------------
+  // Inline editor for an existing cashbook row. Amount is locked for entries
+  // that came from an invoice or payslip (those flows own the canonical
+  // amount; editing here would silently desync the linked record).
+  const [editEntry, setEditEntry] = useState(null); // { ...entry } | null
+  const [editForm, setEditForm] = useState({ date: '', party: '', amount: '', payment_mode: 'cash', bank_id: '', notes: '' });
+  const [editBanks, setEditBanks] = useState([]);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const openEdit = (entry) => {
+    setEditEntry(entry);
+    setEditForm({
+      date: fmtDate(entry.date),
+      party: entry.kind === 'credit' ? (entry.from || '') : (entry.to || ''),
+      amount: String(entry.amount ?? ''),
+      payment_mode: entry.payment_mode || 'cash',
+      bank_id: entry.bank_id || '',
+      notes: entry.notes || '',
+    });
+    // Lazily load banks for the same gst bucket
+    axios.get(`${API}/api/finance/banks?gst_type=${gstType}`, { headers })
+      .then(r => setEditBanks(r.data || []))
+      .catch(() => setEditBanks([]));
+  };
+  const closeEdit = () => { setEditEntry(null); };
+
+  const saveEdit = async () => {
+    if (!editEntry) return;
+    const body = {
+      date: editForm.date,
+      party: editForm.party,
+      notes: editForm.notes,
+      payment_mode: editForm.payment_mode,
+      bank_id: editForm.payment_mode === 'bank' ? (editForm.bank_id || null) : null,
+    };
+    // Amount only sent when not invoice/payslip-linked AND user actually changed it
+    const isLinked = !!(editEntry.invoice_id || editEntry.payslip_id);
+    if (!isLinked) {
+      const amt = parseFloat(editForm.amount);
+      if (!isFinite(amt) || amt <= 0) {
+        toast.error('Amount must be greater than zero');
+        return;
+      }
+      body.amount = amt;
+    }
+    setEditSaving(true);
+    try {
+      await axios.patch(`${API}/api/finance/banks/cashbook/entries/${editEntry.entry_id}`, body, { headers });
+      toast.success('Entry updated');
+      closeEdit();
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Update failed');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+  // -------------------------------------------------------------------------
+
   if (loading && !data) {
     return <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin text-[#6366f1]" /></div>;
   }
@@ -504,9 +563,24 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                     <td className={`px-4 py-2 ${textSecondary} capitalize`}>{e.payment_mode}{e.bank_label ? ` · ${e.bank_label}` : ''}</td>
                     <td className="px-4 py-2 text-right font-semibold text-[#10b981]">{fmt(e.amount)}</td>
                     <td className="px-4 py-2 text-right">
-                      <button onClick={() => deleteEntry(e)} className="text-[#f87171] hover:text-[#fca5a5]">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="inline-flex items-center gap-2">
+                        <button
+                          onClick={() => openEdit(e)}
+                          className="text-[#6366f1] hover:text-[#818cf8]"
+                          title="Edit entry"
+                          data-testid={`cb-edit-${e.entry_id}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteEntry(e)}
+                          className="text-[#f87171] hover:text-[#fca5a5]"
+                          title="Delete entry"
+                          data-testid={`cb-del-${e.entry_id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -541,7 +615,7 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                     <td className={`px-4 py-2 ${textSecondary} capitalize`}>{e.payment_mode}{e.bank_label ? ` · ${e.bank_label}` : ''}</td>
                     <td className="px-4 py-2 text-right font-semibold text-[#ef4444]">{fmt(e.amount)}</td>
                     <td className="px-4 py-2 text-right">
-                      <div className="inline-flex items-center gap-1">
+                      <div className="inline-flex items-center gap-2">
                         {e.expense_group_id && (
                           <button
                             onClick={() => viewGroup(e.expense_group_id)}
@@ -552,7 +626,20 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
                             <Eye className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        <button onClick={() => deleteEntry(e)} className="text-[#f87171] hover:text-[#fca5a5]">
+                        <button
+                          onClick={() => openEdit(e)}
+                          className="text-[#6366f1] hover:text-[#818cf8]"
+                          title="Edit entry"
+                          data-testid={`cb-edit-${e.entry_id}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteEntry(e)}
+                          className="text-[#f87171] hover:text-[#fca5a5]"
+                          title="Delete entry"
+                          data-testid={`cb-del-${e.entry_id}`}
+                        >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -1094,6 +1181,128 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
             </div>
             <div className="flex justify-end pt-3 border-t mt-3" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
               <Button onClick={() => setGroupView(null)} variant="outline" className={borderColor}>Close</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Entry modal — works for both Cash In (credit) and Cash Out (debit) */}
+      {editEntry && (
+        <Dialog open={true} onOpenChange={(o) => { if (!o) closeEdit(); }}>
+          <DialogContent className={`${bgCard} border ${borderColor} ${textPrimary} max-w-md`} data-testid="cashbook-edit-modal">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-[#6366f1]" />
+                Edit {editEntry.kind === 'credit' ? 'Income' : 'Expense'} Entry
+              </DialogTitle>
+              <p className={`text-xs ${textSecondary}`}>
+                {gstType === 'gst' ? 'GST' : 'Non-GST'} Cashbook
+                {editEntry.invoice_number && ` • Linked to ${editEntry.invoice_number}`}
+              </p>
+            </DialogHeader>
+
+            <div className="space-y-3 mt-2">
+              <div>
+                <Label className={`text-xs ${textSecondary}`}>Date</Label>
+                <Input
+                  type="date"
+                  value={editForm.date}
+                  onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="cb-edit-date"
+                />
+              </div>
+
+              <div>
+                <Label className={`text-xs ${textSecondary}`}>
+                  {editEntry.kind === 'credit' ? 'From (counter-party)' : 'To (counter-party)'}
+                </Label>
+                <Input
+                  value={editForm.party}
+                  onChange={(e) => setEditForm({ ...editForm, party: e.target.value })}
+                  placeholder={editEntry.kind === 'credit' ? 'Customer / Source' : 'Vendor / Recipient'}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="cb-edit-party"
+                />
+              </div>
+
+              <div>
+                <Label className={`text-xs ${textSecondary}`}>Amount</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                  disabled={!!(editEntry.invoice_id || editEntry.payslip_id)}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary} ${(editEntry.invoice_id || editEntry.payslip_id) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  data-testid="cb-edit-amount"
+                />
+                {(editEntry.invoice_id || editEntry.payslip_id) && (
+                  <p className={`text-[10px] mt-1 flex items-center gap-1 ${textSecondary}`}>
+                    <AlertCircle className="h-3 w-3" />
+                    Amount is locked — this entry is linked to {editEntry.invoice_id ? 'an invoice' : 'a payslip'}. Adjust it from the source record.
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={`text-xs ${textSecondary}`}>Payment Mode</Label>
+                  <select
+                    value={editForm.payment_mode}
+                    onChange={(e) => setEditForm({ ...editForm, payment_mode: e.target.value, bank_id: e.target.value === 'bank' ? editForm.bank_id : '' })}
+                    className={`w-full px-3 py-2 rounded-md text-sm ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="cb-edit-mode"
+                  >
+                    {PAYMENT_MODES.map((m) => (
+                      <option key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</option>
+                    ))}
+                  </select>
+                </div>
+                {editForm.payment_mode === 'bank' && (
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Bank Account</Label>
+                    <select
+                      value={editForm.bank_id || ''}
+                      onChange={(e) => setEditForm({ ...editForm, bank_id: e.target.value })}
+                      className={`w-full px-3 py-2 rounded-md text-sm ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      data-testid="cb-edit-bank"
+                    >
+                      <option value="">Select bank…</option>
+                      {editBanks.map((b) => (
+                        <option key={b.bank_id} value={b.bank_id}>
+                          {b.account_holder || b.bank_name}{b.bank_name ? ` · ${b.bank_name}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Label className={`text-xs ${textSecondary}`}>Notes</Label>
+                <Input
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  placeholder="Optional"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="cb-edit-notes"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t mt-3" style={{ borderColor: isDark ? '#27272a' : '#e5e7eb' }}>
+              <Button onClick={closeEdit} variant="outline" className={borderColor} data-testid="cb-edit-cancel">
+                Cancel
+              </Button>
+              <Button
+                onClick={saveEdit}
+                disabled={editSaving}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                data-testid="cb-edit-save"
+              >
+                {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

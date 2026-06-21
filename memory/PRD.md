@@ -1,6 +1,33 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Edit button on Cashbook entries (GST + Non-GST) ✅
+
+### What
+Each row of the Cash In / Cash Out tables in the GST and Non-GST Cashbook now has an **Edit** (pencil) icon next to the existing Delete (trash) icon. Clicking it opens a popup that lets the user update Date, Counter-party (`from`/`to`), Amount, Payment Mode (cash/cheque/bank/upi), Bank Account, and Notes — then Save.
+
+### Implementation
+**Backend** (`/app/backend/banks_routes.py`):
+- New `PATCH /api/finance/banks/cashbook/entries/{entry_id}` with `CashbookEntryUpdate` model.
+- Maps `party` → `from` for credits / `to` for debits.
+- Switching payment mode away from `bank` clears `bank_id` and `bank_label`.
+- Switching/setting a `bank_id` validates the bank exists AND belongs to the same GST bucket as the entry (uses `normalize_cashbook_gst()` so legacy `no_tax` entries still resolve correctly).
+- **Amount edit is rejected** with HTTP 400 when the entry is linked to an invoice (`invoice_id`) or payslip (`payslip_id`) — those flows own the canonical amount. Error: *"Amount can't be edited on an invoice- or payslip-linked entry. Adjust the source invoice/payslip instead."*
+
+**Frontend** (`/app/frontend/src/components/finance/CashbookSplit.js`):
+- Added `Pencil` icon import; new state (`editEntry`, `editForm`, `editBanks`, `editSaving`) and helpers (`openEdit`, `closeEdit`, `saveEdit`).
+- Injected the Edit button into both Cash In and Cash Out rows: `data-testid="cb-edit-{entry_id}"`.
+- New modal `<Dialog data-testid="cashbook-edit-modal">` with proper field-level test IDs (`cb-edit-date / -party / -amount / -mode / -bank / -notes / -save / -cancel`).
+- Amount input is disabled (with an inline AlertCircle hint) when the entry is invoice- or payslip-linked.
+- Bank picker only appears when payment mode is `bank`; banks are fetched lazily for the active gst bucket.
+
+### Verification
+- `curl PATCH ...` with `{party:"Test Vendor", notes:"Edited via API"}` → `Entry updated`; subsequent GET shows `from: "Test Vendor"`, `notes: "Edited via API"`.
+- `curl PATCH ...` with `{amount:999}` on an invoice-linked entry → 400 with the lock message.
+- UI screenshot: pencil icons render alongside trash icons on every Non-GST Cashbook row; clicking pencil on an invoice-linked entry opens the Edit modal with a "Linked to INV-2026-0007" sub-header and a locked Amount field.
+
+
+
 ## Latest Update — Feb 21, 2026 — Cash in Total Book: Bank name + Account Type tags ✅
 
 ### Problem

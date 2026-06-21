@@ -562,6 +562,84 @@ async def delete_cashbook_entry(entry_id: str, request: Request):
     return {"message": "Entry removed"}
 
 
+class CashbookEntryUpdate(BaseModel):
+    date: Optional[str] = None
+    amount: Optional[float] = None
+    party: Optional[str] = None       # `from` for credits, `to` for debits
+    notes: Optional[str] = None
+    payment_mode: Optional[str] = None  # cash | cheque | bank | upi
+    bank_id: Optional[str] = None
+
+
+@banks_router.patch("/cashbook/entries/{entry_id}")
+async def update_cashbook_entry(entry_id: str, payload: CashbookEntryUpdate, request: Request):
+    """Edit an existing cashbook entry. We deliberately keep this conservative:
+    entries linked to an invoice (`invoice_id`) cannot have their `amount`
+    changed here — that would silently desync the invoice's paid_amount /
+    balance_due. The user should reopen the invoice and re-collect instead.
+    Same goes for entries tied to a payslip."""
+    await _get_user(request)
+    entry = await db.cashbook_entries.find_one({"entry_id": entry_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
+    update: dict = {}
+    if payload.date is not None and payload.date.strip():
+        update["date"] = payload.date.strip()
+    if payload.notes is not None:
+        update["notes"] = payload.notes.strip()
+    if payload.party is not None and payload.party.strip():
+        # credits store the counterparty in `from`, debits in `to`
+        if entry.get("kind") == "credit":
+            update["from"] = payload.party.strip()
+        else:
+            update["to"] = payload.party.strip()
+    if payload.payment_mode is not None and payload.payment_mode in ("cash", "cheque", "bank", "upi"):
+        update["payment_mode"] = payload.payment_mode
+        # When switching away from `bank` we also clear the bank_id/bank_label
+        if payload.payment_mode != "bank":
+            update["bank_id"] = None
+            update["bank_label"] = None
+    if payload.bank_id is not None:
+        # Only apply when the resulting mode is `bank`
+        target_mode = update.get("payment_mode") or entry.get("payment_mode")
+        if target_mode == "bank" and payload.bank_id:
+            bank_doc = await db.finance_banks.find_one(
+                {"bank_id": payload.bank_id, "is_deleted": {"$ne": True}}, {"_id": 0}
+            )
+            if not bank_doc:
+                raise HTTPException(status_code=400, detail="Selected bank not found")
+            entry_gst = normalize_cashbook_gst(entry.get("gst_type"))
+            if normalize_cashbook_gst(bank_doc.get("gst_type")) != entry_gst:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"This is a {entry_gst.upper()} entry — please pick a {entry_gst.upper()} bank account.",
+                )
+            update["bank_id"] = payload.bank_id
+            update["bank_label"] = bank_doc.get("account_holder") or bank_doc.get("bank_name") or "Bank"
+
+    if payload.amount is not None:
+        if entry.get("invoice_id") or entry.get("payslip_id"):
+            raise HTTPException(
+                status_code=400,
+                detail="Amount can't be edited on an invoice- or payslip-linked entry. Adjust the source invoice/payslip instead.",
+            )
+        try:
+            new_amount = float(payload.amount)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="amount must be a number")
+        if new_amount <= 0:
+            raise HTTPException(status_code=400, detail="amount must be greater than zero")
+        update["amount"] = new_amount
+
+    if not update:
+        return {"message": "No changes", "entry_id": entry_id}
+
+    update["updated_at"] = datetime.now(timezone.utc)
+    await db.cashbook_entries.update_one({"entry_id": entry_id}, {"$set": update})
+    return {"message": "Entry updated", "entry_id": entry_id}
+
+
 # ============== MULTI-SOURCE EXPENSE (allocated across cash / cheque / banks) ==============
 
 class ExpenseAllocation(BaseModel):
