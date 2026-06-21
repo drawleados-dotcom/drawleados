@@ -1,6 +1,24 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Tab badges now react to active filters ✅
+
+### Problem
+The main tab badges (`My Tasks (16) · Assign to Team (34) · …`) on `/our-tasks` were computed from the raw `tasks` list with **only** the assignment-relation predicate applied. They ignored the date picker and every chip in the filter bar — so the badge always showed the all-time total even when the user filtered to "today" or a specific project.
+
+### Fix
+`/app/frontend/src/pages/OurTasksPage.js`:
+- Extracted the inline `filteredTasks` predicate into a single `taskPasses(task, tabCtx)` `useCallback` that takes the tab context as a parameter (defaulting to the active `mainTab`).
+- Added two `useMemo` counters — `myTabCount` and `teamTabCount` — that re-run the same full predicate against the OTHER tab context. This way every filter chip (date / project / department / category / status / type / assignedTo / assignedBy) cascades into the tab badges.
+- Wired `myTabCount` / `teamTabCount` into the `<OperationsTabsBar />` `counts` prop.
+
+### Verification
+- Default date `06/21/2026` → `My Tasks (16) · Assign to Team (34)`.
+- Changed Summary date to `12/31/2027` (only a recurring standup falls there) → badges instantly updated to `My Tasks (1) · Assign to Team (2)`. Table also reflects the same single row.
+- `Projects / Departments / Approvals / Meetings` badges intentionally remain entity-total counts (no date dimension).
+
+
+
 ## Latest Update — Feb 21, 2026 — Project tasks vanishing after hard refresh / auto-refresh tick ✅
 
 ### Problem

@@ -964,13 +964,16 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   };
 
 
-  const filteredTasks = tasks.filter(task => {
+  // Single source of truth for task filtering. `tabCtx` lets us reuse the
+  // predicate to compute counts for OTHER tabs without flipping `mainTab`
+  // state (used by the tab badges — see myTabCount / teamTabCount below).
+  const taskPasses = useCallback((task, tabCtx = mainTab) => {
     // Main Tab filter - Assigned to Me vs Assign to Team
-    if (mainTab === 'assigned_to_me') {
+    if (tabCtx === 'assigned_to_me') {
       // My Tasks = tasks assigned to me OR created by me (fix: was missing created_by)
       const isMine = task.assigned_to === user?.user_id || task.created_by === user?.user_id;
       if (!isMine) return false;
-    } else if (mainTab === 'assign_to_team') {
+    } else if (tabCtx === 'assign_to_team') {
       // Super Admin / Admin / Operation Head → see EVERY task in the org
       const role = (user?.role || '').toLowerCase().trim();
       const desg = (user?.designation || '').toLowerCase().trim();
@@ -983,21 +986,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         if (!(createdByMe || inMyDept)) return false;
       }
     }
-    
+
     // Quick filter (tabs)
     if (filter === 'my' && !(task.created_by === user?.user_id || task.assigned_to === user?.user_id)) return false;
     if (filter !== 'all' && filter !== 'my' && task.status !== filter) return false;
-    
+
     // Date filter
     if (filters.dateFilter === 'today') {
       const today = getTodayString();
-      // Check both direct due_date match and recurring instances
       if (!taskOccursOnDate(task, today)) {
         const taskDate = task.due_date || task.created_at?.split('T')[0];
         if (taskDate !== today) return false;
       }
     } else if (filters.dateFilter === 'single' && filters.singleDate) {
-      // Check both direct due_date match and recurring instances
       if (!taskOccursOnDate(task, filters.singleDate)) {
         const taskDate = task.due_date || task.created_at?.split('T')[0];
         if (taskDate !== filters.singleDate) return false;
@@ -1007,31 +1008,46 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       if (filters.dateFrom && taskDate < filters.dateFrom) return false;
       if (filters.dateTo && taskDate > filters.dateTo) return false;
     }
-    
+
     // Assigned To filter
     if (filters.assignedTo === 'myself' && task.assigned_to !== user?.user_id) return false;
     if (filters.assignedTo !== 'all' && filters.assignedTo !== 'myself' && task.assigned_to !== filters.assignedTo) return false;
-    
+
     // Assigned By filter
     if (filters.assignedBy !== 'all' && task.assigned_by !== filters.assignedBy) return false;
-    
+
     // Department filter
     if (filters.department !== 'all' && task.department !== filters.department) return false;
-    
+
     // Project filter
     if (filters.project !== 'all' && task.project_id !== filters.project) return false;
-    
+
     // Category filter (per-department categories from Operations → Departments)
     if (filters.category !== 'all' && task.category !== filters.category) return false;
-    
+
     // Type filter
     if (filters.taskType !== 'all' && task.type !== filters.taskType) return false;
-    
+
     // Status filter (from advanced filters)
     if (filters.status !== 'all' && task.status !== filters.status) return false;
-    
+
     return true;
-  });
+  }, [mainTab, filter, filters, user, myDesignation]);
+
+  const filteredTasks = tasks.filter(t => taskPasses(t));
+
+  // Cross-tab counts — keep "My Tasks" and "Assign to Team" badges in sync
+  // with the active filter bar (date / project / department / status / etc).
+  // Without this the badges showed all-time totals and never moved when the
+  // user changed the date or any filter chip.
+  const myTabCount = useMemo(
+    () => tasks.filter(t => taskPasses(t, 'assigned_to_me')).length,
+    [tasks, taskPasses]
+  );
+  const teamTabCount = useMemo(
+    () => tasks.filter(t => taskPasses(t, 'assign_to_team')).length,
+    [tasks, taskPasses]
+  );
 
   // Collapse duplicate Meeting/Team-Meeting/Client-Meeting tasks (one row per
   // assignee) into a single grouped row in the "Assign to Team" view. Each
@@ -1266,8 +1282,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           setFilter={setFilter}
           setFilters={setFilters}
           counts={{
-            myTasks: assignedToMeTasks.length + myOwnTasks.length,
-            assignToTeam: assignedToTeamTasks.length,
+            myTasks: myTabCount,
+            assignToTeam: teamTabCount,
             projects: projectsCount,
             departments: departmentsCount,
             approvals: approvalsCount,
