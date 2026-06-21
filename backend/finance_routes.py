@@ -308,14 +308,18 @@ async def get_next_invoice_number(year: Optional[int] = None):
 async def get_invoices(
     status: Optional[str] = None,
     gst_type: Optional[str] = None,
+    source: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None
 ):
-    """Get all invoices with filters"""
+    """Get all invoices with filters. `source` filters by origin
+    (e.g. `payment_schedule` for invoices auto-raised from a project split)."""
     query = {"is_deleted": False}
     
     if status:
         query["status"] = status
+    if source:
+        query["source"] = source
     if gst_type:
         # "Non-GST" tab in Cashbook should also include Unregistered invoices
         # (gst_type='no_tax') — they are non-tax invoices and belong in the

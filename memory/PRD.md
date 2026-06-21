@@ -1,6 +1,32 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — "Raise Invoice" on Payment Schedule Req with GST/Non-GST popup ✅
+
+### Flow (matches user spec)
+1. From a Project's Payment Schedule, the existing "Inv Raise Req" button creates a `pending` invoice with `source='payment_schedule'`.
+2. The Finance → Invoice → New Invoice Req → **Payment Schedule** sub-pill now lists those pending rows.
+3. Each row has a new **Raise Invoice** button. Clicking it opens a small modal asking **GST / Non-GST**, with the invoice number + amount as sub-header.
+4. Clicking **Continue** opens the existing Invoice Form (Edit mode) on the chosen tax tab, pre-filled with the auto-raised invoice (client, items, dates, notes).
+5. After Save, the row flips to a ✓ **Invoiced** badge (button disabled) until the next refresh removes it from the pending list.
+
+### Implementation
+**Backend** (`/app/backend/finance_routes.py`)
+- `GET /api/finance/invoices` now accepts an optional `source` query param (e.g. `?source=payment_schedule`) which maps directly to `query["source"]`.
+
+**Frontend** (`/app/frontend/src/components/finance/InvoicesTab.js`)
+- Added `psInvoices` state + `fetchPsInvoices()` → calls `/finance/invoices?source=payment_schedule`, keeps only `status='pending'` + locally-just-raised rows.
+- New "Payment Schedule" sub-pill count is now `psInvoices.length` (instead of the always-zero filter on lead requests). The "All" pill counts both buckets.
+- Split the requests TabsContent body into two tables: the existing Leads-based one for `New Invoice Req`, and a new `data-testid="ps-invoice-requests-table"` for Payment Schedule rows (columns: Invoice # · Project / Milestone · Client · Amount · Raised · Status / Action).
+- New GST/Non-GST popup (`data-testid="ps-raise-choice-popup"`) with test IDs `ps-raise-gst`, `ps-raise-non_gst`, `ps-raise-cancel`, `ps-raise-ok`.
+- `onSave` of the InvoiceFormModal — when the saved invoice was a PS pending invoice, the local row is marked `_raised_now: true` so the UI immediately shows the "Invoiced" badge.
+
+### Verification
+- `curl /api/finance/invoices?source=payment_schedule` → 1 pending invoice returned.
+- UI screenshots: Payment Schedule pill shows `(1)` and renders the row; "Raise Invoice" opens the popup with the invoice number + amount and the GST/Non-GST toggle; "Continue" opens the Edit Invoice form pre-filled on the Non-GST tab.
+
+
+
 ## Latest Update — Feb 21, 2026 — Edit button on Cashbook entries (GST + Non-GST) ✅
 
 ### What

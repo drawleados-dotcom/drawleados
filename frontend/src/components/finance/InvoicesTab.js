@@ -31,10 +31,16 @@ const InvoicesTab = () => {
 
   // Sales → Finance bridge: pending Invoice Requests raised from Leads
   const [invoiceRequests, setInvoiceRequests] = useState([]);
+  // Pending Payment-Schedule-sourced invoices (raised from project Payment Schedule).
+  // These live in db.invoices with source='payment_schedule' & status='pending'.
+  const [psInvoices, setPsInvoices] = useState([]);
   // detail-popup state
   const [viewingRequest, setViewingRequest] = useState(null);
   // prefill payload passed to InvoiceFormModal after Raise Invoice
   const [invoicePreset, setInvoicePreset] = useState(null); // { clientId, gstType, items, notes, requestId }
+  // Payment Schedule → "Raise Invoice" GST choice popup state
+  const [psRaiseChoice, setPsRaiseChoice] = useState(null); // { invoice }
+  const [psChoiceGstType, setPsChoiceGstType] = useState('gst');
 
   const months = [
     { value: '0', label: 'January' },
@@ -59,6 +65,7 @@ const InvoicesTab = () => {
 
   useEffect(() => {
     fetchInvoiceRequests();
+    fetchPsInvoices();
   }, []);
 
   const fetchInvoiceRequests = async () => {
@@ -70,6 +77,45 @@ const InvoicesTab = () => {
     }
   };
 
+  // Pending payment-schedule invoices — drive the Payment Schedule sub-tab
+  // on the Invoice Req view. We keep `status='pending'` so once the user
+  // raises the invoice (which flips it to 'draft') it disappears from the
+  // active list but the on-screen row stays badge-tagged until refresh.
+  const fetchPsInvoices = async () => {
+    try {
+      const res = await api.get('/finance/invoices', {
+        params: { source: 'payment_schedule' },
+      });
+      // Only keep the un-finalized ones (status='pending', the auto-raised
+      // placeholders) PLUS anything we just finalized in-session so the row
+      // can show the "Invoiced" badge.
+      setPsInvoices((res.data || []).filter(i => i.status === 'pending' || i._raised_now));
+    } catch (error) {
+      console.error('Error fetching payment schedule invoices:', error);
+    }
+  };
+
+  // Open the GST/Non-GST popup for a payment-schedule invoice row.
+  const openPsRaiseInvoice = (inv) => {
+    setPsChoiceGstType(inv.gst_type === 'gst' ? 'gst' : 'non_gst');
+    setPsRaiseChoice({ invoice: inv });
+  };
+
+  // Confirm the popup → open the InvoiceFormModal in EDIT mode for that
+  // pending invoice with the chosen gst_type pre-applied. After save the
+  // invoice's status moves off `pending` and the local row is flipped to
+  // show "Invoiced" + a disabled action.
+  const confirmPsRaiseInvoice = () => {
+    if (!psRaiseChoice?.invoice) return;
+    const inv = psRaiseChoice.invoice;
+    const gstType = psChoiceGstType;
+    // Pre-rewrite gst_type on the open invoice so the form lands on the right tab
+    const seededInvoice = { ...inv, gst_type: gstType };
+    setPsRaiseChoice(null);
+    setSelectedInvoice(seededInvoice);
+    setInvoicePreset(null);
+    setShowInvoiceModal(true);
+  };
   const fetchInvoices = async () => {
     try {
       const params = statusFilter !== 'all' ? { status: statusFilter } : {};
@@ -740,12 +786,12 @@ const InvoicesTab = () => {
                 { id: 'payment_schedule', label: 'Payment Schedule' },
               ].map((t) => {
                 const active = sourceFilter === t.id;
-                const count = invoiceRequests.filter((req) => {
-                  const src = req.source || 'lead';
-                  if (t.id === 'all') return true;
-                  if (t.id === 'payment_schedule') return src === 'payment_schedule';
-                  return src !== 'payment_schedule';
-                }).length;
+                const nonPsReqCount = invoiceRequests.filter(r => (r.source || 'lead') !== 'payment_schedule').length;
+                const psCount = psInvoices.length;
+                const count =
+                  t.id === 'all' ? nonPsReqCount + psCount
+                    : t.id === 'payment_schedule' ? psCount
+                    : nonPsReqCount;
                 return (
                   <button
                     key={t.id}
@@ -761,6 +807,78 @@ const InvoicesTab = () => {
               })}
             </div>
           </div>
+
+          {/* Payment Schedule sub-table (separate data source: pending invoices
+              auto-raised from project Payment Schedule splits) */}
+          {sourceFilter === 'payment_schedule' && (
+            <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid="ps-invoice-requests-table">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-[#09090b] border-b border-[#27272a]">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Invoice #</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Project / Milestone</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Client</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Raised</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Status / Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#27272a]">
+                    {psInvoices.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-12 text-center text-[#a1a1aa]">
+                          No pending Payment Schedule invoice requests.
+                        </td>
+                      </tr>
+                    ) : (
+                      psInvoices.map((inv) => {
+                        const milestone = (inv.items?.[0]?.service_name) || inv.notes || '—';
+                        const project = (inv.items?.[0]?.description || '').replace(/^Project:\s*/, '') || '—';
+                        const raisedNow = !!inv._raised_now;
+                        return (
+                          <tr key={inv.invoice_id} className="hover:bg-[#27272a]/20 transition-colors" data-testid={`ps-invreq-row-${inv.invoice_id}`}>
+                            <td className="px-4 py-3 text-sm font-mono text-[#fafafa]">{inv.invoice_number}</td>
+                            <td className="px-4 py-3 text-sm text-[#a1a1aa]">
+                              <div className="text-[#fafafa] font-medium">{milestone}</div>
+                              <div className="text-xs">{project}</div>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-[#a1a1aa]">{inv.client_name || '—'}</td>
+                            <td className="px-4 py-3 text-right text-sm font-semibold text-[#fafafa]">₹{Number(inv.total_amount || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-3 text-xs text-[#a1a1aa]">{inv.created_at ? new Date(inv.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-end gap-2 items-center">
+                                {raisedNow ? (
+                                  <span
+                                    className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-500/15 text-emerald-400"
+                                    data-testid={`ps-invreq-invoiced-${inv.invoice_id}`}
+                                  >
+                                    ✓ Invoiced
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => openPsRaiseInvoice(inv)}
+                                    data-testid={`ps-invreq-raise-${inv.invoice_id}`}
+                                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3 text-xs"
+                                  >
+                                    <FileText className="h-3.5 w-3.5 mr-1" /> Raise Invoice
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Lead / New Invoice Req sub-table — original behaviour */}
+          {sourceFilter !== 'payment_schedule' && (
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -837,6 +955,7 @@ const InvoicesTab = () => {
               </table>
             </div>
           </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -850,7 +969,7 @@ const InvoicesTab = () => {
           presetNotes={invoicePreset?.notes}
           onClose={() => { setShowInvoiceModal(false); setInvoicePreset(null); }}
           onSave={async () => {
-            // If this invoice was created from a request, mark the request invoiced.
+            // If this invoice was created from a Leads request, mark that request invoiced.
             if (invoicePreset?.requestId) {
               try {
                 await api.post(`/finance/banks/invoice-requests/${invoicePreset.requestId}/mark-invoiced`);
@@ -859,11 +978,84 @@ const InvoicesTab = () => {
               }
               fetchInvoiceRequests();
             }
+            // If we just finalised a Payment-Schedule pending invoice, flip the
+            // local row to show the "Invoiced" badge (and disable the button)
+            // until the next refresh removes it from the pending list.
+            const editedId = selectedInvoice?.invoice_id;
+            const wasPs = selectedInvoice?.source === 'payment_schedule';
+            if (wasPs && editedId) {
+              setPsInvoices((prev) => prev.map(p =>
+                p.invoice_id === editedId ? { ...p, _raised_now: true, status: 'draft' } : p
+              ));
+              // re-fetch in background so the row eventually drops off
+              fetchPsInvoices();
+            }
             setShowInvoiceModal(false);
             setInvoicePreset(null);
             fetchInvoices();
           }}
         />
+      )}
+
+      {/* GST / Non-GST choice popup for Payment Schedule "Raise Invoice" */}
+      {psRaiseChoice && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setPsRaiseChoice(null); }}
+          data-testid="ps-raise-choice-popup"
+        >
+          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-semibold text-[#fafafa] mb-1">Raise Invoice</h3>
+            <p className="text-sm text-[#a1a1aa] mb-5">
+              {psRaiseChoice.invoice.invoice_number} · ₹{Number(psRaiseChoice.invoice.total_amount || 0).toLocaleString('en-IN')}
+            </p>
+            <div className="space-y-2 mb-5">
+              <label className="text-xs uppercase tracking-wider text-[#a1a1aa]">Invoice Type</label>
+              <div className="flex gap-2">
+                {[
+                  { id: 'gst', label: 'GST' },
+                  { id: 'non_gst', label: 'Non-GST' },
+                ].map((opt) => {
+                  const active = psChoiceGstType === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setPsChoiceGstType(opt.id)}
+                      data-testid={`ps-raise-${opt.id}`}
+                      className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors border ${
+                        active
+                          ? (opt.id === 'gst'
+                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                              : 'bg-amber-500/15 border-amber-500/40 text-amber-300')
+                          : 'bg-[#09090b] border-[#27272a] text-[#a1a1aa] hover:text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => setPsRaiseChoice(null)}
+                data-testid="ps-raise-cancel"
+                className="text-[#a1a1aa] hover:text-white"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmPsRaiseInvoice}
+                data-testid="ps-raise-ok"
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Invoice Request Detail Modal — opens from "View" on a pending request */}
