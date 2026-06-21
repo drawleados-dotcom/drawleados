@@ -459,6 +459,52 @@ async def delete_client_service(client_id: str, service_id: str, request: Reques
     return {"message": "Service removed"}
 
 
+# ============== CLIENT PROJECTS (read-only) ==============
+
+@clients_router.get("/{client_id}/projects")
+async def list_client_projects(client_id: str, request: Request):
+    """
+    Returns the projects created for this client. Used by the Client Detail
+    popup's Services tab — surfaces the projects the client has hired Drawlead
+    for. Read-only here; projects are managed in Operations → Projects.
+    """
+    await get_current_user_from_request(request)
+    projects = await db.projects.find(
+        {"client_id": client_id},
+        {
+            "_id": 0,
+            "project_id": 1,
+            "name": 1,
+            "description": 1,
+            "departments": 1,
+            "start_date": 1,
+            "due_date": 1,
+            "status": 1,
+            "payment_schedule": 1,
+            "created_at": 1,
+        },
+    ).sort("created_at", -1).to_list(500)
+
+    # Surface the contract total per project (sum of payment-schedule splits)
+    # so the popup can show "₹X total" without an extra query on the client.
+    for p in projects:
+        sched = (p.get("payment_schedule") or {})
+        splits = sched.get("splits") or []
+        total = 0.0
+        for s in splits:
+            try:
+                total += float(s.get("amount", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+        p["contract_total"] = round(total, 2)
+        # Strip the heavy payment_schedule field — the dedicated endpoint
+        # already returns splits if the UI needs them.
+        p.pop("payment_schedule", None)
+        if isinstance(p.get("created_at"), datetime):
+            p["created_at"] = p["created_at"].isoformat()
+    return projects
+
+
 # ============== CLIENT PAYMENT SCHEDULE (aggregated from projects) ==============
 
 @clients_router.get("/{client_id}/payment-schedule")

@@ -1,6 +1,31 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Client Detail popup is now read-only (except Client Details) ✅
+
+### Problem
+The Client Detail popup let users add ad-hoc "services" inside the popup, which created a second source of truth alongside Operations → Projects. Same risk on Feedback. The user wanted the popup to be a pure summary view — editable Client Details only, everything else read-only and sourced from the canonical place (Projects).
+
+### What changed
+**Backend** (`/app/backend/clients_routes.py`)
+- New `GET /api/finance/clients/{client_id}/projects` — returns the projects created for this client (project_id, name, description, departments, start/due, status, computed `contract_total` from payment schedule splits). Read-only.
+- Kept existing `GET /finance/clients/{client_id}/payment-schedule` — already aggregated from projects.
+
+**Frontend** (`/app/frontend/src/components/finance/ClientSummaryModal.js`)
+- **Services tab**: dropped the free-form "Add a service" form and the per-row delete buttons. Now fetches `/finance/clients/{id}/projects` and renders a read-only table (`Project · Departments · Start · Due · Contract Total · Status`). Empty state nudges users to *Operations → Projects*.
+- **Payment Schedule tab**: already read-only (unchanged content, sourced from projects).
+- **Review & Feedback tab**: removed the Add Feedback form, star-rating picker, and per-row delete buttons. Renders a read-only feed.
+- Pruned unused imports (`Input`, `Textarea`, `Plus`, `Trash2`) and unused state (`newService`, `addService`, `deleteService`, `newFeedback`, `addFeedback`, `deleteFeedback`).
+
+### Verification
+- `curl /api/finance/clients/cli_85ca74e08dc8/projects` → returns `[{project_id, name: "Urban Space Builders", departments: ["website"], contract_total: 100009.0, status: "active", ...}]`.
+- Modal screenshots:
+  - Services tab → caption "Projects this client has hired Drawlead for. Manage them in Operations → Projects." + row `Urban Space Builders · website · ₹1,00,009 · active`.
+  - Payment Schedule tab → 4 read-only rows (Advance · Developement · Live · n) with Collected/Pending status badges and linked invoice numbers.
+  - Review & Feedback tab → "Read-only feedback log. Manage entries from the dedicated CRM workflow." + empty state.
+
+
+
 ## Latest Update — Feb 21, 2026 — Invoice # is now visible and editable ✅
 
 ### Problem

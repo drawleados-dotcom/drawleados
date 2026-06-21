@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Textarea } from '../ui/textarea';
 import api from '../../utils/api';
 import { toast } from 'sonner';
 import {
   Loader2, FileText, IndianRupee, AlertCircle, CheckCircle2,
   Calendar, Phone, Mail, Building2, MapPin, CreditCard, Receipt,
-  Wrench, Wallet, MessageSquare, Star, Plus, Trash2,
+  Wrench, Wallet, MessageSquare, Star, Briefcase,
 } from 'lucide-react';
 
 const fmtCurrency = (n, currency = 'INR') => {
@@ -67,17 +65,17 @@ const ClientSummaryModal = ({ clientId, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('services');
 
-  // Per-tab state
-  const [services, setServices] = useState([]);
-  const [servicesLoading, setServicesLoading] = useState(false);
-  const [newService, setNewService] = useState({ name: '', description: '', amount: '' });
+  // Services tab now displays the projects this client has hired Drawlead for
+  // (read-only). Free-form services have been removed — the only place that
+  // creates services is Operations → Projects.
+  const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
 
   const [paymentSchedule, setPaymentSchedule] = useState([]);
   const [psLoading, setPsLoading] = useState(false);
 
   const [feedback, setFeedback] = useState([]);
   const [fbLoading, setFbLoading] = useState(false);
-  const [newFeedback, setNewFeedback] = useState({ comment: '', rating: 5 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,15 +89,15 @@ const ClientSummaryModal = ({ clientId, onClose }) => {
     }
   }, [clientId]);
 
-  const loadServices = useCallback(async () => {
-    setServicesLoading(true);
+  const loadProjects = useCallback(async () => {
+    setProjectsLoading(true);
     try {
-      const r = await api.get(`/finance/clients/${clientId}/services`);
-      setServices(r.data || []);
+      const r = await api.get(`/finance/clients/${clientId}/projects`);
+      setProjects(r.data || []);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to load services');
+      toast.error(e.response?.data?.detail || 'Failed to load projects');
     } finally {
-      setServicesLoading(false);
+      setProjectsLoading(false);
     }
   }, [clientId]);
 
@@ -131,63 +129,10 @@ const ClientSummaryModal = ({ clientId, onClose }) => {
 
   useEffect(() => {
     if (!clientId) return;
-    if (activeTab === 'services') loadServices();
+    if (activeTab === 'services') loadProjects();
     if (activeTab === 'payment_schedule') loadPaymentSchedule();
     if (activeTab === 'feedback') loadFeedback();
-  }, [activeTab, clientId, loadServices, loadPaymentSchedule, loadFeedback]);
-
-  const addService = async () => {
-    if (!newService.name.trim()) { toast.error('Service name is required'); return; }
-    try {
-      await api.post(`/finance/clients/${clientId}/services`, {
-        name: newService.name.trim(),
-        description: newService.description.trim(),
-        amount: parseFloat(newService.amount) || 0,
-      });
-      toast.success('Service added');
-      setNewService({ name: '', description: '', amount: '' });
-      loadServices();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to add service');
-    }
-  };
-
-  const deleteService = async (serviceId) => {
-    if (!window.confirm('Remove this service?')) return;
-    try {
-      await api.delete(`/finance/clients/${clientId}/services/${serviceId}`);
-      toast.success('Service removed');
-      loadServices();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to remove service');
-    }
-  };
-
-  const addFeedback = async () => {
-    if (!newFeedback.comment.trim()) { toast.error('Comment is required'); return; }
-    try {
-      await api.post(`/finance/clients/${clientId}/feedback`, {
-        comment: newFeedback.comment.trim(),
-        rating: Number(newFeedback.rating) || null,
-      });
-      toast.success('Feedback added');
-      setNewFeedback({ comment: '', rating: 5 });
-      loadFeedback();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to add feedback');
-    }
-  };
-
-  const deleteFeedback = async (fid) => {
-    if (!window.confirm('Remove this feedback?')) return;
-    try {
-      await api.delete(`/finance/clients/${clientId}/feedback/${fid}`);
-      toast.success('Feedback removed');
-      loadFeedback();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to remove feedback');
-    }
-  };
+  }, [activeTab, clientId, loadProjects, loadPaymentSchedule, loadFeedback]);
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
@@ -297,79 +242,59 @@ const ClientSummaryModal = ({ clientId, onClose }) => {
             {/* === TAB CONTENT === */}
             {activeTab === 'services' && (
               <div className="space-y-3" data-testid="client-services-pane">
-                {/* Add Service */}
-                <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4 space-y-3">
-                  <p className="text-sm font-medium">Add a service this client has hired</p>
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
-                    <Input
-                      placeholder="Service name (e.g. Website Revamp)"
-                      value={newService.name}
-                      onChange={(e) => setNewService({ ...newService, name: e.target.value })}
-                      className="md:col-span-4 bg-[#18181b] border-[#27272a] text-sm"
-                      data-testid="new-service-name"
-                    />
-                    <Input
-                      placeholder="Description (optional)"
-                      value={newService.description}
-                      onChange={(e) => setNewService({ ...newService, description: e.target.value })}
-                      className="md:col-span-5 bg-[#18181b] border-[#27272a] text-sm"
-                      data-testid="new-service-description"
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Amount"
-                      value={newService.amount}
-                      onChange={(e) => setNewService({ ...newService, amount: e.target.value })}
-                      className="md:col-span-2 bg-[#18181b] border-[#27272a] text-sm"
-                      data-testid="new-service-amount"
-                    />
-                    <Button
-                      onClick={addService}
-                      className="md:col-span-1 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                      data-testid="add-service-btn"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Service List */}
-                {servicesLoading ? (
+                <p className="text-xs text-[#a1a1aa]">
+                  Projects this client has hired Drawlead for. Manage them in
+                  <span className="text-[#a78bfa]"> Operations → Projects</span>.
+                </p>
+                {projectsLoading ? (
                   <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[#6366f1]" /></div>
-                ) : services.length === 0 ? (
+                ) : projects.length === 0 ? (
                   <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-8 text-center text-[#a1a1aa]">
-                    <Wrench className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                    No services added yet for this client.
+                    <Briefcase className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                    No projects yet for this client. Create one in Operations → Projects.
                   </div>
                 ) : (
                   <div className="bg-[#09090b] border border-[#27272a] rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                       <thead className="bg-[#1c1c1f] text-[#a1a1aa] text-xs uppercase">
                         <tr>
-                          <th className="px-4 py-2 text-left">Service</th>
-                          <th className="px-4 py-2 text-left">Description</th>
-                          <th className="px-4 py-2 text-right">Amount</th>
+                          <th className="px-4 py-2 text-left">Project</th>
+                          <th className="px-4 py-2 text-left">Departments</th>
+                          <th className="px-4 py-2 text-left">Start</th>
+                          <th className="px-4 py-2 text-left">Due</th>
+                          <th className="px-4 py-2 text-right">Contract Total</th>
                           <th className="px-4 py-2 text-center">Status</th>
-                          <th className="px-4 py-2 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {services.map((s) => (
-                          <tr key={s.service_id} className="border-t border-[#27272a] hover:bg-[#1c1c1f]/50" data-testid={`service-row-${s.service_id}`}>
-                            <td className="px-4 py-2 font-medium">{s.name}</td>
-                            <td className="px-4 py-2 text-[#a1a1aa]">{s.description || '—'}</td>
-                            <td className="px-4 py-2 text-right font-medium">{fmtCurrency(s.amount, s.currency)}</td>
-                            <td className="px-4 py-2 text-center">
-                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-[#14532d]/40 text-[#4ade80]">{s.status || 'active'}</span>
+                        {projects.map((p) => (
+                          <tr
+                            key={p.project_id}
+                            className="border-t border-[#27272a] hover:bg-[#1c1c1f]/50"
+                            data-testid={`client-project-row-${p.project_id}`}
+                          >
+                            <td className="px-4 py-2 font-medium">
+                              <div className="flex flex-col">
+                                <span>{p.name || '—'}</span>
+                                {p.description && (
+                                  <span className="text-xs text-[#a1a1aa] line-clamp-1">{p.description}</span>
+                                )}
+                              </div>
                             </td>
-                            <td className="px-4 py-2 text-right">
-                              <button
-                                onClick={() => deleteService(s.service_id)}
-                                className="text-[#f87171] hover:text-[#fca5a5]"
-                                data-testid={`delete-service-${s.service_id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                            <td className="px-4 py-2 text-[#a1a1aa]">
+                              {(p.departments || []).length > 0
+                                ? (p.departments || []).join(', ')
+                                : '—'}
+                            </td>
+                            <td className="px-4 py-2 text-[#a1a1aa]">{fmtDate(p.start_date)}</td>
+                            <td className="px-4 py-2 text-[#a1a1aa]">{fmtDate(p.due_date)}</td>
+                            <td className="px-4 py-2 text-right font-medium">
+                              {fmtCurrency(p.contract_total, data.client.currency)}
+                            </td>
+                            <td className="px-4 py-2 text-center">
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-[#14532d]/40 text-[#4ade80]">
+                                {p.status || 'active'}
+                              </span>
                             </td>
                           </tr>
                         ))}
@@ -428,40 +353,9 @@ const ClientSummaryModal = ({ clientId, onClose }) => {
 
             {activeTab === 'feedback' && (
               <div className="space-y-3" data-testid="client-feedback-pane">
-                {/* Add Feedback */}
-                <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4 space-y-3">
-                  <p className="text-sm font-medium">Add review or feedback</p>
-                  <Textarea
-                    placeholder="Write your comment..."
-                    value={newFeedback.comment}
-                    onChange={(e) => setNewFeedback({ ...newFeedback, comment: e.target.value })}
-                    className="bg-[#18181b] border-[#27272a] text-sm min-h-[80px]"
-                    data-testid="new-feedback-comment"
-                  />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => setNewFeedback({ ...newFeedback, rating: n })}
-                          data-testid={`rating-star-${n}`}
-                          className="p-0.5"
-                        >
-                          <Star className={`h-5 w-5 ${n <= (newFeedback.rating || 0) ? 'fill-[#fbbf24] text-[#fbbf24]' : 'text-[#3f3f46]'}`} />
-                        </button>
-                      ))}
-                    </div>
-                    <Button
-                      onClick={addFeedback}
-                      className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                      data-testid="add-feedback-btn"
-                    >
-                      <Plus className="h-4 w-4 mr-1" /> Add Feedback
-                    </Button>
-                  </div>
-                </div>
-
+                <p className="text-xs text-[#a1a1aa]">
+                  Read-only feedback log. Manage entries from the dedicated CRM workflow.
+                </p>
                 {/* Feedback List */}
                 {fbLoading ? (
                   <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-[#6366f1]" /></div>
@@ -493,13 +387,6 @@ const ClientSummaryModal = ({ clientId, onClose }) => {
                             </div>
                             <p className="text-sm text-[#d4d4d8] whitespace-pre-wrap">{f.comment}</p>
                           </div>
-                          <button
-                            onClick={() => deleteFeedback(f.feedback_id)}
-                            className="text-[#f87171] hover:text-[#fca5a5]"
-                            data-testid={`delete-feedback-${f.feedback_id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
                         </div>
                       </div>
                     ))}
