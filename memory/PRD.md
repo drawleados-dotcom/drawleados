@@ -1,6 +1,26 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Project tasks vanishing after hard refresh / auto-refresh tick ✅
+
+### Problem
+User reported on production: after a hard refresh, opening a project showed `0 tasks` even when the project genuinely had tasks. Department filter chips all collapsed to `(0)`. Same project worked fine before the refresh.
+
+### Root cause
+`ProjectsPanel.js` had a `useEffect` that, on every `projects` list update (15s polling + focus refresh), **overwrote** `selectedProject` with the matching row from the list. But the list endpoint `GET /api/projects` does NOT include the `tasks` array — only `GET /api/projects/{id}` does. So every auto-refresh tick clobbered the loaded tasks → UI fell back to "No tasks yet" and the category chips all read `(0)`.
+
+### Fix
+`/app/frontend/src/components/ProjectsPanel.js` (lines ~124–155): replaced the naive `setSelectedProject(fresh)` with a smart sync:
+1. If `fresh.task_count !== selectedProject.tasks?.length` → refetch `GET /api/projects/{id}` (brings the fresh `tasks` array).
+2. Otherwise → merge the list-level fields into the detail object while **preserving `prev.tasks`**.
+
+### Verification
+- Logged in, navigated to Operations → Projects → opened "The Velli Shop" (8 tasks).
+- Immediate state: 8 tasks, `All (8) · Wireframe (2) · UI (1) · Website General Works (1)`, Hours Worked = 2h 15m.
+- Waited 18s for the auto-refresh polling cycle — state still identical, tasks did not disappear. Bug resolved.
+
+
+
 ## Latest Update — Feb 21, 2026 — Finance Dashboard `bank_breakdown` net calculation ✅
 
 ### Problem

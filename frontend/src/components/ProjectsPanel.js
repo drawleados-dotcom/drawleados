@@ -122,16 +122,36 @@ export default function ProjectsPanel({
   }, [loadProjects, loadUsers, loadDeptCategories, loadClients]);
 
   // Keep the open project detail view in sync with the latest `projects` list.
-  // Previously `selectedProject` was a one-time snapshot, so newly created
-  // tasks didn't appear inside the project until the user manually closed +
-  // reopened it — which made it feel like tasks took ~2 minutes to reflect.
-  // Now every auto-refresh tick re-syncs `selectedProject` from the matching
-  // project in the freshly fetched list.
+  // The list endpoint (`GET /api/projects`) does NOT include the `tasks` array —
+  // only `GET /api/projects/{id}` does. Previously this hook overwrote
+  // `selectedProject` with the bare list row, which wiped out `tasks` on every
+  // auto-refresh tick (the "tasks disappear after hard refresh" bug).
+  //
+  // We now MERGE list-level metadata (departments, members, task_count, etc.)
+  // into the existing detail object and preserve `tasks`. When the underlying
+  // task_count changes (e.g. someone added/removed a task) we refetch the
+  // detail endpoint so the tasks array stays accurate.
   useEffect(() => {
     if (!selectedProject?.project_id) return;
     const fresh = projects.find(p => p.project_id === selectedProject.project_id);
-    if (fresh && fresh !== selectedProject) setSelectedProject(fresh);
-  }, [projects]); // re-sync open project when list refreshes
+    if (!fresh) return;
+    const taskCountChanged = (fresh.task_count ?? 0) !== (selectedProject.task_count ?? (selectedProject.tasks?.length ?? 0));
+    if (taskCountChanged) {
+      // Task count drifted — pull full detail (includes `tasks`).
+      axios.get(`${API}/api/projects/${selectedProject.project_id}`, { headers })
+        .then(r => setSelectedProject(prev => prev?.project_id === r.data.project_id ? r.data : prev))
+        .catch(() => {/* keep current state */});
+      return;
+    }
+    // Same task count — merge list fields but keep the loaded `tasks` array.
+    setSelectedProject(prev => {
+      if (!prev) return prev;
+      const existingTasks = prev.tasks;
+      const merged = { ...prev, ...fresh };
+      if (existingTasks !== undefined) merged.tasks = existingTasks;
+      return merged;
+    });
+  }, [projects]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Background polling + focus refresh — pauses while a create/edit modal is open
   useAutoRefresh(
