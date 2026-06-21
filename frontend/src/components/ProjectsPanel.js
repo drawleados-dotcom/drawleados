@@ -121,6 +121,18 @@ export default function ProjectsPanel({
     loadClients();
   }, [loadProjects, loadUsers, loadDeptCategories, loadClients]);
 
+  // Keep the open project detail view in sync with the latest `projects` list.
+  // Previously `selectedProject` was a one-time snapshot, so newly created
+  // tasks didn't appear inside the project until the user manually closed +
+  // reopened it — which made it feel like tasks took ~2 minutes to reflect.
+  // Now every auto-refresh tick re-syncs `selectedProject` from the matching
+  // project in the freshly fetched list.
+  useEffect(() => {
+    if (!selectedProject?.project_id) return;
+    const fresh = projects.find(p => p.project_id === selectedProject.project_id);
+    if (fresh && fresh !== selectedProject) setSelectedProject(fresh);
+  }, [projects]); // re-sync open project when list refreshes
+
   // Background polling + focus refresh — pauses while a create/edit modal is open
   useAutoRefresh(
     [loadProjects, loadUsers, loadDeptCategories],
