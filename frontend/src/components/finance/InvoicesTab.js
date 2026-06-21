@@ -25,6 +25,9 @@ const InvoicesTab = () => {
   const [activeView, setActiveView] = useState('list');
   // 'all' = both, 'new' = invoices NOT from payment schedule, 'payment_schedule' = ones raised via Payment Schedule
   const [sourceFilter, setSourceFilter] = useState('all');
+  // 'all' | 'gst' | 'non_gst' — drives the new pill strip on the Invoice List view.
+  // Non-GST also includes Unregistered (`gst_type='no_tax'`) invoices.
+  const [taxFilter, setTaxFilter] = useState('all');
 
   // Sales → Finance bridge: pending Invoice Requests raised from Leads
   const [invoiceRequests, setInvoiceRequests] = useState([]);
@@ -198,7 +201,14 @@ const InvoicesTab = () => {
       : sourceFilter === 'payment_schedule' ? src === 'payment_schedule'
       : src !== 'payment_schedule';
 
-    return matchesSearch && matchesMonth && matchesYear && matchesSource;
+    // Tax filter (Invoice List view) — GST = strict registered, Non-GST = no_gst + no_tax (Unregistered)
+    const gt = (invoice.gst_type || 'gst').toLowerCase();
+    const matchesTax =
+      taxFilter === 'all' ? true
+      : taxFilter === 'gst' ? gt === 'gst'
+      : (gt === 'non_gst' || gt === 'no_tax');
+
+    return matchesSearch && matchesMonth && matchesYear && matchesSource && matchesTax;
   });
 
   // Calculate month-wise report data
@@ -414,27 +424,27 @@ const InvoicesTab = () => {
 
         {/* Invoice List View */}
         <TabsContent value="list">
-          {/* Source filter pill strip: All · New Invoice · Payment Schedule Invoice */}
+          {/* Tax filter pill strip: GST · Non-GST · All — drives the Invoice List */}
           <div className="mb-3 flex items-center gap-2 flex-wrap">
             <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
               {[
+                { id: 'gst', label: 'GST' },
+                { id: 'non_gst', label: 'Non-GST' },
                 { id: 'all', label: 'All' },
-                { id: 'new', label: 'New Invoice' },
-                { id: 'payment_schedule', label: 'Payment Schedule Invoice' },
               ].map((t) => {
-                const active = sourceFilter === t.id;
+                const active = taxFilter === t.id;
                 const count = invoices.filter((inv) => {
-                  const src = inv.source || 'new';
+                  const gt = (inv.gst_type || 'gst').toLowerCase();
                   if (t.id === 'all') return true;
-                  if (t.id === 'payment_schedule') return src === 'payment_schedule';
-                  return src !== 'payment_schedule';
+                  if (t.id === 'gst') return gt === 'gst';
+                  return gt === 'non_gst' || gt === 'no_tax';
                 }).length;
                 return (
                   <button
                     key={t.id}
                     type="button"
-                    onClick={() => setSourceFilter(t.id)}
-                    data-testid={`invoice-source-tab-${t.id}`}
+                    onClick={() => setTaxFilter(t.id)}
+                    data-testid={`invoice-tax-tab-${t.id}`}
                     className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
                   >
                     {t.label}
@@ -718,6 +728,39 @@ const InvoicesTab = () => {
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 mb-3 text-xs text-[#a1a1aa]">
             Requests raised from the Leads pipeline (when a lead is moved to <span className="text-[#fafafa] font-semibold">Invoice Raise</span>). Click <span className="text-[#fafafa] font-semibold">Accept</span> to auto-create a Draft invoice pre-filled with company, amount and GST data — you can finalize it from the Edit modal.
           </div>
+
+          {/* Source pill strip for the Payment Request view:
+              All · New Invoice (from Leads) · Payment Schedule (from a project split).
+              Filters the requests list below by their origin. */}
+          <div className="mb-3 flex items-center gap-2 flex-wrap">
+            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+              {[
+                { id: 'all', label: 'All' },
+                { id: 'new', label: 'New Invoice Req' },
+                { id: 'payment_schedule', label: 'Payment Schedule' },
+              ].map((t) => {
+                const active = sourceFilter === t.id;
+                const count = invoiceRequests.filter((req) => {
+                  const src = req.source || 'lead';
+                  if (t.id === 'all') return true;
+                  if (t.id === 'payment_schedule') return src === 'payment_schedule';
+                  return src !== 'payment_schedule';
+                }).length;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setSourceFilter(t.id)}
+                    data-testid={`invoice-request-source-${t.id}`}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                  >
+                    {t.label}
+                    <span className="ml-1.5 text-[10px] opacity-70">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -735,13 +778,23 @@ const InvoicesTab = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#27272a]">
-                  {invoiceRequests.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-[#a1a1aa]">
-                        No pending invoice requests.
-                      </td>
-                    </tr>
-                  ) : invoiceRequests.map((req) => (
+                  {(() => {
+                    const filteredRequests = invoiceRequests.filter((req) => {
+                      const src = req.source || 'lead';
+                      if (sourceFilter === 'all') return true;
+                      if (sourceFilter === 'payment_schedule') return src === 'payment_schedule';
+                      return src !== 'payment_schedule';
+                    });
+                    if (filteredRequests.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-12 text-center text-[#a1a1aa]">
+                            No pending invoice requests.
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return filteredRequests.map((req) => (
                     <tr key={req.request_id} className="hover:bg-[#27272a]/20 transition-colors" data-testid={`invreq-row-${req.request_id}`}>
                       <td className="px-4 py-3 text-sm font-medium text-[#fafafa]">{req.company_name}</td>
                       <td className="px-4 py-3 text-sm text-[#a1a1aa]">{req.lead_name || '-'}</td>
@@ -778,7 +831,8 @@ const InvoicesTab = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
