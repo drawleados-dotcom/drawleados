@@ -1,6 +1,31 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Invoice # is now visible and editable ✅
+
+### Problem
+The "Invoice #" field on the **New Invoice** modal showed only the placeholder text `Auto-generated` and was read-only. Users couldn't see what number the invoice would be assigned, nor override it (e.g. for back-dated invoices, parallel series, or correcting accidental gaps).
+
+### What changed
+**Backend**
+- `/app/backend/finance_models.py` — `InvoiceCreate` now accepts an optional `invoice_number` field.
+- `/app/backend/finance_routes.py`:
+  - New `GET /api/finance/invoices/next-number?year=YYYY` — returns the next auto-generated number for the year as a **preview** (does not consume or reserve).
+  - `POST /api/finance/invoices` — when the request body carries a non-empty `invoice_number`, the server validates uniqueness against `db.invoices` and uses that number; if blank, it falls back to the existing `generate_invoice_number(year)` auto-numbering.
+
+**Frontend**
+- `/app/frontend/src/components/finance/InvoiceFormModal.js`:
+  - On modal open (create mode only) fetches `/finance/invoices/next-number` and pre-fills the input with the upcoming number (e.g. `INV-2026-0017`).
+  - When the user changes the Invoice Date year, the suggested number refreshes — but only if the user hasn't typed a custom value.
+  - Input is now writable: removed `readOnly`, added `onChange` handler.
+  - `payload.invoice_number` is sent in the create POST (omitted if user leaves it blank so the backend keeps auto-numbering).
+
+### Verification
+- `curl /api/finance/invoices/next-number?year=2026` → `{"invoice_number":"INV-2026-0017","year":2026}`.
+- UI screenshots: New Invoice modal opens with `INV-2026-0017` visible; field accepts free-form edit to `INV-2026-CUSTOM-01`.
+
+
+
 ## Latest Update — Feb 21, 2026 — Project filter dropdown shows department tags ✅
 
 ### Problem

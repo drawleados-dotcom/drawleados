@@ -91,6 +91,7 @@ class InvoiceItem(BaseModel):
     amount: float
 
 class InvoiceCreate(BaseModel):
+    invoice_number: Optional[str] = None  # user can override; backend auto-generates if blank
     invoice_date: datetime
     due_date: datetime
     lead_id: Optional[str] = None

@@ -177,9 +177,21 @@ async def create_invoice(invoice_data: InvoiceCreate, request: Request):
         current_user = await get_current_user_from_request(request)
         user_id = current_user["user_id"]
         
-        # Generate invoice number
+        # Invoice number — honor user override if provided & unique, else auto-generate
         year = invoice_data.invoice_date.year
-        invoice_number = await generate_invoice_number(year)
+        user_number = (invoice_data.invoice_number or "").strip()
+        if user_number:
+            existing = await db.invoices.find_one(
+                {"invoice_number": user_number}, {"_id": 1}
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invoice number '{user_number}' already exists. Pick a different one."
+                )
+            invoice_number = user_number
+        else:
+            invoice_number = await generate_invoice_number(year)
         
         # Calculate totals with per-item GST and discounts
         subtotal = 0.0
@@ -238,8 +250,8 @@ async def create_invoice(invoice_data: InvoiceCreate, request: Request):
         invoice_id = f"inv_{uuid.uuid4().hex[:12]}"
         invoice_doc = {
             "invoice_id": invoice_id,
+            **invoice_data.model_dump(exclude={"items", "invoice_number"}),
             "invoice_number": invoice_number,
-            **invoice_data.model_dump(exclude={"items"}),
             "status": "draft",
             "subtotal": round(subtotal, 2),
             "total_discount": round(total_discount, 2),
@@ -282,6 +294,15 @@ async def create_invoice(invoice_data: InvoiceCreate, request: Request):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@finance_router.get("/invoices/next-number")
+async def get_next_invoice_number(year: Optional[int] = None):
+    """Return the next invoice number that would be auto-assigned for the given year.
+    Used to PRE-FILL the Invoice # input on the New Invoice form so users see the
+    upcoming number (and can override it before saving). Preview only — does not
+    consume or reserve the number."""
+    yr = int(year) if year else datetime.utcnow().year
+    return {"invoice_number": await generate_invoice_number(yr), "year": yr}
 
 @finance_router.get("/invoices")
 async def get_invoices(

@@ -141,6 +141,52 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
     }
   }, [invoice]);
 
+  // Pre-fill the next invoice number on first open (create mode only).
+  // The number is just a preview — server re-validates uniqueness on save —
+  // and the user can freely edit it before submitting.
+  useEffect(() => {
+    if (invoice) return; // edit mode: keep the existing number
+    let cancelled = false;
+    (async () => {
+      try {
+        const year = new Date(formData.invoice_date || today).getFullYear();
+        const res = await api.get(`/finance/invoices/next-number?year=${year}`);
+        if (cancelled) return;
+        const next = res?.data?.invoice_number;
+        if (next) {
+          setFormData((p) => p.invoice_number ? p : { ...p, invoice_number: next });
+        }
+      } catch {
+        // Silently fail — backend will still auto-generate on save.
+      }
+    })();
+    return () => { cancelled = true; };
+    // Only run once when modal opens; year switches on invoice_date change handled below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // When the invoice_date year changes (e.g. user picks Jan of next year on a
+  // form they opened in Dec), refresh the suggested number — but ONLY if the
+  // user hasn't manually typed a custom value yet.
+  useEffect(() => {
+    if (invoice) return;
+    const yr = new Date(formData.invoice_date || today).getFullYear();
+    // If the current number already matches the INV-{yr}-#### pattern leave it alone.
+    if (formData.invoice_number && !formData.invoice_number.startsWith(`INV-${yr}-`)) {
+      // Looks like a custom number — don't clobber it.
+      return;
+    }
+    if (formData.invoice_number && formData.invoice_number.startsWith(`INV-${yr}-`)) return;
+    (async () => {
+      try {
+        const res = await api.get(`/finance/invoices/next-number?year=${yr}`);
+        const next = res?.data?.invoice_number;
+        if (next) setFormData((p) => ({ ...p, invoice_number: next }));
+      } catch { /* ignore */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.invoice_date]);
+
   // Auto-update due_date when invoice_date or terms change (only for known terms)
   useEffect(() => {
     const days = PAYMENT_TERMS_MAP[formData.terms];
@@ -221,6 +267,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
     setSubmitMode(mode);
     try {
       const payload = {
+        invoice_number: (formData.invoice_number || '').trim() || undefined,
         invoice_date: new Date(formData.invoice_date).toISOString(),
         due_date: new Date(formData.due_date).toISOString(),
         client_id: formData.client_id,
@@ -383,9 +430,9 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                 <Label className={labelCls}>Invoice #</Label>
                 <Input
                   value={formData.invoice_number}
+                  onChange={(e) => set('invoice_number', e.target.value)}
                   placeholder="Auto-generated"
-                  readOnly
-                  className={inputCls + ' opacity-70'}
+                  className={inputCls}
                   data-testid="invoice-number"
                 />
               </div>
