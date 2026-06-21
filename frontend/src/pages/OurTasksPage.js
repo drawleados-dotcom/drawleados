@@ -936,6 +936,34 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
   };
 
+  // Sort tasks by start_time. Default: ascending so manually-entered timings
+  // appear chronologically (08:00, 14:30, 19:30) instead of in insertion order.
+  // MUST be declared BEFORE filteredTasks/displayTasks because displayTasks
+  // references `sortMode`.
+  const [sortMode, setSortMode] = useState('asc'); // 'asc' | 'desc' | 'none'
+  // Timeline (audit log) popup — Super Admin only.
+  const [timelineTask, setTimelineTask] = useState(null);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
+  const openTimelineModal = async (task) => {
+    setTimelineTask(task);
+    setTimelineEvents([]);
+    setTimelineLoading(true);
+    try {
+      const r = await axios.get(
+        `${API}/api/our-tasks/tasks/${task.task_id}/timeline`,
+        { headers },
+      );
+      setTimelineEvents(r.data?.events || []);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load timeline');
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
+
+
   const filteredTasks = tasks.filter(task => {
     // Main Tab filter - Assigned to Me vs Assign to Team
     if (mainTab === 'assigned_to_me') {
@@ -1107,31 +1135,6 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Stats - based on main tab
   const assignedToMeTasks = tasks.filter(t => t.assigned_to === user?.user_id && t.created_by !== user?.user_id);
   const _role = (user?.role || '').toLowerCase();
-  // Sort tasks by start_time. Default: ascending so manually-entered timings
-  // appear chronologically (08:00, 14:30, 19:30) instead of in insertion order.
-  // Toggle via the small sort dropdown above the table.
-  const [sortMode, setSortMode] = useState('asc'); // 'asc' | 'desc' | 'none'
-  // Timeline (audit log) popup — Super Admin only.
-  const [timelineTask, setTimelineTask] = useState(null);
-  const [timelineEvents, setTimelineEvents] = useState([]);
-  const [timelineLoading, setTimelineLoading] = useState(false);
-
-  const openTimelineModal = async (task) => {
-    setTimelineTask(task);
-    setTimelineEvents([]);
-    setTimelineLoading(true);
-    try {
-      const r = await axios.get(
-        `${API}/api/our-tasks/tasks/${task.task_id}/timeline`,
-        { headers },
-      );
-      setTimelineEvents(r.data?.events || []);
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to load timeline');
-    } finally {
-      setTimelineLoading(false);
-    }
-  };
   const _desg = (user?.designation || '').toLowerCase().trim();
   const _isPrivileged = _role === 'super_admin' || _role === 'admin' || _desg === 'operation head';
   const _myDepts = (myDesignation?.operations_departments || []);
