@@ -305,7 +305,7 @@ async def bank_breakdown(request: Request):
     # Load all bank accounts (we'll attach running totals per bank below)
     banks = await db.finance_banks.find(
         {"is_deleted": {"$ne": True}},
-        {"_id": 0, "bank_id": 1, "account_holder": 1, "bank_name": 1, "gst_type": 1},
+        {"_id": 0, "bank_id": 1, "account_holder": 1, "bank_name": 1, "account_type": 1, "gst_type": 1},
     ).sort("created_at", 1).to_list(500)
 
     # Aggregate cashbook entries — TWO groupings: by payment_mode, AND by bank_id.
@@ -353,7 +353,13 @@ async def bank_breakdown(request: Request):
             continue
         label = b.get("account_holder") or b.get("bank_name") or "Bank"
         amt = float(bank_totals.get(b["bank_id"], 0.0))
-        out[gt]["banks"].append({"bank_id": b["bank_id"], "label": label, "amount": amt})
+        out[gt]["banks"].append({
+            "bank_id": b["bank_id"],
+            "label": label,
+            "bank_name": b.get("bank_name") or "",
+            "account_type": b.get("account_type") or "",
+            "amount": amt,
+        })
         out[gt]["bank_total"] += amt
 
     # Fold non-bank payment modes (cash / cheque / upi) into their gst bucket

@@ -1203,8 +1203,28 @@ const ExpenseTab = () => {
           {(data?.banks || []).length === 0 ? (
             <p className={`text-xs italic ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No bank accounts yet.</p>
           ) : (data.banks || []).map((b) => (
-            <div key={b.bank_id} className="flex items-center justify-between">
-              <span className={`text-sm ${isDark ? 'text-[#d4d4d8]' : 'text-gray-700'} truncate`}>{b.label}</span>
+            <div key={b.bank_id} className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className={`text-sm ${isDark ? 'text-[#d4d4d8]' : 'text-gray-700'} truncate`} data-testid={`bank-holder-${b.bank_id}`}>{b.label}</span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {b.bank_name && (
+                    <span
+                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap ${isDark ? 'bg-[#6366f1]/15 text-[#a78bfa]' : 'bg-indigo-100 text-indigo-600'}`}
+                      data-testid={`bank-name-tag-${b.bank_id}`}
+                    >
+                      {b.bank_name}
+                    </span>
+                  )}
+                  {b.account_type && (
+                    <span
+                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap capitalize ${isDark ? 'bg-[#22c55e]/15 text-[#4ade80]' : 'bg-emerald-100 text-emerald-600'}`}
+                      data-testid={`account-type-tag-${b.bank_id}`}
+                    >
+                      {b.account_type}
+                    </span>
+                  )}
+                </div>
+              </div>
               <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(b.amount)}</span>
             </div>
           ))}

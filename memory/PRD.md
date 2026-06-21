@@ -1,6 +1,26 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Cash in Total Book: Bank name + Account Type tags ✅
+
+### Problem
+The "Cash in Total Book" panel listed each account holder (e.g. `Vinoth Kumar`) with just a balance — no way to tell from a glance which physical bank it belonged to or whether it was a savings/current account. Users had to dive into the Banks tab to disambiguate.
+
+### Fix
+**Backend** (`/app/backend/banks_routes.py` → `bank_breakdown`):
+- The bank-list projection now also fetches `account_type`, and each row pushed to `out[gt]["banks"]` carries `bank_name` and `account_type` in addition to `label` and `amount`.
+
+**Frontend** (`/app/frontend/src/components/finance/ExpenseTab.js` → `BankColumn`):
+- Each row now renders two pills inline next to the holder name: an indigo pill for `bank_name` (e.g. `HDFC`, `Indian Bank`, `SBI`) and a green pill for `account_type` (e.g. `Current`, `Savings`). Empty fields are skipped so the row stays clean.
+- `data-testid`s: `bank-holder-{bank_id}`, `bank-name-tag-{bank_id}`, `account-type-tag-{bank_id}`.
+
+### Verification
+Cashbook → Cash in Total Book → expanded panel now shows:
+- GST Accounts: `Drawlead Current [HDFC] [Current] ₹1,214`, `Vinoth [Indian Bank] [Savings] ₹0`, `A [Savings] ₹0`.
+- Non-GST Accounts: `Latha Babu [SBI] [Savings] ₹0`.
+
+
+
 ## Latest Update — Feb 21, 2026 — Paid `no_tax` invoices now appear in Non-GST Cashbook ✅
 
 ### Problem (production)
