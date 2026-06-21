@@ -523,22 +523,36 @@ export default function ProjectsPanel({
               )}
             </div>
 
-            {/* Summary cards — counts respect the task Date filter above (filteredTasks) */}
-            <div className="grid grid-cols-3 gap-3 pt-1">
+            {/* Summary cards — counts AND worked hours respect the task Date +
+                Team Member filters below. Total tasks, Completed, Pending and
+                an aggregated Hours Worked across every assignee on the visible
+                tasks (e.g. P1 35min + P2 60min → 1h 35m). */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
               {(() => {
-                const todoCount = filteredTasks.filter(t => (t.status || 'pending') === 'pending').length;
-                const inProgCount = filteredTasks.filter(t => t.status === 'in_progress').length;
+                const totalCount = filteredTasks.length;
                 const doneCount = filteredTasks.filter(t => t.status === 'completed').length;
+                const pendingCount = filteredTasks.filter(t => {
+                  const s = (t.status || 'pending').toLowerCase();
+                  return s === 'pending' || s === 'in_progress';
+                }).length;
+                const totalSec = filteredTasks.reduce(
+                  (acc, t) => acc + Number(t?.time_tracking?.total_seconds || 0),
+                  0,
+                );
+                const hh = Math.floor(totalSec / 3600);
+                const mm = Math.floor((totalSec % 3600) / 60);
+                const hoursLabel = `${hh}h ${mm}m`;
                 const cards = [
-                  { label: 'To Do', value: todoCount, color: 'text-[#71717a]', accent: 'bg-[#71717a]/15' },
-                  { label: 'Pending', value: inProgCount, color: 'text-[#3b82f6]', accent: 'bg-[#3b82f6]/15' },
-                  { label: 'Completed', value: doneCount, color: 'text-[#10b981]', accent: 'bg-[#10b981]/15' },
+                  { label: 'Total Tasks', value: totalCount, color: 'text-[#71717a]', accent: 'bg-[#71717a]/15', testid: 'project-summary-total' },
+                  { label: 'Completed', value: doneCount, color: 'text-[#10b981]', accent: 'bg-[#10b981]/15', testid: 'project-summary-completed' },
+                  { label: 'Pending', value: pendingCount, color: 'text-[#3b82f6]', accent: 'bg-[#3b82f6]/15', testid: 'project-summary-pending' },
+                  { label: 'Hours Worked', value: hoursLabel, color: 'text-[#6366f1]', accent: 'bg-[#6366f1]/15', testid: 'project-summary-hours' },
                 ];
                 return cards.map(c => (
                   <div
                     key={c.label}
                     className={`rounded-lg border ${borderColor} ${bgSecondary} p-3 flex items-center justify-between`}
-                    data-testid={`project-summary-${c.label.toLowerCase().replace(' ', '-')}`}
+                    data-testid={c.testid}
                   >
                     <div>
                       <p className={`text-xs ${textSecondary}`}>{c.label}</p>
