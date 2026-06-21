@@ -1,6 +1,35 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Paid `no_tax` invoices now appear in Non-GST Cashbook ✅
+
+### Problem (production)
+User collected payment on a NO_TAX invoice (INV-2026-0011, ₹45,000, Urban Space Builders). The Invoice list correctly marked it `PAID`, but the Cashbook tab showed **₹0 / "No entries"** — both the GST tab and Non-GST tab were empty. The income was effectively invisible.
+
+### Root cause
+Invoices carry one of THREE `gst_type` values: `"gst" | "non_gst" | "no_tax"`. Cashbook entries and bank accounts only have TWO buckets: `"gst" | "non_gst"`.
+
+- **Write path** (`POST /finance/banks/collect/{invoice_id}` line 235): the cashbook entry was stamped with the **raw** invoice `gst_type`, so `no_tax` invoices produced cashbook entries with `gst_type: "no_tax"`.
+- **Read paths** (`GET /cashbook/entries`, `_balance_for`, `bank_breakdown` aggregation): all matched `gst_type` exactly against `"gst"` or `"non_gst"`. Any entry stamped `"no_tax"` was silently dropped from every list, summary and bank-breakdown roll-up → invisible income.
+
+### Fix
+`/app/backend/banks_routes.py`:
+- Added `normalize_cashbook_gst()` helper that folds `no_tax` → `non_gst` and `cashbook_gst_match()` that returns `{"$in": ["non_gst", "no_tax"]}` for the Non-GST bucket (defensive for legacy data).
+- `collect_payment` now writes `gst_type = normalize_cashbook_gst(inv.gst_type)` — every new cashbook entry from a `no_tax` invoice now stores `"non_gst"`.
+- `list_cashbook_entries` and `_balance_for` use `cashbook_gst_match()` so any legacy `no_tax` entries still surface in the Non-GST tab/balances.
+- `bank_breakdown` post-processing normalizes each row's `gst_type` so `no_tax` aggregations are folded into the Non-GST bucket instead of being silently dropped.
+
+`/app/backend/server.py` startup tasks:
+- **One-time backfill**: `db.cashbook_entries.update_many({gst_type:"no_tax"}, {$set:{gst_type:"non_gst"}})` — runs on every backend start; will cleanly migrate any orphan entries already in production once redeployed. Log line: `[startup] Migrated N orphan cashbook entries: gst_type 'no_tax' → 'non_gst'`.
+
+### Verification (preview)
+- Created `gst_type=no_tax` invoice → collected ₹1,234 cash.
+- New cashbook entry returned with `gst_type: "non_gst"` (not orphan `no_tax`).
+- Non-GST `cashbook/entries`: 5 → 6 entries, credit total ₹25,110.04 → ₹26,344.04 (Δ ₹1,234 ✓).
+- Dashboard `bank-breakdown` Non-GST cash: ₹50 → ₹1,284 (Δ ₹1,234 ✓). GST totals unchanged.
+
+
+
 ## Latest Update — Feb 21, 2026 — Client Detail popup is now read-only (except Client Details) ✅
 
 ### Problem

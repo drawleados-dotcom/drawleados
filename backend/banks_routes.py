@@ -20,6 +20,35 @@ def init_banks_db(database):
     db = database
 
 
+# ---------------------------------------------------------------------------
+# GST type normalization
+# Invoices carry one of three gst_types: "gst", "non_gst", "no_tax".
+# Cashbook entries and bank accounts only have TWO buckets: "gst" / "non_gst".
+# So `no_tax` MUST be folded into `non_gst` everywhere cashbook entries are
+# written, queried or aggregated — otherwise paid Non-GST/No-Tax invoices
+# create orphan cashbook entries that show up in neither tab (the
+# "Income added but not visible in Cashbook" bug).
+# ---------------------------------------------------------------------------
+def normalize_cashbook_gst(value: Optional[str]) -> str:
+    """Map invoice gst_type ('gst' | 'non_gst' | 'no_tax') → cashbook bucket
+    ('gst' | 'non_gst'). Defaults to 'gst' when the value is missing/unknown."""
+    v = (value or "").lower().strip()
+    if v in ("non_gst", "no_tax"):
+        return "non_gst"
+    if v == "gst":
+        return "gst"
+    return "gst"
+
+
+def cashbook_gst_match(gst_type: str):
+    """Return a Mongo filter that matches cashbook entries for the given
+    cashbook bucket. For Non-GST we also pull in legacy entries that were
+    stamped with `gst_type='no_tax'` before the normalization fix landed."""
+    if gst_type == "non_gst":
+        return {"$in": ["non_gst", "no_tax"]}
+    return gst_type
+
+
 class BankCreate(BaseModel):
     gst_type: str  # "gst" | "non_gst"
     account_holder: str  # e.g. "Drawlead Pvt Ltd" (GST) or "Latha Babu" (Non-GST)
@@ -187,7 +216,8 @@ async def collect_invoice(invoice_id: str, payload: InvoiceCollectPayload, reque
 
     total_collect = sum(i["amount"] for i in items)
 
-    inv_gst = (inv.get("gst_type") or "gst").lower()
+    inv_gst_raw = (inv.get("gst_type") or "gst").lower()
+    inv_gst = normalize_cashbook_gst(inv_gst_raw)  # folds no_tax → non_gst
     bank_doc_cache: dict = {}
     for it in items:
         if it["source"] == "bank":
@@ -196,7 +226,7 @@ async def collect_invoice(invoice_id: str, payload: InvoiceCollectPayload, reque
             )
             if not doc:
                 raise HTTPException(status_code=400, detail="Selected bank not found")
-            if (doc.get("gst_type") or "").lower() != inv_gst:
+            if normalize_cashbook_gst(doc.get("gst_type")) != inv_gst:
                 raise HTTPException(status_code=400, detail=f"This is a {inv_gst.upper()} invoice — please pick a {inv_gst.upper()} bank account.")
             bank_doc_cache[it["bank_id"]] = doc
 
@@ -318,7 +348,7 @@ async def bank_breakdown(request: Request):
 
     # Attach per-bank balances under the right gst bucket
     for b in banks:
-        gt = (b.get("gst_type") or "gst").lower()
+        gt = normalize_cashbook_gst(b.get("gst_type") or "gst")
         if gt not in out or out[gt] is None:
             continue
         label = b.get("account_holder") or b.get("bank_name") or "Bank"
@@ -328,7 +358,7 @@ async def bank_breakdown(request: Request):
 
     # Fold non-bank payment modes (cash / cheque / upi) into their gst bucket
     for row in mode_rows:
-        gt = (row["_id"].get("gst_type") or "gst").lower()
+        gt = normalize_cashbook_gst(row["_id"].get("gst_type") or "gst")  # no_tax → non_gst
         if gt not in out or out[gt] is None:
             continue
         mode = (row["_id"].get("mode") or "bank").lower()
@@ -408,7 +438,7 @@ async def list_cashbook_entries(request: Request, gst_type: str):
         raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
 
     entries = await db.cashbook_entries.find(
-        {"gst_type": gst_type}, {"_id": 0}
+        {"gst_type": cashbook_gst_match(gst_type)}, {"_id": 0}
     ).sort("date", -1).to_list(5000)
     for e in entries:
         if isinstance(e.get("created_at"), datetime):
@@ -651,7 +681,7 @@ async def _balance_for(gst_type: str, source: str, bank_id: Optional[str] = None
     Entries with payment_mode='ledger' are excluded — they are pure ledger
     records (e.g. AI Credits recorded as expense) that don't move money.
     """
-    base = {"gst_type": gst_type, "payment_mode": {"$ne": "ledger"}}
+    base = {"gst_type": cashbook_gst_match(gst_type), "payment_mode": {"$ne": "ledger"}}
     if source == "bank":
         base["payment_mode"] = "bank"
         base["bank_id"] = bank_id

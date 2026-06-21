@@ -169,6 +169,22 @@ async def startup_tasks():
     except Exception as _e:
         logging.warning(f"[startup] Designation whitespace normalization skipped: {_e}")
 
+    # One-time backfill: cashbook entries created from `no_tax` invoices were
+    # stamped with `gst_type='no_tax'` and became invisible in both GST and
+    # Non-GST tabs (the cashbook lists matched gst_type exactly). Fold any
+    # legacy entries into `non_gst` so they show up where users expect them.
+    try:
+        res = await db.cashbook_entries.update_many(
+            {"gst_type": "no_tax"},
+            {"$set": {"gst_type": "non_gst"}},
+        )
+        if (getattr(res, "modified_count", 0) or 0) > 0:
+            logging.info(
+                f"[startup] Migrated {res.modified_count} orphan cashbook entries: gst_type 'no_tax' → 'non_gst'"
+            )
+    except Exception as _e:
+        logging.warning(f"[startup] Cashbook no_tax backfill skipped: {_e}")
+
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
 async def health_check():
