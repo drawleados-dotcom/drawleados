@@ -1231,3 +1231,95 @@ async def cascade_group_status(task_id: str, payload: GroupStatusPayload, reques
         gid = f"mtg_{uuid.uuid4().hex[:12]}"
         await db.our_tasks.update_many(query, {"$set": {"meeting_group_id": gid}})
     return {"updated": res.modified_count}
+
+
+@our_tasks_router.get("/tasks/{task_id}/timeline")
+async def get_task_timeline(task_id: str, request: Request):
+    """Return a chronological audit timeline for one task.
+
+    Only Super Admin / Admin can view this — the frontend also gates the
+    eye-on-clock icon to super_admin. Events are synthesised from existing
+    task fields (created_at, updated_at, approval_request) plus the dedicated
+    `task_events` collection which the write paths append to.
+    """
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    role = (user.role or "").lower()
+    if role not in ("super_admin", "admin"):
+        raise HTTPException(status_code=403, detail="Timeline is visible to Super Admin only")
+
+    task = await db.our_tasks.find_one({"task_id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    events = []
+
+    # 1) Synthesised events from the task document itself.
+    if task.get("created_at"):
+        events.append({
+            "kind": "created",
+            "at": task["created_at"],
+            "by": task.get("created_by_name") or task.get("created_by") or "—",
+            "summary": f"Task created — \"{task.get('task_name','')}\"",
+            "details": {
+                "assigned_to": task.get("assigned_to_name"),
+                "due_date": task.get("due_date"),
+                "due_time": task.get("due_time"),
+                "type": task.get("type"),
+            },
+        })
+    ar = task.get("approval_request") or {}
+    if ar.get("requested_at"):
+        events.append({
+            "kind": "approval_requested",
+            "at": ar["requested_at"],
+            "by": ar.get("requested_by_name") or ar.get("requested_by") or "—",
+            "summary": f"Approval requested → {ar.get('approver_role') or 'operations'}",
+            "details": {"note": ar.get("note"), "status": ar.get("status")},
+        })
+    if ar.get("decided_at"):
+        events.append({
+            "kind": "approval_decided",
+            "at": ar["decided_at"],
+            "by": ar.get("decided_by_name") or ar.get("decided_by") or "—",
+            "summary": f"Approval {ar.get('status') or 'decided'} by {ar.get('approver_role') or 'operations'}",
+            "details": {"comment": ar.get("decision_comment"), "status": ar.get("status")},
+        })
+    if task.get("updated_at") and task["updated_at"] != task.get("created_at"):
+        events.append({
+            "kind": "updated",
+            "at": task["updated_at"],
+            "by": "—",
+            "summary": "Task updated",
+            "details": {},
+        })
+
+    # Dedicated event log entries.
+    async for ev in db.task_events.find({"task_id": task_id}, {"_id": 0}).sort("at", 1):
+        # Normalise the timestamp to ISO string so the merge sort below
+        # doesn't blow up comparing str vs datetime.
+        v = ev.get("at")
+        if hasattr(v, "isoformat"):
+            ev["at"] = v.isoformat()
+        events.append(ev)
+
+    # Sort ascending and return.
+    events.sort(key=lambda e: str(e.get("at") or ""))
+    return {"task_id": task_id, "events": events}
+
+
+async def _log_task_event(task_id: str, kind: str, user, summary: str, details: Optional[dict] = None):
+    """Append one row to the `task_events` audit log. Best-effort, never raises."""
+    try:
+        from server import db
+        await db.task_events.insert_one({
+            "task_id": task_id,
+            "kind": kind,
+            "at": datetime.now(timezone.utc).isoformat(),
+            "by": getattr(user, "user_id", None) or "—",
+            "by_name": getattr(user, "name", None) or "—",
+            "summary": summary,
+            "details": details or {},
+        })
+    except Exception:
+        pass

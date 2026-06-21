@@ -13,7 +13,7 @@ import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video, ListChecks, ShieldCheck, Crown, Check
+  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -1045,6 +1045,28 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         lead._group_size = lead._group_members.length;
       }
     }
+    // Sort by start_time if requested. Tasks without a start_time fall to the
+    // end of the list (kept in their original order via stable index tie-break).
+    if (sortMode !== 'none') {
+      const toMin = (t) => {
+        const s = (t.start_time || '').trim();
+        if (!s) return Number.POSITIVE_INFINITY;
+        const m = s.match(/^(\d{1,2}):(\d{2})/);
+        if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+        // ISO fallback
+        const dt = new Date(s);
+        if (!isNaN(dt.getTime())) return dt.getHours() * 60 + dt.getMinutes();
+        return Number.POSITIVE_INFINITY;
+      };
+      const sorted = [...out].map((t, i) => ({ t, i }));
+      sorted.sort((a, b) => {
+        const am = toMin(a.t);
+        const bm = toMin(b.t);
+        if (am === bm) return a.i - b.i; // stable
+        return sortMode === 'asc' ? am - bm : bm - am;
+      });
+      return sorted.map((x) => x.t);
+    }
     return out;
   })();
 
@@ -1085,6 +1107,31 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Stats - based on main tab
   const assignedToMeTasks = tasks.filter(t => t.assigned_to === user?.user_id && t.created_by !== user?.user_id);
   const _role = (user?.role || '').toLowerCase();
+  // Sort tasks by start_time. Default: ascending so manually-entered timings
+  // appear chronologically (08:00, 14:30, 19:30) instead of in insertion order.
+  // Toggle via the small sort dropdown above the table.
+  const [sortMode, setSortMode] = useState('asc'); // 'asc' | 'desc' | 'none'
+  // Timeline (audit log) popup — Super Admin only.
+  const [timelineTask, setTimelineTask] = useState(null);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+
+  const openTimelineModal = async (task) => {
+    setTimelineTask(task);
+    setTimelineEvents([]);
+    setTimelineLoading(true);
+    try {
+      const r = await axios.get(
+        `${API}/api/our-tasks/tasks/${task.task_id}/timeline`,
+        { headers },
+      );
+      setTimelineEvents(r.data?.events || []);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load timeline');
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
   const _desg = (user?.designation || '').toLowerCase().trim();
   const _isPrivileged = _role === 'super_admin' || _role === 'admin' || _desg === 'operation head';
   const _myDepts = (myDesignation?.operations_departments || []);
@@ -1462,6 +1509,18 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               Reset
             </Button>
 
+            {/* Sort by Start Time — chronologically orders manually-entered timings */}
+            <Select value={sortMode} onValueChange={setSortMode}>
+              <SelectTrigger className={`h-9 w-[140px] ${bgSecondary} border-0 text-xs`} data-testid="sort-mode-select">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="asc">Start ↑ (early)</SelectItem>
+                <SelectItem value="desc">Start ↓ (late)</SelectItem>
+                <SelectItem value="none">No sort</SelectItem>
+              </SelectContent>
+            </Select>
+
             <div className="ml-auto">
               <Button
                 onClick={() => setShowCreateModal(true)}
@@ -1798,6 +1857,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
+                          {/* Super-Admin-only Timeline icon — opens the audit log popup */}
+                          {(user?.role || '').toLowerCase() === 'super_admin' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-amber-500"
+                              onClick={(e) => { e.stopPropagation(); openTimelineModal(task); }}
+                              title="View timeline"
+                              data-testid={`task-timeline-${task.task_id}`}
+                            >
+                              <History className="h-4 w-4" />
+                            </Button>
+                          )}
                           {(() => {
                             const isSuperAdmin = (user?.role || '').toLowerCase() === 'super_admin';
                             const isCreator = task.created_by === user?.user_id;
@@ -2364,8 +2436,89 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         )}
 
         {/* Task Detail Modal - Comprehensive View */}
-        {showTaskDetailModal && viewingTask && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+
+        {/* Timeline modal — visible to Super Admin only. Shows the full audit
+            log of a task: creation, edits, approval submit / decide, etc. */}
+        {timelineTask && (
+          <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[90] p-4"
+            onClick={() => setTimelineTask(null)}
+            data-testid="task-timeline-modal"
+          >
+            <Card
+              className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CardContent className="p-5 flex flex-col h-full">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                      <History className="h-5 w-5 text-amber-500" /> Task Timeline
+                    </h3>
+                    <p className={`text-xs ${textSecondary} mt-0.5 line-clamp-1`}>{timelineTask.task_name}</p>
+                  </div>
+                  <button
+                    onClick={() => setTimelineTask(null)}
+                    className={textSecondary}
+                    data-testid="timeline-close"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1 -mx-1 px-1">
+                  {timelineLoading ? (
+                    <p className={`text-xs italic ${textSecondary} text-center py-10`}>Loading timeline…</p>
+                  ) : timelineEvents.length === 0 ? (
+                    <p className={`text-xs italic ${textSecondary} text-center py-10`}>No events recorded yet.</p>
+                  ) : (
+                    <ol className="relative border-l-2 border-amber-500/30 ml-3 space-y-3 py-1">
+                      {timelineEvents.map((ev, idx) => {
+                        const at = ev.at ? new Date(ev.at) : null;
+                        const atStr = at && !isNaN(at.getTime())
+                          ? at.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+                          : (ev.at || '—');
+                        const kindColor =
+                          ev.kind === 'created' ? 'bg-emerald-500'
+                          : ev.kind === 'updated' ? 'bg-blue-500'
+                          : ev.kind === 'approval_requested' ? 'bg-amber-500'
+                          : ev.kind === 'approval_decided' ? 'bg-purple-500'
+                          : 'bg-gray-400';
+                        return (
+                          <li key={idx} className="ml-4 relative" data-testid={`timeline-event-${idx}`}>
+                            <span className={`absolute -left-[22px] top-1 w-3 h-3 rounded-full ${kindColor} ring-2 ring-amber-500/30`} />
+                            <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                              <div className="flex items-center justify-between flex-wrap gap-1">
+                                <p className={`text-xs font-semibold ${textPrimary}`}>{ev.summary || ev.kind}</p>
+                                <p className={`text-[10px] ${textSecondary}`}>{atStr}</p>
+                              </div>
+                              <p className={`text-[11px] ${textSecondary} mt-0.5`}>
+                                <span className="font-medium">{ev.by_name || ev.by || '—'}</span>
+                                {ev.kind && <span className="ml-2 opacity-60">· {ev.kind.replace(/_/g, ' ')}</span>}
+                              </p>
+                              {ev.details && Object.keys(ev.details).length > 0 && (
+                                <div className={`mt-1.5 text-[10px] ${textSecondary} space-y-0.5`}>
+                                  {Object.entries(ev.details).filter(([, v]) => v !== null && v !== '' && v !== undefined).map(([k, v]) => (
+                                    <p key={k}><span className="opacity-70">{k.replace(/_/g, ' ')}:</span> <span className={textPrimary}>{String(v)}</span></p>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </div>
+                <div className="mt-3 pt-3 border-t flex justify-end" style={{ borderColor: 'rgba(120,120,120,0.2)' }}>
+                  <Button variant="outline" onClick={() => setTimelineTask(null)}>Close</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+
+        {showTaskDetailModal && viewingTask && (          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <Card className={`${bgCard} border ${borderColor} w-full max-w-2xl max-h-[90vh] overflow-y-auto`}>
               <CardHeader className="sticky top-0 z-10" style={{ backgroundColor: isDark ? '#18181b' : 'white' }}>
                 <div className="flex items-center justify-between">
