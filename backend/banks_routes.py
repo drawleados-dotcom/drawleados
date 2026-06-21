@@ -278,19 +278,27 @@ async def bank_breakdown(request: Request):
         {"_id": 0, "bank_id": 1, "account_holder": 1, "bank_name": 1, "gst_type": 1},
     ).sort("created_at", 1).to_list(500)
 
-    # Aggregate cashbook credits — TWO groupings: by payment_mode, AND by bank_id.
+    # Aggregate cashbook entries — TWO groupings: by payment_mode, AND by bank_id.
+    # IMPORTANT: balance = Σ credits − Σ debits, NOT just credits. Without this,
+    # the dashboard kept showing positive balances even when debits had fully
+    # offset the credits (the bug behind "Income/Expense = 0 but Cash in Total
+    # Book = ₹41,300"). Pure-ledger entries (`payment_mode='ledger'`, used by
+    # the AI Credits flow) never move money so they're excluded from balances.
     by_mode_pipeline = [
-        {"$match": {"kind": "credit"}},
+        {"$match": {"payment_mode": {"$ne": "ledger"}}},
         {"$group": {
             "_id": {"gst_type": {"$ifNull": ["$gst_type", "gst"]}, "mode": {"$ifNull": ["$payment_mode", "bank"]}},
-            "amount": {"$sum": "$amount"},
+            "amount": {"$sum": {"$cond": [{"$eq": ["$kind", "credit"]}, "$amount", {"$multiply": ["$amount", -1]}]}},
         }},
     ]
     mode_rows = await db.cashbook_entries.aggregate(by_mode_pipeline).to_list(100)
 
     by_bank_pipeline = [
-        {"$match": {"kind": "credit", "payment_mode": "bank", "bank_id": {"$ne": None}}},
-        {"$group": {"_id": "$bank_id", "amount": {"$sum": "$amount"}}},
+        {"$match": {"payment_mode": "bank", "bank_id": {"$ne": None}}},
+        {"$group": {
+            "_id": "$bank_id",
+            "amount": {"$sum": {"$cond": [{"$eq": ["$kind", "credit"]}, "$amount", {"$multiply": ["$amount", -1]}]}},
+        }},
     ]
     bank_totals: dict = {}
     async for row in db.cashbook_entries.aggregate(by_bank_pipeline):

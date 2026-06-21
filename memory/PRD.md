@@ -1,6 +1,22 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Finance Dashboard `bank_breakdown` net calculation ✅
+
+### Problem
+"Income/Expense = 0 but Cash in Total Book = ₹41,300." The dashboard's `bank_breakdown` was summing only `kind=credit` entries and never subtracting `kind=debit`, so as soon as debits paid down credits the per-bank/per-mode balances kept showing the gross credit figure.
+
+### What changed
+- `/app/backend/banks_routes.py` `GET /finance/banks/dashboard/bank-breakdown`:
+  - Both aggregations (`by_mode_pipeline` and `by_bank_pipeline`) now sum `credit − debit`: `{"$cond": [{"$eq": ["$kind","credit"]}, "$amount", {"$multiply": ["$amount", -1]}]}`.
+  - Pure ledger entries (`payment_mode == "ledger"`, used by AI Credits) are excluded — they never move money.
+
+### Verification (live)
+- `curl GET /api/finance/banks/dashboard/bank-breakdown` returns sensible nets: GST `bank_total=1214, cash=13000, upi=400, total=14614`; Non-GST `cash=50, total=50`.
+- Finance → Dashboard screenshot: "Cash in Book → ALL ₹14,664 / GST ₹14,614 / Other ₹50" — UI matches backend.
+
+
+
 ## Latest Update — Feb 15, 2026 (cont.) — Per-user Clock-In time entry mode (Auto / Manual) ✅
 
 ### Problem
