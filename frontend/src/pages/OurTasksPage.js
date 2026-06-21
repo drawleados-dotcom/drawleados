@@ -1445,13 +1445,41 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 <Briefcase className="h-3.5 w-3.5 mr-1 opacity-60" />
                 <SelectValue placeholder="All Projects" />
               </SelectTrigger>
-              <SelectContent className={bgCard}>
+              <SelectContent className={`${bgCard} min-w-[320px]`}>
                 <SelectItem value="all">All Projects</SelectItem>
                 {projectsForTask
                   .filter(p => filters.department === 'all' || (p.departments || []).includes(filters.department))
-                  .map(p => (
-                    <SelectItem key={p.project_id} value={p.project_id}>{p.name}</SelectItem>
-                  ))}
+                  .map(p => {
+                    const deptKeys = p.departments || [];
+                    return (
+                      <SelectItem key={p.project_id} value={p.project_id}>
+                        <div className="flex items-center justify-between gap-3 w-full">
+                          <span className="truncate">{p.name}</span>
+                          {deptKeys.length > 0 && (
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {deptKeys.slice(0, 3).map(dk => {
+                                const lbl = deptCategoriesForTask.find(d => d.dept_key === dk)?.label || dk;
+                                return (
+                                  <span
+                                    key={dk}
+                                    className="text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-[#6366f1]/15 text-[#6366f1] whitespace-nowrap"
+                                    data-testid={`project-dept-tag-${p.project_id}-${dk}`}
+                                  >
+                                    {lbl}
+                                  </span>
+                                );
+                              })}
+                              {deptKeys.length > 3 && (
+                                <span className="text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-[#6366f1]/10 text-[#6366f1]">
+                                  +{deptKeys.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
               </SelectContent>
             </Select>
 

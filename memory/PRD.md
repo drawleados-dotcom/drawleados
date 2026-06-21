@@ -1,6 +1,23 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Project filter dropdown shows department tags ✅
+
+### Problem
+On `/our-tasks`, the "All Projects" filter dropdown listed only the project name. Users couldn't tell at-a-glance which department(s) a project belonged to, so picking the right project in a list of 50+ was guesswork.
+
+### Fix
+`/app/frontend/src/pages/OurTasksPage.js` — the project `<Select>` items now render the project name on the left and a row of department pills on the right:
+- Each pill resolves the `dept_key` to its human label via `deptCategoriesForTask`.
+- First 3 departments shown inline; anything beyond collapses into a `+N` chip.
+- Increased `SelectContent` min-width to `320px` so the pills don't crowd the name.
+- Each pill carries `data-testid="project-dept-tag-{project_id}-{dept_key}"` for testing.
+
+### Verification
+Screenshot of the open dropdown: `Urban Space Builders [Website] · The Velli Shop [Website] · Apex Website Build [Website] [SEO] · PJ [Website] · SA test [Website]`. Projects without departments simply show no tags. Multi-department projects render all relevant pills.
+
+
+
 ## Latest Update — Feb 21, 2026 — Tab badges now react to active filters ✅
 
 ### Problem
