@@ -287,8 +287,43 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
               <FileText className="h-6 w-6 text-[#6366f1]" />
               {invoice ? 'Edit Invoice' : 'New Invoice'}
             </DialogTitle>
-            <p className="text-sm text-[#a1a1aa]">Create a GST-compliant invoice</p>
+            <p className="text-sm text-[#a1a1aa]">
+              {(formData.gst_type || 'gst') === 'gst'
+                ? 'Create a GST-compliant invoice (Registered Business)'
+                : 'Create a simple invoice without tax (Unregistered Business)'}
+            </p>
           </DialogHeader>
+
+          {/* Business Type toggle — Registered (GST) hides nothing;
+              Unregistered hides the per-line Tax % column and the Total Tax row.
+              Stored on formData.gst_type ('gst' | 'no_tax'). */}
+          <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-3 mt-3 flex flex-wrap items-center gap-2" data-testid="invoice-business-type">
+            <span className="text-sm text-[#a1a1aa] mr-2">Invoice Type:</span>
+            {[
+              { id: 'gst', label: 'Registered (GST)', hint: 'with tax column' },
+              { id: 'no_tax', label: 'Unregistered', hint: 'no tax' },
+            ].map((opt) => {
+              const active = (formData.gst_type || 'gst') === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    set('gst_type', opt.id);
+                    // Zero-out per-line tax when switching to Unregistered so totals match.
+                    if (opt.id !== 'gst') {
+                      setItems((prev) => prev.map((it) => ({ ...it, gst_rate: 0 })));
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium border ${active ? 'bg-[#6366f1] border-[#6366f1] text-white' : 'bg-[#18181b] border-[#27272a] text-[#a1a1aa] hover:text-white'}`}
+                  data-testid={`invoice-type-${opt.id}`}
+                >
+                  {opt.label}
+                  <span className="ml-1 opacity-70">· {opt.hint}</span>
+                </button>
+              );
+            })}
+          </div>
 
           <form className="space-y-5 mt-2">
             {/* Customer Name */}
@@ -417,7 +452,9 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                       <th className="px-3 py-2 text-right w-20">Qty</th>
                       <th className="px-3 py-2 text-right w-24">Rate (₹)</th>
                       <th className="px-3 py-2 text-right w-20">Disc %</th>
-                      <th className="px-3 py-2 text-right w-20">Tax %</th>
+                      {(formData.gst_type || 'gst') === 'gst' && (
+                        <th className="px-3 py-2 text-right w-20">Tax %</th>
+                      )}
                       <th className="px-3 py-2 text-right w-28">Amount</th>
                       <th className="px-3 py-2 w-10"></th>
                     </tr>
@@ -464,21 +501,23 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                             className="bg-[#09090b] border-[#27272a] text-[#fafafa] text-right"
                           />
                         </td>
-                        <td className="px-3 py-2">
-                          <Select
-                            value={String(it.gst_rate)}
-                            onValueChange={(v) => handleItemChange(idx, 'gst_rate', v)}
-                          >
-                            <SelectTrigger className="bg-[#09090b] border-[#27272a] text-[#fafafa]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
-                              {GST_RATES.map((r) => (
-                                <SelectItem key={r} value={String(r)}>{r}%</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
+                        {(formData.gst_type || 'gst') === 'gst' && (
+                          <td className="px-3 py-2">
+                            <Select
+                              value={String(it.gst_rate)}
+                              onValueChange={(v) => handleItemChange(idx, 'gst_rate', v)}
+                            >
+                              <SelectTrigger className="bg-[#09090b] border-[#27272a] text-[#fafafa]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                                {GST_RATES.map((r) => (
+                                  <SelectItem key={r} value={String(r)}>{r}%</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </td>
+                        )}
                         <td className="px-3 py-2 text-right font-medium text-[#fafafa]">
                           ₹{(calc.lines[idx]?.total || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                         </td>
@@ -554,14 +593,18 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                     <span className="text-[#f87171]">- ₹{calc.totalDiscount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-[#a1a1aa] text-sm">
-                  <span>Taxable Amount</span>
-                  <span>₹{calc.afterDiscount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                </div>
-                <div className="flex justify-between text-[#a1a1aa] text-sm">
-                  <span>Total Tax</span>
-                  <span>+ ₹{calc.totalGst.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                </div>
+                {(formData.gst_type || 'gst') === 'gst' && (
+                  <>
+                    <div className="flex justify-between text-[#a1a1aa] text-sm">
+                      <span>Taxable Amount</span>
+                      <span>₹{calc.afterDiscount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="flex justify-between text-[#a1a1aa] text-sm">
+                      <span>Total Tax</span>
+                      <span>+ ₹{calc.totalGst.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </>
+                )}
                 <div className="border-t border-[#27272a] pt-2.5 flex justify-between font-bold text-lg">
                   <span className="text-[#fafafa]">Total (₹)</span>
                   <span className="text-[#6366f1]">

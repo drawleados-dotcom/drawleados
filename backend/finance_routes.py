@@ -296,7 +296,13 @@ async def get_invoices(
     if status:
         query["status"] = status
     if gst_type:
-        query["gst_type"] = gst_type
+        # "Non-GST" tab in Cashbook should also include Unregistered invoices
+        # (gst_type='no_tax') — they are non-tax invoices and belong in the
+        # same bucket. "GST" tab matches strict.
+        if gst_type == "non_gst":
+            query["gst_type"] = {"$in": ["non_gst", "no_tax"]}
+        else:
+            query["gst_type"] = gst_type
     if from_date:
         query["invoice_date"] = {"$gte": datetime.fromisoformat(from_date)}
     if to_date:
