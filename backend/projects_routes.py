@@ -49,6 +49,13 @@ class ProjectTaskCreate(BaseModel):
     work_link: Optional[str] = None
     department: Optional[str] = None
     category: Optional[str] = None
+    # ERP-project taxonomy (only set when project has the `erp` department)
+    erp_designation: Optional[str] = None
+    erp_page_id: Optional[str] = None
+    erp_subpage_id: Optional[str] = None
+    erp_function_id: Optional[str] = None
+    erp_module_id: Optional[str] = None
+    erp_stage: Optional[str] = None  # developing | testing | bug
 
 
 async def _is_operation_head_or_admin(user, db) -> bool:
@@ -490,6 +497,13 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         "category": payload.category,
         "project_id": project_id,
         "project_name": project.get("name"),
+        # ERP taxonomy passthrough (None for non-ERP projects)
+        "erp_designation": payload.erp_designation,
+        "erp_page_id": payload.erp_page_id,
+        "erp_subpage_id": payload.erp_subpage_id,
+        "erp_function_id": payload.erp_function_id,
+        "erp_module_id": payload.erp_module_id,
+        "erp_stage": payload.erp_stage,
         "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
         "created_at": now,
         "updated_at": now,

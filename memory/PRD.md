@@ -1,6 +1,47 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — ERP Project Taxonomy + Board (Phases 1–4) ✅
+
+### What
+A new department-scoped workflow for projects whose `departments` array contains `"erp"`. Layers, top → down:
+**User Designation → Pages → Sub-pages → Functions → Modules** + per-task **Stage** (Developing / Testing / Bug).
+
+### Phase 1 — Backend taxonomy
+- `/app/backend/erp_routes.py` (new) — mounts at `/api/projects/{project_id}/erp/...`
+- 4 collections + CRUD endpoints: `erp_pages`, `erp_subpages`, `erp_functions`, `erp_modules`
+- Cascade deletes (deleting a page wipes its sub-pages → functions → modules)
+- `GET /summary` returns counts per layer + per-stage and the full taxonomy in one round-trip
+- `GET /tasks` returns tasks filtered by any combination of layer + stage
+- Wired into `server.py` (`init_erp_db`, `include_router`)
+
+### Phase 2 — Task model + form
+- `ProjectTaskCreate` gains 6 optional fields: `erp_designation, erp_page_id, erp_subpage_id, erp_function_id, erp_module_id, erp_stage`
+- `POST /api/projects/{id}/tasks` persists them on the `our_tasks` document
+- `ProjectsPanel.js` Add/Edit Task modal now renders an "ERP Taxonomy" section (conditional on the project having the `erp` department) with cascading selects — Designation suggests from existing taxonomy via `<datalist>`, Page → Sub-page → Function → Module disable until their parent is picked
+
+### Phase 3 — ERP Board tab
+- New `/app/frontend/src/components/projects/ErpBoardTab.js`
+- Project inner-tabs now include "ERP Board" (only when `departments.includes('erp')`)
+- 3-column Kanban grouped by stage: **Developing · Testing · Bug**
+- Cards show task name + page / sub-page / function / module pills + designation + due date
+
+### Phase 4 — Summary strip + filters
+- Filter Row 1: `Designations · Pages · Sub-pages · Functions · Modules · Stage`
+- Filter Row 2: dynamic sub-pills (items inside the active Row-1 layer with task counts)
+- Top summary card with 9 clickable pills (every count is a deep-link into that filter)
+- "Manage Taxonomy" button → `/app/frontend/src/components/projects/ManageErpTaxonomyModal.js` — 4-column cascading CRUD with inline Add/Delete and hierarchy-aware disabling
+
+### Verification (preview)
+- `POST/PATCH/DELETE` against pages/subpages/functions/modules — all 200s; cascade delete confirmed.
+- `GET /summary` returns counts and full taxonomy.
+- UI: opened Urban Space Builders (seeded with `erp` department for testing), inner-tabs strip now shows the new **ERP Board** tab; clicking it renders the summary pills + Designations/Pages/.../Stage filter strip + Developing/Testing/Bug Kanban; "Manage Taxonomy" opens the 4-column modal pre-filled with the test page/subpage/function/module.
+
+### Notes
+- `urban_space_builders` (`prj_e3b5440b7a9f`) was seeded with `erp` in its `departments` array as a one-time playground for testing. Remove it from `Operations → Projects → Edit` if you want it back to a pure Website project.
+
+
+
 ## Latest Update — Feb 21, 2026 — "Raise Invoice" on Payment Schedule Req with GST/Non-GST popup ✅
 
 ### Flow (matches user spec)

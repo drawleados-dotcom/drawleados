@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Layers } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
+import ErpBoardTab from './projects/ErpBoardTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -46,7 +47,20 @@ export default function ProjectsPanel({
 
   const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
   const [clients, setClients] = useState([]);
-  const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
+  const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_designation: '', erp_page_id: '', erp_subpage_id: '', erp_function_id: '', erp_module_id: '', erp_stage: 'developing' });
+  // Lazily-loaded ERP taxonomy for the open project — used to populate the
+  // cascading Page/Sub-page/Function/Module selects in the Add Task modal.
+  const [erpTaxonomy, setErpTaxonomy] = useState(null);
+  useEffect(() => {
+    const isErp = (selectedProject?.departments || []).includes('erp');
+    if (!isErp || !showAddTask) return;
+    let cancelled = false;
+    axios.get(`${API}/api/projects/${selectedProject.project_id}/erp/summary`, { headers })
+      .then(r => { if (!cancelled) setErpTaxonomy(r.data); })
+      .catch(() => { if (!cancelled) setErpTaxonomy(null); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line
+  }, [selectedProject?.project_id, showAddTask]);
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [activeCategoryTab, setActiveCategoryTab] = useState('all');
   // Team management for selected project
@@ -334,7 +348,7 @@ export default function ProjectsPanel({
         await axios.post(`${API}/api/projects/${selectedProject.project_id}/tasks`, taskDraft, { headers });
         toast.success('Task added — appears in assignee\'s My Tasks');
       }
-      setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '' });
+      setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_designation: '', erp_page_id: '', erp_subpage_id: '', erp_function_id: '', erp_module_id: '', erp_stage: 'developing' });
       setShowAddTask(false);
       setEditingTaskId(null);
       refreshSelectedProject();
@@ -356,6 +370,12 @@ export default function ProjectsPanel({
       work_link: task.work_link || '',
       department: task.department || '',
       category: task.category || '',
+      erp_designation: task.erp_designation || '',
+      erp_page_id: task.erp_page_id || '',
+      erp_subpage_id: task.erp_subpage_id || '',
+      erp_function_id: task.erp_function_id || '',
+      erp_module_id: task.erp_module_id || '',
+      erp_stage: task.erp_stage || 'developing',
     });
     setShowAddTask(true);
   };
@@ -606,10 +626,13 @@ export default function ProjectsPanel({
           const isPriv = role === 'super_admin' || role === 'admin';
           const psVisibility = currentUser?.designation_config?.operations_payment_schedule || 'visible';
           const showPaymentSchedule = isPriv || psVisibility !== 'hidden';
+          // ERP Board tab only renders for ERP-department projects
+          const isErpProject = (selectedProject?.departments || []).includes('erp');
           const innerTabs = [
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
+            ...(isErpProject ? [{ id: 'erp_board', label: 'ERP Board', icon: Layers }] : []),
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks
           if (!showPaymentSchedule && projectInnerTab === 'payment') {
@@ -682,6 +705,18 @@ export default function ProjectsPanel({
             />
           );
         })()}
+
+        {projectInnerTab === 'erp_board' && (
+          <ErpBoardTab
+            project={selectedProject}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
 
         {projectInnerTab === 'tasks' && (
         <div className="space-y-2">
@@ -1322,6 +1357,108 @@ export default function ProjectsPanel({
                     </select>
                   </div>
                 </div>
+                {/* ERP Taxonomy selectors — only when the project has the
+                    `erp` department. Cascading: Designation → Page → Sub-page
+                    → Function → Module + Stage. Free-text designation accepts
+                    any value to match existing users.designation conventions. */}
+                {(selectedProject?.departments || []).includes('erp') && (
+                  <div className={`mt-2 border ${borderColor} rounded-lg p-3 space-y-2`} data-testid="task-erp-section">
+                    <div className="flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-[#6366f1]" />
+                      <p className={`text-sm font-semibold ${textPrimary}`}>ERP Taxonomy</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>Designation</Label>
+                        <Input
+                          value={taskDraft.erp_designation}
+                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_designation: e.target.value })}
+                          placeholder="e.g. Frontend Dev"
+                          list="erp-designation-suggestions"
+                          data-testid="task-erp-designation"
+                        />
+                        <datalist id="erp-designation-suggestions">
+                          {(erpTaxonomy?.designations || []).map(d => <option key={d} value={d} />)}
+                        </datalist>
+                      </div>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>Page</Label>
+                        <select
+                          value={taskDraft.erp_page_id}
+                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_page_id: e.target.value, erp_subpage_id: '', erp_function_id: '', erp_module_id: '' })}
+                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                          data-testid="task-erp-page"
+                        >
+                          <option value="">— select page —</option>
+                          {(erpTaxonomy?.pages || []).map(p => (
+                            <option key={p.page_id} value={p.page_id}>{p.name}{p.designation ? ` · ${p.designation}` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>Sub-page</Label>
+                        <select
+                          value={taskDraft.erp_subpage_id}
+                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_subpage_id: e.target.value, erp_function_id: '', erp_module_id: '' })}
+                          disabled={!taskDraft.erp_page_id}
+                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary} disabled:opacity-50`}
+                          data-testid="task-erp-subpage"
+                        >
+                          <option value="">— select sub-page —</option>
+                          {(erpTaxonomy?.subpages || []).filter(s => s.page_id === taskDraft.erp_page_id).map(s => (
+                            <option key={s.subpage_id} value={s.subpage_id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>Function</Label>
+                        <select
+                          value={taskDraft.erp_function_id}
+                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_function_id: e.target.value, erp_module_id: '' })}
+                          disabled={!taskDraft.erp_subpage_id}
+                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary} disabled:opacity-50`}
+                          data-testid="task-erp-function"
+                        >
+                          <option value="">— select function —</option>
+                          {(erpTaxonomy?.functions || []).filter(f => f.subpage_id === taskDraft.erp_subpage_id).map(f => (
+                            <option key={f.function_id} value={f.function_id}>{f.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>Module</Label>
+                        <select
+                          value={taskDraft.erp_module_id}
+                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_module_id: e.target.value })}
+                          disabled={!taskDraft.erp_function_id}
+                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary} disabled:opacity-50`}
+                          data-testid="task-erp-module"
+                        >
+                          <option value="">— select module —</option>
+                          {(erpTaxonomy?.modules || []).filter(m => m.function_id === taskDraft.erp_function_id).map(m => (
+                            <option key={m.module_id} value={m.module_id}>{m.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>Stage</Label>
+                        <select
+                          value={taskDraft.erp_stage}
+                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_stage: e.target.value })}
+                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                          data-testid="task-erp-stage"
+                        >
+                          <option value="developing">Developing</option>
+                          <option value="testing">Testing</option>
+                          <option value="bug">Bug</option>
+                        </select>
+                      </div>
+                    </div>
+                    <p className={`text-[10px] ${textSecondary} italic`}>
+                      Missing pages/sub-pages/functions/modules? Open <span className="text-[#a78bfa]">ERP Board → Manage Taxonomy</span> to create them.
+                    </p>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="ghost" onClick={() => { setShowAddTask(false); setEditingTaskId(null); }}>Cancel</Button>
                   <Button onClick={handleAddTask} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="project-task-save">
