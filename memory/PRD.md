@@ -1,6 +1,31 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Week-Wise bottom table strictly clipped to selected week ✅
+
+### Problem (production)
+On the Finance → Dashboard → **Week Wise** view, the Income / Expense table at the bottom was occasionally showing rows whose `date` fell **outside** the currently selected week (Week 22 = 16 Jun → 22 Jun showed earlier-week rows). Caused by mixed historical date shapes in `cashbook_entries` / `cashflow` / `expense_entries` (ISO strings, BSON datetimes) — MongoDB range queries silently skip rows with the "wrong" type, so the data set returned isn't always trustworthy.
+
+### Fix
+**Backend** (`/app/backend/expense_routes.py` → `get_weekly_summary`):
+- Added a Python-side clip after both Mongo cursors finish:
+  - `_entry_day_iso(e)` normalises any of {`str` (`YYYY-MM-DD` or ISO), `datetime`, `date`} to `YYYY-MM-DD`.
+  - `_within_week(e)` returns True only if `start_iso <= iso_day < end_iso`.
+- Both `income_entries` and `expense_entries` are filtered through `_within_week` before totalling. So `total_income` and `total_expense` are also recomputed strictly from the in-window rows.
+
+**Frontend** (`/app/frontend/src/components/finance/WeekWiseTab.js`):
+- Belt-and-suspenders: the bottom table now re-filters the rows using `data.start_date` / `data.end_date` from the same response. Anything outside that window is silently dropped from the UI.
+- The Income / Expense **tab badges** are now driven by the same filtered count — badge ↔ row count can never disagree.
+- Added per-row `data-testid="weekwise-{income|expense}-row-{idx}"` for testing.
+
+### Verification (preview)
+- `GET /api/expense/weekly` → `week:22, start:2026-06-16, end:2026-06-22, income_entries:0, expense_entries:0`.
+- UI screenshots: Week 22 view renders with `Income (0) · Expense (0)` badges and the "No income entries this week." empty state. Switching weeks reloads cleanly.
+
+After redeploy, any rogue rows that the production query was leaking will now be excluded both from the totals and from the visible table.
+
+
+
 ## Latest Update — Feb 21, 2026 — ERP Project Taxonomy + Board (Phases 1–4) ✅
 
 ### What

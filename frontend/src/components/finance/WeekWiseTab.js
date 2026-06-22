@@ -223,12 +223,26 @@ export default function WeekWiseTab({ isDark, bgCard, bgSecondary, bgInput, text
         </div>
       </div>
 
-      {/* Inner tabs: Income / Expense */}
+      {/* Inner tabs: Income / Expense — counts use the same date guard as the
+          table below so badge ↔ row count never disagree. */}
       <div className="flex gap-2">
-        {[
-          { id: 'income', label: 'Income', icon: ArrowUpRight, accent: 'text-emerald-500', count: (data?.income_entries || []).length },
-          { id: 'expense', label: 'Expense', icon: ArrowDownRight, accent: 'text-rose-500', count: (data?.expense_entries || []).length },
-        ].map((t) => {
+        {(() => {
+          const startStr = (data?.start_date || '').slice(0, 10);
+          const endStr   = (data?.end_date   || '').slice(0, 10);
+          const within = (raw) => {
+            let iso = typeof raw === 'string' ? raw.slice(0, 10) :
+                      raw ? new Date(raw).toISOString().slice(0, 10) : '';
+            if (!iso) return false;
+            if (startStr && iso < startStr) return false;
+            if (endStr && iso > endStr) return false;
+            return true;
+          };
+          const iCount = (data?.income_entries || []).filter(r => within(r.date || r.created_at)).length;
+          const eCount = (data?.expense_entries || []).filter(r => within(r.date || r.created_at)).length;
+          return [
+            { id: 'income',  label: 'Income',  icon: ArrowUpRight,   accent: 'text-emerald-500', count: iCount },
+            { id: 'expense', label: 'Expense', icon: ArrowDownRight, accent: 'text-rose-500',    count: eCount },
+          ].map((t) => {
           const Icon = t.icon;
           const isActive = innerTab === t.id;
           return (
@@ -251,13 +265,35 @@ export default function WeekWiseTab({ isDark, bgCard, bgSecondary, bgInput, text
               </span>
             </button>
           );
-        })}
+        });})()}
       </div>
 
       {/* Entry list */}
       <div className={`${bgCard} border ${borderColor} rounded-2xl overflow-hidden`}>
         {(() => {
-          const rows = innerTab === 'income' ? (data?.income_entries || []) : (data?.expense_entries || []);
+          // Defensive clip: the bottom table MUST only show rows whose date
+          // sits inside the selected week. Without this, any stale-cache /
+          // legacy-data drift on the backend can leak rows from neighbouring
+          // weeks into the table. start_date / end_date come from the same
+          // response so the boundaries always match the cards above.
+          const startStr = (data?.start_date || '').slice(0, 10);
+          const endStr   = (data?.end_date   || '').slice(0, 10); // inclusive
+          const inWeek = (row) => {
+            const raw = row.date || row.created_at || '';
+            // Pull "YYYY-MM-DD" out of strings; for Date objects → toISOString().
+            let iso = '';
+            if (typeof raw === 'string') {
+              iso = raw.slice(0, 10);
+            } else if (raw) {
+              try { iso = new Date(raw).toISOString().slice(0, 10); } catch { iso = ''; }
+            }
+            if (!iso) return false;
+            if (startStr && iso < startStr) return false;
+            if (endStr && iso > endStr) return false;
+            return true;
+          };
+          const all = innerTab === 'income' ? (data?.income_entries || []) : (data?.expense_entries || []);
+          const rows = all.filter(inWeek);
           if (rows.length === 0) {
             return (
               <div className="text-center p-12">
@@ -276,7 +312,7 @@ export default function WeekWiseTab({ isDark, bgCard, bgSecondary, bgInput, text
               </thead>
               <tbody>
                 {rows.map((row, idx) => (
-                  <tr key={row.entry_id || row.cashbook_id || idx} className={`border-t ${borderColor}`}>
+                  <tr key={row.entry_id || row.cashbook_id || idx} className={`border-t ${borderColor}`} data-testid={`weekwise-${innerTab}-row-${idx}`}>
                     <td className={`px-4 py-3 ${textPrimary}`}>{fmtDate(row.date || row.created_at)}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>
                       {row.description || row.item_name || row.notes || row.category_name || row.title || '—'}

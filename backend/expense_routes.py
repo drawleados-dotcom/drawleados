@@ -1132,6 +1132,30 @@ async def get_weekly_summary(request: Request, week_number: Optional[int] = None
         async for e in legacy_cursor:
             income_entries.append({**e, "amount": e.get("amount", 0)})
 
+    # Defensive in-Python clip: the cashbook collection has mixed historical
+    # date shapes (ISO strings, BSON datetimes, even epoch ms in legacy rows
+    # from a long-ago import). MongoDB range queries don't cross types, so
+    # rogue rows can slip through. Re-filter here to be 100% sure every row
+    # shown sits inside [start_iso, end_iso). Same guard applied to expenses
+    # below.
+    def _entry_day_iso(e):
+        d = e.get("date") or e.get("created_at")
+        if d is None:
+            return None
+        if isinstance(d, str):
+            # Take the date portion only — handles "YYYY-MM-DD" and ISO timestamps.
+            return d[:10] if len(d) >= 10 else d
+        try:
+            # datetime / date-like
+            return d.date().isoformat() if hasattr(d, "date") else d.isoformat()[:10]
+        except Exception:
+            return None
+
+    def _within_week(e):
+        iso = _entry_day_iso(e)
+        return bool(iso) and (start_iso <= iso < end_iso)
+
+    income_entries = [e for e in income_entries if _within_week(e)]
     total_income = sum(float(e.get("amount", 0) or 0) for e in income_entries)
 
     # === Expense — pull debits from unified cashbook_entries (GST + Non-GST) ===
@@ -1153,6 +1177,7 @@ async def get_weekly_summary(request: Request, week_number: Optional[int] = None
         )
         async for e in exp_cursor:
             expense_entries.append(e)
+    expense_entries = [e for e in expense_entries if _within_week(e)]
     total_expense = sum(float(e.get("amount", 0) or 0) for e in expense_entries)
 
     # Sort entries by date desc for display
