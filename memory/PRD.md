@@ -1,6 +1,27 @@
 # Drawlead OS - Product Requirements Document
 
 
+## Latest Update — Feb 21, 2026 — Payment Schedule Month navigator (Week-Wise arrow style) ✅
+
+### What
+Dropped the static "All months" select on Finance → Dashboard → **Payment Schedule** and replaced it with the same arrow-navigator UX used on Week-Wise: `← [Month YYYY] →` with a "This Month" badge when you're on the current calendar month, and an **All Time** option in the jump-dropdown on the right. The 3 summary cards (Total · Collected · Pending) react live to the active filter; From/To inputs remain for custom-range queries.
+
+### Implementation
+`/app/frontend/src/components/finance/FinancePaymentScheduleTab.js`
+- New helpers: `monthKey()`, `fmtMonth()`, `shiftMonth(key, delta)` to operate on `YYYY-MM` keys.
+- `monthFilter` state now stores either `"YYYY-MM"` (default = current month) or `"all"` (All Time).
+- Filter logic switched from `d.slice(5, 7)` (month-of-year only) to `d.slice(0, 7)` (year + month) so swiping arrows actually move year-aware.
+- `availableMonths` memo collects every `YYYY-MM` present in the schedules (plus the current month) and feeds the dropdown so users can jump directly to any populated month.
+- UI: ← / → arrow buttons (`finance-pay-month-prev` / `-month-next`), a centred month label (`finance-pay-month-label`) with a "X payment splits" sub-line, the green `This Month` badge, plus the dropdown (`finance-pay-month-filter`), From/To inputs and a Reset button (`finance-pay-clear`).
+- Summary cards already drove off `filteredRows` totals — no change needed, just consume the new filter.
+
+### Verification
+- June 2026 (current) → badge shown, cards `₹50K / ₹50K / ₹0`, 1 split (Urban Space Builders).
+- ← → May 2026 → badge hidden, cards zero, empty-state row.
+- Dropdown → All Time → cards `₹100,009 / ₹100,000 / ₹9`, all 4 splits.
+
+
+
 ## Latest Update — Feb 21, 2026 — Week-Wise bottom table strictly clipped to selected week ✅
 
 ### Problem (production)

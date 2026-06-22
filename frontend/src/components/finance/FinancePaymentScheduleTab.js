@@ -5,17 +5,23 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Wallet, ChevronRight, X, FolderOpen } from 'lucide-react';
+import { Wallet, ChevronRight, X, FolderOpen, ChevronLeft, Calendar } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
-const MONTHS = [
-  { id: 'all', label: 'All months' },
-  ...Array.from({ length: 12 }, (_, i) => ({
-    id: String(i + 1).padStart(2, '0'),
-    label: new Date(2000, i, 1).toLocaleString('en-US', { month: 'long' }),
-  })),
-];
+// "Month key" is `YYYY-MM`. `all` reserved for "All time" (no month clip).
+const monthKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+const fmtMonth = (key) => {
+  if (!key || key === 'all') return 'All Time';
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+};
+const shiftMonth = (key, delta) => {
+  if (!key || key === 'all') return monthKey(new Date());
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return monthKey(d);
+};
 
 export default function FinancePaymentScheduleTab({ isDark, token }) {
   const [projects, setProjects] = useState([]);
@@ -25,7 +31,9 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
   const [me, setMe] = useState(null);
 
   // Filters
-  const [monthFilter, setMonthFilter] = useState('all'); // MM or 'all'
+  // `monthFilter` is a YYYY-MM key (e.g. "2026-06") or "all" for All Time.
+  // Defaults to the current calendar month so the dashboard "opens on today".
+  const [monthFilter, setMonthFilter] = useState(monthKey());
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
@@ -110,18 +118,33 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
     return rows;
   }, [projects]);
 
-  // Apply date / month filters on expected_date
+  // Apply month / date-range filters on expected_date.
+  // monthFilter is "YYYY-MM" → match the row's year+month; "all" disables it.
   const filteredRows = useMemo(() => {
     return allRows.filter((r) => {
       const d = r.expected_date || '';
       if (monthFilter !== 'all') {
-        if (!d || d.slice(5, 7) !== monthFilter) return false;
+        // Compare against YYYY-MM (first 7 chars of "YYYY-MM-DD")
+        if (!d || d.slice(0, 7) !== monthFilter) return false;
       }
       if (fromDate && (!d || d < fromDate)) return false;
       if (toDate && (!d || d > toDate)) return false;
       return true;
     });
   }, [allRows, monthFilter, fromDate, toDate]);
+
+  // All distinct YYYY-MM month keys actually present in the schedules — feeds
+  // the jump dropdown. We also always include the current month so the user
+  // can land on "this month" even when there's nothing scheduled yet.
+  const availableMonths = useMemo(() => {
+    const set = new Set();
+    set.add(monthKey()); // current month always reachable
+    allRows.forEach(r => {
+      const d = r.expected_date || '';
+      if (d && d.length >= 7) set.add(d.slice(0, 7));
+    });
+    return Array.from(set).sort(); // chronological
+  }, [allRows]);
 
   // Summary totals (driven by filtered rows)
   const totals = useMemo(() => {
@@ -167,45 +190,86 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
 
   return (
     <div className="space-y-4" data-testid="finance-payment-schedule-tab">
-      {/* Filters */}
+      {/* Month navigator — arrow-style switcher just like Week-Wise.
+          Lets users jump month-by-month with ← / → buttons and pick any
+          available month (or All Time) from the dropdown on the right.
+          The From/To inputs remain available for custom-range queries. */}
       <Card className={`${bgCard} border ${borderColor}`}>
-        <CardContent className="p-4 flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className={`text-xs ${textSecondary}`}>Month</span>
-            <select
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-              data-testid="finance-pay-month-filter"
-            >
-              {MONTHS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-3 justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setMonthFilter(prev => prev === 'all' ? monthKey() : shiftMonth(prev, -1))}
+                className={`h-9 w-9 ${borderColor}`}
+                title="Previous month"
+                data-testid="finance-pay-month-prev"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="px-3 py-1.5 min-w-[180px] text-center">
+                <p className={`text-base font-semibold ${textPrimary}`} data-testid="finance-pay-month-label">
+                  {fmtMonth(monthFilter)}
+                </p>
+                {monthFilter !== 'all' && (
+                  <p className={`text-[10px] ${textSecondary}`}>{filteredRows.length} payment splits</p>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setMonthFilter(prev => prev === 'all' ? monthKey() : shiftMonth(prev, 1))}
+                className={`h-9 w-9 ${borderColor}`}
+                title="Next month"
+                data-testid="finance-pay-month-next"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              {monthFilter === monthKey() && (
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 inline-flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> This Month
+                </Badge>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={monthFilter}
+                onChange={(e) => setMonthFilter(e.target.value)}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                data-testid="finance-pay-month-filter"
+              >
+                <option value="all">All Time</option>
+                {availableMonths.map(k => <option key={k} value={k}>{fmtMonth(k)}</option>)}
+              </select>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${textSecondary}`}>From</span>
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className={`h-9 ${bgSecondary} border ${borderColor} ${textPrimary} text-sm w-[150px]`}
+                  data-testid="finance-pay-from"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${textSecondary}`}>To</span>
+                <Input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className={`h-9 ${bgSecondary} border ${borderColor} ${textPrimary} text-sm w-[150px]`}
+                  data-testid="finance-pay-to"
+                />
+              </div>
+              {(monthFilter !== monthKey() || fromDate || toDate) && (
+                <Button variant="outline" size="sm" onClick={() => { setMonthFilter(monthKey()); setFromDate(''); setToDate(''); }} className={`${borderColor} h-9`} data-testid="finance-pay-clear">
+                  Reset
+                </Button>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs ${textSecondary}`}>From</span>
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className={`h-9 ${bgSecondary} border ${borderColor} ${textPrimary} text-sm w-[150px]`}
-              data-testid="finance-pay-from"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs ${textSecondary}`}>To</span>
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className={`h-9 ${bgSecondary} border ${borderColor} ${textPrimary} text-sm w-[150px]`}
-              data-testid="finance-pay-to"
-            />
-          </div>
-          {(monthFilter !== 'all' || fromDate || toDate) && (
-            <Button variant="outline" size="sm" onClick={() => { setMonthFilter('all'); setFromDate(''); setToDate(''); }} className={`${borderColor} h-9`}>
-              Clear
-            </Button>
-          )}
         </CardContent>
       </Card>
 
