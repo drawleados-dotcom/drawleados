@@ -1,10 +1,8 @@
-name: Deploy to Hostinger VPS
+name: Deploy Drawlead
 
 on:
-  # Auto-deploy on every push to main
   push:
     branches: [ main ]
-  # Manual trigger from the GitHub Actions tab
   workflow_dispatch: {}
 
 concurrency:
@@ -12,79 +10,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ---- CI sanity: catch obvious breaks before touching prod ----
-  ci-sanity:
-    name: CI Sanity (build check)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'yarn'
-          cache-dependency-path: frontend/yarn.lock
-
-      - name: Frontend build
-        working-directory: frontend
-        env:
-          REACT_APP_BACKEND_URL: https://os.drawlead.com
-          CI: 'false'   # don't fail on warnings
-        run: |
-          yarn install --frozen-lockfile
-          yarn build
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Backend imports check
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -c "import server; print('Backend imports OK')"
-
-  # ---- Deploy: SSH into VPS and re-run docker compose ----
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
-    needs: ci-sanity
     timeout-minutes: 15
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: SSH → VPS, pull + rebuild + restart
+      - name: SSH → VPS deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
           script: |
             set -e
             cd /opt/drawlead
-            echo "==> Pulling latest code"
+            echo "Pulling latest code"
             git fetch --all
             git reset --hard origin/main
-            echo "==> Rebuilding containers"
-            cd deploy
-            docker compose --env-file .env build --pull
-            echo "==> Restarting services"
-            docker compose --env-file .env up -d
-            echo "==> Cleaning unused images"
-            docker image prune -f
-            echo "==> Status"
-            docker compose --env-file .env ps
 
-      - name: Health check
-        run: |
-          sleep 10
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://os.drawlead.com/api/health || echo "000")
-          echo "Health check returned: $STATUS"
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "404" ]; then
-            echo "::warning ::Backend returned $STATUS — investigate at /opt/drawlead/deploy"
-          fi
+            echo "Running deployment script"
+            /root/deploy-drawlead.sh
+
+            echo "Deployment complete"
