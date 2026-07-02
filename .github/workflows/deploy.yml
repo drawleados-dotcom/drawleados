@@ -5,20 +5,14 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
-concurrency:
-  group: production-deploy
-  cancel-in-progress: false
-
 jobs:
   deploy:
-    name: Deploy to VPS
     runs-on: ubuntu-latest
-    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: SSH → VPS deploy
+      - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
@@ -28,11 +22,6 @@ jobs:
           script: |
             set -e
             cd /opt/drawlead
-            echo "Pulling latest code"
-            git fetch --all
+            git fetch origin main
             git reset --hard origin/main
-
-            echo "Running deployment script"
             /root/deploy-drawlead.sh
-
-            echo "Deployment complete"
