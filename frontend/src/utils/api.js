@@ -26,7 +26,8 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('session_token');
-      window.location.href = '/login';
+      // Query param survives the hard reload so the login page can explain why.
+      window.location.href = '/login?reason=session_expired';
     }
     return Promise.reject(error);
   }
