@@ -17,6 +17,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.PORT }}
           script: |
+            set -e
             cd /opt/drawlead
             git fetch origin main
             git reset --hard origin/main
