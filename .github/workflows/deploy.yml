@@ -3,16 +3,13 @@ name: Deploy Drawlead
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: {}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: SSH Deploy
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
@@ -20,7 +17,6 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.PORT }}
           script: |
-            set -e
             cd /opt/drawlead
             git fetch origin main
             git reset --hard origin/main
