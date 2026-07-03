@@ -450,8 +450,7 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* 5. My Profile (HR) */}
-        {hasAccess('hr') && (
+        {/* 5. My Profile — every employee gets this regardless of designation module_access */}
         <Link
           to="/hr"
           data-testid="nav-my-profile"
@@ -462,7 +461,6 @@ const Sidebar = () => {
           <UserCircle className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'My Profile'}
         </Link>
-        )}
 
         {/* 6. Settings */}
         {hasAccess('settings') && (
@@ -478,19 +476,17 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* 7. Documentation */}
-        {(hasAccess('documentations') || (moduleAccess.length === 0 && (hasAccess('leads') || isBDE || isAdmin))) && (
-          <Link
-            to="/documentations"
-            data-testid="nav-documentations"
-            style={orderStyle('documentations')}
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/documentations' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Documentation' : ''}
-          >
-            <FileSpreadsheet className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Documentation'}
-          </Link>
-        )}
+        {/* 7. Documentation — every employee gets this regardless of designation module_access */}
+        <Link
+          to="/documentations"
+          data-testid="nav-documentations"
+          style={orderStyle('documentations')}
+          className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/documentations' ? navItemActive : navItemInactive}`}
+          title={isCollapsed ? 'Documentation' : ''}
+        >
+          <FileSpreadsheet className="h-5 w-5" strokeWidth={2} />
+          {!isCollapsed && 'Documentation'}
+        </Link>
           </>
         )}
       </nav>
