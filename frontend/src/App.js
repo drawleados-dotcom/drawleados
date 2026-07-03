@@ -97,7 +97,8 @@ function AppRouter() {
       <Route
         path="/hr"
         element={
-          <ProtectedRoute module="hr">
+          // No module gate — every authenticated employee gets their own profile.
+          <ProtectedRoute>
             <HRPage />
           </ProtectedRoute>
         }
@@ -206,7 +207,8 @@ function AppRouter() {
       <Route
         path="/documentations"
         element={
-          <ProtectedRoute module="documentations">
+          // No module gate — every authenticated employee gets the documentation module.
+          <ProtectedRoute>
             <DocumentationsPage />
           </ProtectedRoute>
         }
