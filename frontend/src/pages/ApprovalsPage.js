@@ -28,7 +28,8 @@ const DEPARTMENTS = [
   { id: 'finance', label: 'Finance', icon: DollarSign },
   { id: 'hr', label: 'HR', icon: Briefcase },
   { id: 'business_dev', label: 'Business Dev', icon: BarChart3 },
-  { id: 'erp', label: 'ERP', icon: Code }
+  { id: 'erp', label: 'ERP', icon: Code },
+  { id: 'attendance', label: 'Attendance', icon: Clock }
 ];
 
 // Website stage tabs
@@ -170,6 +171,29 @@ export default function ApprovalsPage({ embedded = false }) {
   }, [loadPayrollApprovals]);
 
   useAutoRefresh([loadPayrollApprovals]);
+
+  // ---- Attendance (early login/logout) + Permission requests — view only, actioned in HR Admin ----
+  const [attendancePending, setAttendancePending] = useState({ attendance: [], permissions: [] });
+
+  const loadAttendancePending = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/attendance/pending-approvals`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setAttendancePending({
+        attendance: res.data?.attendance || [],
+        permissions: res.data?.permissions || [],
+      });
+    } catch (error) {
+      setAttendancePending({ attendance: [], permissions: [] });
+    }
+  }, [token]);
+
+  useEffect(() => {
+    loadAttendancePending();
+  }, [loadAttendancePending]);
+
+  useAutoRefresh([loadAttendancePending]);
 
   // Pump HR bucket count so it reflects payslips too
   bucketCounts.hr = bucketCounts.hr + payrollApprovals.length;
@@ -412,6 +436,8 @@ export default function ApprovalsPage({ embedded = false }) {
   };
 
   const stats = getStats();
+  // Attendance isn't part of the task-approvals queue — count it separately.
+  stats.byDept.attendance = attendancePending.attendance.length + attendancePending.permissions.length;
 
   const content = (
       <div className={`flex flex-col h-full ${bgTertiary}`} data-testid="approvals-page">
@@ -753,6 +779,77 @@ export default function ApprovalsPage({ embedded = false }) {
               <Briefcase className="h-10 w-10 mx-auto mb-2 opacity-40" />
               <p className={`text-sm ${textPrimary}`}>No HR approvals pending</p>
               <p className="text-xs mt-1">Payslips sent for CEO review will show up here.</p>
+            </div>
+          )}
+
+          {/* Attendance (early login/logout) + Permission requests — view only.
+              Actual approve/reject still happens in HR Admin. */}
+          {(selectedDepartments.includes('all') || selectedDepartments.includes('attendance')) &&
+            (attendancePending.attendance.length > 0 || attendancePending.permissions.length > 0) && (
+            <div data-testid="attendance-approvals-section">
+              <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
+                <Clock className="h-4 w-4 text-[#f59e0b]" />
+                Attendance & Permission
+                <Badge className="bg-[#f59e0b]/20 text-[#f59e0b] ml-2">
+                  {attendancePending.attendance.length + attendancePending.permissions.length}
+                </Badge>
+                <span className={`text-xs font-normal ${textSecondary} ml-2`}>(view only — actioned in HR Admin)</span>
+              </h3>
+              <div className="space-y-3">
+                {attendancePending.attendance.map(att => {
+                  const isLogout = (att.approval_status || '').includes('logout');
+                  const diff = att.difference_hours;
+                  return (
+                    <div
+                      key={att.attendance_id}
+                      className={`${bgCard} border ${borderColor} rounded-lg p-4 flex items-center justify-between gap-4 flex-wrap`}
+                      data-testid={`attendance-pending-${att.attendance_id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-full bg-[#f59e0b] flex items-center justify-center text-white text-sm font-bold shrink-0">
+                          {(att.employee_name || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className={`font-medium ${textPrimary}`}>{att.employee_name}</p>
+                          <p className={`text-xs ${textSecondary}`}>{att.date ? new Date(att.date).toLocaleDateString() : ''}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <Badge className={isLogout ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400'}>
+                          {isLogout ? 'Early Logout' : 'Early Login'}
+                        </Badge>
+                        {typeof diff === 'number' && (
+                          <span className={`text-sm font-bold ${diff < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                            {diff > 0 ? '+' : ''}{diff.toFixed(1)} hrs
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {attendancePending.permissions.map(p => (
+                  <div
+                    key={p.permission_id}
+                    className={`${bgCard} border ${borderColor} rounded-lg p-4 flex items-center justify-between gap-4 flex-wrap`}
+                    data-testid={`permission-pending-${p.permission_id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-purple-500 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                        {(p.user_name || '?').charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className={`font-medium ${textPrimary}`}>{p.user_name || 'Unknown'}</p>
+                        <p className={`text-xs ${textSecondary}`}>
+                          {p.date ? new Date(p.date).toLocaleDateString() : ''}{p.reason ? ` · ${p.reason}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge className="bg-purple-500/20 text-purple-400">
+                      Permission · {p.hours_requested || 0}h
+                    </Badge>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
