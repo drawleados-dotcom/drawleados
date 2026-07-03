@@ -1367,7 +1367,19 @@ async def get_pending_approvals(request: Request):
     attendance_pending = await db.attendance.find({
         "approval_status": {"$in": ["pending_early_login", "pending_early_logout"]}
     }, {"_id": 0}).sort("date", -1).to_list(100)
-    
+
+    # Enrich with employee name/department so the approvals table can show who it is
+    if attendance_pending:
+        user_ids = list({r.get("user_id") for r in attendance_pending if r.get("user_id")})
+        users = await db.users.find(
+            {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1, "department": 1}
+        ).to_list(len(user_ids))
+        user_map = {u["user_id"]: u for u in users}
+        for record in attendance_pending:
+            user_info = user_map.get(record.get("user_id"), {})
+            record["employee_name"] = user_info.get("name", record.get("user_name", "Unknown"))
+            record["department"] = user_info.get("department", "")
+
     # Get pending permission requests
     permission_pending = await db.permissions.find({
         "status": "pending"
