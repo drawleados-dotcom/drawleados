@@ -1375,10 +1375,29 @@ async def get_pending_approvals(request: Request):
             {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1, "department": 1}
         ).to_list(len(user_ids))
         user_map = {u["user_id"]: u for u in users}
+        settings = await get_hr_settings()
+        standard_hours = settings.get("standard_work_hours", 9.0)
         for record in attendance_pending:
             user_info = user_map.get(record.get("user_id"), {})
             record["employee_name"] = user_info.get("name", record.get("user_name", "Unknown"))
             record["department"] = user_info.get("department", "")
+
+            # Hours short of / early against the standard schedule (negative = deviated early)
+            status = record.get("approval_status")
+            if status == "pending_early_logout":
+                record["difference_hours"] = round(record.get("total_hours", 0) - standard_hours, 2)
+            elif status == "pending_early_login" and record.get("clock_in") and record.get("date"):
+                clock_in = record["clock_in"]
+                if isinstance(clock_in, str):
+                    clock_in = datetime.fromisoformat(clock_in.replace('Z', '+00:00'))
+                if clock_in.tzinfo is None:
+                    clock_in = clock_in.replace(tzinfo=timezone.utc)
+                standard_login_dt = parse_time_string(settings["standard_login_time"], record["date"])
+                if standard_login_dt.tzinfo is None:
+                    standard_login_dt = standard_login_dt.replace(tzinfo=timezone.utc)
+                record["difference_hours"] = round((clock_in - standard_login_dt).total_seconds() / 3600, 2)
+            else:
+                record["difference_hours"] = 0
 
     # Get pending permission requests
     permission_pending = await db.permissions.find({
