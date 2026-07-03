@@ -59,9 +59,10 @@ services:
     networks:
       - drawlead_net
     ports:
-      - "80:80"
-      # Add 443 when you wire up SSL (see SETUP.md → Step 6)
-      # - "443:443"
+      - "127.0.0.1:8080:80"
+      # Bound to loopback only — host Nginx reverse-proxies here.
+      # This VPS also hosts other sites (e.g. fitsiomax) on host Nginx :80/:443,
+      # so this container must not bind the public port directly.
 
 volumes:
   mongo_data:
