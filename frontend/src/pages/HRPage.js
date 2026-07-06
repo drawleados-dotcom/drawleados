@@ -390,7 +390,9 @@ export default function HRPage() {
                 data-testid={`hr-tab-${tab.id}`}
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
                   activeTab === tab.id
-                    ? 'bg-blue-600 text-white shadow-lg'
+                    ? tab.id === 'profile'
+                      ? 'bg-yellow-500 text-white shadow-lg'
+                      : 'bg-blue-600 text-white shadow-lg'
                     : `${bgCard} ${textSecondary} ${hoverBg} border ${borderColor}`
                 }`}
               >
