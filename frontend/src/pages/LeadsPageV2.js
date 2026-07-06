@@ -2413,9 +2413,9 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
 
                     {/* Stage Column */}
                     <td className="px-4 py-4">
-                      <span 
-                        className="px-3 py-1 rounded text-sm border-2 font-medium"
-                        style={{ 
+                      <span
+                        className="inline-block px-3 py-1 rounded text-sm border-2 font-medium whitespace-nowrap"
+                        style={{
                           borderColor: stage?.color || '#71717a',
                           color: stage?.color || '#71717a',
                           backgroundColor: 'transparent'
