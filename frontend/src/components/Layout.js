@@ -621,7 +621,7 @@ const Layout = ({ children }) => {
                 <Button
                   size="sm"
                   onClick={() => navigate('/our-tasks')}
-                  className={`h-8 px-3 text-xs ${location.pathname === '/our-tasks' ? 'bg-[#6366f1] text-white' : isDark ? 'bg-[#27272a] text-[#fafafa] hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                  className={`h-8 px-3 text-xs ${location.pathname === '/our-tasks' ? 'bg-[#16a34a] text-white' : isDark ? 'bg-[#27272a] text-[#fafafa] hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                   data-testid="header-nav-operations"
                 >
                   <ClipboardList className="h-3 w-3 mr-1" /> Operations
