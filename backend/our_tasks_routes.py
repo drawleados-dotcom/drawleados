@@ -823,6 +823,14 @@ async def edit_time_tracking(task_id: str, payload: TimeEditPayload, request: Re
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    # Locked once started-and-stopped (timer finished) or once Operations has approved —
+    # mirrors the frontend's edit-button visibility rules.
+    existing_status = (task.get("time_tracking") or {}).get("status")
+    if existing_status == "finished":
+        raise HTTPException(status_code=400, detail="Task time is locked once started and stopped")
+    if task.get("approval_request", {}).get("status") == "approved":
+        raise HTTPException(status_code=400, detail="Task time is locked — already approved by Operations")
+
     # Determine base date — explicit, else first existing session date, else today
     base_date = payload.date
     if not base_date:

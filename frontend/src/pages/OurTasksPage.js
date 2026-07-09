@@ -530,6 +530,21 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   };
 
+  // HTML min/max on type="number" only affects the spinner arrows, not free typing —
+  // clamp here so values like "8989" can't be typed into the minute field.
+  const clampHour = (raw) => {
+    if (raw === '') return '';
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n)) return '';
+    return String(Math.min(12, Math.max(1, n)));
+  };
+  const clampMinute = (raw) => {
+    if (raw === '') return '';
+    const n = parseInt(raw, 10);
+    if (Number.isNaN(n)) return '';
+    return String(Math.min(59, Math.max(0, n)));
+  };
+
   const openEditTimeModal = (task) => {
     const { start, end } = getTaskStartEnd(task);
     const sParts = splitHM(toTimeInputValue(start));
@@ -687,13 +702,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     );
 
     if (status === 'finished') {
+      // Once started and stopped, the recorded time is locked — no more manual edits.
       return (
-        <div className="flex gap-1 items-center">
-          <Badge className="bg-[#10b981]/20 text-[#10b981]">
-            <CheckCircle2 className="h-3 w-3 mr-1" /> Done {formatDuration(tracking.total_seconds || 0)}
-          </Badge>
-          {editBtn}
-        </div>
+        <Badge className="bg-[#10b981]/20 text-[#10b981]">
+          <CheckCircle2 className="h-3 w-3 mr-1" /> Done {formatDuration(tracking.total_seconds || 0)}
+        </Badge>
       );
     }
 
@@ -2949,7 +2962,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       min="1"
                       max="12"
                       value={editTimeModal.sH}
-                      onChange={(e) => setEditTimeModal((m) => ({ ...m, sH: e.target.value }))}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, sH: clampHour(e.target.value) }))}
                       className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
                       data-testid="edit-time-start-hour"
                     />
@@ -2959,7 +2972,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       min="0"
                       max="59"
                       value={String(editTimeModal.sM).padStart(2, '0')}
-                      onChange={(e) => setEditTimeModal((m) => ({ ...m, sM: e.target.value }))}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, sM: clampMinute(e.target.value) }))}
                       className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
                       data-testid="edit-time-start-min"
                     />
@@ -2992,7 +3005,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       min="1"
                       max="12"
                       value={editTimeModal.eH}
-                      onChange={(e) => setEditTimeModal((m) => ({ ...m, eH: e.target.value }))}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, eH: clampHour(e.target.value) }))}
                       className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
                       data-testid="edit-time-end-hour"
                     />
@@ -3002,7 +3015,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       min="0"
                       max="59"
                       value={String(editTimeModal.eM).padStart(2, '0')}
-                      onChange={(e) => setEditTimeModal((m) => ({ ...m, eM: e.target.value }))}
+                      onChange={(e) => setEditTimeModal((m) => ({ ...m, eM: clampMinute(e.target.value) }))}
                       className="w-20 text-center text-2xl font-normal text-[#fafafa] bg-[#27272a] border border-[#3f3f46] rounded-lg py-2"
                       data-testid="edit-time-end-min"
                     />
