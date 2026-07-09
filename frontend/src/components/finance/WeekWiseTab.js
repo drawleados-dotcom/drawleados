@@ -315,7 +315,10 @@ export default function WeekWiseTab({ isDark, bgCard, bgSecondary, bgInput, text
                   <tr key={row.entry_id || row.cashbook_id || idx} className={`border-t ${borderColor}`} data-testid={`weekwise-${innerTab}-row-${idx}`}>
                     <td className={`px-4 py-3 ${textPrimary}`}>{fmtDate(row.date || row.created_at)}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>
-                      {row.description || row.item_name || row.notes || row.category_name || row.title || '—'}
+                      {/* Cashbook credit/debit entries store the party name as
+                          `from` / `to` (see CashbookSplit.js), not `description` —
+                          check those first so Cash In/Out rows don't fall through to "—". */}
+                      {row.from || row.to || row.description || row.item_name || row.notes || row.category_name || row.title || '—'}
                     </td>
                     <td className={`px-4 py-3 text-right font-semibold ${
                       innerTab === 'income' ? 'text-emerald-500' : 'text-rose-500'
