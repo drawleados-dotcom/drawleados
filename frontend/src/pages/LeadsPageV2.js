@@ -2326,31 +2326,31 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
 
   return (
     <div className="space-y-4">
-      {/* Tab Filters - Scrollable */}
-      <div className={`flex items-center gap-3 sm:gap-6 pb-3 border-b-2 ${borderColor} overflow-x-auto no-scrollbar`}>
+      {/* Tab Filters - wraps to fit the page width instead of scrolling */}
+      <div className={`flex items-center flex-wrap gap-x-4 gap-y-2 pb-3 border-b-2 ${borderColor}`}>
         <button
           onClick={() => setActiveTab('all')}
-          className={`flex items-center gap-1.5 sm:gap-2 pb-2 border-b-2 transition-all flex-shrink-0 ${
-            activeTab === 'all' 
-              ? 'border-[#3b82f6] text-[#3b82f6]' 
+          className={`flex items-center gap-1.5 pb-2 border-b-2 transition-all ${
+            activeTab === 'all'
+              ? 'border-[#3b82f6] text-[#3b82f6]'
               : `border-transparent ${textSecondary} hover:${textPrimary}`
           }`}
         >
-          <span className="font-medium text-xs sm:text-sm">All ({leads.length})</span>
+          <span className="font-medium text-xs">All ({leads.length})</span>
         </button>
         {stages.map(stage => (
           <button
             key={stage.stage_id}
             onClick={() => setActiveTab(stage.stage_id)}
-            className={`flex items-center gap-1 sm:gap-2 pb-2 border-b-2 transition-all whitespace-nowrap flex-shrink-0 ${
-              activeTab === stage.stage_id 
+            className={`flex items-center gap-1 pb-2 border-b-2 transition-all whitespace-nowrap ${
+              activeTab === stage.stage_id
                 ? `border-current`
                 : `border-transparent ${textSecondary} hover:${textPrimary}`
             }`}
             style={{ color: activeTab === stage.stage_id ? stage.color : undefined }}
           >
-            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-            <span className="text-xs sm:text-sm">{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
+            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+            <span className="text-xs">{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
           </button>
         ))}
       </div>
