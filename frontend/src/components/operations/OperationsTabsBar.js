@@ -96,7 +96,15 @@ export default function OperationsTabsBar({
               setMainTab(tab.id);
               if (setMeetingsSubActive) setMeetingsSubActive(false);
               if (tab.id !== 'approvals' && setFilter) setFilter('all');
-              if (setFilters) setFilters((prev) => ({ ...prev, assignedTo: 'all' }));
+              if (setFilters) {
+                setFilters((prev) => ({
+                  ...prev,
+                  assignedTo: 'all',
+                  // Assign to Team defaults to Today instead of All Time —
+                  // the team-wide list is too large to be useful unscoped.
+                  ...(tab.id === 'assign_to_team' ? { dateFilter: 'today' } : {}),
+                }));
+              }
             }}
             data-testid={`ops-tab-${tab.id.replace(/_/g, '-')}`}
             className={`flex items-center gap-2 px-5 py-3 rounded-xl transition-all ${
