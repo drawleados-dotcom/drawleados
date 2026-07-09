@@ -864,12 +864,15 @@ const LeadsPageV2 = () => {
   const negotiationLeads = filteredLeads.filter(l => matchBucket(l, ['negotiation']));
   const closedLeads = filteredLeads.filter(l => matchBucket(l, ['deal closed', 'closed', 'won', 'payment']));
   const lostLeads = filteredLeads.filter(l => matchBucket(l, ['lost', 'rejected', 'cancel']));
+  // "appoin" catches both "Appointment" and the "Appoinment" stage-name typo some teams use
+  const appointmentLeads = filteredLeads.filter(l => matchBucket(l, ['appoin']));
 
   const summaryAmounts = {
     quotation: { count: quotationLeads.length, amount: sumAmount(quotationLeads) },
     negotiation: { count: negotiationLeads.length, amount: sumAmount(negotiationLeads) },
     closed: { count: closedLeads.length, amount: sumAmount(closedLeads) },
     lost: { count: lostLeads.length, amount: sumAmount(lostLeads) },
+    appointment: { count: appointmentLeads.length, amount: sumAmount(appointmentLeads) },
   };
 
   const getLeadsByStage = (stageId) => {
@@ -1133,9 +1136,10 @@ const LeadsPageV2 = () => {
 
 
         {/* Amount Summary Cards (Quotation / Negotiation / Deal Closed / Lost) */}
-        <div className={`px-4 pt-4 grid grid-cols-2 md:grid-cols-4 gap-3`} data-testid="amount-summary-row">
+        <div className={`px-4 pt-4 grid grid-cols-2 md:grid-cols-5 gap-3`} data-testid="amount-summary-row">
           {[
             { key: 'quotation', label: 'Total Quotation', color: '#f59e0b', icon: '📄' },
+            { key: 'appointment', label: 'Appointments', color: '#3b82f6', icon: '📅' },
             { key: 'negotiation', label: 'Negotiation', color: '#ec4899', icon: '🤝' },
             { key: 'closed', label: 'Deal Closed', color: '#22c55e', icon: '✅' },
             { key: 'lost', label: 'Amount Lost', color: '#ef4444', icon: '❌' },
