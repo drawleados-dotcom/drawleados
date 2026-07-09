@@ -1116,7 +1116,16 @@ const LeadsPageV2 = () => {
                     size="sm"
                     data-testid="date-apply"
                     className="bg-[#3b82f6] hover:bg-[#2563eb]"
-                    onClick={() => setShowDatePopover(false)}
+                    onClick={() => {
+                      // Picking just one day in the calendar leaves `to` unset,
+                      // which filters "that day onward" forever — not what a
+                      // single click means to most people. Treat it as a
+                      // one-day filter unless a second, later day was picked.
+                      if (dateRange.from && !dateRange.to) {
+                        setDateRange({ from: dateRange.from, to: dateRange.from });
+                      }
+                      setShowDatePopover(false);
+                    }}
                   >Apply</Button>
                 </div>
               </div>
