@@ -3458,7 +3458,18 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
             {"$set": {"module_access": new_module_access, "designation": profile_data.get("designation", "")}}
         )
         logging.info(f"Updated module_access for user {user_id} to {new_module_access}")
-    
+
+    # Keep users.name in sync with the edited full_name. Almost everywhere else in
+    # the app (sidebar greeting, task "Created by", attendance user_name) reads
+    # users.name, not employee_profiles.full_name — without this, an admin's name
+    # correction here never shows up anywhere except this HR Admin list.
+    new_full_name = profile_data.get("full_name")
+    if new_full_name and new_full_name != user.get("name"):
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"name": new_full_name}}
+        )
+
     # Update or create profile
     profile_data["user_id"] = user_id
     profile_data["updated_at"] = datetime.now(timezone.utc)
