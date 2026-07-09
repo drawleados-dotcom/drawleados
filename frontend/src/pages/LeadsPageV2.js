@@ -1156,10 +1156,13 @@ const LeadsPageV2 = () => {
                   <div>
                     <p className={`text-[11px] uppercase tracking-wide ${textSecondary} font-medium`}>{card.label}</p>
                     <p className="text-xl sm:text-2xl font-bold mt-1" style={{ color: card.color }}>
-                      {formatCurrency(data.amount)}
+                      {data.count} <span className="text-xs sm:text-sm font-medium">{data.count === 1 ? 'lead' : 'leads'}</span>
                     </p>
-                    <p className={`text-xs ${textSecondary} mt-0.5`}>
-                      {data.count} {data.count === 1 ? 'lead' : 'leads'}
+                    <p
+                      className="text-xs font-semibold mt-1.5 inline-block px-1.5 py-0.5 rounded"
+                      style={{ color: card.color, backgroundColor: `${card.color}1a` }}
+                    >
+                      {formatCurrency(data.amount)}
                     </p>
                   </div>
                   <div
