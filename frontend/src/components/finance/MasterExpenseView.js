@@ -32,7 +32,7 @@ const orderTops = (tops) => {
   return [...visible].sort((a, b) => idx(a) - idx(b));
 };
 
-const MasterExpenseView = () => {
+const MasterExpenseView = ({ onAddPayrollExpense }) => {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -240,6 +240,16 @@ const MasterExpenseView = () => {
                     <Stat l="Grand" v={fmt(grand)} green={grand > 0} />
                     <Stat l="Paid" v={fmt(paid)} />
                     <Stat l="Balance" v={fmt(balance)} red={balance > 0} green={balance <= 0 && grand > 0} />
+                    {onAddPayrollExpense && (
+                      <button
+                        onClick={onAddPayrollExpense}
+                        data-testid="master-overhead-payroll-pay-btn"
+                        title="Pick an employee's approved payslip and record the payment in Cashbook"
+                        className="ml-1 shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#a78bfa]/15 text-[#a78bfa] hover:bg-[#a78bfa]/25 transition-colors"
+                      >
+                        Pay Employee
+                      </button>
+                    )}
                   </div>
                 );
               })()}

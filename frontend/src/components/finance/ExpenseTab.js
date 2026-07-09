@@ -156,6 +156,17 @@ const ExpenseTab = () => {
   const [invoiceSubTab, setInvoiceSubTab] = useState('invoice');   // invoice | projects | clients
   const [dashboardSubTab, setDashboardSubTab] = useState('dashboard'); // dashboard | weekly | payment_schedule
 
+  // Deep link: Master Expense's Overhead → Payroll row "Pay Employee" button
+  // jumps to Cashbook → Cash Out and auto-opens the payslip picker there.
+  // Bumping this to Date.now() re-triggers CashbookSplit's effect even if
+  // the modal is already open from a previous click.
+  const [payrollJumpSignal, setPayrollJumpSignal] = useState(0);
+  const jumpToPayrollExpense = () => {
+    setActiveTab('cashbook');
+    setCashbookSubTab('cashbook');
+    setPayrollJumpSignal(Date.now());
+  };
+
   // Dashboard period filter (date range). Empty = All Time.
   const _dt = new Date();
   const _from = new Date(_dt.getFullYear(), _dt.getMonth(), 1).toISOString().slice(0, 10);
@@ -2063,7 +2074,7 @@ const ExpenseTab = () => {
                     Banks
                   </button>
                 </div>
-                {cashbookSubTab === 'cashbook' && <CashbookSplit />}
+                {cashbookSubTab === 'cashbook' && <CashbookSplit autoOpenPayrollSignal={payrollJumpSignal} />}
                 {cashbookSubTab === 'banks' && <BanksTab />}
               </div>
             );
@@ -2106,7 +2117,7 @@ const ExpenseTab = () => {
                     Payroll
                   </button>
                 </div>
-                {expenseSubTab === 'categories' && <MasterExpenseView />}
+                {expenseSubTab === 'categories' && <MasterExpenseView onAddPayrollExpense={jumpToPayrollExpense} />}
                 {expenseSubTab === 'split' && <ExpenseSplitTab />}
                 {expenseSubTab === 'budget' && <BudgetView />}
                 {expenseSubTab === 'payroll' && <PayrollTab />}

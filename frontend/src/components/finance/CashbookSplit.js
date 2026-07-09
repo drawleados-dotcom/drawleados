@@ -26,7 +26,7 @@ const PAYMENT_MODES = ['cash', 'cheque', 'bank', 'upi'];
  * Single Cashbook with internal GST | Non-GST sub-tabs.
  * Pass `gstType` to lock it to one type (used internally when toggled).
  */
-const CashbookSplit = ({ gstType: lockedGstType }) => {
+const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   const { isDark } = useTheme();
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
@@ -175,7 +175,7 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
 
   const selectedPayslip = payablePayslips.find((p) => p.payslip_id === selectedPayslipId) || null;
 
-  const openAdd = async (kind) => {
+  const openAdd = async (kind, opts = {}) => {
     setModal(kind);
     setForm({ ...empty });
     try {
@@ -200,22 +200,44 @@ const CashbookSplit = ({ gstType: lockedGstType }) => {
       setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
       setExpenseTotal('');
       // Load Expense Split categories to tag this expense against a budget bucket.
+      let cats = [];
       try {
         const now = new Date();
         const r3 = await axios.get(
           `${API}/api/finance/expense-split/budgets?month=${now.getMonth() + 1}&year=${now.getFullYear()}`,
           { headers },
         );
-        setSplitCategories(r3.data?.categories || []);
+        cats = r3.data?.categories || [];
+        setSplitCategories(cats);
       } catch (e) {
         setSplitCategories([]);
       }
-      setSplitTopId('');
-      setSplitSubId('');
+      // Deep-link from Master Expense's "Payroll" row: pre-pick whichever
+      // top category has a "Payroll" sub-category so the payslip picker
+      // below opens immediately instead of making the user hunt for it.
+      const presetName = (opts.presetSubCategoryName || '').toLowerCase().trim();
+      let preset = null;
+      if (presetName) {
+        for (const top of cats) {
+          const sub = (top.sub_categories || []).find((s) => (s.name || '').toLowerCase().trim() === presetName);
+          if (sub) { preset = { topId: top.category_id, subId: sub.category_id }; break; }
+        }
+      }
+      setSplitTopId(preset?.topId || '');
+      setSplitSubId(preset?.subId || '');
       setSelectedPayslipId('');
       setPayablePayslips([]);
     }
   };
+
+  // Deep link from Master Expense's "Payroll" row (see MasterExpenseView /
+  // ExpenseTab): each click bumps `autoOpenPayrollSignal` to a fresh value,
+  // which re-triggers this even if the modal is already open.
+  useEffect(() => {
+    if (!autoOpenPayrollSignal) return;
+    openAdd('debit', { presetSubCategoryName: 'Payroll' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenPayrollSignal]);
 
   const sourceOptions = () => {
     if (!balances) return [];
