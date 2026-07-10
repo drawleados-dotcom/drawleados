@@ -62,6 +62,8 @@ export default function ProjectsPanel({
     // eslint-disable-next-line
   }, [selectedProject?.project_id, showAddTask]);
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
+  const [deptStatuses, setDeptStatuses] = useState([]); // [{dept_key, label, statuses: [...]}]
+  const [statusFilter, setStatusFilter] = useState('all'); // Project List View status sub-tab (only meaningful when deptFilter !== 'all')
   const [activeCategoryTab, setActiveCategoryTab] = useState('all');
   // Team management for selected project
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -117,6 +119,15 @@ export default function ProjectsPanel({
     }
   }, [headers]);
 
+  const loadDeptStatuses = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/department-statuses`, { headers });
+      setDeptStatuses(res.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [headers]);
+
   const loadClients = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/finance/clients?include_summary=false`, { headers });
@@ -132,8 +143,9 @@ export default function ProjectsPanel({
     loadProjects(true);
     loadUsers();
     loadDeptCategories();
+    loadDeptStatuses();
     loadClients();
-  }, [loadProjects, loadUsers, loadDeptCategories, loadClients]);
+  }, [loadProjects, loadUsers, loadDeptCategories, loadDeptStatuses, loadClients]);
 
   // Keep the open project detail view in sync with the latest `projects` list.
   // The list endpoint (`GET /api/projects`) does NOT include the `tasks` array —
@@ -253,6 +265,23 @@ export default function ProjectsPanel({
     }
   };
 
+  // Union of custom statuses across every department a project is linked to
+  // (a project can span multiple departments — see `departments` field).
+  // Falls back to including the project's current status even if it's no
+  // longer defined on any linked department, so the dropdown never hides
+  // the value that's actually set.
+  const statusOptionsFor = (project) => {
+    const deptKeys = project?.departments || [];
+    const options = [];
+    deptStatuses
+      .filter(d => deptKeys.includes(d.dept_key))
+      .forEach(d => (d.statuses || []).forEach(s => { if (!options.includes(s)) options.push(s); }));
+    const current = project?.status;
+    if (current && !options.includes(current)) options.unshift(current);
+    if (options.length === 0 && !current) options.push('active');
+    return options;
+  };
+
   const updateProjectField = async (field, value) => {
     if (!selectedProject) return;
     try {
@@ -263,6 +292,21 @@ export default function ProjectsPanel({
       );
       setSelectedProject(prev => prev ? { ...prev, [field]: value || null } : prev);
       loadProjects();
+      toast.success('Project updated');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update project');
+    }
+  };
+
+  // Like updateProjectField, but for a row in the list view (not necessarily
+  // the currently open project detail).
+  const updateProjectRowStatus = async (project, value) => {
+    try {
+      await axios.patch(`${API}/api/projects/${project.project_id}`, { status: value }, { headers });
+      setProjects(prev => prev.map(x => x.project_id === project.project_id ? { ...x, status: value } : x));
+      if (selectedProject?.project_id === project.project_id) {
+        setSelectedProject(prev => prev ? { ...prev, status: value } : prev);
+      }
       toast.success('Project updated');
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to update project');
@@ -515,7 +559,20 @@ export default function ProjectsPanel({
                 )}
               </div>
               <div className="flex items-center gap-2"><ListChecks className={`h-4 w-4 ${textSecondary}`} /><span className={textPrimary}>{selectedProject.tasks?.length || 0} tasks</span></div>
-              <Badge className="bg-[#10b981]/20 text-[#10b981]">{selectedProject.status || 'active'}</Badge>
+              {canManageProjects ? (
+                <select
+                  value={selectedProject.status || 'active'}
+                  onChange={(e) => updateProjectField('status', e.target.value)}
+                  className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="project-edit-status-select"
+                >
+                  {statusOptionsFor(selectedProject).map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              ) : (
+                <Badge className="bg-[#10b981]/20 text-[#10b981]">{selectedProject.status || 'active'}</Badge>
+              )}
             </div>
 
             {/* Client — required link to Finance → Clients */}
@@ -1500,7 +1557,7 @@ export default function ProjectsPanel({
           {/* Department filter tabs with counts */}
           <div className="flex flex-wrap gap-2 mb-4">
             <button
-              onClick={() => setDeptFilter('all')}
+              onClick={() => { setDeptFilter('all'); setStatusFilter('all'); }}
               className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                 deptFilter === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
               }`}
@@ -1514,7 +1571,7 @@ export default function ProjectsPanel({
               return (
                 <button
                   key={d.value}
-                  onClick={() => setDeptFilter(d.value)}
+                  onClick={() => { setDeptFilter(d.value); setStatusFilter('all'); }}
                   className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                     deptFilter === d.value ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
                   }`}
@@ -1525,6 +1582,43 @@ export default function ProjectsPanel({
               );
             })}
           </div>
+
+          {/* Status sub-tabs — only meaningful once a specific department is
+              selected, since status vocabularies are defined per department
+              (Operations → Departments → {Dept} → Status tab). */}
+          {deptFilter !== 'all' && (() => {
+            const deptProjects = projects.filter(p => (p.departments || []).includes(deptFilter));
+            const statuses = deptStatuses.find(d => d.dept_key === deptFilter)?.statuses || [];
+            if (statuses.length === 0) return null;
+            return (
+              <div className="flex flex-wrap gap-2 mb-4" data-testid="project-status-subtabs">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={`px-3 py-1 rounded-full text-xs transition-all ${
+                    statusFilter === 'all' ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
+                  }`}
+                  data-testid="status-filter-all"
+                >
+                  All Status ({deptProjects.length})
+                </button>
+                {statuses.map(s => {
+                  const count = deptProjects.filter(p => (p.status || 'active') === s).length;
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => setStatusFilter(s)}
+                      className={`px-3 py-1 rounded-full text-xs transition-all ${
+                        statusFilter === s ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
+                      }`}
+                      data-testid={`status-filter-${s.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      {s} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`} data-testid="projects-list">
             <table className="w-full text-sm">
@@ -1543,6 +1637,7 @@ export default function ProjectsPanel({
               <tbody>
                 {projects
                   .filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter))
+                  .filter(p => statusFilter === 'all' || (p.status || 'active') === statusFilter)
                   .map(p => (
                   <tr
                     key={p.project_id}
@@ -1580,7 +1675,21 @@ export default function ProjectsPanel({
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge className="bg-[#10b981]/20 text-[#10b981]">{p.status || 'active'}</Badge>
+                      {canManageProjects ? (
+                        <select
+                          value={p.status || 'active'}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => updateProjectRowStatus(p, e.target.value)}
+                          className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-xs`}
+                          data-testid={`project-row-status-select-${p.project_id}`}
+                        >
+                          {statusOptionsFor(p).map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Badge className="bg-[#10b981]/20 text-[#10b981]">{p.status || 'active'}</Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
@@ -1625,7 +1734,10 @@ export default function ProjectsPanel({
                 ))}
               </tbody>
             </table>
-            {projects.filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter)).length === 0 && (
+            {projects
+              .filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter))
+              .filter(p => statusFilter === 'all' || (p.status || 'active') === statusFilter)
+              .length === 0 && (
               <div className={`p-8 text-center text-sm ${textSecondary}`}>No projects found</div>
             )}
           </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Building2, Plus, X, Check, Tag, Trash2, Pencil } from 'lucide-react';
+import { Building2, Plus, X, Check, Tag, Trash2, Pencil, Flag } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
@@ -15,15 +15,22 @@ export default function DepartmentsPanel({
 }) {
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [editingDept, setEditingDept] = useState(null); // { dept_key, label, categories }
+  const [editingDept, setEditingDept] = useState(null); // { dept_key, label, categories, statuses }
+  const [modalTab, setModalTab] = useState('categories'); // 'categories' | 'status'
   const [categoryDraft, setCategoryDraft] = useState('');
+  const [statusDraft, setStatusDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API}/api/department-categories`, { headers });
-      setList(res.data || []);
+      const [catRes, statusRes] = await Promise.all([
+        axios.get(`${API}/api/department-categories`, { headers }),
+        axios.get(`${API}/api/department-statuses`, { headers }),
+      ]);
+      const statusByKey = {};
+      (statusRes.data || []).forEach(d => { statusByKey[d.dept_key] = d.statuses || []; });
+      setList((catRes.data || []).map(d => ({ ...d, statuses: statusByKey[d.dept_key] || [] })));
     } catch (e) {
       console.error(e);
     } finally {
@@ -37,11 +44,15 @@ export default function DepartmentsPanel({
   useAutoRefresh(load, { enabled: !editingDept });
 
   const openEdit = (dept) => {
-    setEditingDept({ ...dept, categories: [...(dept.categories || [])] });
+    setEditingDept({ ...dept, categories: [...(dept.categories || [])], statuses: [...(dept.statuses || [])] });
+    setModalTab('categories');
     setCategoryDraft('');
+    setStatusDraft('');
     setEditingCategory(null);
+    setEditingStatus(null);
   };
   const [editingCategory, setEditingCategory] = useState(null); // { original, value }
+  const [editingStatus, setEditingStatus] = useState(null); // { original, value }
 
   const startEditCategory = (c) => setEditingCategory({ original: c, value: c });
   const commitEditCategory = () => {
@@ -77,20 +88,61 @@ export default function DepartmentsPanel({
     setEditingDept(prev => ({ ...prev, categories: (prev.categories || []).filter(x => x !== c) }));
   };
 
+  const startEditStatus = (s) => setEditingStatus({ original: s, value: s });
+  const commitEditStatus = () => {
+    if (!editingStatus) return;
+    const next = (editingStatus.value || '').trim();
+    if (!next) {
+      toast.error('Status name cannot be empty');
+      return;
+    }
+    if (next !== editingStatus.original && (editingDept.statuses || []).includes(next)) {
+      toast.error('Status already exists');
+      return;
+    }
+    setEditingDept(prev => ({
+      ...prev,
+      statuses: (prev.statuses || []).map(s => s === editingStatus.original ? next : s),
+    }));
+    setEditingStatus(null);
+  };
+
+  const addStatus = () => {
+    const v = (statusDraft || '').trim();
+    if (!v) return;
+    if ((editingDept.statuses || []).includes(v)) {
+      toast.error('Status already exists');
+      return;
+    }
+    setEditingDept(prev => ({ ...prev, statuses: [...(prev.statuses || []), v] }));
+    setStatusDraft('');
+  };
+
+  const removeStatus = (s) => {
+    setEditingDept(prev => ({ ...prev, statuses: (prev.statuses || []).filter(x => x !== s) }));
+  };
+
   const save = async () => {
     if (!editingDept) return;
     setSaving(true);
     try {
-      await axios.put(
-        `${API}/api/department-categories/${editingDept.dept_key}`,
-        { categories: editingDept.categories || [] },
-        { headers }
-      );
-      toast.success(`${editingDept.label} categories saved`);
+      await Promise.all([
+        axios.put(
+          `${API}/api/department-categories/${editingDept.dept_key}`,
+          { categories: editingDept.categories || [] },
+          { headers }
+        ),
+        axios.put(
+          `${API}/api/department-statuses/${editingDept.dept_key}`,
+          { statuses: editingDept.statuses || [] },
+          { headers }
+        ),
+      ]);
+      toast.success(`${editingDept.label} saved`);
       setEditingDept(null);
       load();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save categories');
+      toast.error(e.response?.data?.detail || 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -100,7 +152,7 @@ export default function DepartmentsPanel({
     <div className="space-y-4" data-testid="departments-panel">
       <div>
         <h2 className={`text-xl font-semibold ${textPrimary}`}>Departments &amp; Categories</h2>
-        <p className={textSecondary}>Define categories per department. They appear when creating tasks inside projects.</p>
+        <p className={textSecondary}>Define categories and project statuses per department. Categories appear when creating tasks; statuses appear on the project's Status dropdown.</p>
       </div>
 
       {loading ? (
@@ -144,7 +196,7 @@ export default function DepartmentsPanel({
         </div>
       )}
 
-      {/* Edit Categories Popup */}
+      {/* Edit Categories / Status Popup */}
       {editingDept && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !saving && setEditingDept(null)}>
           <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`} onClick={(e) => e.stopPropagation()}>
@@ -152,89 +204,196 @@ export default function DepartmentsPanel({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Building2 className="h-5 w-5 text-[#6366f1]" />
-                  <h3 className={`text-lg font-semibold ${textPrimary}`}>{editingDept.label} — Categories</h3>
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>{editingDept.label}</h3>
                 </div>
                 <button onClick={() => !saving && setEditingDept(null)} className={textSecondary}>
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <p className={`text-xs ${textSecondary}`}>
-                Add categories like Wireframe, UI, Content, Development, Testing.
-                These appear in task creation under projects.
-              </p>
 
-              {/* Existing categories */}
-              <div className="space-y-2">
-                {(editingDept.categories || []).length === 0 ? (
-                  <p className={`text-sm ${textSecondary}`}>No categories yet.</p>
-                ) : (
-                  (editingDept.categories || []).map(c => {
-                    const isEditing = editingCategory?.original === c;
-                    return (
-                      <div
-                        key={c}
-                        className={`flex items-center justify-between p-2 rounded-lg ${bgSecondary} gap-2`}
-                        data-testid={`dept-cat-row-${c.toLowerCase().replace(/\s+/g, '-')}`}
-                      >
-                        {isEditing ? (
-                          <>
-                            <Input
-                              autoFocus
-                              value={editingCategory.value}
-                              onChange={(e) => setEditingCategory(prev => ({ ...prev, value: e.target.value }))}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); commitEditCategory(); }
-                                if (e.key === 'Escape') { e.preventDefault(); setEditingCategory(null); }
-                              }}
-                              className="h-8 flex-1"
-                              data-testid={`dept-cat-edit-input-${c.toLowerCase().replace(/\s+/g, '-')}`}
-                            />
-                            <button onClick={commitEditCategory} className="text-[#10b981] p-1" title="Save" data-testid="dept-cat-edit-confirm">
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button onClick={() => setEditingCategory(null)} className={`${textSecondary} p-1`} title="Cancel">
-                              <X className="h-4 w-4" />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <span className={`text-sm ${textPrimary} flex items-center gap-2 flex-1 min-w-0`}>
-                              <Tag className="h-3 w-3 text-[#6366f1]" />
-                              <span className="truncate">{c}</span>
-                            </span>
-                            <button
-                              onClick={() => startEditCategory(c)}
-                              className="text-[#6366f1] p-1"
-                              title="Edit"
-                              data-testid={`dept-cat-edit-${c.toLowerCase().replace(/\s+/g, '-')}`}
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </button>
-                            <button onClick={() => removeCategory(c)} className="text-[#ef4444] p-1" title="Delete">
-                              <Trash2 className="h-3 w-3" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
+              {/* Tab switcher */}
+              <div className={`inline-flex rounded-lg border ${borderColor} ${bgSecondary} p-1`} data-testid="dept-modal-tabs">
+                <button
+                  onClick={() => setModalTab('categories')}
+                  data-testid="dept-modal-tab-categories"
+                  className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                    modalTab === 'categories' ? 'bg-[#6366f1] text-white shadow' : `${textSecondary} hover:bg-[#6366f1]/10`
+                  }`}
+                >
+                  Categories
+                </button>
+                <button
+                  onClick={() => setModalTab('status')}
+                  data-testid="dept-modal-tab-status"
+                  className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                    modalTab === 'status' ? 'bg-[#6366f1] text-white shadow' : `${textSecondary} hover:bg-[#6366f1]/10`
+                  }`}
+                >
+                  Status
+                </button>
               </div>
 
-              {/* Add new category */}
-              <div className="flex gap-2">
-                <Input
-                  value={categoryDraft}
-                  onChange={(e) => setCategoryDraft(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }}
-                  placeholder="e.g. Wireframe"
-                  className="flex-1"
-                  data-testid="dept-cat-input"
-                />
-                <Button onClick={addCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="dept-cat-add">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </div>
+              {modalTab === 'categories' ? (
+                <>
+                  <p className={`text-xs ${textSecondary}`}>
+                    Add categories like Wireframe, UI, Content, Development, Testing.
+                    These appear in task creation under projects.
+                  </p>
+
+                  {/* Existing categories */}
+                  <div className="space-y-2">
+                    {(editingDept.categories || []).length === 0 ? (
+                      <p className={`text-sm ${textSecondary}`}>No categories yet.</p>
+                    ) : (
+                      (editingDept.categories || []).map(c => {
+                        const isEditing = editingCategory?.original === c;
+                        return (
+                          <div
+                            key={c}
+                            className={`flex items-center justify-between p-2 rounded-lg ${bgSecondary} gap-2`}
+                            data-testid={`dept-cat-row-${c.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            {isEditing ? (
+                              <>
+                                <Input
+                                  autoFocus
+                                  value={editingCategory.value}
+                                  onChange={(e) => setEditingCategory(prev => ({ ...prev, value: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); commitEditCategory(); }
+                                    if (e.key === 'Escape') { e.preventDefault(); setEditingCategory(null); }
+                                  }}
+                                  className="h-8 flex-1"
+                                  data-testid={`dept-cat-edit-input-${c.toLowerCase().replace(/\s+/g, '-')}`}
+                                />
+                                <button onClick={commitEditCategory} className="text-[#10b981] p-1" title="Save" data-testid="dept-cat-edit-confirm">
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => setEditingCategory(null)} className={`${textSecondary} p-1`} title="Cancel">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className={`text-sm ${textPrimary} flex items-center gap-2 flex-1 min-w-0`}>
+                                  <Tag className="h-3 w-3 text-[#6366f1]" />
+                                  <span className="truncate">{c}</span>
+                                </span>
+                                <button
+                                  onClick={() => startEditCategory(c)}
+                                  className="text-[#6366f1] p-1"
+                                  title="Edit"
+                                  data-testid={`dept-cat-edit-${c.toLowerCase().replace(/\s+/g, '-')}`}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button onClick={() => removeCategory(c)} className="text-[#ef4444] p-1" title="Delete">
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Add new category */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={categoryDraft}
+                      onChange={(e) => setCategoryDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCategory(); } }}
+                      placeholder="e.g. Wireframe"
+                      className="flex-1"
+                      data-testid="dept-cat-input"
+                    />
+                    <Button onClick={addCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="dept-cat-add">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className={`text-xs ${textSecondary}`}>
+                    Add statuses like Project Onboarded, Developing, Paused, Delivered, Refunded.
+                    These appear in the project's Status dropdown for projects linked to this department.
+                  </p>
+
+                  {/* Existing statuses */}
+                  <div className="space-y-2">
+                    {(editingDept.statuses || []).length === 0 ? (
+                      <p className={`text-sm ${textSecondary}`}>No statuses yet.</p>
+                    ) : (
+                      (editingDept.statuses || []).map(s => {
+                        const isEditing = editingStatus?.original === s;
+                        return (
+                          <div
+                            key={s}
+                            className={`flex items-center justify-between p-2 rounded-lg ${bgSecondary} gap-2`}
+                            data-testid={`dept-status-row-${s.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            {isEditing ? (
+                              <>
+                                <Input
+                                  autoFocus
+                                  value={editingStatus.value}
+                                  onChange={(e) => setEditingStatus(prev => ({ ...prev, value: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); commitEditStatus(); }
+                                    if (e.key === 'Escape') { e.preventDefault(); setEditingStatus(null); }
+                                  }}
+                                  className="h-8 flex-1"
+                                  data-testid={`dept-status-edit-input-${s.toLowerCase().replace(/\s+/g, '-')}`}
+                                />
+                                <button onClick={commitEditStatus} className="text-[#10b981] p-1" title="Save" data-testid="dept-status-edit-confirm">
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => setEditingStatus(null)} className={`${textSecondary} p-1`} title="Cancel">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className={`text-sm ${textPrimary} flex items-center gap-2 flex-1 min-w-0`}>
+                                  <Flag className="h-3 w-3 text-[#6366f1]" />
+                                  <span className="truncate">{s}</span>
+                                </span>
+                                <button
+                                  onClick={() => startEditStatus(s)}
+                                  className="text-[#6366f1] p-1"
+                                  title="Edit"
+                                  data-testid={`dept-status-edit-${s.toLowerCase().replace(/\s+/g, '-')}`}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button onClick={() => removeStatus(s)} className="text-[#ef4444] p-1" title="Delete">
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Add new status */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={statusDraft}
+                      onChange={(e) => setStatusDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStatus(); } }}
+                      placeholder="e.g. Project Onboarded"
+                      className="flex-1"
+                      data-testid="dept-status-input"
+                    />
+                    <Button onClick={addStatus} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="dept-status-add">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              )}
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" onClick={() => setEditingDept(null)} disabled={saving}>Cancel</Button>

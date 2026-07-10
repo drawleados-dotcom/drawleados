@@ -45,7 +45,7 @@ from approvals_routes import approvals_router, set_db as set_approvals_db
 from additional_tasks_routes import additional_tasks_router, init_additional_tasks_db
 from projects_routes import projects_router
 from erp_routes import erp_router, init_erp_db
-from dept_categories_routes import dept_categories_router
+from dept_categories_routes import dept_categories_router, dept_statuses_router
 from meetings_routes import meetings_router, init_meetings_db
 from sheets_routes import sheets_router
 from org_tree_routes import org_tree_router, init_org_tree_db
@@ -2750,6 +2750,7 @@ api_router.include_router(meetings_router)
 api_router.include_router(projects_router)
 api_router.include_router(erp_router)
 api_router.include_router(dept_categories_router)
+api_router.include_router(dept_statuses_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
 api_router.include_router(db_admin_router)
