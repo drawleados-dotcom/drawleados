@@ -1345,7 +1345,14 @@ const LeadsPageV2 = () => {
                 <TabsTrigger value="basic">Basic Details</TabsTrigger>
                 <TabsTrigger value="lead">Lead Details</TabsTrigger>
                 <TabsTrigger value="appointments" data-testid="appointments-tab-trigger">Appointments</TabsTrigger>
-                <TabsTrigger value="followup">Follow-up</TabsTrigger>
+                <TabsTrigger value="followup" className="gap-1.5">
+                  Follow-up
+                  {(editingLead?.followups?.length > 0) && (
+                    <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-[#14b8a6] text-white text-[10px] font-bold">
+                      {editingLead.followups.length}
+                    </span>
+                  )}
+                </TabsTrigger>
               </TabsList>
               
               {/* Basic Details Tab */}
@@ -1859,6 +1866,18 @@ const LeadsPageV2 = () => {
                         }}
                       >
                         {stage.name}
+                        {needsFollowup && (editingLead?.followups?.length > 0) && (
+                          <span
+                            className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                            style={{
+                              backgroundColor: isCurrent ? '#ffffff' : stage.color,
+                              color: isCurrent ? stage.color : '#ffffff',
+                            }}
+                            data-testid="followup-count-badge"
+                          >
+                            {editingLead.followups.length}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
