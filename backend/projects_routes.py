@@ -40,6 +40,7 @@ class ProjectUpdate(BaseModel):
     documents: Optional[List[dict]] = None
     payment_schedule: Optional[dict] = None
     project_expense: Optional[dict] = None
+    pages: Optional[List[dict]] = None
 
 
 class DeleteProjectRequest(BaseModel):

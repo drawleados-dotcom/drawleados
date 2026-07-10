@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Layers } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Layers, Globe } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
+import ProjectPagesTab from './projects/ProjectPagesTab';
 import ErpBoardTab from './projects/ErpBoardTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -828,10 +829,13 @@ export default function ProjectsPanel({
           const showPaymentSchedule = isPriv || psVisibility !== 'hidden';
           // ERP Board tab only renders for ERP-department projects
           const isErpProject = (selectedProject?.departments || []).includes('erp');
+          // Pages tab only renders for Website-department projects
+          const isWebsiteProject = (selectedProject?.departments || []).includes('website');
           const innerTabs = [
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
+            ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isErpProject ? [{ id: 'erp_board', label: 'ERP Board', icon: Layers }] : []),
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks
@@ -905,6 +909,20 @@ export default function ProjectsPanel({
             />
           );
         })()}
+
+        {projectInnerTab === 'pages' && (
+          <ProjectPagesTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            canEdit={canManageProjects}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
 
         {projectInnerTab === 'erp_board' && (
           <ErpBoardTab
