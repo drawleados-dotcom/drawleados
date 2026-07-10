@@ -342,17 +342,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Task name is required');
       return;
     }
-    // Department and Project are mandatory for every task — My Tasks and
-    // Assign to Team alike — so every task is always traceable to a project.
-    // Meetings (team/client) are the exception: they aren't project work and
-    // don't belong to any single department or project.
+    // Department is mandatory for every task — My Tasks and Assign to Team
+    // alike — so every task is always traceable to a department. Meetings
+    // (team/client) are the exception: they aren't project work and don't
+    // belong to any single department. Project is optional — some teams
+    // (e.g. SEO) don't have projects to attach a task to.
     if (!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase())) {
       if (!formData.department) {
         toast.error('Please select a Department');
-        return;
-      }
-      if (!formData.project_id) {
-        toast.error('Please select a Project');
         return;
       }
     }
@@ -395,10 +392,6 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase())) {
       if (!formData.department) {
         toast.error('Please select a Department');
-        return;
-      }
-      if (!formData.project_id) {
-        toast.error('Please select a Project');
         return;
       }
     }
@@ -2236,9 +2229,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className={textPrimary}>
-                          Project {!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) && <span className="text-red-500">*</span>}
-                        </Label>
+                        <Label className={textPrimary}>Project</Label>
                         <Select
                           value={formData.project_id || 'none'}
                           onValueChange={(v) => {
