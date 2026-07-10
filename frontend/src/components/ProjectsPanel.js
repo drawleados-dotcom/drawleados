@@ -1526,29 +1526,79 @@ export default function ProjectsPanel({
             })}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects
-              .filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter))
-              .map(p => (
-              <Card
-                key={p.project_id}
-                className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#6366f1] transition-colors`}
-                onClick={async () => {
-                  // Optimistic UI — show the project shell immediately, then hydrate with tasks.
-                  setSelectedProject(p);
-                  try {
-                    const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
-                    setSelectedProject(res.data);
-                  } catch { /* ignore — keep optimistic copy */ }
-                }}
-                data-testid={`project-card-${p.project_id}`}
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between mb-2 gap-2">
-                    <h3 className={`font-semibold ${textPrimary} flex-1 min-w-0 truncate`}>{p.name}</h3>
-                    <div className="flex items-center gap-1 flex-shrink-0">
+          <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`} data-testid="projects-list">
+            <table className="w-full text-sm">
+              <thead className={`${bgSecondary} ${textSecondary} text-xs uppercase`}>
+                <tr>
+                  <th className="text-left px-4 py-3">Project</th>
+                  <th className="text-left px-4 py-3">Departments</th>
+                  <th className="text-left px-4 py-3">Client</th>
+                  <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-left px-4 py-3">Due Date</th>
+                  <th className="text-left px-4 py-3">Tasks</th>
+                  <th className="text-left px-4 py-3">Members</th>
+                  {canManageProjects && <th className="text-right px-4 py-3">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {projects
+                  .filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter))
+                  .map(p => (
+                  <tr
+                    key={p.project_id}
+                    className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors`}
+                    onClick={async () => {
+                      // Optimistic UI — show the project shell immediately, then hydrate with tasks.
+                      setSelectedProject(p);
+                      try {
+                        const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
+                        setSelectedProject(res.data);
+                      } catch { /* ignore — keep optimistic copy */ }
+                    }}
+                    data-testid={`project-row-${p.project_id}`}
+                  >
+                    <td className="px-4 py-3 max-w-[240px]">
+                      <p className={`font-medium ${textPrimary} truncate`}>{p.name}</p>
+                      <p className={`text-xs ${textSecondary} truncate`}>{p.description || 'No description'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(p.departments || []).map(dv => {
+                          const d = DEPARTMENTS.find(x => x.value === dv);
+                          return d ? (
+                            <Badge key={dv} className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{d.label}</Badge>
+                          ) : null;
+                        })}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className={`flex items-center gap-1 text-xs ${textSecondary}`}>
+                        {(p.client_name || p.client_id) && <Building2 className="h-3 w-3 flex-shrink-0" />}
+                        <span className="truncate max-w-[140px]" data-testid={`project-row-client-${p.project_id}`}>
+                          {p.client_name || (clients.find(c => c.client_id === p.client_id)?.display_name) || '—'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
                       <Badge className="bg-[#10b981]/20 text-[#10b981]">{p.status || 'active'}</Badge>
-                      {canManageProjects && (
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
+                        <Calendar className="h-3 w-3" />{fmtDate(p.due_date)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
+                        <ListChecks className="h-3 w-3" />{p.task_count || 0}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
+                        <Users className="h-3 w-3" />{p.members?.length || 0}
+                      </span>
+                    </td>
+                    {canManageProjects && (
+                      <td className="px-4 py-3 text-right">
                         <button
                           type="button"
                           onClick={async (e) => {
@@ -1569,36 +1619,15 @@ export default function ProjectsPanel({
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
-                      )}
-                    </div>
-                  </div>
-                  <p className={`text-sm ${textSecondary} line-clamp-2 mb-3`}>{p.description || 'No description'}</p>
-                  {(p.departments || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {(p.departments || []).map(dv => {
-                        const d = DEPARTMENTS.find(x => x.value === dv);
-                        return d ? (
-                          <Badge key={dv} className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{d.label}</Badge>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-                  <div className={`flex items-center gap-4 text-xs ${textSecondary}`}>
-                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{fmtDate(p.due_date)}</span>
-                    <span className="flex items-center gap-1"><ListChecks className="h-3 w-3" />{p.task_count || 0} tasks</span>
-                    <span className="flex items-center gap-1"><Users className="h-3 w-3" />{p.members?.length || 0}</span>
-                  </div>
-                  {(p.client_name || p.client_id) && (
-                    <div className={`flex items-center gap-1 text-xs ${textSecondary} mt-2 pt-2 border-t ${borderColor}`}>
-                      <Building2 className="h-3 w-3" />
-                      <span className="truncate" data-testid={`project-card-client-${p.project_id}`}>
-                        {p.client_name || (clients.find(c => c.client_id === p.client_id)?.display_name) || 'Client'}
-                      </span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {projects.filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter)).length === 0 && (
+              <div className={`p-8 text-center text-sm ${textSecondary}`}>No projects found</div>
+            )}
           </div>
         </>
       )}
