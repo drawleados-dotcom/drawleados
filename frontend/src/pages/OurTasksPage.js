@@ -1256,25 +1256,36 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // When inside the Operations Modal, skip the global Layout wrapper.
   const content = (
       <div className="space-y-6">
-        {/* Header (hidden when inside Operations Modal) */}
-        {!inModal && (
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight mb-1">
-              <span className="bg-gradient-to-r from-[#10b981] to-[#059669] bg-clip-text text-transparent">
-                Hi, {user?.name || 'User'}
-              </span>
-            </h1>
-            <p className={textSecondary}>Team-wide task management for all users</p>
-          </div>
-        </div>
-        )}
+        {/* Main Tabs — pill style matching My Profile */}
+        <OperationsTabsBar
+          user={user}
+          mainTab={mainTab}
+          setMainTab={setMainTab}
+          setMeetingsSubActive={setMeetingsSubActive}
+          setFilter={setFilter}
+          setFilters={setFilters}
+          counts={{
+            myTasks: myTabCount,
+            assignToTeam: teamTabCount,
+            projects: projectsCount,
+            departments: departmentsCount,
+            approvals: approvalsCount,
+            meetings: meetingsCount,
+          }}
+          bgCard={bgCard}
+          textSecondary={textSecondary}
+          hoverBg={hoverBg}
+          borderColor={borderColor}
+        />
 
         {/* Operations Summary Cards — Feb 2026
             5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO.
             Now driven by `filterScopedSummary` so the numbers always reflect
             the active filter bar (date, project, person, department, category,
-            status) — see useMemo above. */}
+            status) — see useMemo above. Only relevant for the task-list tabs
+            (My Tasks / Assign to Team); Projects/Departments/Approvals/Meetings
+            have their own summaries. */}
+        {(mainTab === 'assigned_to_me' || mainTab === 'assign_to_team') && (
         <OperationsSummaryCards
           summary={filterScopedSummary}
           summaryDate={summaryDate}
@@ -1298,28 +1309,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           bgSecondary={bgSecondary}
           borderColor={borderColor}
         />
-
-        {/* Main Tabs — pill style matching My Profile */}
-        <OperationsTabsBar
-          user={user}
-          mainTab={mainTab}
-          setMainTab={setMainTab}
-          setMeetingsSubActive={setMeetingsSubActive}
-          setFilter={setFilter}
-          setFilters={setFilters}
-          counts={{
-            myTasks: myTabCount,
-            assignToTeam: teamTabCount,
-            projects: projectsCount,
-            departments: departmentsCount,
-            approvals: approvalsCount,
-            meetings: meetingsCount,
-          }}
-          bgCard={bgCard}
-          textSecondary={textSecondary}
-          hoverBg={hoverBg}
-          borderColor={borderColor}
-        />
+        )}
 
         {/* Approvals tab — embed the dedicated page */}
         {mainTab === 'approvals' && (
