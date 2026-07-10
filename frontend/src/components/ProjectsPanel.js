@@ -1094,7 +1094,7 @@ export default function ProjectsPanel({
             onClick={() => setShowTeamModal(false)}
             data-testid="project-team-modal"
           >
-            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1874,7 +1874,7 @@ export default function ProjectsPanel({
       {/* Create Project Modal */}
       {showCreateProject && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => setShowCreateProject(false)}>
-          <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className={`text-lg font-semibold ${textPrimary}`}>Create Project</h3>
