@@ -1477,7 +1477,7 @@ export default function ProjectsPanel({
   return (
     <div className="space-y-4" data-testid="projects-panel">
       <div className="flex items-center justify-between">
-        <h2 className={`text-xl font-semibold ${textPrimary}`}>Projects</h2>
+        <h2 className={`text-2xl font-bold ${textPrimary}`}>Projects</h2>
         {canManageProjects && (
           <Button onClick={() => setShowCreateProject(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="create-project-btn">
             <Plus className="h-4 w-4 mr-1" /> Create Project
@@ -1501,7 +1501,7 @@ export default function ProjectsPanel({
           <div className="flex flex-wrap gap-2 mb-4">
             <button
               onClick={() => setDeptFilter('all')}
-              className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+              className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                 deptFilter === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
               }`}
               data-testid="dept-filter-all"
@@ -1515,7 +1515,7 @@ export default function ProjectsPanel({
                 <button
                   key={d.value}
                   onClick={() => setDeptFilter(d.value)}
-                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                     deptFilter === d.value ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
                   }`}
                   data-testid={`dept-filter-${d.value}`}

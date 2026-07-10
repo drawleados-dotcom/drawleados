@@ -1255,7 +1255,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
   // When inside the Operations Modal, skip the global Layout wrapper.
   const content = (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Main Tabs — pill style matching My Profile */}
         <OperationsTabsBar
           user={user}
@@ -1335,7 +1335,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             <>
               {/* View / Edit toggle — privileged users + designations granted Edit */}
               {showToggle && (
-                <div className={`flex items-center justify-end gap-2 mb-3`} data-testid="projects-view-edit-toggle">
+                <div className={`flex items-center justify-end gap-2 mb-1`} data-testid="projects-view-edit-toggle">
                   <span className={`text-xs ${textSecondary}`}>Mode:</span>
                   <div className={`inline-flex rounded-lg border ${borderColor} ${bgCard} p-1`}>
                     <button
