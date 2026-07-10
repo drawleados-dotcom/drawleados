@@ -83,6 +83,7 @@ const LeadsPageV2 = () => {
   const [teamMembers, setTeamMembers] = useState([]);
 
   // UI state
+  const [pipeline, setPipeline] = useState('pre_sales'); // 'pre_sales' | 'sales' — Sales Department sub-tabs
   const [viewMode, setViewMode] = useState('list'); // 'list' only
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
@@ -162,21 +163,21 @@ const LeadsPageV2 = () => {
 
   const loadLeads = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/leads`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/leads`, { headers, params: { pipeline } });
       setLeads(res.data || []);
     } catch (error) {
       console.error('Error loading leads:', error);
     }
-  }, []);
+  }, [pipeline]);
 
   const loadStages = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/stages`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/stages`, { headers, params: { pipeline } });
       setStages(res.data || []);
     } catch (error) {
       console.error('Error loading stages:', error);
     }
-  }, []);
+  }, [pipeline]);
 
   const loadCustomFields = useCallback(async () => {
     try {
@@ -189,12 +190,12 @@ const LeadsPageV2 = () => {
 
   const loadStats = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/stats`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/stats`, { headers, params: { pipeline } });
       setStats(res.data || { total: 0, by_stage: {} });
     } catch (error) {
       console.error('Error loading stats:', error);
     }
-  }, []);
+  }, [pipeline]);
 
   const loadSheetsConfig = useCallback(async () => {
     try {
@@ -288,7 +289,7 @@ const LeadsPageV2 = () => {
       return;
     }
     try {
-      const data = { ...leadForm };
+      const data = { ...leadForm, pipeline };
       if (!data.stage_id && stages.length > 0) {
         data.stage_id = stages[0].stage_id;
       }
@@ -343,6 +344,20 @@ const LeadsPageV2 = () => {
       loadStats();
     } catch (error) {
       toast.error('Failed to update lead stage');
+    }
+  };
+
+  const promoteLeadToSales = async (leadId) => {
+    if (!window.confirm('Promote this lead to the Sales pipeline?')) return;
+    try {
+      await axios.post(`${API}/api/leads-v2/leads/${leadId}/promote`, {}, { headers });
+      toast.success('Lead promoted to Sales');
+      setShowAddLeadModal(false);
+      setEditingLead(null);
+      loadLeads();
+      loadStats();
+    } catch (error) {
+      toast.error('Failed to promote lead');
     }
   };
 
@@ -414,7 +429,8 @@ const LeadsPageV2 = () => {
     try {
       await axios.post(`${API}/api/leads-v2/stages`, {
         name: newStageName,
-        color: newStageColor
+        color: newStageColor,
+        pipeline
       }, { headers });
       toast.success('Stage created');
       setNewStageName('');
@@ -903,7 +919,7 @@ const LeadsPageV2 = () => {
                 <Users className="h-6 w-6 text-[#3b82f6]" />
               </div>
               <div>
-                <h1 className={`text-xl font-bold ${textPrimary}`}>Leads</h1>
+                <h1 className={`text-xl font-bold ${textPrimary}`}>Sales Department</h1>
                 <p className={`text-sm ${textSecondary}`}>{stats.total} Total Leads</p>
               </div>
             </div>
@@ -1011,6 +1027,27 @@ const LeadsPageV2 = () => {
               </Button>
             </div>
           </div>
+        </div>
+
+        {/* Pre-sales / Sales pipeline tabs */}
+        <div className={`px-4 pt-3 flex items-center gap-2`} data-testid="pipeline-tabs">
+          {[
+            { key: 'pre_sales', label: 'Pre-sales' },
+            { key: 'sales', label: 'Sales' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => { setPipeline(tab.key); setFilterStage(null); }}
+              data-testid={`pipeline-tab-${tab.key}`}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                pipeline === tab.key
+                  ? 'bg-[#3b82f6] text-white'
+                  : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Date Range Filter */}
@@ -1700,7 +1737,7 @@ const LeadsPageV2 = () => {
             )}
 
             <DialogFooter className="flex sm:justify-between gap-2 w-full">
-              <div>
+              <div className="flex gap-2">
                 {editingLead && (
                   <Button
                     onClick={async () => {
@@ -1720,6 +1757,16 @@ const LeadsPageV2 = () => {
                     data-testid="permanent-delete-lead-btn"
                   >
                     <Trash2 className="h-4 w-4 mr-1" /> Permanently Delete
+                  </Button>
+                )}
+                {editingLead && pipeline === 'pre_sales' && (
+                  <Button
+                    onClick={() => promoteLeadToSales(editingLead.lead_id)}
+                    variant="outline"
+                    className="border-[#22c55e] text-[#22c55e] hover:bg-[#22c55e]/10"
+                    data-testid="promote-to-sales-btn"
+                  >
+                    Promote to Sales
                   </Button>
                 )}
               </div>
