@@ -2336,21 +2336,21 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
               : `border-transparent ${textSecondary} hover:${textPrimary}`
           }`}
         >
-          <span className="font-medium text-xs">All ({leads.length})</span>
+          <span className="font-medium text-sm">All ({leads.length})</span>
         </button>
         {stages.map(stage => (
           <button
             key={stage.stage_id}
             onClick={() => setActiveTab(stage.stage_id)}
-            className={`flex items-center gap-1 pb-2 border-b-2 transition-all whitespace-nowrap ${
+            className={`flex items-center gap-1.5 pb-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === stage.stage_id
                 ? `border-current`
                 : `border-transparent ${textSecondary} hover:${textPrimary}`
             }`}
             style={{ color: activeTab === stage.stage_id ? stage.color : undefined }}
           >
-            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-            <span className="text-xs">{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
+            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+            <span className="text-sm">{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
           </button>
         ))}
       </div>
