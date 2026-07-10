@@ -329,17 +329,17 @@ const Sidebar = () => {
         {/* === STANDARD VIEW (for non-tasks-only users and non-project-managers) === */}
         {!hasTasksModuleOnly && !isProjectManager && (
           <>
-        {/* 1. Leads */}
+        {/* 1. Leads (Sales Department) */}
         {hasAccess('leads') && (
           <Link
             to="/leads"
             data-testid="nav-leads"
             style={orderStyle('leads')}
             className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/leads' ? navItemActive : navItemInactive}`}
-            title={isCollapsed ? 'Leads' : ''}
+            title={isCollapsed ? 'Sales Department' : ''}
           >
             <Users className="h-5 w-5" strokeWidth={2} />
-            {!isCollapsed && 'Leads'}
+            {!isCollapsed && 'Sales Department'}
           </Link>
         )}
 

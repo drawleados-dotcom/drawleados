@@ -41,7 +41,9 @@ def get_redirect_uri():
     return "http://localhost:8001/api/oauth/calendar/callback"
 
 SCOPES = [
-    "https://www.googleapis.com/auth/calendar.readonly",
+    # calendar.events grants read/write on events (superset of calendar.readonly)
+    # so lead appointments can be pushed to the user's calendar, not just listed.
+    "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/userinfo.email",
     "openid"
 ]
@@ -125,6 +127,62 @@ async def get_valid_credentials(user_id: str):
                 return None
     
     return connection
+
+async def upsert_appointment_event(
+    user_id: str,
+    summary: str,
+    start_iso: str,
+    description: str = "",
+    existing_event_id: Optional[str] = None,
+    duration_minutes: int = 30,
+) -> Optional[str]:
+    """Create (or update) a Google Calendar event for a lead appointment.
+
+    Best-effort: returns None (instead of raising) when the user hasn't
+    connected Google Calendar, or the sync otherwise fails — calendar sync
+    is a bonus on top of the appointment, not a requirement for saving it.
+    """
+    connection = await get_valid_credentials(user_id)
+    if not connection:
+        return None
+
+    try:
+        start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
+    except ValueError:
+        logger.error(f"Invalid appointment datetime for calendar sync: {start_iso}")
+        return None
+    end_dt = start_dt + timedelta(minutes=duration_minutes)
+
+    creds = Credentials(
+        token=connection["access_token"],
+        refresh_token=connection.get("refresh_token"),
+        token_uri="https://oauth2.googleapis.com/token",
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET
+    )
+    service = build("calendar", "v3", credentials=creds)
+    event_body = {
+        "summary": summary,
+        "description": description,
+        "start": {"dateTime": start_dt.isoformat()},
+        "end": {"dateTime": end_dt.isoformat()},
+    }
+
+    try:
+        if existing_event_id:
+            try:
+                event = service.events().update(
+                    calendarId="primary", eventId=existing_event_id, body=event_body
+                ).execute()
+            except Exception:
+                # Event may have been deleted on the Google side — recreate it.
+                event = service.events().insert(calendarId="primary", body=event_body).execute()
+        else:
+            event = service.events().insert(calendarId="primary", body=event_body).execute()
+        return event.get("id")
+    except Exception as e:
+        logger.error(f"Failed to sync appointment to Google Calendar for user {user_id}: {e}")
+        return None
 
 # ============== OAUTH ROUTES ==============
 

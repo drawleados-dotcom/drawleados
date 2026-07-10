@@ -34,6 +34,7 @@ class StageCreate(BaseModel):
     name: str
     color: str = '#71717a'
     order: int = 0
+    pipeline: str = 'pre_sales'  # 'pre_sales' or 'sales'
 
 class StageUpdate(BaseModel):
     name: Optional[str] = None
@@ -79,6 +80,7 @@ class LeadCreate(BaseModel):
     notes: str = ''
     stage_id: str = ''
     custom_fields: Dict[str, Any] = {}
+    pipeline: str = 'pre_sales'  # 'pre_sales' or 'sales'
 
 class LeadUpdate(BaseModel):
     # Basic Details
@@ -137,36 +139,53 @@ async def get_current_user_from_request(request: Request) -> dict:
 
 # ============== STAGES ROUTES ==============
 
+def _pipeline_match(pipeline: str) -> Dict[str, Any]:
+    """Mongo filter matching documents in `pipeline`. Docs created before this
+    field existed have no `pipeline` key at all — they're treated as
+    'pre_sales' since that was the only pipeline before the Sales split."""
+    if pipeline == "pre_sales":
+        return {"$or": [{"pipeline": "pre_sales"}, {"pipeline": {"$exists": False}}]}
+    return {"pipeline": pipeline}
+
 @leads_v2_router.get("/stages")
-async def get_stages(request: Request):
-    """Get all lead stages. Auto-seeds defaults on first call and idempotently
-    backfills the fixed "Invoice Raise" stage if it's missing."""
+async def get_stages(request: Request, pipeline: str = "pre_sales"):
+    """Get all lead stages for a pipeline ('pre_sales' or 'sales'). Auto-seeds
+    defaults on first call per-pipeline and idempotently backfills the fixed
+    "Invoice Raise" stage if it's missing."""
     await get_current_user_from_request(request)
+    base_query = {"is_deleted": {"$ne": True}, "$and": [_pipeline_match(pipeline)]}
     stages = await db.lead_stages.find(
-        {"is_deleted": {"$ne": True}},
+        base_query,
         {"_id": 0}
     ).sort("order", 1).to_list(100)
-    
+
     # Create default stages if none exist
     if not stages:
-        default_stages = [
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Prospect", "color": "#6366f1", "order": 0},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Lead", "color": "#3b82f6", "order": 1},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Qualified", "color": "#8b5cf6", "order": 2},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Proposal", "color": "#f59e0b", "order": 3},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Negotiation", "color": "#ec4899", "order": 4},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Followup", "color": "#14b8a6", "order": 5},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Payment Stage", "color": "#f97316", "order": 6},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 7, "is_fixed": True},
-            {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Deal Closed", "color": "#22c55e", "order": 8},
-        ]
+        if pipeline == "sales":
+            default_stages = [
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Appointment", "color": "#3b82f6", "order": 0},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 1, "is_fixed": True},
+            ]
+        else:
+            default_stages = [
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Prospect", "color": "#6366f1", "order": 0},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Lead", "color": "#3b82f6", "order": 1},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Qualified", "color": "#8b5cf6", "order": 2},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Proposal", "color": "#f59e0b", "order": 3},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Negotiation", "color": "#ec4899", "order": 4},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Followup", "color": "#14b8a6", "order": 5},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Payment Stage", "color": "#f97316", "order": 6},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 7, "is_fixed": True},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Deal Closed", "color": "#22c55e", "order": 8},
+            ]
         for stage in default_stages:
+            stage["pipeline"] = pipeline
             stage["created_at"] = datetime.now(timezone.utc)
             stage["is_deleted"] = False
             await db.lead_stages.insert_one(stage)
         stages = default_stages
 
-    # Idempotent backfill: ensure "Invoice Raise" exists for existing tenants.
+    # Idempotent backfill: ensure "Invoice Raise" exists for this pipeline.
     # Inserted just before "Deal Closed" / "Lost" if present, otherwise at the end.
     has_invoice_raise = any((s.get("name") or "").strip().lower() == "invoice raise" for s in stages)
     if not has_invoice_raise:
@@ -174,10 +193,10 @@ async def get_stages(request: Request):
         terminal_orders = [s.get("order", 0) for s in stages
                            if (s.get("name") or "").strip().lower() in ("deal closed", "lost", "won")]
         insert_order = (min(terminal_orders) if terminal_orders else (max((s.get("order", 0) for s in stages), default=-1) + 1))
-        # Shift terminal stages down by 1 to make room.
+        # Shift terminal stages down by 1 to make room (scoped to this pipeline only).
         if terminal_orders:
             await db.lead_stages.update_many(
-                {"is_deleted": {"$ne": True}, "order": {"$gte": insert_order}},
+                {**base_query, "order": {"$gte": insert_order}},
                 {"$inc": {"order": 1}},
             )
         new_stage = {
@@ -186,12 +205,13 @@ async def get_stages(request: Request):
             "color": "#a855f7",
             "order": insert_order,
             "is_fixed": True,
+            "pipeline": pipeline,
             "created_at": datetime.now(timezone.utc),
             "is_deleted": False,
         }
         await db.lead_stages.insert_one(new_stage)
         stages = await db.lead_stages.find(
-            {"is_deleted": {"$ne": True}},
+            base_query,
             {"_id": 0}
         ).sort("order", 1).to_list(100)
 
@@ -201,25 +221,26 @@ async def get_stages(request: Request):
 async def create_stage(stage_data: StageCreate, request: Request):
     """Create a new stage"""
     user = await get_current_user_from_request(request)
-    
-    # Get next order
+
+    # Get next order (scoped to this stage's pipeline)
     max_order = await db.lead_stages.find_one(
-        {"is_deleted": {"$ne": True}},
+        {"is_deleted": {"$ne": True}, "$and": [_pipeline_match(stage_data.pipeline)]},
         sort=[("order", -1)]
     )
     next_order = (max_order.get("order", -1) + 1) if max_order else 0
-    
+
     stage_id = f"stage_{uuid.uuid4().hex[:8]}"
     stage_doc = {
         "stage_id": stage_id,
         "name": stage_data.name,
         "color": stage_data.color,
         "order": stage_data.order if stage_data.order > 0 else next_order,
+        "pipeline": stage_data.pipeline,
         "created_by": user["user_id"],
         "created_at": datetime.now(timezone.utc),
         "is_deleted": False
     }
-    
+
     await db.lead_stages.insert_one(stage_doc)
     return await db.lead_stages.find_one({"stage_id": stage_id}, {"_id": 0})
 
@@ -347,26 +368,30 @@ async def get_leads(
     request: Request,
     stage_id: Optional[str] = None,
     search: Optional[str] = None,
-    lead_owner: Optional[str] = None
+    lead_owner: Optional[str] = None,
+    pipeline: str = "pre_sales"
 ):
     """Get all leads with optional filters"""
     await get_current_user_from_request(request)
-    
+
     query = {"is_deleted": {"$ne": True}}
-    
+    and_clauses = [_pipeline_match(pipeline)]
+
     if stage_id:
         query["stage_id"] = stage_id
-    
+
     if lead_owner:
         query["lead_owner"] = lead_owner
-    
+
     if search:
-        query["$or"] = [
+        and_clauses.append({"$or": [
             {"name": {"$regex": search, "$options": "i"}},
             {"email": {"$regex": search, "$options": "i"}},
             {"phone": {"$regex": search, "$options": "i"}},
-        ]
-    
+        ]})
+
+    query["$and"] = and_clauses
+
     leads = await db.leads_v2.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
     
     # Enrich leads with lead_owner_name
@@ -479,7 +504,7 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
     `followup_at` for Followup / Prospect Followup stages — both drive the new
     columns in the leads table and the date filter."""
     current_user = await get_current_user_from_request(request)
-    
+
     lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
 
     update_doc = {
@@ -492,13 +517,28 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
     if stage_data.get("followup_at"):
         update_doc["followup_at"] = stage_data["followup_at"]
 
+    new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
+    new_stage_name = (new_stage.get("name") or "").strip().lower() if new_stage else ""
+
+    # Push appointment date/time to the user's connected Google Calendar (best-effort).
+    if stage_data.get("appointment_at") and "appoin" in new_stage_name:
+        from google_calendar_routes import upsert_appointment_event
+        calendar_event_id = await upsert_appointment_event(
+            user_id=current_user["user_id"],
+            summary=f"New Lead Appointment - {lead.get('name', 'Lead')}" if lead else "New Lead Appointment",
+            start_iso=stage_data["appointment_at"],
+            description=f"Lead: {lead.get('name', '')}\nPhone: {lead.get('phone', '')}\nEmail: {lead.get('email', '')}" if lead else "",
+            existing_event_id=lead.get("google_calendar_event_id") if lead else None,
+        )
+        if calendar_event_id:
+            update_doc["google_calendar_event_id"] = calendar_event_id
+
     await db.leads_v2.update_one(
         {"lead_id": lead_id},
         {"$set": update_doc},
     )
-    
+
     # Check if moved to "Deal Closed" or "Won" stage
-    new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
     if new_stage and new_stage.get("name", "").lower() in ["deal closed", "won", "closed won"]:
         # Get lead owner and admin emails
         recipient_emails = []
@@ -524,6 +564,42 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
                 lead_id=lead_id
             ))
     
+    return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+
+@leads_v2_router.post("/leads/{lead_id}/promote")
+async def promote_lead_to_sales(lead_id: str, request: Request):
+    """Promote a lead out of Pre-sales into the Sales pipeline, placing it on
+    the Sales pipeline's first stage (by `order`) — e.g. "Appointment"."""
+    user = await get_current_user_from_request(request)
+
+    lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    first_sales_stage = await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "pipeline": "sales"},
+        {"_id": 0},
+        sort=[("order", 1)],
+    )
+    if not first_sales_stage:
+        # Seed the Sales pipeline's default stages on first-ever promotion.
+        await get_stages(request, pipeline="sales")
+        first_sales_stage = await db.lead_stages.find_one(
+            {"is_deleted": {"$ne": True}, "pipeline": "sales"},
+            {"_id": 0},
+            sort=[("order", 1)],
+        )
+
+    await db.leads_v2.update_one(
+        {"lead_id": lead_id},
+        {"$set": {
+            "pipeline": "sales",
+            "stage_id": first_sales_stage["stage_id"],
+            "promoted_at": datetime.now(timezone.utc),
+            "promoted_by": user["user_id"],
+            "updated_at": datetime.now(timezone.utc),
+        }},
+    )
     return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
 
 # ============== LEAD REMARKS/NOTES ==============
@@ -644,17 +720,19 @@ async def disconnect_sheets(request: Request):
 # ============== STATS ROUTES ==============
 
 @leads_v2_router.get("/stats")
-async def get_lead_stats(request: Request):
-    """Get lead statistics"""
+async def get_lead_stats(request: Request, pipeline: str = "pre_sales"):
+    """Get lead statistics for a pipeline"""
     await get_current_user_from_request(request)
-    
+
     stages = await db.lead_stages.find(
-        {"is_deleted": {"$ne": True}},
+        {"is_deleted": {"$ne": True}, "$and": [_pipeline_match(pipeline)]},
         {"_id": 0}
     ).sort("order", 1).to_list(100)
-    
-    total_leads = await db.leads_v2.count_documents({"is_deleted": {"$ne": True}})
-    
+
+    total_leads = await db.leads_v2.count_documents(
+        {"is_deleted": {"$ne": True}, "$and": [_pipeline_match(pipeline)]}
+    )
+
     stats = {
         "total": total_leads,
         "by_stage": {}
