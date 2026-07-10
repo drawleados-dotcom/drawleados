@@ -1090,11 +1090,12 @@ export default function ProjectsPanel({
         {/* Team Management Modal */}
         {showTeamModal && (
           <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]"
+            className="fixed inset-0 bg-black/60 overflow-y-auto z-[70]"
             onClick={() => setShowTeamModal(false)}
             data-testid="project-team-modal"
           >
-            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+          <div className="min-h-full flex items-center justify-center py-8">
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1144,6 +1145,7 @@ export default function ProjectsPanel({
                 </div>
               </CardContent>
             </Card>
+          </div>
           </div>
         )}
 
@@ -1873,8 +1875,9 @@ export default function ProjectsPanel({
 
       {/* Create Project Modal */}
       {showCreateProject && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => setShowCreateProject(false)}>
-          <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 overflow-y-auto z-[70]" onClick={() => setShowCreateProject(false)}>
+        <div className="min-h-full flex items-center justify-center py-8">
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
             <CardContent className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className={`text-lg font-semibold ${textPrimary}`}>Create Project</h3>
@@ -2004,6 +2007,7 @@ export default function ProjectsPanel({
               </div>
             </CardContent>
           </Card>
+        </div>
         </div>
       )}
     </div>
