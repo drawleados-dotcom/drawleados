@@ -9,7 +9,7 @@ import { Button } from '../ui/button';
  *   • Super Admin / Admin always see everything.
  *   • Otherwise visibility is driven by user.designation_config (operations_*).
  *   • Robust fallback: a user with 'operations' in module_access always sees at least My Tasks.
- *   • Operation Head designation gets a reordered tab strip (assign → approvals → my tasks → …).
+ *   • Operation Head designation gets a reordered tab strip (projects → approvals → assign to team → my tasks → departments → meetings).
  *   • Auto-corrects mainTab if the active tab is hidden for this user.
  */
 export default function OperationsTabsBar({
@@ -59,9 +59,11 @@ export default function OperationsTabsBar({
 
   const visibleTabs = allTabs.filter((t) => isVisible(t.id));
   const desg = (user?.designation || '').toLowerCase().trim();
-  const isOpHead = desg === 'operation head';
+  const isOpHead = desg === 'operation head' ||
+                   desg === 'head of operations' ||
+                   (desg.includes('head') && desg.includes('operation'));
   const tabs = isOpHead
-    ? ['assign_to_team', 'approvals', 'assigned_to_me', 'projects', 'departments', 'meetings']
+    ? ['projects', 'approvals', 'assign_to_team', 'assigned_to_me', 'departments', 'meetings']
         .map((id) => visibleTabs.find((t) => t.id === id))
         .filter(Boolean)
     : visibleTabs;
