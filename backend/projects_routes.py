@@ -24,6 +24,7 @@ class ProjectCreate(BaseModel):
     members: Optional[List[str]] = []   # user_ids
     departments: Optional[List[str]] = []  # department keys: website, social_media, meta, seo, finance, hr, business_dev, erp
     status: Optional[str] = "active"     # active | completed | on_hold
+    project_type: Optional[str] = None   # onetime | monthly
 
 
 class ProjectUpdate(BaseModel):
@@ -35,9 +36,14 @@ class ProjectUpdate(BaseModel):
     members: Optional[List[str]] = None
     departments: Optional[List[str]] = None
     status: Optional[str] = None
+    project_type: Optional[str] = None   # onetime | monthly
     documents: Optional[List[dict]] = None
     payment_schedule: Optional[dict] = None
     project_expense: Optional[dict] = None
+
+
+class DeleteProjectRequest(BaseModel):
+    password: str
 
 
 class ProjectTaskCreate(BaseModel):
@@ -147,6 +153,7 @@ async def create_project(payload: ProjectCreate, request: Request):
         "members": members,
         "departments": payload.departments or [],
         "status": payload.status or "active",
+        "project_type": payload.project_type,
         "created_by": user.user_id,
         "created_by_name": user.name,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -222,11 +229,14 @@ async def update_project(project_id: str, payload: ProjectUpdate, request: Reque
 
 
 @projects_router.delete("/{project_id}")
-async def delete_project(project_id: str, request: Request):
-    from server import get_current_user, db
+async def delete_project(project_id: str, payload: DeleteProjectRequest, request: Request):
+    from server import get_current_user, db, verify_password
     user = await get_current_user(request)
-    if not await _is_operation_head_or_admin(user, db):
-        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can delete projects")
+    if (user.role or "").lower() != "super_admin":
+        raise HTTPException(status_code=403, detail="Only Super Admin can delete projects")
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc or not verify_password(payload.password, user_doc.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Incorrect password")
     # Soft-detach tasks from the deleted project rather than deleting them
     await db.our_tasks.update_many(
         {"project_id": project_id},

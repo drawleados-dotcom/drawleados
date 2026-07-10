@@ -45,7 +45,7 @@ export default function ProjectsPanel({
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
 
-  const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
+  const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', project_type: 'onetime', departments: [], members: [] });
   const [clients, setClients] = useState([]);
   const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_designation: '', erp_page_id: '', erp_subpage_id: '', erp_function_id: '', erp_module_id: '', erp_stage: 'developing' });
   // Lazily-loaded ERP taxonomy for the open project — used to populate the
@@ -82,6 +82,10 @@ export default function ProjectsPanel({
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [projectMeetings, setProjectMeetings] = useState([]);
   const [showMeetingsList, setShowMeetingsList] = useState(false);
+  // Delete project — Super Admin only, requires re-entering their password
+  const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false);
+  const [deleteProjectPassword, setDeleteProjectPassword] = useState('');
+  const [deletingProject, setDeletingProject] = useState(false);
   // Task filters inside project detail
   const [taskMemberFilter, setTaskMemberFilter] = useState('all');
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all, today, single, range
@@ -191,7 +195,7 @@ export default function ProjectsPanel({
     try {
       await axios.post(`${API}/api/projects`, projectDraft, { headers });
       toast.success('Project created');
-      setProjectDraft({ name: '', client_id: '', description: '', start_date: '', due_date: '', departments: [], members: [] });
+      setProjectDraft({ name: '', client_id: '', description: '', start_date: '', due_date: '', project_type: 'onetime', departments: [], members: [] });
       setShowCreateProject(false);
       loadProjects();
     } catch (e) {
@@ -310,6 +314,28 @@ export default function ProjectsPanel({
       toast.success('Project updated');
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to update project');
+    }
+  };
+
+  // Super Admin only — deleting a project requires re-entering their
+  // password (verified server-side against the account's stored hash).
+  const confirmDeleteProject = async () => {
+    if (!selectedProject || !deleteProjectPassword) return;
+    setDeletingProject(true);
+    try {
+      await axios.delete(`${API}/api/projects/${selectedProject.project_id}`, {
+        data: { password: deleteProjectPassword },
+        headers,
+      });
+      toast.success('Project deleted');
+      setShowDeleteProjectModal(false);
+      setDeleteProjectPassword('');
+      setSelectedProject(null);
+      loadProjects();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to delete project');
+    } finally {
+      setDeletingProject(false);
     }
   };
 
@@ -439,6 +465,96 @@ export default function ProjectsPanel({
 
   const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
 
+  // Days remaining (+N) or overdue (-N) against a due date, for the "Due
+  // Balance" column — compares calendar days only (ignores time-of-day).
+  const dueBalanceInfo = (dueIso) => {
+    if (!dueIso) return null;
+    const due = new Date(dueIso);
+    if (isNaN(due)) return null;
+    const today = new Date();
+    const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const days = Math.round((dueDay - todayDay) / (1000 * 60 * 60 * 24));
+    if (days === 0) return { label: 'Due today', color: '#f59e0b' };
+    if (days > 0) return { label: `+${days}d`, color: '#10b981' };
+    return { label: `${days}d overdue`, color: '#ef4444' };
+  };
+
+  // Department + Status navigation — shared between the list view and the
+  // project detail view so it stays visible ("fixed") no matter which one
+  // is showing. Clicking a tab from inside a project detail also exits back
+  // to the (filtered) list, since that's what picking a different
+  // department/status scope means.
+  const navTabsBar = (
+    <div data-testid="project-nav-tabs">
+      {/* Department filter tabs with counts */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button
+          onClick={() => { setSelectedProject(null); setDeptFilter('all'); setStatusFilter('all'); }}
+          className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+            deptFilter === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+          }`}
+          data-testid="dept-filter-all"
+        >
+          All ({projects.length})
+        </button>
+        {DEPARTMENTS.map(d => {
+          const count = projects.filter(p => (p.departments || []).includes(d.value)).length;
+          if (count === 0) return null;
+          return (
+            <button
+              key={d.value}
+              onClick={() => { setSelectedProject(null); setDeptFilter(d.value); setStatusFilter('all'); }}
+              className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                deptFilter === d.value ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+              }`}
+              data-testid={`dept-filter-${d.value}`}
+            >
+              {d.label} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Status sub-tabs — only meaningful once a specific department is
+          selected, since status vocabularies are defined per department
+          (Operations → Departments → {Dept} → Status tab). */}
+      {deptFilter !== 'all' && (() => {
+        const deptProjects = projects.filter(p => (p.departments || []).includes(deptFilter));
+        const statuses = deptStatuses.find(d => d.dept_key === deptFilter)?.statuses || [];
+        if (statuses.length === 0) return null;
+        return (
+          <div className="flex flex-wrap gap-2 mb-4" data-testid="project-status-subtabs">
+            <button
+              onClick={() => { setSelectedProject(null); setStatusFilter('all'); }}
+              className={`px-3 py-1 rounded-full text-xs transition-all ${
+                statusFilter === 'all' ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
+              }`}
+              data-testid="status-filter-all"
+            >
+              All Status ({deptProjects.length})
+            </button>
+            {statuses.map(s => {
+              const count = deptProjects.filter(p => (p.status || 'active') === s).length;
+              return (
+                <button
+                  key={s}
+                  onClick={() => { setSelectedProject(null); setStatusFilter(s); }}
+                  className={`px-3 py-1 rounded-full text-xs transition-all ${
+                    statusFilter === s ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
+                  }`}
+                  data-testid={`status-filter-${s.toLowerCase().replace(/\s+/g, '-')}`}
+                >
+                  {s} ({count})
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  );
+
   // ---------- Project Detail View ----------
   if (selectedProject) {
     // Build category sub-tabs from project's selected departments
@@ -479,6 +595,7 @@ export default function ProjectsPanel({
 
     return (
       <div className="space-y-4" data-testid="project-detail-view">
+        {navTabsBar}
         <div className="flex items-center justify-between">
           <div>
             <button onClick={() => setSelectedProject(null)} className={`text-sm ${textSecondary} hover:underline mb-1`}>
@@ -522,6 +639,16 @@ export default function ProjectsPanel({
             <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
               <Plus className="h-4 w-4 mr-1" /> Add Task
             </Button>
+            {role === 'super_admin' && (
+              <Button
+                onClick={() => { setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
+                variant="outline"
+                className="gap-2 border-red-500/40 text-red-500 hover:bg-red-500/10"
+                data-testid="project-delete-btn"
+              >
+                <Trash2 className="h-4 w-4" /> Delete
+              </Button>
+            )}
           </div>
         </div>
 
@@ -573,6 +700,20 @@ export default function ProjectsPanel({
               ) : (
                 <Badge className="bg-[#10b981]/20 text-[#10b981]">{selectedProject.status || 'active'}</Badge>
               )}
+              {canManageProjects ? (
+                <select
+                  value={selectedProject.project_type || ''}
+                  onChange={(e) => updateProjectField('project_type', e.target.value)}
+                  className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="project-edit-type-select"
+                >
+                  <option value="">Type: —</option>
+                  <option value="onetime">Onetime</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              ) : selectedProject.project_type ? (
+                <Badge className="bg-[#8b5cf6]/20 text-[#8b5cf6] capitalize">{selectedProject.project_type}</Badge>
+              ) : null}
             </div>
 
             {/* Client — required link to Finance → Clients */}
@@ -1526,6 +1667,54 @@ export default function ProjectsPanel({
             </Card>
           </div>
         )}
+
+        {/* Delete Project — Super Admin only, re-enter password to confirm */}
+        {showDeleteProjectModal && (
+          <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]"
+            onClick={() => !deletingProject && setShowDeleteProjectModal(false)}
+          >
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-red-500 flex items-center gap-2">
+                    <Trash2 className="h-5 w-5" /> Delete Project
+                  </h3>
+                  <button onClick={() => !deletingProject && setShowDeleteProjectModal(false)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-sm ${textSecondary}`}>
+                  This will permanently delete <b className={textPrimary}>{selectedProject.name}</b>. Tasks linked to it
+                  will be detached, not deleted. Enter your password to confirm.
+                </p>
+                <div>
+                  <Label className={textPrimary}>Password</Label>
+                  <Input
+                    type="password"
+                    autoFocus
+                    value={deleteProjectPassword}
+                    onChange={(e) => setDeleteProjectPassword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmDeleteProject(); } }}
+                    placeholder="Your account password"
+                    data-testid="delete-project-password"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" onClick={() => setShowDeleteProjectModal(false)} disabled={deletingProject}>Cancel</Button>
+                  <Button
+                    onClick={confirmDeleteProject}
+                    disabled={deletingProject || !deleteProjectPassword}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                    data-testid="delete-project-confirm"
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" /> {deletingProject ? 'Deleting…' : 'Delete Project'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     );
   }
@@ -1554,71 +1743,7 @@ export default function ProjectsPanel({
         </Card>
       ) : (
         <>
-          {/* Department filter tabs with counts */}
-          <div className="flex flex-wrap gap-2 mb-4">
-            <button
-              onClick={() => { setDeptFilter('all'); setStatusFilter('all'); }}
-              className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                deptFilter === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
-              }`}
-              data-testid="dept-filter-all"
-            >
-              All ({projects.length})
-            </button>
-            {DEPARTMENTS.map(d => {
-              const count = projects.filter(p => (p.departments || []).includes(d.value)).length;
-              if (count === 0) return null;
-              return (
-                <button
-                  key={d.value}
-                  onClick={() => { setDeptFilter(d.value); setStatusFilter('all'); }}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                    deptFilter === d.value ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
-                  }`}
-                  data-testid={`dept-filter-${d.value}`}
-                >
-                  {d.label} ({count})
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Status sub-tabs — only meaningful once a specific department is
-              selected, since status vocabularies are defined per department
-              (Operations → Departments → {Dept} → Status tab). */}
-          {deptFilter !== 'all' && (() => {
-            const deptProjects = projects.filter(p => (p.departments || []).includes(deptFilter));
-            const statuses = deptStatuses.find(d => d.dept_key === deptFilter)?.statuses || [];
-            if (statuses.length === 0) return null;
-            return (
-              <div className="flex flex-wrap gap-2 mb-4" data-testid="project-status-subtabs">
-                <button
-                  onClick={() => setStatusFilter('all')}
-                  className={`px-3 py-1 rounded-full text-xs transition-all ${
-                    statusFilter === 'all' ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
-                  }`}
-                  data-testid="status-filter-all"
-                >
-                  All Status ({deptProjects.length})
-                </button>
-                {statuses.map(s => {
-                  const count = deptProjects.filter(p => (p.status || 'active') === s).length;
-                  return (
-                    <button
-                      key={s}
-                      onClick={() => setStatusFilter(s)}
-                      className={`px-3 py-1 rounded-full text-xs transition-all ${
-                        statusFilter === s ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
-                      }`}
-                      data-testid={`status-filter-${s.toLowerCase().replace(/\s+/g, '-')}`}
-                    >
-                      {s} ({count})
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })()}
+          {navTabsBar}
 
           <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`} data-testid="projects-list">
             <table className="w-full text-sm">
@@ -1628,10 +1753,12 @@ export default function ProjectsPanel({
                   <th className="text-left px-4 py-3">Departments</th>
                   <th className="text-left px-4 py-3">Client</th>
                   <th className="text-left px-4 py-3">Status</th>
+                  <th className="text-left px-4 py-3">Type</th>
+                  <th className="text-left px-4 py-3">Start Date</th>
                   <th className="text-left px-4 py-3">Due Date</th>
+                  <th className="text-left px-4 py-3">Due Balance</th>
                   <th className="text-left px-4 py-3">Tasks</th>
                   <th className="text-left px-4 py-3">Members</th>
-                  {canManageProjects && <th className="text-right px-4 py-3">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1692,9 +1819,31 @@ export default function ProjectsPanel({
                       )}
                     </td>
                     <td className="px-4 py-3">
+                      {p.project_type ? (
+                        <Badge className="bg-[#8b5cf6]/20 text-[#8b5cf6] text-xs capitalize">{p.project_type}</Badge>
+                      ) : (
+                        <span className={`text-xs ${textSecondary}`}>—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
+                        <Calendar className="h-3 w-3" />{fmtDate(p.start_date)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
                         <Calendar className="h-3 w-3" />{fmtDate(p.due_date)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const info = dueBalanceInfo(p.due_date);
+                        return info ? (
+                          <span className="text-xs font-medium" style={{ color: info.color }}>{info.label}</span>
+                        ) : (
+                          <span className={`text-xs ${textSecondary}`}>—</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
@@ -1706,30 +1855,6 @@ export default function ProjectsPanel({
                         <Users className="h-3 w-3" />{p.members?.length || 0}
                       </span>
                     </td>
-                    {canManageProjects && (
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            if (!window.confirm(`Delete project "${p.name}"?\n\nTasks linked to it will be detached (not deleted).`)) return;
-                            try {
-                              await axios.delete(`${API}/api/projects/${p.project_id}`, { headers });
-                              toast.success('Project deleted');
-                              loadProjects();
-                              if (selectedProject?.project_id === p.project_id) setSelectedProject(null);
-                            } catch (err) {
-                              toast.error(err.response?.data?.detail || 'Failed to delete project');
-                            }
-                          }}
-                          className="p-1 rounded hover:bg-red-500/10 text-red-500 hover:text-red-400 transition"
-                          title="Delete project"
-                          data-testid={`project-delete-${p.project_id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1787,6 +1912,28 @@ export default function ProjectsPanel({
                 <div>
                   <Label className={textPrimary}>Due Date</Label>
                   <Input type="date" value={projectDraft.due_date} onChange={(e) => setProjectDraft({ ...projectDraft, due_date: e.target.value })} />
+                </div>
+              </div>
+
+              {/* Project Type */}
+              <div>
+                <Label className={textPrimary}>Project Type</Label>
+                <div className="flex gap-2 mt-1">
+                  {[{ value: 'onetime', label: 'Onetime' }, { value: 'monthly', label: 'Monthly' }].map(t => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setProjectDraft({ ...projectDraft, project_type: t.value })}
+                      className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${
+                        projectDraft.project_type === t.value
+                          ? 'bg-[#6366f1] border-[#6366f1] text-white'
+                          : `${borderColor} ${bgSecondary} ${textSecondary}`
+                      }`}
+                      data-testid={`project-type-${t.value}`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
