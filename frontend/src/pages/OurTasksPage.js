@@ -342,9 +342,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Task name is required');
       return;
     }
-    // Enforce department BEFORE other field checks when assigning to team (clearer UX)
-    if (mainTab === 'assign_to_team' && !formData.department) {
-      toast.error('Please select a Department before creating a team task');
+    // Department and Project are mandatory for every task — My Tasks and
+    // Assign to Team alike — so every task is always traceable to a project.
+    if (!formData.department) {
+      toast.error('Please select a Department');
+      return;
+    }
+    if (!formData.project_id) {
+      toast.error('Please select a Project');
       return;
     }
     if (!formData.type) {
@@ -381,6 +386,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (submitting) return;
     if (!formData.task_name.trim()) {
       toast.error('Task name is required');
+      return;
+    }
+    if (!formData.department) {
+      toast.error('Please select a Department');
+      return;
+    }
+    if (!formData.project_id) {
+      toast.error('Please select a Project');
       return;
     }
     if (!formData.type) {
@@ -2203,7 +2216,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     </div>
 
                     <div>
-                      <Label className={textPrimary}>Department</Label>
+                      <Label className={textPrimary}>Department <span className="text-red-500">*</span></Label>
                       <Select
                         value={formData.department || 'none'}
                         onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '' }))}
@@ -2222,7 +2235,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className={textPrimary}>Project</Label>
+                        <Label className={textPrimary}>Project <span className="text-red-500">*</span></Label>
                         <Select
                           value={formData.project_id || 'none'}
                           onValueChange={(v) => {
