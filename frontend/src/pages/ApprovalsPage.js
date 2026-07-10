@@ -89,6 +89,10 @@ export default function ApprovalsPage({ embedded = false }) {
   const canApprovePM = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'project_manager';
   const canApproveOps = user?.role === 'super_admin' || user?.role === 'admin' || 
                         (user?.designation || '').toLowerCase().includes('operation');
+  const normalizedDesignation = (user?.designation || '').toLowerCase().trim();
+  const isHeadOfOperations = normalizedDesignation === 'operation head' ||
+                             normalizedDesignation === 'head of operations' ||
+                             (normalizedDesignation.includes('head') && normalizedDesignation.includes('operation'));
   
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -127,6 +131,12 @@ export default function ApprovalsPage({ embedded = false }) {
   // - Operations → approver_role in {operations, ceo, marketing_head}
   // - HR       → approver_role === 'hr'
   const [approverBucket, setApproverBucket] = useState('operations');
+  useEffect(() => {
+    if (isHeadOfOperations && approverBucket !== 'operations') {
+      setApproverBucket('operations');
+    }
+  }, [isHeadOfOperations, approverBucket]);
+
   const bucketMatchesRole = (role) => {
     const r = (role || '').toLowerCase();
     if (approverBucket === 'pm') return r === 'pm';
@@ -155,6 +165,10 @@ export default function ApprovalsPage({ embedded = false }) {
   const [payrollActionBusy, setPayrollActionBusy] = useState(false);
 
   const loadPayrollApprovals = useCallback(async () => {
+    if (isHeadOfOperations) {
+      setPayrollApprovals([]);
+      return;
+    }
     try {
       const res = await axios.get(`${API}/api/payroll/approvals`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -164,7 +178,7 @@ export default function ApprovalsPage({ embedded = false }) {
       // 403 is expected for non-CEO viewers — silent skip.
       setPayrollApprovals([]);
     }
-  }, [token]);
+  }, [token, isHeadOfOperations]);
 
   useEffect(() => {
     loadPayrollApprovals();
@@ -176,6 +190,10 @@ export default function ApprovalsPage({ embedded = false }) {
   const [attendancePending, setAttendancePending] = useState({ attendance: [], permissions: [] });
 
   const loadAttendancePending = useCallback(async () => {
+    if (isHeadOfOperations) {
+      setAttendancePending({ attendance: [], permissions: [] });
+      return;
+    }
     try {
       const res = await axios.get(`${API}/api/hr/admin/attendance/pending-approvals`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -187,7 +205,7 @@ export default function ApprovalsPage({ embedded = false }) {
     } catch (error) {
       setAttendancePending({ attendance: [], permissions: [] });
     }
-  }, [token]);
+  }, [token, isHeadOfOperations]);
 
   useEffect(() => {
     loadAttendancePending();
@@ -196,7 +214,7 @@ export default function ApprovalsPage({ embedded = false }) {
   useAutoRefresh([loadAttendancePending]);
 
   // Pump HR bucket count so it reflects payslips too
-  bucketCounts.hr = bucketCounts.hr + payrollApprovals.length;
+  bucketCounts.hr = isHeadOfOperations ? 0 : bucketCounts.hr + payrollApprovals.length;
 
   const approvePayslip = async (payslipId) => {
     setPayrollActionBusy(true);
@@ -237,6 +255,11 @@ export default function ApprovalsPage({ embedded = false }) {
 
   // Load approvals
   const loadApprovals = useCallback(async () => {
+    if (isHeadOfOperations) {
+      setApprovals([]);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       // Build department filter - empty for 'all', comma-separated for specific departments
@@ -259,7 +282,7 @@ export default function ApprovalsPage({ embedded = false }) {
     } finally {
       setLoading(false);
     }
-  }, [selectedDepartments, dateFilter, token, approvalType]);
+  }, [selectedDepartments, dateFilter, token, approvalType, isHeadOfOperations]);
 
   useEffect(() => {
     loadApprovals();
@@ -284,6 +307,17 @@ export default function ApprovalsPage({ embedded = false }) {
 
   // Background polling + focus refresh — keeps both queues live
   useAutoRefresh([loadApprovals, loadTaskApprovals]);
+
+  const refreshVisibleApprovals = () => {
+    if (isHeadOfOperations) {
+      loadTaskApprovals();
+      return;
+    }
+    loadApprovals();
+    loadTaskApprovals();
+    loadPayrollApprovals();
+    loadAttendancePending();
+  };
 
   // Open the View Decision modal for a task approval
   const [decisionTask, setDecisionTask] = useState(null);
@@ -451,11 +485,13 @@ export default function ApprovalsPage({ embedded = false }) {
               <div>
                 <h1 className={`text-2xl font-bold ${textPrimary}`}>Approvals</h1>
                 <p className={`text-sm ${textSecondary}`}>
-                  Review and approve pending requests from all departments
+                  {isHeadOfOperations
+                    ? 'Review and approve Operations requests'
+                    : 'Review and approve pending requests from all departments'}
                 </p>
               </div>
             </div>
-            <Button onClick={loadApprovals} variant="outline" className="gap-2">
+            <Button onClick={refreshVisibleApprovals} variant="outline" className="gap-2">
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
           </div>
@@ -463,6 +499,7 @@ export default function ApprovalsPage({ embedded = false }) {
           {/* Approval Queue toggle removed — all approvals route to Operations */}
           
           {/* Filters */}
+          {!isHeadOfOperations && (
           <div className="flex items-center gap-4 flex-wrap">
             {/* Date Filter */}
             <div className="flex items-center gap-2">
@@ -496,9 +533,11 @@ export default function ApprovalsPage({ embedded = false }) {
               />
             </div>
           </div>
+          )}
         </div>
 
         {/* Department Checkboxes Selection */}
+        {!isHeadOfOperations && (
         <div className={`px-6 py-4 border-b ${borderColor} ${bgCard}`}>
           <div className="flex items-center gap-2 mb-3">
             <Filter className={`h-4 w-4 ${textSecondary}`} />
@@ -552,9 +591,10 @@ export default function ApprovalsPage({ embedded = false }) {
             })}
           </div>
         </div>
+        )}
         
         {/* Stage Sub-Tabs (for Website department - shown when Website is selected) */}
-        {selectedDepartments.includes('website') && (
+        {!isHeadOfOperations && selectedDepartments.includes('website') && (
           <div className={`px-6 py-3 border-b ${borderColor} ${bgCard}`}>
             <div className="flex items-center gap-2 mb-2">
               <Globe className={`h-4 w-4 ${textSecondary}`} />
@@ -596,11 +636,13 @@ export default function ApprovalsPage({ embedded = false }) {
         <div className="flex-1 overflow-auto p-6 space-y-6">
           {/* 3-way Approvals bucket sub-tabs: PM / Operations / HR */}
           <div className="flex items-center gap-2 flex-wrap" data-testid="approver-bucket-tabs">
-            {[
+            {(isHeadOfOperations ? [
+              { id: 'operations', label: 'Operations Approvals', color: 'from-blue-500 to-indigo-600' },
+            ] : [
               { id: 'pm', label: 'Tech Lead Approvals', color: 'from-purple-500 to-purple-600' },
               { id: 'operations', label: 'Operations Approvals', color: 'from-blue-500 to-indigo-600' },
               { id: 'hr', label: 'HR Approvals', color: 'from-pink-500 to-rose-600' },
-            ].map(b => {
+            ]).map(b => {
               const isActive = approverBucket === b.id;
               const count = bucketCounts[b.id] || 0;
               return (
@@ -694,7 +736,7 @@ export default function ApprovalsPage({ embedded = false }) {
           )}
 
           {/* HR Payroll Approvals — only visible inside the HR bucket */}
-          {approverBucket === 'hr' && payrollApprovals.length > 0 && (
+          {!isHeadOfOperations && approverBucket === 'hr' && payrollApprovals.length > 0 && (
             <div data-testid="payroll-approvals-section">
               <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
                 <Briefcase className="h-4 w-4 text-[#f43f5e]" />
@@ -774,7 +816,7 @@ export default function ApprovalsPage({ embedded = false }) {
             </div>
           )}
 
-          {approverBucket === 'hr' && payrollApprovals.length === 0 && visibleTaskApprovals.length === 0 && (
+          {!isHeadOfOperations && approverBucket === 'hr' && payrollApprovals.length === 0 && visibleTaskApprovals.length === 0 && (
             <div className={`text-center py-12 ${textSecondary} border ${borderColor} rounded-lg ${bgCard}`}>
               <Briefcase className="h-10 w-10 mx-auto mb-2 opacity-40" />
               <p className={`text-sm ${textPrimary}`}>No HR approvals pending</p>
@@ -784,7 +826,8 @@ export default function ApprovalsPage({ embedded = false }) {
 
           {/* Attendance (early login/logout) + Permission requests — view only.
               Actual approve/reject still happens in HR Admin. */}
-          {(selectedDepartments.includes('all') || selectedDepartments.includes('attendance')) &&
+          {!isHeadOfOperations &&
+            (selectedDepartments.includes('all') || selectedDepartments.includes('attendance')) &&
             (attendancePending.attendance.length > 0 || attendancePending.permissions.length > 0) && (
             <div data-testid="attendance-approvals-section">
               <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
@@ -853,18 +896,24 @@ export default function ApprovalsPage({ embedded = false }) {
             </div>
           )}
 
-          {loading ? (
+          {isHeadOfOperations && visibleTaskApprovals.length === 0 ? (
+            <div className={`text-center py-16 ${textSecondary} border ${borderColor} rounded-lg ${bgCard}`}>
+              <CheckCircle2 className="h-16 w-16 mx-auto mb-4 opacity-30" />
+              <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>No Operations approvals pending</h3>
+              <p>Operations approval requests will show up here.</p>
+            </div>
+          ) : !isHeadOfOperations && loading ? (
             <div className={`text-center py-16 ${textSecondary}`}>
               <RefreshCw className="h-8 w-8 mx-auto mb-4 animate-spin" />
               <p>Loading approvals...</p>
             </div>
-          ) : filteredApprovals.length === 0 ? (
+          ) : !isHeadOfOperations && filteredApprovals.length === 0 ? (
             <div className={`text-center py-16 ${textSecondary}`}>
               <CheckCircle2 className="h-16 w-16 mx-auto mb-4 opacity-30" />
               <h3 className={`text-lg font-medium ${textPrimary} mb-2`}>No pending approvals</h3>
               <p>All caught up! Check back later for new requests.</p>
             </div>
-          ) : (
+          ) : !isHeadOfOperations ? (
             <div className="space-y-3">
               {filteredApprovals.map(approval => (
                 <ApprovalCard
@@ -882,7 +931,7 @@ export default function ApprovalsPage({ embedded = false }) {
                 />
               ))}
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Task Approval Decision Popup */}

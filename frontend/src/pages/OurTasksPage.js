@@ -95,6 +95,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // a new `headers` prop on every render → their loadXyz useCallback identity
   // changes → their useEffect fires constantly → "Loading…" blinks every frame.
   const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+  const normalizedDesignation = (user?.designation || '').toLowerCase().trim();
+  const isHeadOfOperations = normalizedDesignation === 'operation head' ||
+                             normalizedDesignation === 'head of operations' ||
+                             (normalizedDesignation.includes('head') && normalizedDesignation.includes('operation'));
 
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -233,7 +237,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       setDeptCategoriesForTask(dRes.data || []);
       setProjectsCount((pRes.data || []).length);
       setDepartmentsCount((dRes.data || []).length);
-      setApprovalsCount((aRes.data || []).length);
+      const pendingApprovals = aRes.data || [];
+      setApprovalsCount(
+        isHeadOfOperations
+          ? pendingApprovals.filter(t => (t.approval_request?.approver_role || '').toLowerCase() === 'operations').length
+          : pendingApprovals.length
+      );
       setMeetingsCount((mRes.data || []).length);
       // Find my designation
       const userDesg = (user?.designation || '').toLowerCase().trim();
@@ -244,7 +253,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     } catch (error) {
       console.error('Error loading projects/categories:', error);
     }
-  }, [user?.designation]);
+  }, [user?.designation, isHeadOfOperations]);
 
   // Filter dept categories visible to the current user based on their designation's
   // operations_departments. If the designation explicitly defines operations_departments,
