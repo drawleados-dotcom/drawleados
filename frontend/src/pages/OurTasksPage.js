@@ -1014,7 +1014,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       if (!isPrivileged) {
         const myDepts = (myDesignation?.operations_departments || []);
         const createdByMe = task.created_by === user?.user_id && task.assigned_to !== user?.user_id;
-        const inMyDept = task.department && myDepts.includes(task.department) && task.assigned_to !== user?.user_id;
+        const inMyDept = task.department && (task.department === 'all' || myDepts.includes(task.department)) && task.assigned_to !== user?.user_id;
         if (!(createdByMe || inMyDept)) return false;
       }
     }
@@ -1048,8 +1048,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // Assigned By filter
     if (filters.assignedBy !== 'all' && task.assigned_by !== filters.assignedBy) return false;
 
-    // Department filter
-    if (filters.department !== 'all' && task.department !== filters.department) return false;
+    // Department filter — a task marked "all" (Select All) belongs to every
+    // department's view, so it always passes a specific-department filter.
+    if (filters.department !== 'all' && task.department !== filters.department && task.department !== 'all') return false;
 
     // Project filter
     if (filters.project !== 'all' && task.project_id !== filters.project) return false;
@@ -1636,7 +1637,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 )}
               </button>
               {visibleDeptCategories.map(d => {
-                const count = pendingByDept[d.dept_key] || 0;
+                // A task marked "all" (Select All) counts toward every department's badge too.
+                const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
                 const isActive = filters.department === d.dept_key && !meetingsSubActive;
                 return (
                   <button
@@ -1768,7 +1770,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           <div className="flex flex-col gap-1">
                             <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs w-fit">{task.category}</Badge>
                             {task.department && (
-                              <span className={`text-xs ${textSecondary}`}>{task.department}</span>
+                              <span className={`text-xs ${textSecondary}`}>{task.department === 'all' ? 'All Departments' : task.department}</span>
                             )}
                           </div>
                         ) : (
@@ -2212,16 +2214,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     </div>
 
                     <div>
-                      <Label className={textPrimary}>Department <span className="text-red-500">*</span></Label>
+                      <Label className={textPrimary}>
+                        Department {!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) && <span className="text-red-500">*</span>}
+                      </Label>
                       <Select
                         value={formData.department || 'none'}
                         onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '' }))}
                       >
                         <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
-                          <SelectValue placeholder="Select department" />
+                          <SelectValue placeholder={MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) ? 'Select department (optional)' : 'Select department'} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="none">— None —</SelectItem>
+                          <SelectItem value="all">Select All (All Departments)</SelectItem>
                           {visibleDeptCategories.map(d => (
                             <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
                           ))}
@@ -2231,7 +2236,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className={textPrimary}>Project <span className="text-red-500">*</span></Label>
+                        <Label className={textPrimary}>
+                          Project {!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) && <span className="text-red-500">*</span>}
+                        </Label>
                         <Select
                           value={formData.project_id || 'none'}
                           onValueChange={(v) => {
@@ -2265,7 +2272,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             <SelectItem value="none">— None —</SelectItem>
                             {(() => {
                               const myProjects = projectsForTask.filter((p) => {
-                                if (formData.department && !(p.departments || []).includes(formData.department)) {
+                                if (formData.department && formData.department !== 'all' && !(p.departments || []).includes(formData.department)) {
                                   return false;
                                 }
                                 const members = Array.isArray(p.members) ? p.members : [];
@@ -2274,7 +2281,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               if (myProjects.length === 0) {
                                 return (
                                   <div className={`px-3 py-2 text-xs ${textSecondary}`}>
-                                    No projects assigned to you{formData.department ? ` in this department` : ''}.
+                                    No projects assigned to you{formData.department && formData.department !== 'all' ? ` in this department` : ''}.
                                   </div>
                                 );
                               }
@@ -2290,10 +2297,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         <Select
                           value={formData.category || 'none'}
                           onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
-                          disabled={!formData.department}
+                          disabled={!formData.department || formData.department === 'all'}
                         >
                           <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-category">
-                            <SelectValue placeholder={formData.department ? 'Select category' : 'Pick dept first'} />
+                            <SelectValue placeholder={formData.department === 'all' ? 'N/A for All Departments' : (formData.department ? 'Select category' : 'Pick dept first')} />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">— None —</SelectItem>
