@@ -344,13 +344,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     // Department and Project are mandatory for every task — My Tasks and
     // Assign to Team alike — so every task is always traceable to a project.
-    if (!formData.department) {
-      toast.error('Please select a Department');
-      return;
-    }
-    if (!formData.project_id) {
-      toast.error('Please select a Project');
-      return;
+    // Meetings (team/client) are the exception: they aren't project work and
+    // don't belong to any single department or project.
+    if (!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase())) {
+      if (!formData.department) {
+        toast.error('Please select a Department');
+        return;
+      }
+      if (!formData.project_id) {
+        toast.error('Please select a Project');
+        return;
+      }
     }
     if (!formData.type) {
       toast.error('Please pick a Type for this task');
@@ -388,13 +392,15 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Task name is required');
       return;
     }
-    if (!formData.department) {
-      toast.error('Please select a Department');
-      return;
-    }
-    if (!formData.project_id) {
-      toast.error('Please select a Project');
-      return;
+    if (!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase())) {
+      if (!formData.department) {
+        toast.error('Please select a Department');
+        return;
+      }
+      if (!formData.project_id) {
+        toast.error('Please select a Project');
+        return;
+      }
     }
     if (!formData.type) {
       toast.error('Please pick a Type for this task');

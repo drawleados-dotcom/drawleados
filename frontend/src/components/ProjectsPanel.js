@@ -30,12 +30,14 @@ export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
   viewOnly = false,
 }) {
-  // Permission: Super Admin / Admin / Operation Head designation can create + edit projects
+  // Permission: the parent (OurTasksPage) already resolves this correctly — privileged
+  // roles via their own View/Edit toggle, everyone else via their designation's
+  // operations_projects config — and passes it down as `viewOnly`. Previously this
+  // panel ALSO re-checked designation with a hardcoded exact-string match
+  // (desg === 'operation head'), which silently blocked anyone whose actual
+  // designation title didn't match that literal string (e.g. "Head of Operations").
   const role = (currentUser?.role || '').toLowerCase();
-  const desg = (currentUser?.designation || '').toLowerCase().trim();
-  const _baseCanManage = role === 'super_admin' || role === 'admin' || desg === 'operation head';
-  // Force view-only when toggle is on
-  const canManageProjects = _baseCanManage && !viewOnly;
+  const canManageProjects = !viewOnly;
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);

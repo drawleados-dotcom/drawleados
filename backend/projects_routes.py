@@ -65,8 +65,13 @@ class ProjectTaskCreate(BaseModel):
 
 
 async def _is_operation_head_or_admin(user, db) -> bool:
-    """User can create/edit projects if they are super_admin, admin, or have
-    designation == 'Operation Head'.
+    """User can create/edit projects if they are super_admin, admin, or their
+    designation has been granted 'edit' access to operations_projects.
+
+    Previously this matched designation == 'Operation Head' by exact string,
+    which silently locked out anyone whose actual designation title differed
+    from that literal string (e.g. "Head of Operations") — even when their
+    designation's operations_projects config was explicitly set to 'edit'.
     """
     role = (getattr(user, "role", "") or "").lower()
     if role in {"super_admin", "admin"}:
@@ -77,8 +82,17 @@ async def _is_operation_head_or_admin(user, db) -> bool:
     )
     if not user_doc:
         return False
-    desg = (user_doc.get("designation") or "").strip().lower()
-    return desg == "operation head"
+    desg_title = (user_doc.get("designation") or "").strip()
+    if not desg_title:
+        return False
+    import re as _re
+    desg_doc = await db.designations.find_one(
+        {"title": {"$regex": f"^\\s*{_re.escape(desg_title)}\\s*$", "$options": "i"}},
+        {"_id": 0, "operations_projects": 1}
+    )
+    if not desg_doc:
+        return False
+    return (desg_doc.get("operations_projects") or "none") == "edit"
 
 
 @projects_router.get("")

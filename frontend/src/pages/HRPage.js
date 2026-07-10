@@ -22,6 +22,20 @@ import useAutoRefresh from '../hooks/useAutoRefresh';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+// clock_in/clock_out on an attendance record only ever reflect the CURRENT/latest
+// session — each new clock-in overwrites them. When someone clocks in again after
+// being logged out mid-day (without an explicit clock-out), the earlier session's
+// start time otherwise disappears from "Login". Derive the true first login / last
+// logout of the day from the sessions array instead. Shared by AttendanceTab and
+// RequestsAttendanceTab, which are separate components in this file.
+const getDayLoginLogout = (record) => {
+  const recSessions = record?.sessions || [];
+  const firstLogin = recSessions.length > 0 ? recSessions[0].clock_in : record?.clock_in;
+  const lastLogout = record?.clock_out
+    || (recSessions.length > 0 ? recSessions[recSessions.length - 1].clock_out : null);
+  return { firstLogin, lastLogout };
+};
+
 export default function HRPage() {
   const { isDark } = useTheme();
   const { user: authUser } = useAuth();
@@ -644,7 +658,7 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
   const [showBreakSummary, setShowBreakSummary] = useState(false);
   // Multiple sessions support
   const sessions = attendance?.sessions || [];
-  
+
   useEffect(() => {
     if (todayAttendance?.settings) {
       setSettings(todayAttendance.settings);
@@ -855,11 +869,11 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Login</p>
-              <p className={`text-2xl font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_in)}</p>
+              <p className={`text-2xl font-semibold ${textPrimary}`}>{formatTime(getDayLoginLogout(attendance).firstLogin)}</p>
             </div>
             <div className={`p-4 ${bgSecondary} rounded-lg`}>
               <p className={`text-xs ${textSecondary} mb-1`}>Logout</p>
-              <p className={`text-2xl font-semibold ${textPrimary}`}>{formatTime(attendance?.clock_out)}</p>
+              <p className={`text-2xl font-semibold ${textPrimary}`}>{formatTime(getDayLoginLogout(attendance).lastLogout)}</p>
             </div>
             <button
               type="button"
@@ -1042,11 +1056,12 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                   const dayName = recordDate.toLocaleDateString('en-US', { weekday: 'short' });
                   const sessionsCount = record.sessions?.length || (record.clock_in ? 1 : 0);
                   const lunchDiff = getLunchDiff(record.lunch_duration);
+                  const { firstLogin: recordFirstLogin, lastLogout: recordLastLogout } = getDayLoginLogout(record);
 
-                  // Total Login Hour = clock_out - clock_in (gross, includes breaks)
+                  // Total Login Hour = last logout - first login (gross, includes breaks)
                   let totalLoginHrs = null;
-                  if (record.clock_in && record.clock_out) {
-                    const ms = new Date(record.clock_out) - new Date(record.clock_in);
+                  if (recordFirstLogin && recordLastLogout) {
+                    const ms = new Date(recordLastLogout) - new Date(recordFirstLogin);
                     if (ms > 0) totalLoginHrs = ms / 3600000;
                   } else if (record.total_hours != null) {
                     totalLoginHrs = Number(record.total_hours);
@@ -1081,8 +1096,8 @@ function AttendanceTab({ todayAttendance, attendanceHistory, attendanceSummary, 
                       <td className={`p-3`}>
                         <span className="bg-[#6366f1]/20 text-[#6366f1] px-2 py-1 rounded text-sm">{sessionsCount}</span>
                       </td>
-                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in)}</td>
-                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out)}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(recordFirstLogin)}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(recordLastLogout)}</td>
                       <td className={`p-3 ${textPrimary} font-medium`} data-testid={`history-total-login-${index}`}>
                         {totalLoginHrs != null ? `${totalLoginHrs.toFixed(2)}h` : '-'}
                       </td>
@@ -4034,8 +4049,8 @@ function RequestsAttendanceTab({ attendanceHistory, formatDate, formatTime, bgCa
                   return (
                     <tr key={index} className={`border-b ${borderColor} hover:${bgSecondary}`}>
                       <td className={`p-3 ${textPrimary} font-medium`}>{formatDate(record.date)}</td>
-                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_in) || '-'}</td>
-                      <td className={`p-3 ${textPrimary}`}>{formatTime(record.clock_out) || '-'}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(getDayLoginLogout(record).firstLogin) || '-'}</td>
+                      <td className={`p-3 ${textPrimary}`}>{formatTime(getDayLoginLogout(record).lastLogout) || '-'}</td>
                       <td className={`p-3 font-medium text-[#10b981]`}>{record.total_hours?.toFixed(2) || '-'}</td>
                       <td className="p-3">
                         <Badge className={`${
