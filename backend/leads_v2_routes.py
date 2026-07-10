@@ -147,12 +147,71 @@ def _pipeline_match(pipeline: str) -> Dict[str, Any]:
         return {"$or": [{"pipeline": "pre_sales"}, {"pipeline": {"$exists": False}}]}
     return {"pipeline": pipeline}
 
+# Invoice Raise now lives exclusively in the Sales pipeline — a Pre-sales
+# lead books/manages its appointment, then Sales owns everything from
+# Appointment through to the only two outcomes: Lost or Invoice Raise.
+PIPELINE_TERMINAL_STAGES = {
+    "pre_sales": [],
+    "sales": [
+        {"name": "Lost", "color": "#ef4444"},
+        {"name": "Invoice Raise", "color": "#a855f7"},
+    ],
+}
+
+async def _migrate_legacy_presales_invoice_raise():
+    """One-time self-healing migration: Invoice Raise used to be seeded into
+    Pre-sales too. Any stage doc named "Invoice Raise" with no `pipeline` tag
+    (i.e. resolved as pre_sales) is folded into the Sales pipeline, and any
+    lead still sitting on it is moved to "Deal Closed" in Pre-sales so it
+    isn't left pointing at a stage that no longer appears there."""
+    legacy = await db.lead_stages.find_one({
+        "name": {"$regex": "^invoice raise$", "$options": "i"},
+        "pipeline": {"$exists": False},
+        "is_deleted": {"$ne": True},
+    }, {"_id": 0})
+    if not legacy:
+        return
+
+    # Move any leads sitting on the legacy stage to Deal Closed so Pre-sales
+    # never shows a lead pointing at a stage no longer in its stage list.
+    deal_closed = await db.lead_stages.find_one({
+        "name": {"$regex": "^deal closed$", "$options": "i"},
+        "$and": [_pipeline_match("pre_sales")],
+        "is_deleted": {"$ne": True},
+    }, {"_id": 0})
+    if deal_closed:
+        await db.leads_v2.update_many(
+            {"stage_id": legacy["stage_id"], "is_deleted": {"$ne": True}},
+            {"$set": {"stage_id": deal_closed["stage_id"], "updated_at": datetime.now(timezone.utc)}},
+        )
+
+    # If Sales already seeded its own "Invoice Raise" (e.g. someone opened the
+    # Sales tab before this migration ran), reuse that one and retire the
+    # legacy doc instead of creating a duplicate stage.
+    existing_sales_invoice_raise = await db.lead_stages.find_one({
+        "name": {"$regex": "^invoice raise$", "$options": "i"},
+        "pipeline": "sales",
+        "is_deleted": {"$ne": True},
+        "stage_id": {"$ne": legacy["stage_id"]},
+    }, {"_id": 0})
+    if existing_sales_invoice_raise:
+        await db.lead_stages.update_one(
+            {"stage_id": legacy["stage_id"]},
+            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
+        )
+    else:
+        await db.lead_stages.update_one(
+            {"stage_id": legacy["stage_id"]},
+            {"$set": {"pipeline": "sales"}},
+        )
+
 @leads_v2_router.get("/stages")
 async def get_stages(request: Request, pipeline: str = "pre_sales"):
     """Get all lead stages for a pipeline ('pre_sales' or 'sales'). Auto-seeds
-    defaults on first call per-pipeline and idempotently backfills the fixed
-    "Invoice Raise" stage if it's missing."""
+    defaults on first call per-pipeline and idempotently backfills each
+    pipeline's terminal stages (see PIPELINE_TERMINAL_STAGES) if missing."""
     await get_current_user_from_request(request)
+    await _migrate_legacy_presales_invoice_raise()
     base_query = {"is_deleted": {"$ne": True}, "$and": [_pipeline_match(pipeline)]}
     stages = await db.lead_stages.find(
         base_query,
@@ -164,7 +223,8 @@ async def get_stages(request: Request, pipeline: str = "pre_sales"):
         if pipeline == "sales":
             default_stages = [
                 {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Appointment", "color": "#3b82f6", "order": 0},
-                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 1, "is_fixed": True},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Lost", "color": "#ef4444", "order": 1, "is_fixed": True},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 2, "is_fixed": True},
             ]
         else:
             default_stages = [
@@ -175,8 +235,7 @@ async def get_stages(request: Request, pipeline: str = "pre_sales"):
                 {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Negotiation", "color": "#ec4899", "order": 4},
                 {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Followup", "color": "#14b8a6", "order": 5},
                 {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Payment Stage", "color": "#f97316", "order": 6},
-                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 7, "is_fixed": True},
-                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Deal Closed", "color": "#22c55e", "order": 8},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Deal Closed", "color": "#22c55e", "order": 7},
             ]
         for stage in default_stages:
             stage["pipeline"] = pipeline
@@ -185,15 +244,18 @@ async def get_stages(request: Request, pipeline: str = "pre_sales"):
             await db.lead_stages.insert_one(stage)
         stages = default_stages
 
-    # Idempotent backfill: ensure "Invoice Raise" exists for this pipeline.
-    # Inserted just before "Deal Closed" / "Lost" if present, otherwise at the end.
-    has_invoice_raise = any((s.get("name") or "").strip().lower() == "invoice raise" for s in stages)
-    if not has_invoice_raise:
-        # Find the order of "Deal Closed" or "Lost" — Invoice Raise goes immediately before it.
+    # Idempotent backfill: ensure this pipeline's terminal stages exist (e.g.
+    # Sales must always end in Lost / Invoice Raise). Each missing one is
+    # inserted right before "Deal Closed" / "Lost" / "Won" if present,
+    # otherwise appended at the end, in PIPELINE_TERMINAL_STAGES order.
+    for terminal in PIPELINE_TERMINAL_STAGES.get(pipeline, []):
+        has_it = any((s.get("name") or "").strip().lower() == terminal["name"].lower() for s in stages)
+        if has_it:
+            continue
         terminal_orders = [s.get("order", 0) for s in stages
-                           if (s.get("name") or "").strip().lower() in ("deal closed", "lost", "won")]
+                           if (s.get("name") or "").strip().lower() in ("deal closed", "lost", "won")
+                           and (s.get("name") or "").strip().lower() != terminal["name"].lower()]
         insert_order = (min(terminal_orders) if terminal_orders else (max((s.get("order", 0) for s in stages), default=-1) + 1))
-        # Shift terminal stages down by 1 to make room (scoped to this pipeline only).
         if terminal_orders:
             await db.lead_stages.update_many(
                 {**base_query, "order": {"$gte": insert_order}},
@@ -201,8 +263,8 @@ async def get_stages(request: Request, pipeline: str = "pre_sales"):
             )
         new_stage = {
             "stage_id": f"stage_{uuid.uuid4().hex[:8]}",
-            "name": "Invoice Raise",
-            "color": "#a855f7",
+            "name": terminal["name"],
+            "color": terminal["color"],
             "order": insert_order,
             "is_fixed": True,
             "pipeline": pipeline,
@@ -497,12 +559,62 @@ async def permanent_delete_lead(lead_id: str, request: Request):
     await db.leads_sheet_rows.delete_many({"row_id": lead_id})
     return {"message": "Lead permanently deleted", "lead_id": lead_id}
 
+def _lead_pipeline(lead: Dict[str, Any]) -> str:
+    return lead.get("pipeline") or "pre_sales"
+
+async def _get_sales_appointment_stage(request: Request) -> Optional[Dict[str, Any]]:
+    """Return the Sales pipeline's Appointment-named stage, seeding Sales
+    pipeline defaults first if it doesn't exist yet."""
+    stage = await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "pipeline": "sales", "name": {"$regex": "appoin", "$options": "i"}},
+        {"_id": 0},
+        sort=[("order", 1)],
+    )
+    if stage:
+        return stage
+    await get_stages(request, pipeline="sales")
+    return await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "pipeline": "sales", "name": {"$regex": "appoin", "$options": "i"}},
+        {"_id": 0},
+        sort=[("order", 1)],
+    )
+
+async def _sync_calendar_and_log_appointment(
+    lead: Dict[str, Any], appointment_at: str, reason: str, current_user: Dict[str, Any], update_doc: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Push the appointment to Google Calendar (best-effort) and build the
+    appointment_history entry to $push alongside `update_doc`'s $set."""
+    from google_calendar_routes import upsert_appointment_event
+    calendar_event_id = await upsert_appointment_event(
+        user_id=current_user["user_id"],
+        summary=f"New Lead Appointment - {lead.get('name', 'Lead')}" if lead else "New Lead Appointment",
+        start_iso=appointment_at,
+        description=(
+            f"Lead: {lead.get('name', '')}\nPhone: {lead.get('phone', '')}\nEmail: {lead.get('email', '')}\nReason: {reason}"
+            if lead else f"Reason: {reason}"
+        ),
+        existing_event_id=lead.get("google_calendar_event_id") if lead else None,
+    )
+    if calendar_event_id:
+        update_doc["google_calendar_event_id"] = calendar_event_id
+    return {
+        "appointment_at": appointment_at,
+        "reason": reason,
+        "changed_at": datetime.now(timezone.utc),
+        "changed_by": current_user["user_id"],
+        "changed_by_name": current_user.get("name", ""),
+    }
+
 @leads_v2_router.put("/leads/{lead_id}/stage")
 async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: Request):
     """Update lead stage (for drag-drop). Optional `appointment_at` (ISO) is
     stored when moving into an Appointment / Appointment Reschedule stage and
     `followup_at` for Followup / Prospect Followup stages — both drive the new
-    columns in the leads table and the date filter."""
+    columns in the leads table and the date filter.
+
+    Booking an appointment from Pre-sales auto-promotes the lead into the
+    Sales pipeline's own Appointment stage — Sales owns everything from
+    there through to the only two outcomes: Lost or Invoice Raise."""
     current_user = await get_current_user_from_request(request)
 
     lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
@@ -511,31 +623,36 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
         "stage_id": stage_data["stage_id"],
         "updated_at": datetime.now(timezone.utc),
     }
-    # Optional date-time payload from the new appointment/followup mini-popup.
-    if stage_data.get("appointment_at"):
-        update_doc["appointment_at"] = stage_data["appointment_at"]
     if stage_data.get("followup_at"):
         update_doc["followup_at"] = stage_data["followup_at"]
 
     new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
     new_stage_name = (new_stage.get("name") or "").strip().lower() if new_stage else ""
+    is_appointment_stage = "appoin" in new_stage_name
 
-    # Push appointment date/time to the user's connected Google Calendar (best-effort).
-    if stage_data.get("appointment_at") and "appoin" in new_stage_name:
-        from google_calendar_routes import upsert_appointment_event
-        calendar_event_id = await upsert_appointment_event(
-            user_id=current_user["user_id"],
-            summary=f"New Lead Appointment - {lead.get('name', 'Lead')}" if lead else "New Lead Appointment",
-            start_iso=stage_data["appointment_at"],
-            description=f"Lead: {lead.get('name', '')}\nPhone: {lead.get('phone', '')}\nEmail: {lead.get('email', '')}" if lead else "",
-            existing_event_id=lead.get("google_calendar_event_id") if lead else None,
-        )
-        if calendar_event_id:
-            update_doc["google_calendar_event_id"] = calendar_event_id
+    history_entry = None
+    if stage_data.get("appointment_at"):
+        appointment_at = stage_data["appointment_at"]
+        update_doc["appointment_at"] = appointment_at
+
+        # Booking an appointment from Pre-sales auto-promotes into Sales.
+        if is_appointment_stage and lead and _lead_pipeline(lead) == "pre_sales":
+            sales_stage = await _get_sales_appointment_stage(request)
+            if sales_stage:
+                update_doc["pipeline"] = "sales"
+                update_doc["stage_id"] = sales_stage["stage_id"]
+
+        if is_appointment_stage:
+            reason = stage_data.get("reason") or ("Rescheduled" if lead and lead.get("appointment_at") else "Initial appointment booked")
+            history_entry = await _sync_calendar_and_log_appointment(lead, appointment_at, reason, current_user, update_doc)
+
+    mongo_update = {"$set": update_doc}
+    if history_entry:
+        mongo_update["$push"] = {"appointment_history": history_entry}
 
     await db.leads_v2.update_one(
         {"lead_id": lead_id},
-        {"$set": update_doc},
+        mongo_update,
     )
 
     # Check if moved to "Deal Closed" or "Won" stage
@@ -566,39 +683,29 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
     
     return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
 
-@leads_v2_router.post("/leads/{lead_id}/promote")
-async def promote_lead_to_sales(lead_id: str, request: Request):
-    """Promote a lead out of Pre-sales into the Sales pipeline, placing it on
-    the Sales pipeline's first stage (by `order`) — e.g. "Appointment"."""
-    user = await get_current_user_from_request(request)
-
+@leads_v2_router.post("/leads/{lead_id}/appointments/reschedule")
+async def reschedule_appointment(lead_id: str, payload: Dict[str, Any], request: Request):
+    """Reschedule a lead's appointment with a reason. Logs to
+    appointment_history and updates (or creates) the Google Calendar event.
+    Works regardless of which pipeline (Pre-sales or Sales) currently holds
+    the lead — the Appointments tab in the lead popup calls this directly."""
+    current_user = await get_current_user_from_request(request)
     lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    first_sales_stage = await db.lead_stages.find_one(
-        {"is_deleted": {"$ne": True}, "pipeline": "sales"},
-        {"_id": 0},
-        sort=[("order", 1)],
-    )
-    if not first_sales_stage:
-        # Seed the Sales pipeline's default stages on first-ever promotion.
-        await get_stages(request, pipeline="sales")
-        first_sales_stage = await db.lead_stages.find_one(
-            {"is_deleted": {"$ne": True}, "pipeline": "sales"},
-            {"_id": 0},
-            sort=[("order", 1)],
-        )
+    appointment_at = payload.get("appointment_at")
+    if not appointment_at:
+        raise HTTPException(status_code=400, detail="appointment_at is required")
+    reason = (payload.get("reason") or "").strip() or "Rescheduled"
+
+    update_doc = {"updated_at": datetime.now(timezone.utc)}
+    history_entry = await _sync_calendar_and_log_appointment(lead, appointment_at, reason, current_user, update_doc)
+    update_doc["appointment_at"] = appointment_at
 
     await db.leads_v2.update_one(
         {"lead_id": lead_id},
-        {"$set": {
-            "pipeline": "sales",
-            "stage_id": first_sales_stage["stage_id"],
-            "promoted_at": datetime.now(timezone.utc),
-            "promoted_by": user["user_id"],
-            "updated_at": datetime.now(timezone.utc),
-        }},
+        {"$set": update_doc, "$push": {"appointment_history": history_entry}},
     )
     return await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
 

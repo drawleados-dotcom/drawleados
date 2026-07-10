@@ -152,6 +152,13 @@ const LeadsPageV2 = () => {
   const [followUpLead, setFollowUpLead] = useState(null);
   const [followUpRemarks, setFollowUpRemarks] = useState('');
 
+  // Appointments tab — reschedule form state
+  const [showRescheduleForm, setShowRescheduleForm] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('');
+  const [rescheduleReason, setRescheduleReason] = useState('');
+  const [rescheduling, setRescheduling] = useState(false);
+
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -347,17 +354,36 @@ const LeadsPageV2 = () => {
     }
   };
 
-  const promoteLeadToSales = async (leadId) => {
-    if (!window.confirm('Promote this lead to the Sales pipeline?')) return;
+  const rescheduleAppointment = async () => {
+    if (!editingLead) return;
+    if (!rescheduleDate || !rescheduleTime) {
+      toast.error('Pick a date and time');
+      return;
+    }
+    if (!rescheduleReason.trim()) {
+      toast.error('Please enter a reason for rescheduling');
+      return;
+    }
+    setRescheduling(true);
     try {
-      await axios.post(`${API}/api/leads-v2/leads/${leadId}/promote`, {}, { headers });
-      toast.success('Lead promoted to Sales');
-      setShowAddLeadModal(false);
-      setEditingLead(null);
+      const appointment_at = new Date(`${rescheduleDate}T${rescheduleTime}`).toISOString();
+      const res = await axios.post(
+        `${API}/api/leads-v2/leads/${editingLead.lead_id}/appointments/reschedule`,
+        { appointment_at, reason: rescheduleReason.trim() },
+        { headers }
+      );
+      toast.success('Appointment rescheduled');
+      setEditingLead(res.data);
+      setShowRescheduleForm(false);
+      setRescheduleDate('');
+      setRescheduleTime('');
+      setRescheduleReason('');
       loadLeads();
       loadStats();
     } catch (error) {
-      toast.error('Failed to promote lead');
+      toast.error('Failed to reschedule appointment');
+    } finally {
+      setRescheduling(false);
     }
   };
 
@@ -416,6 +442,8 @@ const LeadsPageV2 = () => {
       stage_id: lead.stage_id || '',
       custom_fields: lead.custom_fields || {},
     });
+    setShowRescheduleForm(false);
+    setRescheduleReason('');
     setShowAddLeadModal(true);
   };
 
@@ -1313,9 +1341,10 @@ const LeadsPageV2 = () => {
               <DialogTitle>{editingLead ? 'Edit Lead' : 'Add New Lead'}</DialogTitle>
             </DialogHeader>
             <Tabs defaultValue="basic" className="w-full">
-              <TabsList className={`grid w-full grid-cols-3 ${bgSecondary}`}>
+              <TabsList className={`grid w-full grid-cols-4 ${bgSecondary}`}>
                 <TabsTrigger value="basic">Basic Details</TabsTrigger>
                 <TabsTrigger value="lead">Lead Details</TabsTrigger>
+                <TabsTrigger value="appointments" data-testid="appointments-tab-trigger">Appointments</TabsTrigger>
                 <TabsTrigger value="followup">Follow-up</TabsTrigger>
               </TabsList>
               
@@ -1594,7 +1623,108 @@ const LeadsPageV2 = () => {
                   />
                 </div>
               </TabsContent>
-              
+
+              {/* Appointments Tab */}
+              <TabsContent value="appointments" className="mt-4" data-testid="appointments-tab-content">
+                {editingLead ? (
+                  <div className="space-y-4">
+                    <div className={`p-4 rounded-lg border ${borderColor}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className={`text-sm font-medium ${textPrimary}`}>Current Appointment</h4>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setShowRescheduleForm((v) => !v);
+                            if (editingLead.appointment_at) {
+                              const d = new Date(editingLead.appointment_at);
+                              setRescheduleDate(d.toISOString().split('T')[0]);
+                              setRescheduleTime(d.toTimeString().slice(0, 5));
+                            }
+                            setRescheduleReason('');
+                          }}
+                          data-testid="reschedule-appointment-btn"
+                        >
+                          <Calendar className="h-4 w-4 mr-1" /> Reschedule
+                        </Button>
+                      </div>
+                      {editingLead.appointment_at ? (
+                        <p className={`text-sm ${textPrimary}`}>
+                          {new Date(editingLead.appointment_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                        </p>
+                      ) : (
+                        <p className={`text-sm ${textSecondary}`}>No appointment booked yet</p>
+                      )}
+
+                      {showRescheduleForm && (
+                        <div className={`mt-3 pt-3 border-t ${borderColor} space-y-3`}>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className={textSecondary}>Date</Label>
+                              <Input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className={bgSecondary} />
+                            </div>
+                            <div>
+                              <Label className={textSecondary}>Time</Label>
+                              <Input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className={bgSecondary} />
+                            </div>
+                          </div>
+                          <div>
+                            <Label className={textSecondary}>Reason for reschedule</Label>
+                            <Textarea
+                              value={rescheduleReason}
+                              onChange={(e) => setRescheduleReason(e.target.value)}
+                              placeholder="Why is this appointment being rescheduled?"
+                              className={bgSecondary}
+                              rows={2}
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              onClick={rescheduleAppointment}
+                              disabled={rescheduling}
+                              className="bg-[#3b82f6] hover:bg-[#2563eb]"
+                              data-testid="save-reschedule-btn"
+                            >
+                              {rescheduling ? 'Saving...' : 'Save New Date/Time'}
+                            </Button>
+                            <Button variant="ghost" onClick={() => setShowRescheduleForm(false)}>Cancel</Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className={`text-sm font-medium ${textPrimary} mb-3`}>Appointment History</h4>
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                        {(editingLead.appointment_history || []).length === 0 ? (
+                          <p className={`text-sm ${textSecondary} text-center py-4`}>No appointment history yet</p>
+                        ) : (
+                          [...(editingLead.appointment_history || [])].reverse().map((h, idx) => (
+                            <div key={idx} className={`p-3 rounded-lg ${bgSecondary}`}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Clock className="h-4 w-4 text-blue-400" />
+                                <span className={`text-xs ${textSecondary}`}>
+                                  {new Date(h.changed_at).toLocaleString()} by {h.changed_by_name || 'Unknown'}
+                                </span>
+                              </div>
+                              <p className={`text-sm ${textPrimary}`}>
+                                Set to {new Date(h.appointment_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </p>
+                              {h.reason && <p className={`text-xs ${textSecondary} mt-1`}>Reason: {h.reason}</p>}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`text-center py-8 ${textSecondary}`}>
+                    <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>Save the lead first to manage appointments</p>
+                  </div>
+                )}
+              </TabsContent>
+
               {/* Follow-up Tab */}
               <TabsContent value="followup" className="mt-4">
                 {editingLead ? (
@@ -1757,16 +1887,6 @@ const LeadsPageV2 = () => {
                     data-testid="permanent-delete-lead-btn"
                   >
                     <Trash2 className="h-4 w-4 mr-1" /> Permanently Delete
-                  </Button>
-                )}
-                {editingLead && pipeline === 'pre_sales' && (
-                  <Button
-                    onClick={() => promoteLeadToSales(editingLead.lead_id)}
-                    variant="outline"
-                    className="border-[#22c55e] text-[#22c55e] hover:bg-[#22c55e]/10"
-                    data-testid="promote-to-sales-btn"
-                  >
-                    Promote to Sales
                   </Button>
                 )}
               </div>
@@ -2285,7 +2405,7 @@ const LeadsPageV2 = () => {
                       const isAppt = stageDateModal.kind === 'appointment';
                       const iso = new Date(`${stageDateValue}T${stageTimeValue}:00`).toISOString();
                       try {
-                        await axios.put(
+                        const res = await axios.put(
                           `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
                           {
                             stage_id: stage.stage_id,
@@ -2293,10 +2413,17 @@ const LeadsPageV2 = () => {
                           },
                           { headers },
                         );
-                        const patch = isAppt ? { appointment_at: iso } : { followup_at: iso };
-                        setLeadForm({ ...leadForm, stage_id: stage.stage_id });
-                        setEditingLead({ ...editingLead, stage_id: stage.stage_id, ...patch });
-                        toast.success(`Moved to ${stage.name}`);
+                        // Trust the server's response rather than the clicked stage —
+                        // booking an appointment from Pre-sales auto-promotes the lead
+                        // into Sales' own Appointment stage, so the real stage_id/
+                        // pipeline can differ from what was clicked.
+                        setLeadForm({ ...leadForm, stage_id: res.data.stage_id });
+                        setEditingLead(res.data);
+                        if (res.data.pipeline === 'sales' && pipeline === 'pre_sales') {
+                          toast.success(`Appointment booked — moved to Sales`);
+                        } else {
+                          toast.success(`Moved to ${stage.name}`);
+                        }
                         setStageDateModal(null);
                         loadLeads();
                         loadStats();
