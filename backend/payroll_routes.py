@@ -186,25 +186,13 @@ async def update_company_settings(data: CompanySettingsRequest, request: Request
 
 # ========== PAYSLIP WORKFLOW ==========
 
-@payroll_router.post("/payslip/create")
-async def create_payslip(data: CreatePayslipRequest, request: Request):
-    """HR creates a payslip for an employee for a specific month"""
-    from server import get_current_user
-    current_user = await get_current_user(request)
-    
-    if not _has_hr_access(current_user):
-        raise HTTPException(status_code=403, detail="Only HR can create payslips")
-    
-    # Check if payslip already exists for this month
-    existing = await db.payslips.find_one({
-        "user_id": data.user_id,
-        "month": data.month,
-        "year": data.year
-    })
-    
-    if existing:
-        raise HTTPException(status_code=400, detail="Payslip already exists for this month")
-    
+async def _compute_payslip_doc(user_id: str, month: int, year: int, hr_remarks: str, created_by: str) -> dict:
+    """Compute a fresh (unsaved) draft payslip document for one employee/month.
+
+    Shared by the single "Create Payslip" action and the bulk "Send to
+    Approval" monthly action so the salary/attendance calculation logic
+    lives in exactly one place."""
+    data_user_id, data_month, data_year = user_id, month, year
     # Get payroll settings
     payroll_settings = await db.payroll_settings.find_one({"type": "payroll_config"})
     if not payroll_settings:
@@ -218,90 +206,86 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
         }
     
     standard_hours = payroll_settings.get("standard_hours_per_day", 8.0)
-    
+
     # Get salary at that date
-    target_date = datetime(data.year, data.month, 1)
+    target_date = datetime(data_year, data_month, 1)
     salary_record = await db.salary_history.find_one(
-        {"user_id": data.user_id, "effective_from": {"$lte": target_date}},
+        {"user_id": data_user_id, "effective_from": {"$lte": target_date}},
         sort=[("effective_from", -1)]
     )
-    
+
     base_salary = salary_record["amount"] if salary_record else 0
-    
-    # Get attendance data
-    import calendar as cal
-    total_days_in_month = cal.monthrange(data.year, data.month)[1]
-    
+
     # Get calendar for working days
-    calendar_data = await db.company_calendars.find_one({"month": data.month, "year": data.year})
+    calendar_data = await db.company_calendars.find_one({"month": data_month, "year": data_year})
     total_working_days = calendar_data.get("working_days", 22) if calendar_data else 22
     holidays = calendar_data.get("holidays", []) if calendar_data else []
-    
+
     # Get attendance records
-    month_start = datetime(data.year, data.month, 1)
-    month_end = datetime(data.year, data.month + 1, 1) if data.month < 12 else datetime(data.year + 1, 1, 1)
-    
+    month_start = datetime(data_year, data_month, 1)
+    month_end = datetime(data_year, data_month + 1, 1) if data_month < 12 else datetime(data_year + 1, 1, 1)
+
     attendance_records = await db.attendance.find({
-        "user_id": data.user_id,
+        "user_id": data_user_id,
         "date": {"$gte": month_start, "$lt": month_end}
     }).to_list(31)
-    
+
     days_present = len([r for r in attendance_records if r.get("status") == "present"])
-    
+
     # Calculate total hours worked and extra/less hours
     total_hours_worked = sum(r.get("total_hours", 0) for r in attendance_records if r.get("status") == "present")
     expected_hours = days_present * standard_hours
     extra_hours = max(0, total_hours_worked - expected_hours)
     less_hours = max(0, expected_hours - total_hours_worked)
-    
+
     # Get leave records
     leave_records = await db.leave_requests.find({
-        "user_id": data.user_id,
+        "user_id": data_user_id,
         "status": "approved",
         "start_date": {"$lte": month_end.strftime("%Y-%m-%d")},
         "end_date": {"$gte": month_start.strftime("%Y-%m-%d")}
     }).to_list(20)
-    
+
     casual_leaves = sum(r.get("days", 1) for r in leave_records if r.get("leave_type", "").lower() == "casual")
     sick_leaves = sum(r.get("days", 1) for r in leave_records if r.get("leave_type", "").lower() == "sick")
     total_leaves = casual_leaves + sick_leaves
-    
+
     # Calculate absent days
     absent_days = max(0, total_working_days - days_present - total_leaves - len(holidays))
-    
+
     # Calculate salary
     per_day_salary = round(base_salary / total_working_days, 2) if total_working_days > 0 else 0
     days_paid = days_present + casual_leaves + sick_leaves
     earned_salary = round(per_day_salary * days_paid, 2)
-    
+
     # Deductions based on settings
     pf_enabled = payroll_settings.get("pf_enabled", True)
     pf_percentage = payroll_settings.get("pf_percentage", 12.0)
     pf_deduction = round(base_salary * (pf_percentage / 100), 2) if pf_enabled else 0
-    
+
     pt_enabled = payroll_settings.get("professional_tax_enabled", True)
     pt_amount = payroll_settings.get("professional_tax_amount", 200.0)
     pt_threshold = payroll_settings.get("professional_tax_threshold", 15000.0)
     professional_tax = pt_amount if pt_enabled and base_salary > pt_threshold else 0
-    
+
     lop_deduction = round(per_day_salary * absent_days, 2)
     total_deductions = pf_deduction + professional_tax + lop_deduction
     net_salary = round(earned_salary - pf_deduction - professional_tax, 2)
-    
+
     # Get employee info
-    employee = await db.users.find_one({"user_id": data.user_id}, {"_id": 0, "name": 1, "email": 1, "designation": 1, "employee_id": 1})
-    
+    employee = await db.users.find_one({"user_id": data_user_id}, {"_id": 0, "name": 1, "email": 1, "designation": 1, "employee_id": 1}) or {}
+
     payslip_id = f"payslip_{uuid.uuid4().hex[:12]}"
-    
-    payslip = {
+
+    return {
         "payslip_id": payslip_id,
-        "user_id": data.user_id,
+        "user_id": data_user_id,
         "employee_name": employee.get("name", ""),
         "employee_email": employee.get("email", ""),
         "employee_designation": employee.get("designation", ""),
         "employee_id": employee.get("employee_id", ""),
-        "month": data.month,
-        "year": data.year,
+        "month": data_month,
+        "year": data_year,
         "base_salary": base_salary,
         "attendance": {
             "total_working_days": total_working_days,
@@ -330,19 +314,134 @@ async def create_payslip(data: CreatePayslipRequest, request: Request):
             "total_deductions": total_deductions
         },
         "net_salary": net_salary,
-        "status": "draft",  # draft -> operations_review -> ceo_review -> approved -> generated
-        "hr_remarks": data.hr_remarks,
+        "status": "draft",  # draft -> ceo_review -> generated
+        "hr_remarks": hr_remarks,
         "operations_review": None,
         "ceo_review": None,
-        "created_by": current_user.user_id,
+        "created_by": created_by,
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc)
     }
-    
+
+
+@payroll_router.post("/payslip/create")
+async def create_payslip(data: CreatePayslipRequest, request: Request):
+    """HR creates a payslip for an employee for a specific month"""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_hr_access(current_user):
+        raise HTTPException(status_code=403, detail="Only HR can create payslips")
+
+    existing = await db.payslips.find_one({
+        "user_id": data.user_id,
+        "month": data.month,
+        "year": data.year
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="Payslip already exists for this month")
+
+    payslip = await _compute_payslip_doc(data.user_id, data.month, data.year, data.hr_remarks, current_user.user_id)
     await db.payslips.insert_one(payslip)
     payslip.pop("_id", None)
-    
     return payslip
+
+
+@payroll_router.put("/payslips/bulk-send-for-approval")
+async def bulk_send_payroll_for_approval(month: int, year: int, request: Request):
+    """HR's single monthly action: auto-creates a draft payslip for every
+    employee who doesn't already have one this month, then submits every
+    draft payslip for the month straight to CEO review as one batch — the
+    CEO then approves or rejects the whole month in a single action rather
+    than per-employee."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_hr_access(current_user):
+        raise HTTPException(status_code=403, detail="Only HR can submit payroll for approval")
+
+    existing_rows = await db.payslips.find(
+        {"month": month, "year": year}, {"_id": 0, "user_id": 1}
+    ).to_list(1000)
+    existing_user_ids = {r["user_id"] for r in existing_rows}
+
+    users = await db.users.find({}, {"_id": 0, "user_id": 1}).to_list(1000)
+    created = 0
+    for u in users:
+        if u["user_id"] in existing_user_ids:
+            continue
+        payslip = await _compute_payslip_doc(u["user_id"], month, year, "", current_user.user_id)
+        await db.payslips.insert_one(payslip)
+        created += 1
+
+    result = await db.payslips.update_many(
+        {"month": month, "year": year, "status": "draft"},
+        {"$set": {"status": "ceo_review", "updated_at": datetime.now(timezone.utc)}},
+    )
+    return {"created": created, "submitted": result.modified_count}
+
+
+@payroll_router.put("/payslips/bulk-approve")
+async def bulk_ceo_approve_payroll(month: int, year: int, request: Request):
+    """CEO approves the ENTIRE month's payroll batch in one action — every
+    payslip currently awaiting CEO review for the month flips straight to
+    `generated` (ready to be paid from Cashbook)."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_ceo_approval_access(current_user):
+        raise HTTPException(status_code=403, detail="Only CEO can approve payroll")
+
+    now = datetime.now(timezone.utc)
+    result = await db.payslips.update_many(
+        {"month": month, "year": year, "status": "ceo_review"},
+        {"$set": {
+            "status": "generated",
+            "ceo_review": {
+                "reviewer_id": current_user.user_id,
+                "reviewer_name": current_user.name,
+                "decision": "approved",
+                "reviewed_at": now,
+            },
+            "generated_by": current_user.user_id,
+            "generated_at": now,
+            "updated_at": now,
+        }},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="No payslips awaiting approval for this month")
+    return {"message": f"Approved {result.modified_count} payslips", "approved": result.modified_count}
+
+
+@payroll_router.put("/payslips/bulk-reject")
+async def bulk_ceo_reject_payroll(month: int, year: int, data: ReviewPayslipRequest, request: Request):
+    """CEO rejects the whole month's payroll batch with a single shared
+    reason — every payslip awaiting CEO review for the month goes back to
+    draft so HR can fix it and resubmit via bulk-send-for-approval."""
+    from server import get_current_user
+    current_user = await get_current_user(request)
+
+    if not _has_ceo_approval_access(current_user):
+        raise HTTPException(status_code=403, detail="Only CEO can reject payroll")
+
+    now = datetime.now(timezone.utc)
+    result = await db.payslips.update_many(
+        {"month": month, "year": year, "status": "ceo_review"},
+        {"$set": {
+            "status": "draft",
+            "ceo_review": {
+                "reviewer_id": current_user.user_id,
+                "reviewer_name": current_user.name,
+                "decision": "rejected",
+                "review_text": (data.review_text or "").strip(),
+                "reviewed_at": now,
+            },
+            "updated_at": now,
+        }},
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="No payslips awaiting approval for this month")
+    return {"message": f"Rejected {result.modified_count} payslips", "rejected": result.modified_count}
 
 
 @payroll_router.get("/payslips")

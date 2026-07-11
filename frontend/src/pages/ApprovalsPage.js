@@ -186,6 +186,32 @@ export default function ApprovalsPage({ embedded = false }) {
 
   useAutoRefresh([loadPayrollApprovals]);
 
+  // Group individual ceo_review payslips into one batch per (month, year) —
+  // the CEO approves/rejects the whole month's payroll in a single action
+  // instead of employee-by-employee.
+  const payrollBatches = (() => {
+    const byPeriod = new Map();
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    for (const p of payrollApprovals) {
+      const key = `${p.year}-${p.month}`;
+      if (!byPeriod.has(key)) {
+        byPeriod.set(key, {
+          month: p.month,
+          year: p.year,
+          period: `${months[(p.month || 1) - 1]} ${p.year}`,
+          count: 0,
+          totalNet: 0,
+          employees: [],
+        });
+      }
+      const b = byPeriod.get(key);
+      b.count += 1;
+      b.totalNet += Number(p.net_salary || 0);
+      b.employees.push(p.employee_name || '—');
+    }
+    return Array.from(byPeriod.values()).sort((a, b) => (b.year - a.year) || (b.month - a.month));
+  })();
+
   // ---- Attendance (early login/logout) + Permission requests — view only, actioned in HR Admin ----
   const [attendancePending, setAttendancePending] = useState({ attendance: [], permissions: [] });
 
@@ -213,41 +239,42 @@ export default function ApprovalsPage({ embedded = false }) {
 
   useAutoRefresh([loadAttendancePending]);
 
-  // Pump HR bucket count so it reflects payslips too
-  bucketCounts.hr = isHeadOfOperations ? 0 : bucketCounts.hr + payrollApprovals.length;
+  // Pump HR bucket count so it reflects pending payroll batches too (one
+  // per month, not one per employee).
+  bucketCounts.hr = isHeadOfOperations ? 0 : bucketCounts.hr + payrollBatches.length;
 
-  const approvePayslip = async (payslipId) => {
+  const approvePayrollBatch = async (batch) => {
     setPayrollActionBusy(true);
     try {
       await axios.put(
-        `${API}/api/payroll/payslip/${payslipId}/approve`,
+        `${API}/api/payroll/payslips/bulk-approve`,
         {},
-        { headers: { Authorization: `Bearer ${token}` } },
+        { params: { month: batch.month, year: batch.year }, headers: { Authorization: `Bearer ${token}` } },
       );
-      toast.success('Payslip approved & generated');
+      toast.success(`${batch.period} payroll approved & generated for ${batch.count} employee${batch.count === 1 ? '' : 's'}`);
       loadPayrollApprovals();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to approve payslip');
+      toast.error(error.response?.data?.detail || 'Failed to approve payroll');
     } finally {
       setPayrollActionBusy(false);
     }
   };
 
-  const rejectPayslip = async () => {
+  const rejectPayrollBatch = async () => {
     if (!payrollRejectTarget) return;
     setPayrollActionBusy(true);
     try {
       await axios.put(
-        `${API}/api/payroll/payslip/${payrollRejectTarget.payslip_id}/reject`,
+        `${API}/api/payroll/payslips/bulk-reject`,
         { review_text: payrollRejectRemarks.trim() },
-        { headers: { Authorization: `Bearer ${token}` } },
+        { params: { month: payrollRejectTarget.month, year: payrollRejectTarget.year }, headers: { Authorization: `Bearer ${token}` } },
       );
-      toast.success('Payslip sent back to HR');
+      toast.success(`${payrollRejectTarget.period} payroll sent back to HR`);
       setPayrollRejectTarget(null);
       setPayrollRejectRemarks('');
       loadPayrollApprovals();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to reject payslip');
+      toast.error(error.response?.data?.detail || 'Failed to reject payroll');
     } finally {
       setPayrollActionBusy(false);
     }
@@ -735,88 +762,69 @@ export default function ApprovalsPage({ embedded = false }) {
             </div>
           )}
 
-          {/* HR Payroll Approvals — only visible inside the HR bucket */}
-          {!isHeadOfOperations && approverBucket === 'hr' && payrollApprovals.length > 0 && (
+          {/* HR Payroll Approvals — one card per monthly batch, single approve/reject action for the whole month */}
+          {!isHeadOfOperations && approverBucket === 'hr' && payrollBatches.length > 0 && (
             <div data-testid="payroll-approvals-section">
               <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
                 <Briefcase className="h-4 w-4 text-[#f43f5e]" />
-                Payroll — Payslips awaiting CEO approval
-                <Badge className="bg-[#f43f5e]/20 text-[#f43f5e] ml-2">{payrollApprovals.length}</Badge>
+                Payroll — Monthly batches awaiting CEO approval
+                <Badge className="bg-[#f43f5e]/20 text-[#f43f5e] ml-2">{payrollBatches.length}</Badge>
               </h3>
               <div className="space-y-3">
-                {payrollApprovals.map((p) => {
-                  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                  const period = `${months[(p.month || 1) - 1]} ${p.year}`;
-                  return (
-                    <div
-                      key={p.payslip_id}
-                      className={`${bgCard} border ${borderColor} rounded-lg p-4`}
-                      data-testid={`payroll-approval-${p.payslip_id}`}
-                    >
-                      <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <div className="flex-1 min-w-[260px]">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className={`font-semibold ${textPrimary}`}>{p.employee_name || '—'}</h4>
-                            {p.employee_id && (
-                              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px]">{p.employee_id}</Badge>
-                            )}
-                            {p.employee_designation && (
-                              <Badge className="bg-[#0ea5e9]/15 text-[#0ea5e9] text-[10px]">{p.employee_designation}</Badge>
-                            )}
-                            <Badge className="bg-[#f59e0b]/20 text-[#f59e0b] text-[10px]">{period}</Badge>
-                          </div>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
-                            <div>
-                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Gross</p>
-                              <p className={`text-sm font-semibold ${textPrimary}`}>₹{Number(p.base_salary || 0).toLocaleString('en-IN')}</p>
-                            </div>
-                            <div>
-                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Earned</p>
-                              <p className={`text-sm font-semibold ${textPrimary}`}>₹{Number(p.calculation?.earned_salary || 0).toLocaleString('en-IN')}</p>
-                            </div>
-                            <div>
-                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Deductions</p>
-                              <p className={`text-sm font-semibold text-[#ef4444]`}>-₹{Number(p.deductions?.total_deductions || 0).toLocaleString('en-IN')}</p>
-                            </div>
-                            <div>
-                              <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Net Salary</p>
-                              <p className={`text-base font-bold text-[#10b981]`}>₹{Number(p.net_salary || 0).toLocaleString('en-IN')}</p>
-                            </div>
-                          </div>
-                          {p.hr_remarks && (
-                            <p className={`text-xs ${textSecondary} mt-3 italic`}>HR note: &ldquo;{p.hr_remarks}&rdquo;</p>
-                          )}
+                {payrollBatches.map((batch) => (
+                  <div
+                    key={`${batch.year}-${batch.month}`}
+                    className={`${bgCard} border ${borderColor} rounded-lg p-4`}
+                    data-testid={`payroll-batch-${batch.year}-${batch.month}`}
+                  >
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div className="flex-1 min-w-[260px]">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className={`font-semibold ${textPrimary}`}>{batch.period}</h4>
+                          <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px]">
+                            {batch.count} employee{batch.count === 1 ? '' : 's'}
+                          </Badge>
+                          <Badge className="bg-[#10b981]/15 text-[#10b981] text-[10px]">
+                            Total Net ₹{batch.totalNet.toLocaleString('en-IN')}
+                          </Badge>
                         </div>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                          <Button
-                            size="sm"
-                            onClick={() => approvePayslip(p.payslip_id)}
-                            disabled={payrollActionBusy}
-                            className="bg-[#10b981] hover:bg-[#059669] text-white"
-                            data-testid={`payroll-approve-${p.payslip_id}`}
-                          >
-                            <Check className="h-3 w-3 mr-1" /> Approve & Generate
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => { setPayrollRejectTarget(p); setPayrollRejectRemarks(''); }}
-                            disabled={payrollActionBusy}
-                            className="border-[#ef4444] text-[#ef4444] hover:bg-[#ef4444]/10"
-                            data-testid={`payroll-reject-${p.payslip_id}`}
-                          >
-                            <X className="h-3 w-3 mr-1" /> Reject
-                          </Button>
+                        <div className="flex flex-wrap gap-1 mt-3">
+                          {batch.employees.map((name, i) => (
+                            <span key={`${name}-${i}`} className={`text-[10px] px-2 py-0.5 rounded-full ${bgSecondary} ${textSecondary}`}>
+                              {name}
+                            </span>
+                          ))}
                         </div>
                       </div>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <Button
+                          size="sm"
+                          onClick={() => approvePayrollBatch(batch)}
+                          disabled={payrollActionBusy}
+                          className="bg-[#10b981] hover:bg-[#059669] text-white"
+                          data-testid={`payroll-approve-batch-${batch.year}-${batch.month}`}
+                        >
+                          <Check className="h-3 w-3 mr-1" /> Approve Month & Generate
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => { setPayrollRejectTarget(batch); setPayrollRejectRemarks(''); }}
+                          disabled={payrollActionBusy}
+                          className="border-[#ef4444] text-[#ef4444] hover:bg-[#ef4444]/10"
+                          data-testid={`payroll-reject-batch-${batch.year}-${batch.month}`}
+                        >
+                          <X className="h-3 w-3 mr-1" /> Reject
+                        </Button>
+                      </div>
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          {!isHeadOfOperations && approverBucket === 'hr' && payrollApprovals.length === 0 && visibleTaskApprovals.length === 0 && (
+          {!isHeadOfOperations && approverBucket === 'hr' && payrollBatches.length === 0 && visibleTaskApprovals.length === 0 && (
             <div className={`text-center py-12 ${textSecondary} border ${borderColor} rounded-lg ${bgCard}`}>
               <Briefcase className="h-10 w-10 mx-auto mb-2 opacity-40" />
               <p className={`text-sm ${textPrimary}`}>No HR approvals pending</p>
@@ -1072,7 +1080,7 @@ export default function ApprovalsPage({ embedded = false }) {
             <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md mx-4`} onClick={(e) => e.stopPropagation()}>
               <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
                 <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
-                  <AlertCircle className="h-4 w-4 text-[#ef4444]" /> Reject Payslip
+                  <AlertCircle className="h-4 w-4 text-[#ef4444]" /> Reject Payroll
                 </h3>
                 <button onClick={() => !payrollActionBusy && setPayrollRejectTarget(null)} className={textSecondary}>
                   <X className="h-5 w-5" />
@@ -1080,13 +1088,13 @@ export default function ApprovalsPage({ embedded = false }) {
               </div>
               <div className="p-5 space-y-3">
                 <p className={`text-sm ${textSecondary}`}>
-                  {payrollRejectTarget.employee_name} · {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][(payrollRejectTarget.month || 1) - 1]} {payrollRejectTarget.year}
+                  {payrollRejectTarget.period} · {payrollRejectTarget.count} employee{payrollRejectTarget.count === 1 ? '' : 's'} · Total Net ₹{Number(payrollRejectTarget.totalNet || 0).toLocaleString('en-IN')}
                 </p>
                 <textarea
                   value={payrollRejectRemarks}
                   onChange={(e) => setPayrollRejectRemarks(e.target.value)}
                   rows={4}
-                  placeholder="Reason for rejection (sent back to HR as draft)…"
+                  placeholder="Reason for rejection (sent back to HR as draft for the whole month)…"
                   className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
                   data-testid="payroll-reject-remarks"
                 />
@@ -1095,12 +1103,12 @@ export default function ApprovalsPage({ embedded = false }) {
                     Cancel
                   </Button>
                   <Button
-                    onClick={rejectPayslip}
+                    onClick={rejectPayrollBatch}
                     disabled={payrollActionBusy || !payrollRejectRemarks.trim()}
                     className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
                     data-testid="payroll-reject-confirm"
                   >
-                    <X className="h-3 w-3 mr-1" /> Reject Payslip
+                    <X className="h-3 w-3 mr-1" /> Reject Month
                   </Button>
                 </div>
               </div>

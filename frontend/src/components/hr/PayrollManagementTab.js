@@ -524,6 +524,48 @@ export default function PayrollManagementTab({
               </div>
             </div>
 
+            {/* Monthly payroll approval batch — one Send to Approval action for
+                the whole month instead of per-employee submission. */}
+            {(() => {
+              const pendingCount = rows.filter((r) => r.p?.status === 'ceo_review').length;
+              const generatedCount = rows.filter((r) => ['generated', 'partially_paid', 'paid'].includes(r.p?.status)).length;
+              const rejectedRow = rows.find((r) => r.p?.status === 'draft' && r.p?.ceo_review?.decision === 'rejected');
+              const nothingToSend = totalEmployees > 0 && generatedCount === totalEmployees;
+              return (
+                <div className={`${bgCard} border ${borderColor} rounded-xl p-4 flex flex-wrap items-center gap-3`} data-testid="monthly-payroll-batch-banner">
+                  <div className="flex-1 min-w-[220px]">
+                    {pendingCount > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-[#14b8a6]/20 text-[#14b8a6]">Pending CEO Approval</Badge>
+                        <span className={`text-xs ${textSecondary}`}>{pendingCount} employee{pendingCount === 1 ? '' : 's'} awaiting a single monthly approval</span>
+                      </div>
+                    ) : rejectedRow ? (
+                      <div>
+                        <Badge className="bg-red-500/20 text-red-400">Rejected by CEO</Badge>
+                        {rejectedRow.p.ceo_review?.review_text && (
+                          <p className={`text-xs ${textSecondary} mt-1 italic`}>&ldquo;{rejectedRow.p.ceo_review.review_text}&rdquo; — fix and resubmit.</p>
+                        )}
+                      </div>
+                    ) : nothingToSend ? (
+                      <Badge className="bg-[#a78bfa]/20 text-[#a78bfa]">Payroll approved for {periodLabel}</Badge>
+                    ) : (
+                      <span className={`text-xs ${textSecondary}`}>Send this month's payroll to the CEO for a single approval covering every employee.</span>
+                    )}
+                  </div>
+                  {pendingCount === 0 && !nothingToSend && (
+                    <Button
+                      onClick={onBulkSubmitOperations}
+                      className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
+                      data-testid="monthly-send-to-approval-btn"
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      {rejectedRow ? 'Resubmit for Approval' : 'Send to Approval'}
+                    </Button>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Summary cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {summaryCards.map((c) => (

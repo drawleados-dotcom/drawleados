@@ -777,15 +777,18 @@ export default function HRAdminPage() {
     }
   };
 
+  // Single monthly action — auto-creates a draft payslip for every employee
+  // who doesn't have one yet this month, then submits the whole month as one
+  // batch for CEO review (see Operations → Approvals → HR).
   const handleBulkSubmitOperations = async () => {
     try {
-      await axios.put(`${API}/api/payroll/payslip/bulk/bulk-submit-operations?month=${payslipMonth}&year=${payslipYear}`, {}, { 
+      const res = await axios.put(`${API}/api/payroll/payslips/bulk-send-for-approval?month=${payslipMonth}&year=${payslipYear}`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      toast.success('All payslips submitted for review!');
+      toast.success(`Sent ${res.data?.submitted || 0} employee payslip(s) for CEO approval`);
       loadPayslips(payslipMonth, payslipYear);
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to submit');
+      toast.error(error.response?.data?.detail || 'Failed to submit payroll for approval');
     }
   };
 
