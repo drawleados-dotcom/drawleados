@@ -149,12 +149,16 @@ def _pipeline_match(pipeline: str) -> Dict[str, Any]:
 
 # Invoice Raise now lives exclusively in the Sales pipeline — a Pre-sales
 # lead books/manages its appointment, then Sales owns everything from
-# Appointment through to the only two outcomes: Lost or Invoice Raise.
-PIPELINE_TERMINAL_STAGES = {
+# Appointment through Quotation (a lead here auto-opens the quotation PDF
+# flow, LeadQuotationModal — trigger is name-based, any stage matching
+# /quot/i) to the only two outcomes: Lost or Invoice Raise. Quotation isn't
+# fixed/protected like the terminal two — it's just seeded by default.
+PIPELINE_STAGE_BACKFILL = {
     "pre_sales": [],
     "sales": [
-        {"name": "Lost", "color": "#ef4444"},
-        {"name": "Invoice Raise", "color": "#a855f7"},
+        {"name": "Quotation", "color": "#f59e0b", "is_fixed": False},
+        {"name": "Lost", "color": "#ef4444", "is_fixed": True},
+        {"name": "Invoice Raise", "color": "#a855f7", "is_fixed": True},
     ],
 }
 
@@ -209,7 +213,7 @@ async def _migrate_legacy_presales_invoice_raise():
 async def get_stages(request: Request, pipeline: str = "pre_sales"):
     """Get all lead stages for a pipeline ('pre_sales' or 'sales'). Auto-seeds
     defaults on first call per-pipeline and idempotently backfills each
-    pipeline's terminal stages (see PIPELINE_TERMINAL_STAGES) if missing."""
+    pipeline's default stages (see PIPELINE_STAGE_BACKFILL) if missing."""
     await get_current_user_from_request(request)
     await _migrate_legacy_presales_invoice_raise()
     base_query = {"is_deleted": {"$ne": True}, "$and": [_pipeline_match(pipeline)]}
@@ -223,8 +227,9 @@ async def get_stages(request: Request, pipeline: str = "pre_sales"):
         if pipeline == "sales":
             default_stages = [
                 {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Appointment", "color": "#3b82f6", "order": 0},
-                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Lost", "color": "#ef4444", "order": 1, "is_fixed": True},
-                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 2, "is_fixed": True},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Quotation", "color": "#f59e0b", "order": 1},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Lost", "color": "#ef4444", "order": 2, "is_fixed": True},
+                {"stage_id": f"stage_{uuid.uuid4().hex[:8]}", "name": "Invoice Raise", "color": "#a855f7", "order": 3, "is_fixed": True},
             ]
         else:
             default_stages = [
@@ -244,29 +249,33 @@ async def get_stages(request: Request, pipeline: str = "pre_sales"):
             await db.lead_stages.insert_one(stage)
         stages = default_stages
 
-    # Idempotent backfill: ensure this pipeline's terminal stages exist (e.g.
-    # Sales must always end in Lost / Invoice Raise). Each missing one is
-    # inserted right before "Deal Closed" / "Lost" / "Won" if present,
-    # otherwise appended at the end, in PIPELINE_TERMINAL_STAGES order.
-    for terminal in PIPELINE_TERMINAL_STAGES.get(pipeline, []):
-        has_it = any((s.get("name") or "").strip().lower() == terminal["name"].lower() for s in stages)
+    # Idempotent backfill: ensure this pipeline's default stages exist (e.g.
+    # Sales must always have Quotation and end in Lost / Invoice Raise). Each
+    # missing one is inserted right before whichever OTHER backfill-list
+    # stage already exists with the lowest order (so Quotation lands ahead
+    # of Lost/Invoice Raise even on an already-seeded Sales pipeline),
+    # otherwise appended at the end, in PIPELINE_STAGE_BACKFILL order.
+    backfill_list = PIPELINE_STAGE_BACKFILL.get(pipeline, [])
+    backfill_names_lower = {b["name"].lower() for b in backfill_list}
+    for entry in backfill_list:
+        has_it = any((s.get("name") or "").strip().lower() == entry["name"].lower() for s in stages)
         if has_it:
             continue
-        terminal_orders = [s.get("order", 0) for s in stages
-                           if (s.get("name") or "").strip().lower() in ("deal closed", "lost", "won")
-                           and (s.get("name") or "").strip().lower() != terminal["name"].lower()]
-        insert_order = (min(terminal_orders) if terminal_orders else (max((s.get("order", 0) for s in stages), default=-1) + 1))
-        if terminal_orders:
+        other_orders = [s.get("order", 0) for s in stages
+                        if (s.get("name") or "").strip().lower() in backfill_names_lower
+                        and (s.get("name") or "").strip().lower() != entry["name"].lower()]
+        insert_order = (min(other_orders) if other_orders else (max((s.get("order", 0) for s in stages), default=-1) + 1))
+        if other_orders:
             await db.lead_stages.update_many(
                 {**base_query, "order": {"$gte": insert_order}},
                 {"$inc": {"order": 1}},
             )
         new_stage = {
             "stage_id": f"stage_{uuid.uuid4().hex[:8]}",
-            "name": terminal["name"],
-            "color": terminal["color"],
+            "name": entry["name"],
+            "color": entry["color"],
             "order": insert_order,
-            "is_fixed": True,
+            "is_fixed": entry["is_fixed"],
             "pipeline": pipeline,
             "created_at": datetime.now(timezone.utc),
             "is_deleted": False,
