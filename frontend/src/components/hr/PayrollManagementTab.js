@@ -62,6 +62,7 @@ export default function PayrollManagementTab({
   onGeneratePayslip,
   onBulkSubmitOperations,
   currentUserRole,
+  currentUserModules,
   onRefreshPayslips,
   companySettings,
   canEdit = true,
@@ -535,7 +536,19 @@ export default function PayrollManagementTab({
               // Submitting payroll for CEO approval is restricted to HR & Finance —
               // even Super Admin/Admin (and the CEO themselves) don't get this button,
               // since the CEO is the approver, not the submitter.
-              const canSubmitPayroll = ['hr_manager', 'finance'].includes((currentUserRole || '').toLowerCase());
+              // Mirrors backend _can_submit_payroll_for_approval: HR/Finance role
+              // wins outright; Admin/Super Admin/CEO are excluded outright even if
+              // their designation happens to carry hr_admin/finance module access;
+              // everyone else falls back to designation-granted module access,
+              // since most real HR/Finance staff are set up that way rather than
+              // via the coarse role field.
+              const _role = (currentUserRole || '').toLowerCase();
+              const _modules = (currentUserModules || []).map((m) => String(m).toLowerCase());
+              const canSubmitPayroll = ['hr_manager', 'finance'].includes(_role)
+                ? true
+                : ['admin', 'super_admin', 'ceo'].includes(_role)
+                  ? false
+                  : (_modules.includes('hr_admin') || _modules.includes('finance'));
               return (
                 <div className={`${bgCard} border ${borderColor} rounded-xl p-4 flex flex-wrap items-center gap-3`} data-testid="monthly-payroll-batch-banner">
                   <div className="flex-1 min-w-[220px]">

@@ -1465,6 +1465,7 @@ export default function HRAdminPage() {
             onGeneratePayslip={handleGeneratePayslip}
             onBulkSubmitOperations={handleBulkSubmitOperations}
             currentUserRole={user?.role}
+            currentUserModules={user?.module_access}
             onRefreshPayslips={() => loadPayslips(payslipMonth, payslipYear)}
             companySettings={companySettings}
             canEdit={canEdit}

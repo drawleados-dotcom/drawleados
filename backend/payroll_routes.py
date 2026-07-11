@@ -45,11 +45,25 @@ def _has_hr_access(user) -> bool:
 
 def _can_submit_payroll_for_approval(user) -> bool:
     """Submitting a month's payroll for CEO approval is deliberately stricter
-    than general HR/Payroll access: only the `hr_manager` or `finance` role —
-    not Super Admin/Admin, and not the CEO themselves, since the CEO is the
-    approver of this batch, not the submitter."""
+    than general HR/Payroll access: HR & Finance only — never Super
+    Admin/Admin, and never the CEO themselves, since the CEO is the approver
+    of this batch, not the submitter.
+
+    Matches on the `hr_manager`/`finance` role values first, then falls back
+    to designation-granted `hr_admin`/`finance` module access (most real HR
+    and Finance staff are set up this way rather than via the coarse `role`
+    field) — but Admin/Super Admin/CEO are excluded outright regardless of
+    what module access their designation happens to carry."""
     role = (getattr(user, "role", None) or (user.get("role") if isinstance(user, dict) else "") or "").lower()
-    return role in ("hr_manager", "finance")
+    if role in ("hr_manager", "finance"):
+        return True
+    if role in ("admin", "super_admin", "ceo"):
+        return False
+    modules = getattr(user, "module_access", None)
+    if modules is None and isinstance(user, dict):
+        modules = user.get("module_access")
+    modules = {str(m).lower() for m in (modules or [])}
+    return bool(modules & {"hr_admin", "finance"})
 
 
 # Pydantic Models
