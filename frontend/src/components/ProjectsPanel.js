@@ -917,6 +917,7 @@ export default function ProjectsPanel({
             project={selectedProject}
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
             canEdit={canManageProjects}
+            users={users}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
@@ -929,6 +930,7 @@ export default function ProjectsPanel({
         {projectInnerTab === 'others' && (
           <ProjectOthersTab
             project={selectedProject}
+            users={users}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}

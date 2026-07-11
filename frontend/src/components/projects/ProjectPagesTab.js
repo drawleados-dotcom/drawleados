@@ -49,6 +49,7 @@ export default function ProjectPagesTab({
   project,
   onProjectUpdated,
   canEdit,
+  users,
   isDark,
   bgCard,
   bgSecondary,
@@ -58,6 +59,8 @@ export default function ProjectPagesTab({
 }) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('session_token') : null;
   const headers = { Authorization: `Bearer ${token}` };
+
+  const userName = (userId) => (users || []).find(u => u.user_id === userId)?.name || userId || '—';
 
   const pages = project?.pages || [];
   const tasks = project?.tasks || [];
@@ -215,15 +218,37 @@ export default function ProjectPagesTab({
                         {pageTasks.length === 0 ? (
                           <p className={`text-xs ${textSecondary}`}>No tasks tagged to this page yet.</p>
                         ) : (
-                          <div className="space-y-1.5">
-                            {pageTasks.map(t => (
-                              <div key={t.task_id} className={`flex items-center justify-between gap-3 p-2 rounded-md ${bgCard} border ${borderColor}`}>
-                                <span className={`text-sm ${textPrimary} truncate`}>{t.task_name}</span>
-                                <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium uppercase ${textSecondary} border ${borderColor}`}>
-                                  {(t.status || 'pending').replace('_', ' ')}
-                                </span>
-                              </div>
-                            ))}
+                          <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
+                            <table className="w-full">
+                              <thead>
+                                <tr className={`border-b ${borderColor}`}>
+                                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Name of the Task</th>
+                                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Category</th>
+                                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Date</th>
+                                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Assign To</th>
+                                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Delivery Time</th>
+                                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pageTasks.map(t => (
+                                  <tr key={t.task_id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`page-task-row-${t.task_id}`}>
+                                    <td className={`px-3 py-2 text-sm ${textPrimary}`}>{t.task_name}</td>
+                                    <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.category || '—'}</td>
+                                    <td className={`px-3 py-2 text-xs ${textSecondary}`}>
+                                      {t.due_date ? new Date(t.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                    </td>
+                                    <td className={`px-3 py-2 text-xs ${textSecondary}`}>{userName(t.assigned_to)}</td>
+                                    <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.all_day ? 'All day' : (t.due_time || '—')}</td>
+                                    <td className="px-3 py-2">
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase ${textSecondary} border ${borderColor}`}>
+                                        {(t.status || 'pending').replace('_', ' ')}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         )}
                       </td>

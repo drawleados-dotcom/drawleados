@@ -11,7 +11,8 @@ const STATUS_STYLE = {
 
 // Website-project tasks that aren't tagged to a specific Page — the sibling
 // tab next to Pages for work that doesn't belong under any single page.
-export default function ProjectOthersTab({ project, isDark, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+export default function ProjectOthersTab({ project, users, isDark, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const userName = (userId) => (users || []).find(u => u.user_id === userId)?.name || userId || '—';
   const tasks = (project?.tasks || []).filter(
     t => t.department === 'website' && (!t.website_page_id || t.website_page_id === 'others')
   );
@@ -32,8 +33,11 @@ export default function ProjectOthersTab({ project, isDark, bgCard, bgSecondary,
               <thead>
                 <tr className={`border-b ${borderColor}`}>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase w-12`}>S.No</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Task</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Name of the Task</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Category</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Date</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Assign To</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Delivery Time</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Status</th>
                 </tr>
               </thead>
@@ -43,6 +47,11 @@ export default function ProjectOthersTab({ project, isDark, bgCard, bgSecondary,
                     <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
                     <td className={`p-3 text-sm font-medium ${textPrimary}`}>{t.task_name}</td>
                     <td className={`p-3 text-xs ${textSecondary}`}>{t.category || '—'}</td>
+                    <td className={`p-3 text-xs ${textSecondary}`}>
+                      {t.due_date ? new Date(t.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                    </td>
+                    <td className={`p-3 text-xs ${textSecondary}`}>{userName(t.assigned_to)}</td>
+                    <td className={`p-3 text-xs ${textSecondary}`}>{t.all_day ? 'All day' : (t.due_time || '—')}</td>
                     <td className="p-3">
                       <span className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[t.status] || STATUS_STYLE.pending}`}>
                         {(t.status || 'pending').replace('_', ' ')}
@@ -52,7 +61,7 @@ export default function ProjectOthersTab({ project, isDark, bgCard, bgSecondary,
                 ))}
                 {tasks.length === 0 && (
                   <tr>
-                    <td colSpan={4} className={`p-8 text-center text-xs ${textSecondary}`}>
+                    <td colSpan={7} className={`p-8 text-center text-xs ${textSecondary}`}>
                       No tasks outside a specific page yet.
                     </td>
                   </tr>
