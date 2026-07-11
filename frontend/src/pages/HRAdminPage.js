@@ -17,7 +17,7 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check, Network, Coffee
+  ChevronDown, Check, Network, Coffee, Wallet
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -7191,6 +7191,14 @@ function EnhancedApprovalsTab({
           <Home className="h-4 w-4 mr-2" />
           Remote ({wfhApprovals.length})
         </Button>
+        <Button
+          onClick={() => setActiveSubTab('payroll')}
+          className={`${activeSubTab === 'payroll' ? 'bg-[#f43f5e] text-white' : `${bgSecondary} ${textSecondary}`}`}
+          data-testid="hr-approvals-payroll-subtab"
+        >
+          <Wallet className="h-4 w-4 mr-2" />
+          Payroll
+        </Button>
       </div>
 
       {/* Date Filters */}
@@ -7946,6 +7954,18 @@ function EnhancedApprovalsTab({
         </div>
       )}
 
+      {activeSubTab === 'payroll' && (
+        <PayrollApprovalSection
+          isDark={isDark}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+          canEdit={canEdit}
+        />
+      )}
+
       {/* WFH Details Modal */}
       {showDetailsModal && selectedWfhRequest && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -8251,6 +8271,199 @@ function EnhancedApprovalsTab({
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ Payroll Approval Section (inside HR Admin > Approvals) ============
+// Surfaces the same monthly payroll batches as Operations > Approvals > HR —
+// added here too because the CEO naturally looks for payroll approvals inside
+// HR Admin's own Approvals tab rather than hunting through the Operations
+// module's separate PM/Operations/HR sub-buckets.
+function PayrollApprovalSection({ isDark, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, canEdit }) {
+  const API = process.env.REACT_APP_BACKEND_URL;
+  const token = localStorage.getItem('session_token');
+  const headers = { Authorization: `Bearer ${token}` };
+  const isViewOnly = !canEdit;
+
+  const [payrollApprovals, setPayrollApprovals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [rejectTarget, setRejectTarget] = useState(null);
+  const [rejectRemarks, setRejectRemarks] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`${API}/api/payroll/approvals`, { headers });
+      setPayrollApprovals(res.data || []);
+    } catch (e) {
+      setPayrollApprovals([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const batches = (() => {
+    const byPeriod = new Map();
+    for (const p of payrollApprovals) {
+      const key = `${p.year}-${p.month}`;
+      if (!byPeriod.has(key)) {
+        byPeriod.set(key, {
+          month: p.month, year: p.year,
+          period: `${months[(p.month || 1) - 1]} ${p.year}`,
+          count: 0, totalNet: 0, employees: [],
+        });
+      }
+      const b = byPeriod.get(key);
+      b.count += 1;
+      b.totalNet += Number(p.net_salary || 0);
+      b.employees.push(p.employee_name || '—');
+    }
+    return Array.from(byPeriod.values()).sort((a, b) => (b.year - a.year) || (b.month - a.month));
+  })();
+
+  const approveBatch = async (batch) => {
+    setBusy(true);
+    try {
+      await axios.put(`${API}/api/payroll/payslips/bulk-approve`, {}, { params: { month: batch.month, year: batch.year }, headers });
+      toast.success(`${batch.period} payroll approved & generated for ${batch.count} employee${batch.count === 1 ? '' : 's'}`);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to approve payroll');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rejectBatch = async () => {
+    if (!rejectTarget) return;
+    setBusy(true);
+    try {
+      await axios.put(`${API}/api/payroll/payslips/bulk-reject`, { review_text: rejectRemarks.trim() }, { params: { month: rejectTarget.month, year: rejectTarget.year }, headers });
+      toast.success(`${rejectTarget.period} payroll sent back to HR`);
+      setRejectTarget(null);
+      setRejectRemarks('');
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to reject payroll');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4" data-testid="hr-approvals-payroll-section">
+      {loading ? (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-8 text-center">
+            <Loader2 className={`h-6 w-6 mx-auto mb-2 animate-spin ${textSecondary}`} />
+            <p className={textSecondary}>Loading payroll approvals…</p>
+          </CardContent>
+        </Card>
+      ) : batches.length === 0 ? (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-8 text-center">
+            <Wallet className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+            <p className={textSecondary}>No payroll batches awaiting approval</p>
+            <p className={`text-sm ${textSecondary} mt-1`}>Once HR sends a month's payroll for approval, it shows up here.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        batches.map((batch) => (
+          <Card key={`${batch.year}-${batch.month}`} className={`${bgCard} border ${borderColor}`} data-testid={`hr-payroll-batch-${batch.year}-${batch.month}`}>
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex-1 min-w-[260px]">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className={`font-semibold ${textPrimary}`}>{batch.period}</h4>
+                    <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px]">
+                      {batch.count} employee{batch.count === 1 ? '' : 's'}
+                    </Badge>
+                    <Badge className="bg-[#10b981]/15 text-[#10b981] text-[10px]">
+                      Total Net ₹{batch.totalNet.toLocaleString('en-IN')}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {batch.employees.map((name, i) => (
+                      <span key={`${name}-${i}`} className={`text-[10px] px-2 py-0.5 rounded-full ${bgSecondary} ${textSecondary}`}>
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {!isViewOnly && (
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Button
+                      size="sm"
+                      onClick={() => approveBatch(batch)}
+                      disabled={busy}
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      data-testid={`hr-payroll-approve-${batch.year}-${batch.month}`}
+                    >
+                      <Check className="h-3 w-3 mr-1" /> Approve Month & Generate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setRejectTarget(batch); setRejectRemarks(''); }}
+                      disabled={busy}
+                      className="border-[#ef4444] text-[#ef4444] hover:bg-[#ef4444]/10"
+                      data-testid={`hr-payroll-reject-${batch.year}-${batch.month}`}
+                    >
+                      <X className="h-3 w-3 mr-1" /> Reject
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      )}
+
+      {rejectTarget && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !busy && setRejectTarget(null)}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md mx-4`} onClick={(e) => e.stopPropagation()}>
+            <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
+              <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                <AlertCircle className="h-4 w-4 text-[#ef4444]" /> Reject Payroll
+              </h3>
+              <button onClick={() => !busy && setRejectTarget(null)} className={textSecondary}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className={`text-sm ${textSecondary}`}>
+                {rejectTarget.period} · {rejectTarget.count} employee{rejectTarget.count === 1 ? '' : 's'} · Total Net ₹{Number(rejectTarget.totalNet || 0).toLocaleString('en-IN')}
+              </p>
+              <textarea
+                value={rejectRemarks}
+                onChange={(e) => setRejectRemarks(e.target.value)}
+                rows={4}
+                placeholder="Reason for rejection (sent back to HR as draft for the whole month)…"
+                className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                data-testid="hr-payroll-reject-remarks"
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setRejectTarget(null)} disabled={busy} className={textSecondary}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={rejectBatch}
+                  disabled={busy || !rejectRemarks.trim()}
+                  className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                  data-testid="hr-payroll-reject-confirm"
+                >
+                  <X className="h-3 w-3 mr-1" /> Reject Month
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
