@@ -43,6 +43,15 @@ def _has_hr_access(user) -> bool:
     return "hr_admin" in (modules or [])
 
 
+def _can_submit_payroll_for_approval(user) -> bool:
+    """Submitting a month's payroll for CEO approval is deliberately stricter
+    than general HR/Payroll access: only the `hr_manager` or `finance` role —
+    not Super Admin/Admin, and not the CEO themselves, since the CEO is the
+    approver of this batch, not the submitter."""
+    role = (getattr(user, "role", None) or (user.get("role") if isinstance(user, dict) else "") or "").lower()
+    return role in ("hr_manager", "finance")
+
+
 # Pydantic Models
 class SalaryRecord(BaseModel):
     amount: float
@@ -357,8 +366,8 @@ async def bulk_send_payroll_for_approval(month: int, year: int, request: Request
     from server import get_current_user
     current_user = await get_current_user(request)
 
-    if not _has_hr_access(current_user):
-        raise HTTPException(status_code=403, detail="Only HR can submit payroll for approval")
+    if not _can_submit_payroll_for_approval(current_user):
+        raise HTTPException(status_code=403, detail="Only HR or Finance can submit payroll for approval")
 
     existing_rows = await db.payslips.find(
         {"month": month, "year": year}, {"_id": 0, "user_id": 1}

@@ -61,6 +61,7 @@ export default function PayrollManagementTab({
   onCEOReview,
   onGeneratePayslip,
   onBulkSubmitOperations,
+  currentUserRole,
   onRefreshPayslips,
   companySettings,
   canEdit = true,
@@ -531,6 +532,10 @@ export default function PayrollManagementTab({
               const generatedCount = rows.filter((r) => ['generated', 'partially_paid', 'paid'].includes(r.p?.status)).length;
               const rejectedRow = rows.find((r) => r.p?.status === 'draft' && r.p?.ceo_review?.decision === 'rejected');
               const nothingToSend = totalEmployees > 0 && generatedCount === totalEmployees;
+              // Submitting payroll for CEO approval is restricted to HR & Finance —
+              // even Super Admin/Admin (and the CEO themselves) don't get this button,
+              // since the CEO is the approver, not the submitter.
+              const canSubmitPayroll = ['hr_manager', 'finance'].includes((currentUserRole || '').toLowerCase());
               return (
                 <div className={`${bgCard} border ${borderColor} rounded-xl p-4 flex flex-wrap items-center gap-3`} data-testid="monthly-payroll-batch-banner">
                   <div className="flex-1 min-w-[220px]">
@@ -552,7 +557,7 @@ export default function PayrollManagementTab({
                       <span className={`text-xs ${textSecondary}`}>Send this month's payroll to the CEO for a single approval covering every employee.</span>
                     )}
                   </div>
-                  {pendingCount === 0 && !nothingToSend && (
+                  {pendingCount === 0 && !nothingToSend && canSubmitPayroll && (
                     <Button
                       onClick={onBulkSubmitOperations}
                       className="bg-[#f59e0b] hover:bg-[#d97706] text-white"
@@ -561,6 +566,9 @@ export default function PayrollManagementTab({
                       <Send className="h-4 w-4 mr-2" />
                       {rejectedRow ? 'Resubmit for Approval' : 'Send to Approval'}
                     </Button>
+                  )}
+                  {pendingCount === 0 && !nothingToSend && !canSubmitPayroll && (
+                    <span className={`text-[11px] ${textSecondary}`}>Only HR &amp; Finance can send payroll for approval</span>
                   )}
                 </div>
               );
