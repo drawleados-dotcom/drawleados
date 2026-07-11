@@ -147,6 +147,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     project_id: '',
     project_name: '',
     category: '',
+    website_page_id: '',
+    website_page_name: '',
   });
 
   const [projectsForTask, setProjectsForTask] = useState([]);
@@ -870,6 +872,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       project_id: '',
       project_name: '',
       category: '',
+      website_page_id: '',
+      website_page_name: '',
     });
     setShowCustomRecurrence(false);
   };
@@ -2234,7 +2238,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       </Label>
                       <Select
                         value={formData.department || 'none'}
-                        onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '' }))}
+                        onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '', website_page_id: '', website_page_name: '' }))}
                       >
                         <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
                           <SelectValue placeholder={MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) ? 'Select department (optional)' : 'Select department'} />
@@ -2256,7 +2260,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           value={formData.project_id || 'none'}
                           onValueChange={(v) => {
                             if (v === 'none') {
-                              setFormData(prev => ({ ...prev, project_id: '', project_name: '' }));
+                              setFormData(prev => ({ ...prev, project_id: '', project_name: '', website_page_id: '', website_page_name: '' }));
                             } else {
                               const proj = projectsForTask.find(p => p.project_id === v);
                               const projDepts = proj?.departments || [];
@@ -2272,6 +2276,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                   project_name: proj?.name || '',
                                   department: nextDept,
                                   category: nextDept === prev.department ? prev.category : '',
+                                  website_page_id: '',
+                                  website_page_name: '',
                                 };
                               });
                             }
@@ -2324,6 +2330,37 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         </Select>
                       </div>
                     </div>
+
+                    {formData.department === 'website' && formData.project_id && (
+                      <div>
+                        <Label className={textPrimary}>Page</Label>
+                        <Select
+                          value={formData.website_page_id || 'none'}
+                          onValueChange={(v) => {
+                            if (v === 'none') {
+                              setFormData(prev => ({ ...prev, website_page_id: '', website_page_name: '' }));
+                            } else if (v === 'others') {
+                              setFormData(prev => ({ ...prev, website_page_id: 'others', website_page_name: 'Others' }));
+                            } else {
+                              const proj = projectsForTask.find(p => p.project_id === formData.project_id);
+                              const pg = (proj?.pages || []).find(p => p.id === v);
+                              setFormData(prev => ({ ...prev, website_page_id: v, website_page_name: pg?.page_name || '' }));
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-page">
+                            <SelectValue placeholder="Select page" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">— None —</SelectItem>
+                            {(projectsForTask.find(p => p.project_id === formData.project_id)?.pages || []).map(pg => (
+                              <SelectItem key={pg.id} value={pg.id}>{pg.page_name}</SelectItem>
+                            ))}
+                            <SelectItem value="others">Others</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     <div>
                       <Label className={textPrimary}>Work Link (File/Project URL)</Label>

@@ -5,6 +5,7 @@ import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, F
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
+import ProjectOthersTab from './projects/ProjectOthersTab';
 import ErpBoardTab from './projects/ErpBoardTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -836,6 +837,7 @@ export default function ProjectsPanel({
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
+            ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             ...(isErpProject ? [{ id: 'erp_board', label: 'ERP Board', icon: Layers }] : []),
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks
@@ -915,6 +917,18 @@ export default function ProjectsPanel({
             project={selectedProject}
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
             canEdit={canManageProjects}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'others' && (
+          <ProjectOthersTab
+            project={selectedProject}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}

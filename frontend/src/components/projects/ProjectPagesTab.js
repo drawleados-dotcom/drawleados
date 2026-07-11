@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -60,10 +60,13 @@ export default function ProjectPagesTab({
   const headers = { Authorization: `Bearer ${token}` };
 
   const pages = project?.pages || [];
+  const tasks = project?.tasks || [];
+  const tasksForPage = (pageId) => tasks.filter(t => t.website_page_id === pageId);
 
   // modal state: { mode: 'add' | 'view', page, editing } or null
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [expandedPageId, setExpandedPageId] = useState(null);
 
   const persist = async (nextPages) => {
     try {
@@ -147,12 +150,17 @@ export default function ProjectPagesTab({
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Content Link</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Page Link</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Status</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Tasks</th>
                   <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {pages.map((row, idx) => (
-                  <tr key={row.id} className={`border-b ${borderColor}`} data-testid={`page-row-${row.id}`}>
+                {pages.map((row, idx) => {
+                  const pageTasks = tasksForPage(row.id);
+                  const isExpanded = expandedPageId === row.id;
+                  return (
+                  <React.Fragment key={row.id}>
+                  <tr className={`border-b ${borderColor}`} data-testid={`page-row-${row.id}`}>
                     <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
                     <td className={`p-3 text-sm font-medium ${textPrimary}`}>{row.page_name || '—'}</td>
                     {['ui_link', 'content_link', 'page_link'].map((key) => (
@@ -176,6 +184,18 @@ export default function ProjectPagesTab({
                         {row.status || 'To-Do'}
                       </span>
                     </td>
+                    <td className="p-3">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPageId(isExpanded ? null : row.id)}
+                        className={`inline-flex items-center gap-1 text-xs ${textSecondary} hover:opacity-80`}
+                        data-testid={`page-tasks-toggle-${row.id}`}
+                      >
+                        {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        <ListChecks className="h-3.5 w-3.5" />
+                        {pageTasks.length}
+                      </button>
+                    </td>
                     <td className="p-3 text-right">
                       <div className="inline-flex gap-1">
                         <button type="button" onClick={() => openView(row)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`page-view-${row.id}`}>
@@ -189,10 +209,32 @@ export default function ProjectPagesTab({
                       </div>
                     </td>
                   </tr>
-                ))}
+                  {isExpanded && (
+                    <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`page-tasks-row-${row.id}`}>
+                      <td colSpan={8} className="p-3">
+                        {pageTasks.length === 0 ? (
+                          <p className={`text-xs ${textSecondary}`}>No tasks tagged to this page yet.</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {pageTasks.map(t => (
+                              <div key={t.task_id} className={`flex items-center justify-between gap-3 p-2 rounded-md ${bgCard} border ${borderColor}`}>
+                                <span className={`text-sm ${textPrimary} truncate`}>{t.task_name}</span>
+                                <span className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-medium uppercase ${textSecondary} border ${borderColor}`}>
+                                  {(t.status || 'pending').replace('_', ' ')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
+                  );
+                })}
                 {pages.length === 0 && (
                   <tr>
-                    <td colSpan={7} className={`p-8 text-center text-xs ${textSecondary}`}>
+                    <td colSpan={8} className={`p-8 text-center text-xs ${textSecondary}`}>
                       No pages yet. {canEdit && <span>Click <span className="font-medium">Add Page</span> to add one.</span>}
                     </td>
                   </tr>

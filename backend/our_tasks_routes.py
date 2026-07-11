@@ -39,6 +39,8 @@ class TaskCreate(BaseModel):
     project_id: Optional[str] = None
     project_name: Optional[str] = None
     category: Optional[str] = None
+    website_page_id: Optional[str] = None    # Website dept only: one of the project's Pages, or "others"
+    website_page_name: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     task_name: Optional[str] = None
@@ -58,6 +60,8 @@ class TaskUpdate(BaseModel):
     project_id: Optional[str] = None
     project_name: Optional[str] = None
     category: Optional[str] = None
+    website_page_id: Optional[str] = None
+    website_page_name: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -270,6 +274,8 @@ async def create_task(task_data: TaskCreate, request: Request):
             "project_id": task_data.project_id,
             "project_name": task_data.project_name,
             "category": task_data.category,
+            "website_page_id": task_data.website_page_id,
+            "website_page_name": task_data.website_page_name,
             "created_by": user.user_id,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
