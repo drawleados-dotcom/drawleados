@@ -100,6 +100,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                              normalizedDesignation === 'head of operations' ||
                              (normalizedDesignation.includes('head') && normalizedDesignation.includes('operation'));
 
+  // Head of Operations lands on Projects (their first/primary tab) instead of
+  // My Tasks. Only fires once when the user first loads on the untouched
+  // default tab — doesn't fight a later manual switch to My Tasks, and never
+  // overrides an explicit defaultTab (e.g. the Approvals deep link modal).
+  useEffect(() => {
+    if (defaultTab !== 'assigned_to_me') return;
+    if (!user) return;
+    if (isHeadOfOperations && mainTab === 'assigned_to_me') {
+      setMainTab('projects');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.user_id, isHeadOfOperations]);
+
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
