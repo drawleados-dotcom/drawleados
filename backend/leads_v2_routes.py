@@ -545,6 +545,35 @@ async def delete_lead(lead_id: str, request: Request):
     return {"message": "Lead deleted"}
 
 
+@leads_v2_router.post("/leads/cleanup-dummy-sheet-leads")
+async def cleanup_dummy_sheet_leads(request: Request):
+    """One-off cleanup for blank-row leads created by the sheet-sync bug
+    (fixed in sheets_routes.py): every row Google Sheets reported as blank
+    was previously inserted as a real lead with name defaulted to "—" and
+    empty phone/email. Soft-deletes only leads that came from a sheet sync
+    AND have no name/phone/email at all — never touches a lead with any
+    real data in it."""
+    user = await get_current_user_from_request(request)
+    role = (user.get("role") if isinstance(user, dict) else getattr(user, "role", "")) or ""
+    if role.lower() not in ("super_admin", "admin"):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin can run this cleanup")
+
+    query = {
+        "is_deleted": {"$ne": True},
+        "imported_from_sheet": {"$in": ["lead", "prospect"]},
+        "$or": [{"name": "—"}, {"name": ""}, {"name": {"$exists": False}}],
+        "$and": [
+            {"$or": [{"phone": ""}, {"phone": {"$exists": False}}]},
+            {"$or": [{"email": ""}, {"email": {"$exists": False}}]},
+        ],
+    }
+    result = await db.leads_v2.update_many(
+        query,
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc), "deleted_reason": "dummy_sheet_row_cleanup"}},
+    )
+    return {"removed": result.modified_count}
+
+
 @leads_v2_router.delete("/leads/{lead_id}/permanent")
 async def permanent_delete_lead(lead_id: str, request: Request):
     """Permanently remove a lead from the database (irreversible)."""

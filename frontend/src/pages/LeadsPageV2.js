@@ -664,7 +664,12 @@ const LeadsPageV2 = () => {
       }
       const results = await Promise.all(tasks);
       const totalSynced = results.reduce((acc, r) => acc + (r.data?.synced || 0), 0);
-      toast.success(`Synced ${totalSynced} row(s) from Google Sheets`);
+      const totalSkipped = results.reduce((acc, r) => acc + (r.data?.skipped_blank || 0), 0);
+      toast.success(
+        totalSkipped > 0
+          ? `Synced ${totalSynced} row(s) from Google Sheets · ignored ${totalSkipped} blank row(s)`
+          : `Synced ${totalSynced} row(s) from Google Sheets`
+      );
       // Reload leads + stats so the new rows show up immediately.
       await Promise.all([loadLeads(), loadStats()]);
     } catch (error) {

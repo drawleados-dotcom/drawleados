@@ -490,7 +490,18 @@ async def sync_sheet(sheet_type: str, request: Request):
         return ""
 
     now = datetime.now(timezone.utc)
+    skipped_blank = 0
     for r in body_rows:
+        # Google Sheets' values.get() can report rows past the real data as
+        # blank-string rows instead of omitting them entirely — this happens
+        # whenever any cell in that row has ever held content or formatting
+        # (a common side-effect of automations like Zapier/Make writing Meta
+        # Lead Ads submissions into the sheet, which often pre-format or
+        # touch a wide range of rows/columns). Without this guard, every one
+        # of those blank rows was turned into a dummy lead named "—".
+        if not any(str(cell).strip() for cell in r):
+            skipped_blank += 1
+            continue
         record = {h: (r[i] if i < len(r) else "") for i, h in enumerate(headers_arr)}
         row_id = f"row_{uuid.uuid4().hex[:12]}"
         sheet_docs.append({
@@ -570,6 +581,7 @@ async def sync_sheet(sheet_type: str, request: Request):
         "synced": total_synced,
         "inserted": inserted,
         "updated": updated,
+        "skipped_blank": skipped_blank,
         "stage_id": stage_id,
         "stage_matched": bool(stage_id),
         "last_synced_at": now,
