@@ -51,6 +51,11 @@ import {
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+const STAGE_COLORS = [
+  '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#22c55e',
+  '#ec4899', '#06b6d4', '#84cc16', '#f97316'
+];
+
 const LeadsPageV2 = () => {
   const { isDark } = useTheme();
   const token = localStorage.getItem('session_token');
@@ -853,13 +858,12 @@ const LeadsPageV2 = () => {
 
   // ============== HELPERS ==============
 
-  const filteredLeads = leads.filter(lead => {
-    // Filter by stage if filterStage is set
-    if (filterStage && lead.stage_id !== filterStage) return false;
-    
-    // Filter by lead owner if filterLeadOwner is set
+  // Every filter EXCEPT stage — this is what the stage summary cards count
+  // against, so every card shows its true total regardless of which stage
+  // (if any) is currently selected as the table filter.
+  const passesNonStageFilters = (lead) => {
     if (filterLeadOwner && lead.lead_owner !== filterLeadOwner) return false;
-    
+
     // Filter by date range — match if any of created_at / appointment_at /
     // followup_at falls inside the selected window. This way picking "this
     // week" surfaces leads that have meetings/follow-ups scheduled there too.
@@ -878,8 +882,7 @@ const LeadsPageV2 = () => {
       });
       if (!inRange) return false;
     }
-    
-    // Filter by search term
+
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return (
@@ -888,9 +891,17 @@ const LeadsPageV2 = () => {
       lead.phone?.includes(term) ||
       lead.lead_owner_name?.toLowerCase().includes(term)
     );
-  });
+  };
 
-  // ============== AMOUNT SUMMARY (Quotation / Negotiation / Deal Closed / Lost) ==============
+  const baseFilteredLeads = leads.filter(passesNonStageFilters);
+  const filteredLeads = baseFilteredLeads.filter(lead => !filterStage || lead.stage_id === filterStage);
+
+  // ============== STAGE SUMMARY CARDS ==============
+  // One small clickable card per actual stage of the active pipeline
+  // (Pre-sales / Sales), instead of a fixed set of keyword-matched buckets —
+  // so it always reflects whatever stages are really configured. The
+  // Appointment stage (if present) is pulled out and rendered last with a
+  // stronger highlight, since it's the key milestone in this pipeline.
   const formatCurrency = (n) => {
     const v = Number(n) || 0;
     if (v >= 10000000) return `₹${(v / 10000000).toFixed(2)}Cr`;
@@ -899,30 +910,24 @@ const LeadsPageV2 = () => {
     return `₹${v.toLocaleString('en-IN')}`;
   };
 
-  const stageNameById = (id) => stages.find(s => s.stage_id === id)?.name?.toLowerCase() || '';
-
-  // Buckets matched by stage NAME (works even with user-created custom stages)
-  const matchBucket = (lead, keywords) => {
-    const name = stageNameById(lead.stage_id);
-    return keywords.some(k => name.includes(k));
-  };
-
   const sumAmount = (leadsArr) => leadsArr.reduce((acc, l) => acc + (Number(l.estimation) || 0), 0);
 
-  const quotationLeads = filteredLeads.filter(l => matchBucket(l, ['proposal', 'quotation', 'quote']));
-  const negotiationLeads = filteredLeads.filter(l => matchBucket(l, ['negotiation']));
-  const closedLeads = filteredLeads.filter(l => matchBucket(l, ['deal closed', 'closed', 'won', 'payment']));
-  const lostLeads = filteredLeads.filter(l => matchBucket(l, ['lost', 'rejected', 'cancel']));
-  // "appoin" catches both "Appointment" and the "Appoinment" stage-name typo some teams use
-  const appointmentLeads = filteredLeads.filter(l => matchBucket(l, ['appoin']));
+  const appointmentStage = stages.find(s => /appoin/i.test(s.name || ''));
+  const stageCardOrder = appointmentStage
+    ? [...stages.filter(s => s.stage_id !== appointmentStage.stage_id), appointmentStage]
+    : stages;
 
-  const summaryAmounts = {
-    quotation: { count: quotationLeads.length, amount: sumAmount(quotationLeads) },
-    negotiation: { count: negotiationLeads.length, amount: sumAmount(negotiationLeads) },
-    closed: { count: closedLeads.length, amount: sumAmount(closedLeads) },
-    lost: { count: lostLeads.length, amount: sumAmount(lostLeads) },
-    appointment: { count: appointmentLeads.length, amount: sumAmount(appointmentLeads) },
-  };
+  const stageCards = stageCardOrder.map((s, idx) => {
+    const stageLeads = baseFilteredLeads.filter(l => l.stage_id === s.stage_id);
+    return {
+      stage_id: s.stage_id,
+      name: s.name,
+      color: s.color || STAGE_COLORS[idx % STAGE_COLORS.length],
+      count: stageLeads.length,
+      amount: sumAmount(stageLeads),
+      isAppointment: appointmentStage && s.stage_id === appointmentStage.stage_id,
+    };
+  });
 
   const getLeadsByStage = (stageId) => {
     return filteredLeads.filter(l => l.stage_id === stageId);
@@ -933,11 +938,6 @@ const LeadsPageV2 = () => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' });
   };
-
-  const STAGE_COLORS = [
-    '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#22c55e',
-    '#ec4899', '#06b6d4', '#84cc16', '#f97316'
-  ];
 
   // ============== RENDER ==============
 
@@ -1211,47 +1211,44 @@ const LeadsPageV2 = () => {
           )}
         </div>
 
-        {/* Stage Stats Cards row removed — stage filtering available via List View tabs */}
-
-
-        {/* Amount Summary Cards (Quotation / Negotiation / Deal Closed / Lost) */}
-        <div className={`px-4 pt-4 grid grid-cols-2 md:grid-cols-5 gap-3`} data-testid="amount-summary-row">
-          {[
-            { key: 'quotation', label: 'Total Quotation', color: '#f59e0b', icon: '📄' },
-            { key: 'appointment', label: 'Appointments', color: '#3b82f6', icon: '📅' },
-            { key: 'negotiation', label: 'Negotiation', color: '#ec4899', icon: '🤝' },
-            { key: 'closed', label: 'Deal Closed', color: '#22c55e', icon: '✅' },
-            { key: 'lost', label: 'Amount Lost', color: '#ef4444', icon: '❌' },
-          ].map(card => {
-            const data = summaryAmounts[card.key];
+        {/* Stage Summary Cards — one small clickable card per actual stage of
+            the active pipeline (Pre-sales / Sales). Click to filter the list
+            below to that stage; click again to clear. Appointment (if this
+            pipeline has one) always renders last with a stronger highlight. */}
+        <div className="px-4 pt-4 flex flex-wrap gap-2" data-testid="stage-summary-row">
+          {stageCards.map(card => {
+            const isActive = filterStage === card.stage_id;
             return (
-              <div
-                key={card.key}
-                data-testid={`amount-card-${card.key}`}
-                className={`p-4 rounded-xl border ${borderColor} ${bgSecondary} relative overflow-hidden`}
-                style={{ borderLeft: `4px solid ${card.color}` }}
+              <button
+                type="button"
+                key={card.stage_id}
+                data-testid={`stage-summary-card-${card.stage_id}`}
+                onClick={() => setFilterStage(prev => prev === card.stage_id ? null : card.stage_id)}
+                className={`text-left px-3 py-2 rounded-lg border transition-all min-w-[100px] ${
+                  card.isAppointment ? 'shadow-md' : `${bgSecondary} ${borderColor}`
+                }`}
+                style={{
+                  ...(card.isAppointment
+                    ? { backgroundColor: card.color, borderColor: card.color }
+                    : { borderLeft: `4px solid ${card.color}` }),
+                  ...(isActive ? { boxShadow: `0 0 0 2px ${card.color}` } : {}),
+                }}
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className={`text-[11px] uppercase tracking-wide ${textSecondary} font-medium`}>{card.label}</p>
-                    <p className="text-xl sm:text-2xl font-bold mt-1" style={{ color: card.color }}>
-                      {data.count} <span className="text-xs sm:text-sm font-medium">{data.count === 1 ? 'lead' : 'leads'}</span>
-                    </p>
-                    <p
-                      className="text-xs font-semibold mt-1.5 inline-block px-1.5 py-0.5 rounded"
-                      style={{ color: card.color, backgroundColor: `${card.color}1a` }}
-                    >
-                      {formatCurrency(data.amount)}
-                    </p>
-                  </div>
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center text-lg"
-                    style={{ backgroundColor: `${card.color}20` }}
-                  >
-                    {card.icon}
-                  </div>
-                </div>
-              </div>
+                <p className={`text-[10px] uppercase tracking-wide font-medium truncate ${card.isAppointment ? 'text-white/85' : textSecondary}`}>
+                  {card.name}
+                </p>
+                <p
+                  className="text-lg font-bold mt-0.5"
+                  style={{ color: card.isAppointment ? '#fff' : card.color }}
+                >
+                  {card.count}
+                </p>
+                {card.amount > 0 && (
+                  <p className={`text-[10px] font-medium mt-0.5 ${card.isAppointment ? 'text-white/85' : textSecondary}`}>
+                    {formatCurrency(card.amount)}
+                  </p>
+                )}
+              </button>
             );
           })}
         </div>
