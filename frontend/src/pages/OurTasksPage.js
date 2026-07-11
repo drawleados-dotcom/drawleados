@@ -381,6 +381,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Please pick a Type for this task');
       return;
     }
+    // Website tasks must be tagged to a Page (or explicitly "Others") once a
+    // project is picked, so every page's work is actually traceable to it.
+    if (formData.department === 'website' && formData.project_id && !formData.website_page_id) {
+      toast.error('Please select a Page');
+      return;
+    }
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
       toast.error('Start date is required for recurring tasks');
@@ -421,6 +427,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     if (!formData.type) {
       toast.error('Please pick a Type for this task');
+      return;
+    }
+    if (formData.department === 'website' && formData.project_id && !formData.website_page_id) {
+      toast.error('Please select a Page');
       return;
     }
     // Require due_date when recurrence is set
@@ -898,7 +908,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         occurrences: 13
       },
       status: task.status,
-      work_link: task.work_link || ''
+      work_link: task.work_link || '',
+      department: task.department || '',
+      project_id: task.project_id || '',
+      project_name: task.project_name || '',
+      category: task.category || '',
+      website_page_id: task.website_page_id || '',
+      website_page_name: task.website_page_name || '',
     });
     setEditingTask(task);
   };
@@ -2333,7 +2349,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
                     {formData.department === 'website' && formData.project_id && (
                       <div>
-                        <Label className={textPrimary}>Page</Label>
+                        <Label className={textPrimary}>Page <span className="text-red-500">*</span></Label>
                         <Select
                           value={formData.website_page_id || 'none'}
                           onValueChange={(v) => {
