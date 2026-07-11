@@ -15,6 +15,8 @@ import { toast } from 'sonner';
 import axios from 'axios';
 import SheetConnectModal from '../components/SheetConnectModal';
 import LeadInvoiceRaiseModal from '../components/finance/LeadInvoiceRaiseModal';
+import LeadQuotationModal from '../components/leads/LeadQuotationModal';
+import ViewQuotationModal from '../components/leads/ViewQuotationModal';
 import { useAuth } from '../contexts/AuthContext';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import {
@@ -104,7 +106,12 @@ const LeadsPageV2 = () => {
 
   // Invoice Raise (Sales → Finance) modal — opens when a lead is moved into the "Invoice Raise" stage
   const [invoiceRaiseLead, setInvoiceRaiseLead] = useState(null);
-  
+
+  // Quotation modal — opens when a lead is moved into a "Quotation" stage
+  const [quotationLead, setQuotationLead] = useState(null);
+  const [viewingQuotationId, setViewingQuotationId] = useState(null);
+  const isQuotationStageName = (name) => /quot/i.test(name || '');
+
   // Add new service/industry modal state
   const [showAddServiceModal, setShowAddServiceModal] = useState(false);
   const [showAddIndustryModal, setShowAddIndustryModal] = useState(false);
@@ -351,6 +358,10 @@ const LeadsPageV2 = () => {
       if (stageName === 'invoice raise' || stageName === 'invoice_raise' || stageName === 'invoiceraise') {
         const lead = leads.find(l => l.lead_id === leadId) || (editingLead && editingLead.lead_id === leadId ? editingLead : null);
         if (lead) setInvoiceRaiseLead(lead);
+      }
+      if (isQuotationStageName(stageName)) {
+        const lead = leads.find(l => l.lead_id === leadId) || (editingLead && editingLead.lead_id === leadId ? editingLead : null);
+        if (lead) setQuotationLead(lead);
       }
       loadLeads();
       loadStats();
@@ -899,9 +910,12 @@ const LeadsPageV2 = () => {
   // ============== STAGE SUMMARY CARDS ==============
   // One small clickable card per actual stage of the active pipeline
   // (Pre-sales / Sales), instead of a fixed set of keyword-matched buckets —
-  // so it always reflects whatever stages are really configured. The
-  // Appointment stage (if present) is pulled out and rendered last with a
-  // stronger highlight, since it's the key milestone in this pipeline.
+  // so it always reflects whatever stages are really configured.
+  //  - Pre-sales: Appointment (if present) is pinned last with a highlight —
+  //    it's the milestone before a lead gets promoted into Sales.
+  //  - Sales: Appointment is pinned FIRST instead (leads arrive into Sales
+  //    already having one booked), and Invoice Raise is pinned last with the
+  //    highlight as the final, "locked" stage of the sales cycle.
   const formatCurrency = (n) => {
     const v = Number(n) || 0;
     if (v >= 10000000) return `₹${(v / 10000000).toFixed(2)}Cr`;
@@ -912,12 +926,27 @@ const LeadsPageV2 = () => {
 
   const sumAmount = (leadsArr) => leadsArr.reduce((acc, l) => acc + (Number(l.estimation) || 0), 0);
 
-  const appointmentStage = stages.find(s => /appoin/i.test(s.name || ''));
-  const stageCardOrder = appointmentStage
-    ? [...stages.filter(s => s.stage_id !== appointmentStage.stage_id), appointmentStage]
-    : stages;
+  const findStageByName = (re) => stages.find(s => re.test(s.name || ''));
+  const appointmentStage = findStageByName(/appoin/i);
 
-  const stageCards = stageCardOrder.map((s, idx) => {
+  let orderedStages = stages;
+  let highlightStageId = null;
+  if (pipeline === 'sales') {
+    const invoiceRaiseStage = findStageByName(/invoice.?rais/i);
+    const excludeIds = new Set([appointmentStage?.stage_id, invoiceRaiseStage?.stage_id].filter(Boolean));
+    const middleStages = stages.filter(s => !excludeIds.has(s.stage_id));
+    orderedStages = [
+      ...(appointmentStage ? [appointmentStage] : []),
+      ...middleStages,
+      ...(invoiceRaiseStage ? [invoiceRaiseStage] : []),
+    ];
+    highlightStageId = invoiceRaiseStage?.stage_id || null;
+  } else if (appointmentStage) {
+    orderedStages = [...stages.filter(s => s.stage_id !== appointmentStage.stage_id), appointmentStage];
+    highlightStageId = appointmentStage.stage_id;
+  }
+
+  const stageCards = orderedStages.map((s, idx) => {
     const stageLeads = baseFilteredLeads.filter(l => l.stage_id === s.stage_id);
     return {
       stage_id: s.stage_id,
@@ -925,7 +954,7 @@ const LeadsPageV2 = () => {
       color: s.color || STAGE_COLORS[idx % STAGE_COLORS.length],
       count: stageLeads.length,
       amount: sumAmount(stageLeads),
-      isAppointment: appointmentStage && s.stage_id === appointmentStage.stage_id,
+      isHighlighted: s.stage_id === highlightStageId,
     };
   });
 
@@ -1225,26 +1254,26 @@ const LeadsPageV2 = () => {
                 data-testid={`stage-summary-card-${card.stage_id}`}
                 onClick={() => setFilterStage(prev => prev === card.stage_id ? null : card.stage_id)}
                 className={`flex-1 min-w-0 text-left px-3 py-2 rounded-lg border transition-all ${
-                  card.isAppointment ? 'shadow-md' : `${bgSecondary} ${borderColor}`
+                  card.isHighlighted ? 'shadow-md' : `${bgSecondary} ${borderColor}`
                 }`}
                 style={{
-                  ...(card.isAppointment
+                  ...(card.isHighlighted
                     ? { backgroundColor: card.color, borderColor: card.color }
                     : { borderLeft: `4px solid ${card.color}` }),
                   ...(isActive ? { boxShadow: `0 0 0 2px ${card.color}` } : {}),
                 }}
               >
-                <p className={`text-[10px] uppercase tracking-wide font-medium truncate ${card.isAppointment ? 'text-white/85' : textSecondary}`}>
+                <p className={`text-[10px] uppercase tracking-wide font-medium truncate ${card.isHighlighted ? 'text-white/85' : textSecondary}`}>
                   {card.name}
                 </p>
                 <p
                   className="text-lg font-bold mt-0.5 truncate"
-                  style={{ color: card.isAppointment ? '#fff' : card.color }}
+                  style={{ color: card.isHighlighted ? '#fff' : card.color }}
                 >
                   {card.count}
                 </p>
                 {card.amount > 0 && (
-                  <p className={`text-[10px] font-medium mt-0.5 truncate ${card.isAppointment ? 'text-white/85' : textSecondary}`}>
+                  <p className={`text-[10px] font-medium mt-0.5 truncate ${card.isHighlighted ? 'text-white/85' : textSecondary}`}>
                     {formatCurrency(card.amount)}
                   </p>
                 )}
@@ -1324,6 +1353,7 @@ const LeadsPageV2 = () => {
               onEdit={openEditLead}
               onDelete={deleteLead}
               onStageChange={updateLeadStage}
+              onViewQuotation={setViewingQuotationId}
               formatDate={formatDate}
               isDark={isDark}
               textPrimary={textPrimary}
@@ -1854,6 +1884,11 @@ const LeadsPageV2 = () => {
                               setEditingLead(null);
                               setInvoiceRaiseLead(leadForRaise);
                             }
+                            if (isQuotationStageName(stageName)) {
+                              const leadForQuotation = { ...editingLead, stage_id: stage.stage_id };
+                              setEditingLead(null);
+                              setQuotationLead(leadForQuotation);
+                            }
                           } catch (e) {
                             toast.error('Failed to change stage');
                           }
@@ -2378,6 +2413,23 @@ const LeadsPageV2 = () => {
           />
         )}
 
+        {/* Quotation creation modal — opens when a lead is moved into a "Quotation" stage */}
+        {quotationLead && (
+          <LeadQuotationModal
+            lead={quotationLead}
+            onClose={() => setQuotationLead(null)}
+            onCreated={() => { loadLeads(); }}
+          />
+        )}
+
+        {/* View Quotation popup — opened from the "Quotation" link on a lead's row */}
+        {viewingQuotationId && (
+          <ViewQuotationModal
+            quotationId={viewingQuotationId}
+            onClose={() => setViewingQuotationId(null)}
+          />
+        )}
+
         {/* Appointment / Followup mini date+time popup — Radix Dialog so it
             sits on top of Edit Lead and doesn't get pointer-blocked. */}
         <Dialog open={!!stageDateModal} onOpenChange={(o) => !o && !stageDateSaving && setStageDateModal(null)}>
@@ -2469,7 +2521,7 @@ const LeadsPageV2 = () => {
 };
 
 // ============== LIST VIEW ==============
-const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange, onViewQuotation, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
   const [activeTab, setActiveTab] = useState('all');
   const getStage = (stageId) => stages.find(s => s.stage_id === stageId);
 
@@ -2634,6 +2686,16 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                       >
                         {stage?.name || 'Unknown'}
                       </span>
+                      {lead.quotation_id && onViewQuotation && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onViewQuotation(lead.quotation_id); }}
+                          className="block mt-1 text-xs underline text-[#f59e0b] hover:text-[#d97706]"
+                          data-testid={`view-quotation-${lead.lead_id}`}
+                        >
+                          View Quotation
+                        </button>
+                      )}
                     </td>
 
                     {/* Appointment Column — shown for any lead with appointment_at */}
