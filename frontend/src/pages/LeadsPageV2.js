@@ -1215,7 +1215,7 @@ const LeadsPageV2 = () => {
             the active pipeline (Pre-sales / Sales). Click to filter the list
             below to that stage; click again to clear. Appointment (if this
             pipeline has one) always renders last with a stronger highlight. */}
-        <div className="px-4 pt-4 flex flex-wrap gap-2" data-testid="stage-summary-row">
+        <div className="px-4 pt-4 flex gap-2" data-testid="stage-summary-row">
           {stageCards.map(card => {
             const isActive = filterStage === card.stage_id;
             return (
@@ -1224,7 +1224,7 @@ const LeadsPageV2 = () => {
                 key={card.stage_id}
                 data-testid={`stage-summary-card-${card.stage_id}`}
                 onClick={() => setFilterStage(prev => prev === card.stage_id ? null : card.stage_id)}
-                className={`text-left px-3 py-2 rounded-lg border transition-all min-w-[100px] ${
+                className={`flex-1 min-w-0 text-left px-3 py-2 rounded-lg border transition-all ${
                   card.isAppointment ? 'shadow-md' : `${bgSecondary} ${borderColor}`
                 }`}
                 style={{
@@ -1238,13 +1238,13 @@ const LeadsPageV2 = () => {
                   {card.name}
                 </p>
                 <p
-                  className="text-lg font-bold mt-0.5"
+                  className="text-lg font-bold mt-0.5 truncate"
                   style={{ color: card.isAppointment ? '#fff' : card.color }}
                 >
                   {card.count}
                 </p>
                 {card.amount > 0 && (
-                  <p className={`text-[10px] font-medium mt-0.5 ${card.isAppointment ? 'text-white/85' : textSecondary}`}>
+                  <p className={`text-[10px] font-medium mt-0.5 truncate ${card.isAppointment ? 'text-white/85' : textSecondary}`}>
                     {formatCurrency(card.amount)}
                   </p>
                 )}
