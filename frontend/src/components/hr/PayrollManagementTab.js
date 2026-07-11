@@ -217,6 +217,7 @@ export default function PayrollManagementTab({
       'ceo_review': 'bg-[#6366f1]/20 text-[#6366f1]',
       'approved': 'bg-[#10b981]/20 text-[#10b981]',
       'generated': 'bg-[#14b8a6]/20 text-[#14b8a6]',
+      'partially_paid': 'bg-[#f59e0b]/20 text-[#f59e0b]',
       'paid': 'bg-[#a78bfa]/20 text-[#a78bfa]',
       'not_created': 'bg-gray-500/15 text-gray-500',
     };
@@ -230,6 +231,7 @@ export default function PayrollManagementTab({
       'ceo_review': 'CEO Review',
       'approved': 'Approved',
       'generated': 'Generated',
+      'partially_paid': 'Partially Paid',
       'paid': 'Paid',
       'not_created': 'Not Created',
     };
@@ -455,9 +457,10 @@ export default function PayrollManagementTab({
         const totalEmployees = rows.length;
         // Amount payable = Σ net_salary across all payslips that exist this month
         const totalPayable = rows.reduce((s, r) => s + Number(r.p?.net_salary || 0), 0);
-        // "Paid" includes both `paid` (cashbook flushed) and `generated` (CEO-approved, ready to pay) per user request
+        // "Paid" includes `paid`, `partially_paid` (cashbook flushed, in full or
+        // in part) and `generated` (CEO-approved, ready to pay) per user request
         const totalPaid = rows.reduce((s, r) => {
-          if (r.p && (r.p.status === 'paid' || r.p.status === 'generated')) {
+          if (r.p && (r.p.status === 'paid' || r.p.status === 'generated' || r.p.status === 'partially_paid')) {
             return s + Number(r.p.net_salary || 0);
           }
           return s;
@@ -1468,11 +1471,14 @@ function SalaryPayslipView({
     return true;
   });
   const totalMonthsPaid = allPayslips.filter((p) => p.status === 'paid').length;
-  // Total Salary Paid = only what's been actually paid via Cashbook expense
-  // (status === 'paid', i.e. a debit linked to the payslip exists).
-  const totalSalaryPaid = allPayslips
-    .filter((p) => p.status === 'paid')
-    .reduce((s, p) => s + Number(p.net_salary || 0), 0);
+  // Total Salary Paid = only what's been actually paid via Cashbook expense —
+  // uses the running `amount_paid` so a partially-paid payslip only
+  // contributes the portion genuinely disbursed so far.
+  const totalSalaryPaid = allPayslips.reduce((s, p) => {
+    if (p.status === 'paid') return s + Number(p.amount_paid ?? p.net_salary ?? 0);
+    if (p.status === 'partially_paid') return s + Number(p.amount_paid || 0);
+    return s;
+  }, 0);
   // Total Salary = sum of every created payslip regardless of status.
   const totalSalary = allPayslips.reduce((s, p) => s + Number(p.net_salary || 0), 0);
   const fmtINR = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
@@ -1781,6 +1787,12 @@ function SalaryPayslipView({
                     <Stat l="Gross" v={`₹${Number(viewingPayslip.base_salary ?? viewingPayslip.gross_salary ?? 0).toLocaleString('en-IN')}`} isDark={isDark} />
                     <Stat l="Per Day" v={`₹${Number(viewingPayslip.per_day_salary ?? 0).toLocaleString('en-IN')}`} isDark={isDark} />
                     <Stat l="Net Pay" v={`₹${Number(viewingPayslip.net_salary ?? 0).toLocaleString('en-IN')}`} green isDark={isDark} />
+                    {viewingPayslip.status === 'partially_paid' && (
+                      <>
+                        <Stat l="Paid So Far" v={`₹${Number(viewingPayslip.amount_paid ?? 0).toLocaleString('en-IN')}`} green isDark={isDark} />
+                        <Stat l="Remaining" v={`₹${(Number(viewingPayslip.net_salary ?? 0) - Number(viewingPayslip.amount_paid ?? 0)).toLocaleString('en-IN')}`} isDark={isDark} />
+                      </>
+                    )}
                   </div>
                 </div>
                 <DialogFooter className="mt-4 flex-wrap gap-2">
@@ -1962,7 +1974,7 @@ function SalaryPayslipView({
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-3 pt-4 border-t border-[#3f3f46]">
             {/* Edit and Delete for non-finalized payslips */}
-            {!['generated', 'acknowledged', 'pending_finance', 'paid'].includes(payslip.status) && (
+            {!['generated', 'partially_paid', 'acknowledged', 'pending_finance', 'paid'].includes(payslip.status) && (
               <>
                 <Button 
                   onClick={() => {
@@ -2042,9 +2054,9 @@ function SalaryPayslipView({
                 Generate Payslip
               </Button>
             )}
-            {payslip.status === 'generated' && (
+            {(payslip.status === 'generated' || payslip.status === 'partially_paid') && (
               <>
-                <Button 
+                <Button
                   onClick={() => onDownloadPDF(payslip)}
                   className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
                 >
@@ -2382,7 +2394,7 @@ function SalaryPayslipView({
                   </>
                 )}
 
-                {viewingPayslip.status === 'generated' && (
+                {(viewingPayslip.status === 'generated' || viewingPayslip.status === 'partially_paid') && (
                   <Button
                     onClick={() => onDownloadPDF(viewingPayslip)}
                     className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"

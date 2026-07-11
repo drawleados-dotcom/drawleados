@@ -351,7 +351,13 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
           amount: parseFloat(a.amount) || 0,
         })),
       }, { headers });
-      toast.success(selectedPayslipId ? 'Salary expense recorded · Payslip marked PAID' : 'Expense recorded');
+      if (selectedPayslipId) {
+        const remaining = Number(selectedPayslip?.remaining_amount ?? selectedPayslip?.net_salary ?? 0);
+        const willFullyClear = expenseTotalNum >= remaining - 0.01;
+        toast.success(willFullyClear ? 'Salary expense recorded · Payslip marked PAID' : 'Partial salary payment recorded · Payslip marked PARTIALLY PAID');
+      } else {
+        toast.success('Expense recorded');
+      }
       setModal(null);
       load();
     } catch (e) {
@@ -825,7 +831,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                     data-testid="expense-total-input"
                   />
                   {selectedPayslipId && (
-                    <p className={`text-[10px] ${textSecondary} mt-1`}>Pre-filled from payslip Net Salary — edit if paying a different amount</p>
+                    <p className={`text-[10px] ${textSecondary} mt-1`}>Pre-filled with the remaining payslip balance — edit to pay a partial amount instead</p>
                   )}
                 </div>
                 <div>
@@ -1116,9 +1122,12 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                             setSelectedPayslipId(id);
                             const p = filtered.find((x) => x.payslip_id === id);
                             if (p) {
-                              const net = String(Number(p.net_salary) || 0);
-                              setExpenseTotal(net);
-                              setAllocs([{ source: 'cash', bank_id: '', amount: net }]);
+                              // Pre-fill with the REMAINING balance, not the full net salary —
+                              // a payslip already part-paid in an earlier cashbook entry should
+                              // default to whatever's still owed.
+                              const remaining = String(Number(p.remaining_amount ?? p.net_salary) || 0);
+                              setExpenseTotal(remaining);
+                              setAllocs([{ source: 'cash', bank_id: '', amount: remaining }]);
                               setForm((f) => ({ ...f, party: p.employee_name || '' }));
                             }
                           }}
@@ -1128,16 +1137,21 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                           <option value="">— Choose employee —</option>
                           {filtered.map((p) => {
                             const net = Number(p.net_salary || 0).toLocaleString('en-IN');
+                            const paidSoFar = Number(p.amount_paid || 0);
                             return (
                               <option key={p.payslip_id} value={p.payslip_id}>
-                                {p.employee_name} · Net ₹{net}
+                                {p.employee_name} · Net ₹{net}{paidSoFar > 0 ? ` · Paid ₹${paidSoFar.toLocaleString('en-IN')}` : ''}
                               </option>
                             );
                           })}
                         </select>
                         {selectedPayslip && (
                           <p className={`text-[11px] mt-2 ${textSecondary}`}>
-                            Net salary <b className="text-[#10b981]">₹{Number(selectedPayslip.net_salary || 0).toLocaleString('en-IN')}</b> · Enter the actual amount being paid below (can be partial / variable). Saving will mark the payslip as <b>PAID</b>.
+                            Net salary <b className="text-[#10b981]">₹{Number(selectedPayslip.net_salary || 0).toLocaleString('en-IN')}</b>
+                            {Number(selectedPayslip.amount_paid || 0) > 0 && (
+                              <> · Already paid <b className="text-[#10b981]">₹{Number(selectedPayslip.amount_paid || 0).toLocaleString('en-IN')}</b> · Remaining <b className="text-[#f59e0b]">₹{Number(selectedPayslip.remaining_amount ?? (selectedPayslip.net_salary - selectedPayslip.amount_paid)).toLocaleString('en-IN')}</b></>
+                            )}
+                            {' '}· Enter the amount being paid now below — pay it in full or in installments across multiple entries. The payslip is marked <b>PAID</b> once the full net salary has been covered.
                           </p>
                         )}
                         {filtered.length === 0 && payablePayslips.length > 0 && (

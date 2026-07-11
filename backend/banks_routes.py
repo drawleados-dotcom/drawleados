@@ -850,6 +850,26 @@ async def add_grouped_expense(payload: GroupedExpensePayload, request: Request):
                 detail=f"{label.capitalize()} balance is only ₹{avail:,.0f} — cannot release ₹{a.amount:,.0f}",
             )
 
+    # If this expense pays a payroll payslip, validate it against the
+    # remaining balance BEFORE persisting anything — a payslip can be paid
+    # across multiple partial cashbook entries, so we track a running
+    # `amount_paid` rather than flipping straight to `paid` on any amount.
+    payslip = None
+    if payload.payslip_id:
+        payslip = await db.payslips.find_one({"payslip_id": payload.payslip_id})
+        if not payslip:
+            raise HTTPException(status_code=400, detail="Payslip not found")
+        if payslip.get("status") not in ("generated", "partially_paid"):
+            raise HTTPException(status_code=400, detail="This payslip is not awaiting payment")
+        net_salary = float(payslip.get("net_salary") or 0)
+        already_paid = float(payslip.get("amount_paid") or 0)
+        remaining = net_salary - already_paid
+        if total > remaining + 0.01:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Amount ₹{total:,.0f} exceeds the remaining payroll balance of ₹{remaining:,.0f}",
+            )
+
     # Persist — one entry per allocation, all sharing the same group_id
     group_id = f"exp_{uuid.uuid4().hex[:12]}"
     date_str = payload.date or datetime.now(timezone.utc).date().isoformat()
@@ -888,17 +908,40 @@ async def add_grouped_expense(payload: GroupedExpensePayload, request: Request):
             entry["created_at"] = entry["created_at"].isoformat()
         inserted.append(entry)
 
-    # If this expense was paying a generated payslip, flip it to paid.
-    if payload.payslip_id:
-        await db.payslips.update_one(
-            {"payslip_id": payload.payslip_id, "status": "generated"},
-            {"$set": {
+    # If this expense was paying a payroll payslip, add this payment to its
+    # running `amount_paid` total. Only flip to `paid` once the cumulative
+    # amount covers the net salary — otherwise it stays `partially_paid` and
+    # remains selectable in the Cashbook Payroll picker for the remaining
+    # balance.
+    if payload.payslip_id and payslip:
+        now = datetime.now(timezone.utc)
+        new_paid = float(payslip.get("amount_paid") or 0) + total
+        net_salary = float(payslip.get("net_salary") or 0)
+        payment_entry = {
+            "expense_group_id": group_id,
+            "amount": total,
+            "date": date_str,
+            "paid_by": user["user_id"],
+            "paid_at": now,
+        }
+        if new_paid >= net_salary - 0.01:
+            update = {
                 "status": "paid",
+                "amount_paid": new_paid,
                 "paid_by": user["user_id"],
-                "paid_at": datetime.now(timezone.utc),
+                "paid_at": now,
                 "paid_via_expense_group_id": group_id,
-                "updated_at": datetime.now(timezone.utc),
-            }},
+                "updated_at": now,
+            }
+        else:
+            update = {
+                "status": "partially_paid",
+                "amount_paid": new_paid,
+                "updated_at": now,
+            }
+        await db.payslips.update_one(
+            {"payslip_id": payload.payslip_id},
+            {"$set": update, "$push": {"payment_history": payment_entry}},
         )
 
     return {"expense_group_id": group_id, "total": total, "entries": inserted}

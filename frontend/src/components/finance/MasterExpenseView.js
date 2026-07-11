@@ -69,14 +69,17 @@ const MasterExpenseView = ({ onAddPayrollExpense }) => {
       // and "paid" (paid = already disbursed via cashbook).
       const ps = await axios.get(`${API}/api/payroll/payslips?month=${month}&year=${year}`, { headers });
       const rows = ps.data || [];
-      // Grand = CEO-approved (status ∈ {generated, paid}) net salary sum.
-      const approved = rows.filter((p) => ['generated', 'paid'].includes(p.status));
+      // Grand = CEO-approved (status ∈ {generated, partially_paid, paid}) net salary sum.
+      const approved = rows.filter((p) => ['generated', 'partially_paid', 'paid'].includes(p.status));
       const total = approved.reduce((s, p) => s + Number(p.net_salary || 0), 0);
       setPayrollApprovedTotal(total);
-      // Paid = already disbursed via Cashbook (status === 'paid').
-      const paid = rows
-        .filter((p) => p.status === 'paid')
-        .reduce((s, p) => s + Number(p.net_salary || 0), 0);
+      // Paid = actually disbursed via Cashbook so far — full amount for `paid`,
+      // running `amount_paid` for `partially_paid` (partial installments).
+      const paid = rows.reduce((s, p) => {
+        if (p.status === 'paid') return s + Number(p.amount_paid ?? p.net_salary ?? 0);
+        if (p.status === 'partially_paid') return s + Number(p.amount_paid || 0);
+        return s;
+      }, 0);
       setPayrollPaidTotal(paid);
     } catch {
       setPayrollApprovedTotal(0);

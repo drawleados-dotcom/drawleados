@@ -30,6 +30,7 @@ const STATUS_COLORS = {
   ceo_review: 'bg-[#6366f1]/20 text-[#6366f1]',
   approved: 'bg-[#10b981]/20 text-[#10b981]',
   generated: 'bg-[#14b8a6]/20 text-[#14b8a6]',
+  partially_paid: 'bg-[#f59e0b]/20 text-[#f59e0b]',
   paid: 'bg-[#a78bfa]/20 text-[#a78bfa]',
   not_created: 'bg-gray-500/15 text-gray-500',
 };
@@ -39,6 +40,7 @@ const STATUS_LABELS = {
   ceo_review: 'CEO Review',
   approved: 'Approved',
   generated: 'Generated',
+  partially_paid: 'Partially Paid',
   paid: 'Paid',
   not_created: 'Not Created',
 };
@@ -89,7 +91,7 @@ const PayrollTab = () => {
   const totalEmployees = rows.length;
   const totalPayable = rows.reduce((s, r) => s + Number(r.p?.net_salary || 0), 0);
   const totalPaid = rows.reduce((s, r) => {
-    if (r.p && (r.p.status === 'paid' || r.p.status === 'generated')) {
+    if (r.p && (r.p.status === 'paid' || r.p.status === 'generated' || r.p.status === 'partially_paid')) {
       return s + Number(r.p.net_salary || 0);
     }
     return s;
@@ -236,6 +238,11 @@ const PayrollTab = () => {
                       <td className="px-4 py-3 text-right font-semibold text-[#10b981]">{netSalary != null ? fmtINR(netSalary) : '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <Badge className={STATUS_COLORS[status] || STATUS_COLORS.not_created}>{STATUS_LABELS[status] || status}</Badge>
+                        {status === 'partially_paid' && (
+                          <p className="text-[10px] text-[#a1a1aa] mt-1">
+                            ₹{Number(p.amount_paid || 0).toLocaleString('en-IN')} / {fmtINR(netSalary)}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {p ? (
@@ -320,6 +327,18 @@ const PayrollTab = () => {
                       <p className="text-base font-bold mt-1 text-[#10b981]">₹{Number(viewing.net_salary || 0).toLocaleString('en-IN')}</p>
                     </div>
                   </div>
+                  {viewing.status === 'partially_paid' && (
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
+                        <p className="text-[10px] uppercase text-[#a1a1aa]">Paid So Far</p>
+                        <p className="text-base font-bold mt-1 text-[#10b981]">₹{Number(viewing.amount_paid || 0).toLocaleString('en-IN')}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
+                        <p className="text-[10px] uppercase text-[#a1a1aa]">Remaining</p>
+                        <p className="text-base font-bold mt-1 text-[#f59e0b]">₹{(Number(viewing.net_salary || 0) - Number(viewing.amount_paid || 0)).toLocaleString('en-IN')}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {viewing.hr_remarks && (
                   <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a]">
@@ -330,7 +349,7 @@ const PayrollTab = () => {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setViewing(null)} className="border-[#27272a]">Close</Button>
-                {(viewing.status === 'generated' || viewing.status === 'paid') && (
+                {(viewing.status === 'generated' || viewing.status === 'partially_paid' || viewing.status === 'paid') && (
                   <Button onClick={downloadPDF} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="fin-payroll-view-download">
                     <Download className="h-4 w-4 mr-1" /> Download PDF
                   </Button>

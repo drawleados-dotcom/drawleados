@@ -554,7 +554,10 @@ async def ceo_reject_payslip(payslip_id: str, data: ReviewPayslipRequest, reques
 
 @payroll_router.get("/payslips/payable")
 async def get_payable_payslips(request: Request):
-    """Generated (CEO-approved, not yet paid) payslips — feeds the Cashbook Payroll picker."""
+    """CEO-approved payslips still awaiting payment (fully or partially) —
+    feeds the Cashbook Payroll picker. A partially-paid payslip stays in this
+    list (with `amount_paid` set) so the remaining balance can be paid in a
+    later cashbook entry."""
     from server import get_current_user
     current_user = await get_current_user(request)
 
@@ -562,10 +565,14 @@ async def get_payable_payslips(request: Request):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     rows = await db.payslips.find(
-        {"status": "generated"},
+        {"status": {"$in": ["generated", "partially_paid"]}},
         {"_id": 0, "payslip_id": 1, "user_id": 1, "employee_name": 1, "employee_id": 1,
-         "employee_designation": 1, "month": 1, "year": 1, "net_salary": 1, "base_salary": 1},
+         "employee_designation": 1, "month": 1, "year": 1, "net_salary": 1, "base_salary": 1,
+         "status": 1, "amount_paid": 1},
     ).sort([("year", -1), ("month", -1), ("employee_name", 1)]).to_list(500)
+    for r in rows:
+        r["amount_paid"] = float(r.get("amount_paid") or 0)
+        r["remaining_amount"] = float(r.get("net_salary") or 0) - r["amount_paid"]
     return rows
 
 
