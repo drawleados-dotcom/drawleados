@@ -19,6 +19,11 @@ const API = process.env.REACT_APP_BACKEND_URL;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
+// Match the "Payroll" sub-category regardless of how someone typed it when
+// creating it in Expense Split (e.g. "Pay roll", "Pay-Roll", "PAYROLL") —
+// must stay identical to the check in CashbookSplit.js.
+const isPayrollCategoryName = (name) => (name || '').toLowerCase().replace(/[^a-z]/g, '') === 'payroll';
+
 // Pin Overhead/Marketing/Profit/Investment in that exact order; hide "Loss"
 // entirely. Anything else falls to the end.
 const TAB_ORDER = ['overhead', 'marketing', 'profit', 'investment'];
@@ -264,7 +269,7 @@ const MasterExpenseView = ({ onAddPayrollExpense }) => {
               {(activeTop?.sub_categories || [])
                 // Hide any manually-created "Payroll" sub when on Overhead since the
                 // pinned special row above already represents it.
-                .filter((s) => !(isOverhead && (s.name || '').trim().toLowerCase() === 'payroll'))
+                .filter((s) => !(isOverhead && isPayrollCategoryName(s.name)))
                 .map((s) => (
                 <div key={s.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`master-sub-${s.category_id}`}>
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />

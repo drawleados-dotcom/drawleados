@@ -20,6 +20,10 @@ const fmtDate = (iso) => {
   try { return new Date(iso).toISOString().slice(0, 10); } catch { return iso; }
 };
 
+// Match the "Payroll" sub-category regardless of how someone typed it when
+// creating it in Expense Split (e.g. "Pay roll", "Pay-Roll", "PAYROLL").
+const isPayrollCategoryName = (name) => (name || '').toLowerCase().replace(/[^a-z]/g, '') === 'payroll';
+
 const PAYMENT_MODES = ['cash', 'cheque', 'bank', 'upi'];
 
 /**
@@ -93,7 +97,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
     }
     const top = splitCategories.find((c) => c.category_id === splitTopId);
     const sub = top?.sub_categories?.find((s) => s.category_id === splitSubId);
-    const isPayroll = (sub?.name || '').toLowerCase().trim() === 'payroll';
+    const isPayroll = isPayrollCategoryName(sub?.name);
     if (!isPayroll) {
       setPayablePayslips([]);
       setSelectedPayslipId('');
@@ -114,7 +118,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   // so the empty-state message stays visible even when zero payslips are payable).
   const _selectedTopCat = splitCategories.find((c) => c.category_id === splitTopId);
   const _selectedSubCat = _selectedTopCat?.sub_categories?.find((s) => s.category_id === splitSubId);
-  const isPayrollMode = (_selectedSubCat?.name || '').toLowerCase().trim() === 'payroll';
+  const isPayrollMode = isPayrollCategoryName(_selectedSubCat?.name);
   // AI Credits flow — same name-match trick. When this sub-category is picked
   // we hide the Amount / Date / Allocation fields and surface a project +
   // credits picker that records one expense entry per selected credit row
