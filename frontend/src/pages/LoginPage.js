@@ -12,6 +12,16 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 // (Demo user quick-login list removed in production cleanup.)
 
+// Land on Leads by default — but only for users who can actually see it,
+// so Operations-only staff (no Leads module access) still land where they
+// always have, instead of bouncing off a page they can't open.
+const landingPathFor = (user) => {
+  const role = (user?.role || '').toLowerCase();
+  if (role === 'super_admin' || role === 'admin') return '/leads';
+  const moduleAccess = (user?.module_access || []).map((m) => String(m).toLowerCase());
+  return moduleAccess.includes('leads') ? '/leads' : '/our-tasks';
+};
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -46,7 +56,7 @@ export default function LoginPage() {
         // No 2FA, proceed with login
         setAuth(response.data.user, response.data.session_token);
         toast.success('Login successful!');
-        navigate('/our-tasks');
+        navigate(landingPathFor(response.data.user));
       }
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Login failed');
@@ -62,7 +72,7 @@ export default function LoginPage() {
       const response = await axios.post(`${API}/api/auth/2fa/verify?email=${encodeURIComponent(email)}&code=${twoFactorCode}`);
       setAuth(response.data.user, response.data.session_token);
       toast.success('Login successful!');
-      navigate('/our-tasks');
+      navigate(landingPathFor(response.data.user));
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Invalid 2FA code');
     } finally {
