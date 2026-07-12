@@ -41,18 +41,18 @@ export default function TopNav() {
 
   const items = [
     { key: 'dashboard',     path: '/dashboard',       label: 'Dashboard',       icon: LayoutDashboard },
-    { key: 'my_profile',    path: '/hr',              label: 'My Profile',      icon: UserCircle },
+    { key: 'leads',         path: '/leads',           label: 'Leads',           icon: Megaphone },
+    { key: 'finance',       path: '/finance',         label: 'Finance',         icon: DollarSign },
     { key: 'our_tasks',     path: '/our-tasks',       label: 'Operations',      icon: ClipboardList },
     { key: 'web_dev',       path: '/dl-operations',   label: 'Web Dev',         icon: Globe },
-    { key: 'leads',         path: '/leads',           label: 'Leads',           icon: Megaphone },
     { key: 'meetings',      path: '/calendar',        label: 'Meetings',        icon: Calendar },
     { key: 'approvals',     path: '/approvals',       label: 'Approvals',       icon: ClipboardCheck },
-    { key: 'finance',       path: '/finance',         label: 'Finance',         icon: DollarSign },
     { key: 'hr_admin',      path: '/hr-admin',        label: 'HR Admin',        icon: Users },
     { key: 'documentations', path: '/documentations', label: 'Docs',            icon: FolderOpen },
     { key: 'sales',         path: '/sales',           label: 'Sales',           icon: Briefcase },
     { key: 'meta_ads',      path: '/meta-ads',        label: 'Meta Ads',        icon: FileSpreadsheet },
     { key: 'settings',      path: '/settings',        label: 'Settings',        icon: SettingsIcon },
+    { key: 'my_profile',    path: '/hr',              label: 'My Profile',      icon: UserCircle },
   ];
 
   const visible = items.filter((it) => hasAccess(it.key));
