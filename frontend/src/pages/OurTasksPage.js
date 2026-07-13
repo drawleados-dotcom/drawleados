@@ -149,6 +149,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     category: '',
     website_page_id: '',
     website_page_name: '',
+    erp_user_id: '',
+    erp_user_name: '',
+    erp_page_id: '',
+    erp_page_name: '',
   });
 
   const [projectsForTask, setProjectsForTask] = useState([]);
@@ -387,6 +391,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Please select a Page');
       return;
     }
+    // ERP tasks must be tagged to a User + Page once a project is picked.
+    if (formData.department === 'erp' && formData.project_id) {
+      if (!formData.erp_user_id) { toast.error('Please select a User'); return; }
+      if (!formData.erp_page_id) { toast.error('Please select a Page'); return; }
+    }
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
       toast.error('Start date is required for recurring tasks');
@@ -432,6 +441,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (formData.department === 'website' && formData.project_id && !formData.website_page_id) {
       toast.error('Please select a Page');
       return;
+    }
+    if (formData.department === 'erp' && formData.project_id) {
+      if (!formData.erp_user_id) { toast.error('Please select a User'); return; }
+      if (!formData.erp_page_id) { toast.error('Please select a Page'); return; }
     }
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
@@ -884,6 +897,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       category: '',
       website_page_id: '',
       website_page_name: '',
+      erp_user_id: '',
+      erp_user_name: '',
+      erp_page_id: '',
+      erp_page_name: '',
     });
     setShowCustomRecurrence(false);
   };
@@ -915,6 +932,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       category: task.category || '',
       website_page_id: task.website_page_id || '',
       website_page_name: task.website_page_name || '',
+      erp_user_id: task.erp_user_id || '',
+      erp_user_name: task.erp_user_name || '',
+      erp_page_id: task.erp_page_id || '',
+      erp_page_name: task.erp_page_name || '',
     });
     setEditingTask(task);
   };
@@ -2254,7 +2275,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       </Label>
                       <Select
                         value={formData.department || 'none'}
-                        onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '', website_page_id: '', website_page_name: '' }))}
+                        onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '', website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' }))}
                       >
                         <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
                           <SelectValue placeholder={MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) ? 'Select department (optional)' : 'Select department'} />
@@ -2276,7 +2297,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           value={formData.project_id || 'none'}
                           onValueChange={(v) => {
                             if (v === 'none') {
-                              setFormData(prev => ({ ...prev, project_id: '', project_name: '', website_page_id: '', website_page_name: '' }));
+                              setFormData(prev => ({ ...prev, project_id: '', project_name: '', website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' }));
                             } else {
                               const proj = projectsForTask.find(p => p.project_id === v);
                               const projDepts = proj?.departments || [];
@@ -2294,6 +2315,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                   category: nextDept === prev.department ? prev.category : '',
                                   website_page_id: '',
                                   website_page_name: '',
+                                  erp_user_id: '',
+                                  erp_user_name: '',
+                                  erp_page_id: '',
+                                  erp_page_name: '',
                                 };
                               });
                             }
@@ -2375,6 +2400,63 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             <SelectItem value="others">Others</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                    )}
+
+                    {formData.department === 'erp' && formData.project_id && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label className={textPrimary}>User <span className="text-red-500">*</span></Label>
+                          <Select
+                            value={formData.erp_user_id || 'none'}
+                            onValueChange={(v) => {
+                              if (v === 'none') {
+                                setFormData(prev => ({ ...prev, erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' }));
+                              } else {
+                                const proj = projectsForTask.find(p => p.project_id === formData.project_id);
+                                const eu = (proj?.erp_users || []).find(u => u.id === v);
+                                setFormData(prev => ({ ...prev, erp_user_id: v, erp_user_name: eu?.user_name || '', erp_page_id: '', erp_page_name: '' }));
+                              }
+                            }}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-erp-user">
+                              <SelectValue placeholder="Select user" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">— None —</SelectItem>
+                              {(projectsForTask.find(p => p.project_id === formData.project_id)?.erp_users || []).map(eu => (
+                                <SelectItem key={eu.id} value={eu.id}>{eu.user_name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className={textPrimary}>Page <span className="text-red-500">*</span></Label>
+                          <Select
+                            value={formData.erp_page_id || 'none'}
+                            onValueChange={(v) => {
+                              if (v === 'none') {
+                                setFormData(prev => ({ ...prev, erp_page_id: '', erp_page_name: '' }));
+                              } else {
+                                const proj = projectsForTask.find(p => p.project_id === formData.project_id);
+                                const eu = (proj?.erp_users || []).find(u => u.id === formData.erp_user_id);
+                                const pg = (eu?.pages || []).find(p => p.id === v);
+                                setFormData(prev => ({ ...prev, erp_page_id: v, erp_page_name: pg?.page_name || '' }));
+                              }
+                            }}
+                            disabled={!formData.erp_user_id}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-erp-page">
+                              <SelectValue placeholder={formData.erp_user_id ? 'Select page' : 'Pick user first'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">— None —</SelectItem>
+                              {((projectsForTask.find(p => p.project_id === formData.project_id)?.erp_users || []).find(u => u.id === formData.erp_user_id)?.pages || []).map(pg => (
+                                <SelectItem key={pg.id} value={pg.id}>{pg.page_name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     )}
 

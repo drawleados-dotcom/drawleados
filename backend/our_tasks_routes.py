@@ -41,6 +41,10 @@ class TaskCreate(BaseModel):
     category: Optional[str] = None
     website_page_id: Optional[str] = None    # Website dept only: one of the project's Pages, or "others"
     website_page_name: Optional[str] = None
+    erp_user_id: Optional[str] = None        # ERP dept only: one of the project's erp_users
+    erp_user_name: Optional[str] = None
+    erp_page_id: Optional[str] = None        # one of that user's pages
+    erp_page_name: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     task_name: Optional[str] = None
@@ -62,6 +66,10 @@ class TaskUpdate(BaseModel):
     category: Optional[str] = None
     website_page_id: Optional[str] = None
     website_page_name: Optional[str] = None
+    erp_user_id: Optional[str] = None
+    erp_user_name: Optional[str] = None
+    erp_page_id: Optional[str] = None
+    erp_page_name: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -276,6 +284,10 @@ async def create_task(task_data: TaskCreate, request: Request):
             "category": task_data.category,
             "website_page_id": task_data.website_page_id,
             "website_page_name": task_data.website_page_name,
+            "erp_user_id": task_data.erp_user_id,
+            "erp_user_name": task_data.erp_user_name,
+            "erp_page_id": task_data.erp_page_id,
+            "erp_page_name": task_data.erp_page_name,
             "created_by": user.user_id,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
