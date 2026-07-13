@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
+import ProjectScopesTab from './projects/ProjectScopesTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -455,6 +456,15 @@ export default function ProjectsPanel({
 
   const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
 
+  // Scopes tab "Add Task" — defaults Department to this project's Meta Ads
+  // department (Project itself is implicit: we're already inside it).
+  const openAddTaskForScopes = () => {
+    const defaultCategory = deptCategories.find(d => d.dept_key === 'meta')?.categories?.[0] || '';
+    setEditingTaskId(null);
+    setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: 'meta', category: defaultCategory, erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' });
+    setShowAddTask(true);
+  };
+
   // Days remaining (+N) or overdue (-N) against a due date, for the "Due
   // Balance" column — compares calendar days only (ignores time-of-day).
   const dueBalanceInfo = (dueIso) => {
@@ -818,6 +828,8 @@ export default function ProjectsPanel({
           const isErpProject = (selectedProject?.departments || []).includes('erp');
           // Pages tab only renders for Website-department projects
           const isWebsiteProject = (selectedProject?.departments || []).includes('website');
+          // Scopes/Reports/Additional tabs only render for Meta Ads-department projects
+          const isMetaAdsProject = (selectedProject?.departments || []).includes('meta');
           const innerTabs = [
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
@@ -825,6 +837,9 @@ export default function ProjectsPanel({
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
+            ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
+            ...(isMetaAdsProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
+            ...(isMetaAdsProject ? [{ id: 'additional', label: 'Additional', icon: Layers }] : []),
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks
           if (!showPaymentSchedule && projectInnerTab === 'payment') {
@@ -939,6 +954,35 @@ export default function ProjectsPanel({
             textSecondary={textSecondary}
             borderColor={borderColor}
           />
+        )}
+
+        {projectInnerTab === 'scopes' && (
+          <ProjectScopesTab
+            tasks={selectedProject.tasks || []}
+            users={users}
+            canManageProjects={canManageProjects}
+            onAddTask={openAddTaskForScopes}
+            onEditTask={handleEditTask}
+            onDeleteTask={handleDeleteTask}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'reports' && (
+          <div className={`${bgCard} border ${borderColor} rounded-2xl p-12 text-center`} data-testid="reports-tab">
+            <p className={textSecondary}>Reports coming soon.</p>
+          </div>
+        )}
+
+        {projectInnerTab === 'additional' && (
+          <div className={`${bgCard} border ${borderColor} rounded-2xl p-12 text-center`} data-testid="additional-tab">
+            <p className={textSecondary}>Nothing here yet.</p>
+          </div>
         )}
 
         {projectInnerTab === 'tasks' && (
