@@ -2275,7 +2275,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       </Label>
                       <Select
                         value={formData.department || 'none'}
-                        onValueChange={(v) => setFormData(prev => ({ ...prev, department: v === 'none' ? '' : v, project_id: '', project_name: '', category: '', website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' }))}
+                        onValueChange={(v) => {
+                          const dept = v === 'none' ? '' : v;
+                          const defaultCategory = deptCategoriesForTask.find(d => d.dept_key === dept)?.categories?.[0] || '';
+                          setFormData(prev => ({ ...prev, department: dept, project_id: '', project_name: '', category: defaultCategory, website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' }));
+                        }}
                       >
                         <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
                           <SelectValue placeholder={MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) ? 'Select department (optional)' : 'Select department'} />
@@ -2307,12 +2311,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                 const nextDept = (projDepts.includes(prev.department))
                                   ? prev.department
                                   : (projDepts[0] || prev.department);
+                                const defaultCategory = deptCategoriesForTask.find(d => d.dept_key === nextDept)?.categories?.[0] || '';
                                 return {
                                   ...prev,
                                   project_id: v,
                                   project_name: proj?.name || '',
                                   department: nextDept,
-                                  category: nextDept === prev.department ? prev.category : '',
+                                  category: nextDept === prev.department ? (prev.category || defaultCategory) : defaultCategory,
                                   website_page_id: '',
                                   website_page_name: '',
                                   erp_user_id: '',

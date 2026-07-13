@@ -1551,7 +1551,11 @@ export default function ProjectsPanel({
                     <Label className={textPrimary}>Department *</Label>
                     <select
                       value={taskDraft.department}
-                      onChange={(e) => setTaskDraft({ ...taskDraft, department: e.target.value, category: '' })}
+                      onChange={(e) => {
+                        const dept = e.target.value;
+                        const defaultCategory = deptCategories.find(d => d.dept_key === dept)?.categories?.[0] || '';
+                        setTaskDraft({ ...taskDraft, department: dept, category: defaultCategory });
+                      }}
                       className={`w-full px-3 py-2 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary}`}
                       data-testid="project-task-department"
                     >
