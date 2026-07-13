@@ -401,6 +401,7 @@ export default function ProjectsPanel({
     if (!selectedProject) return;
     if (!taskDraft.task_name.trim()) { toast.error('Task name is required'); return; }
     if (!taskDraft.assigned_to) { toast.error('Please assign to a user'); return; }
+    if (taskDraft.department && !taskDraft.category) { toast.error('Please select a Category'); return; }
     try {
       if (editingTaskId) {
         await axios.put(`${API}/api/our-tasks/tasks/${editingTaskId}`, taskDraft, { headers });
@@ -1570,7 +1571,9 @@ export default function ProjectsPanel({
                     </select>
                   </div>
                   <div>
-                    <Label className={textPrimary}>Category</Label>
+                    <Label className={textPrimary}>
+                      Category {taskDraft.department && <span className="text-red-500">*</span>}
+                    </Label>
                     <select
                       value={taskDraft.category}
                       onChange={(e) => setTaskDraft({ ...taskDraft, category: e.target.value })}

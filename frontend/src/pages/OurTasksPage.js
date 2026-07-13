@@ -385,6 +385,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Please pick a Type for this task');
       return;
     }
+    // Category is mandatory once a department is picked, so every task is
+    // traceable to a specific work category (it now auto-defaults, but a
+    // department with no categories configured could still leave it blank).
+    if (formData.department && formData.department !== 'all' && !formData.category) {
+      toast.error('Please select a Category');
+      return;
+    }
     // Website tasks must be tagged to a Page (or explicitly "Others") once a
     // project is picked, so every page's work is actually traceable to it.
     if (formData.department === 'website' && formData.project_id && !formData.website_page_id) {
@@ -436,6 +443,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     if (!formData.type) {
       toast.error('Please pick a Type for this task');
+      return;
+    }
+    if (formData.department && formData.department !== 'all' && !formData.category) {
+      toast.error('Please select a Category');
       return;
     }
     if (formData.department === 'website' && formData.project_id && !formData.website_page_id) {
@@ -2358,7 +2369,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         </Select>
                       </div>
                       <div>
-                        <Label className={textPrimary}>Category</Label>
+                        <Label className={textPrimary}>
+                          Category {formData.department && formData.department !== 'all' && <span className="text-red-500">*</span>}
+                        </Label>
                         <Select
                           value={formData.category || 'none'}
                           onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
