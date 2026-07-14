@@ -41,6 +41,12 @@ const InvoicesTab = () => {
   // Payment Schedule → "Raise Invoice" GST choice popup state
   const [psRaiseChoice, setPsRaiseChoice] = useState(null); // { invoice }
   const [psChoiceGstType, setPsChoiceGstType] = useState('gst');
+  // Payment Schedule → "Select Invoice" popup: record this row's requested
+  // amount against an already-existing invoice for the same project instead
+  // of raising a new one.
+  const [selectInvoicePopup, setSelectInvoicePopup] = useState(null); // { pendingInvoice, projectInvoices, chosenInvoiceId }
+  const [loadingProjectInvoices, setLoadingProjectInvoices] = useState(false);
+  const [recordingPayment, setRecordingPayment] = useState(false);
 
   const months = [
     { value: '0', label: 'January' },
@@ -116,6 +122,42 @@ const InvoicesTab = () => {
     setInvoicePreset(null);
     setShowInvoiceModal(true);
   };
+
+  // "Select Invoice" — pick an already-existing invoice for the same project
+  // and record this row's requested amount against its balance.
+  const openSelectInvoice = async (inv) => {
+    setSelectInvoicePopup({ pendingInvoice: inv, projectInvoices: [], chosenInvoiceId: '' });
+    setLoadingProjectInvoices(true);
+    try {
+      const res = await api.get('/finance/invoices', { params: { project_id: inv.project_id } });
+      const options = (res.data || []).filter(i => i.invoice_id !== inv.invoice_id && i.status !== 'pending');
+      setSelectInvoicePopup(prev => (prev ? { ...prev, projectInvoices: options } : prev));
+    } catch (error) {
+      toast.error('Failed to load invoices for this project');
+    } finally {
+      setLoadingProjectInvoices(false);
+    }
+  };
+
+  const handleRecordAgainstInvoice = async () => {
+    if (!selectInvoicePopup?.chosenInvoiceId) { toast.error('Please select an invoice'); return; }
+    setRecordingPayment(true);
+    try {
+      await api.post(
+        `/projects/${selectInvoicePopup.pendingInvoice.project_id}/payment-schedule/${selectInvoicePopup.pendingInvoice.split_id}/record-against-invoice`,
+        { invoice_id: selectInvoicePopup.chosenInvoiceId }
+      );
+      toast.success('Payment recorded against invoice');
+      setSelectInvoicePopup(null);
+      fetchPsInvoices();
+      fetchInvoices();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to record payment');
+    } finally {
+      setRecordingPayment(false);
+    }
+  };
+
   const fetchInvoices = async () => {
     try {
       const params = statusFilter !== 'all' ? { status: statusFilter } : {};
@@ -856,14 +898,25 @@ const InvoicesTab = () => {
                                     ✓ Invoiced
                                   </span>
                                 ) : (
-                                  <Button
-                                    size="sm"
-                                    onClick={() => openPsRaiseInvoice(inv)}
-                                    data-testid={`ps-invreq-raise-${inv.invoice_id}`}
-                                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3 text-xs"
-                                  >
-                                    <FileText className="h-3.5 w-3.5 mr-1" /> Raise Invoice
-                                  </Button>
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => openSelectInvoice(inv)}
+                                      data-testid={`ps-invreq-select-${inv.invoice_id}`}
+                                      className="border-[#3f3f46] text-[#fafafa] hover:bg-[#27272a] h-8 px-3 text-xs"
+                                    >
+                                      <Eye className="h-3.5 w-3.5 mr-1" /> Select Invoice
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => openPsRaiseInvoice(inv)}
+                                      data-testid={`ps-invreq-raise-${inv.invoice_id}`}
+                                      className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3 text-xs"
+                                    >
+                                      <FileText className="h-3.5 w-3.5 mr-1" /> Raise Invoice
+                                    </Button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -1057,6 +1110,98 @@ const InvoicesTab = () => {
           </div>
         </div>
       )}
+
+      {/* "Select Invoice" popup for Payment Schedule rows — record this row's
+          requested amount against an already-existing invoice instead of
+          raising a new one. */}
+      {selectInvoicePopup && (() => {
+        const { pendingInvoice, projectInvoices, chosenInvoiceId } = selectInvoicePopup;
+        const chosen = projectInvoices.find(i => i.invoice_id === chosenInvoiceId) || null;
+        const requestAmount = Number(pendingInvoice.total_amount || 0);
+        const chosenTotal = chosen ? Number(chosen.total_amount || 0) : 0;
+        const chosenPaid = chosen ? Number(chosen.paid_amount || 0) : 0;
+        const chosenBalance = chosenTotal - chosenPaid;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget && !recordingPayment) setSelectInvoicePopup(null); }}
+            data-testid="select-invoice-popup"
+          >
+            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
+              <h3 className="text-lg font-semibold text-[#fafafa] mb-1">Select Invoice</h3>
+              <p className="text-sm text-[#a1a1aa] mb-5">
+                {pendingInvoice.invoice_number} · Requested ₹{requestAmount.toLocaleString('en-IN')}
+              </p>
+
+              <label className="text-xs uppercase tracking-wider text-[#a1a1aa]">Invoice</label>
+              {loadingProjectInvoices ? (
+                <p className="text-sm text-[#a1a1aa] mt-2 mb-4">Loading invoices…</p>
+              ) : projectInvoices.length === 0 ? (
+                <p className="text-sm text-[#a1a1aa] mt-2 mb-4">No other invoices found for this project.</p>
+              ) : (
+                <div className="mt-2 mb-4 space-y-2 max-h-48 overflow-y-auto">
+                  {projectInvoices.map((i) => {
+                    const bal = Number(i.total_amount || 0) - Number(i.paid_amount || 0);
+                    const active = chosenInvoiceId === i.invoice_id;
+                    return (
+                      <button
+                        key={i.invoice_id}
+                        type="button"
+                        onClick={() => setSelectInvoicePopup(prev => ({ ...prev, chosenInvoiceId: i.invoice_id }))}
+                        data-testid={`select-invoice-option-${i.invoice_id}`}
+                        className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                          active
+                            ? 'bg-[#6366f1]/15 border-[#6366f1] text-white'
+                            : 'bg-[#09090b] border-[#27272a] text-[#a1a1aa] hover:text-white'
+                        }`}
+                      >
+                        <div className="flex justify-between font-medium">
+                          <span>{i.invoice_number}</span>
+                          <span>₹{Number(i.total_amount || 0).toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="text-xs opacity-70 mt-0.5">
+                          {i.client_name || '—'} · Balance ₹{bal.toLocaleString('en-IN')}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {chosen && (
+                <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4 mb-5 space-y-1.5 text-sm">
+                  <div className="flex justify-between text-[#a1a1aa]"><span>Total Payment Request Amount</span><span className="text-[#fafafa] font-medium">₹{requestAmount.toLocaleString('en-IN')}</span></div>
+                  <div className="flex justify-between text-[#a1a1aa]"><span>Invoice Amount</span><span className="text-[#fafafa] font-medium">₹{chosenTotal.toLocaleString('en-IN')}</span></div>
+                  <div className="flex justify-between text-[#a1a1aa]"><span>Balance</span><span className="text-[#fafafa] font-medium">₹{chosenBalance.toLocaleString('en-IN')}</span></div>
+                  {requestAmount > chosenBalance && (
+                    <p className="text-xs text-rose-400 pt-1">Requested amount exceeds this invoice's balance.</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => setSelectInvoicePopup(null)}
+                  disabled={recordingPayment}
+                  data-testid="select-invoice-cancel"
+                  className="text-[#a1a1aa] hover:text-white"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleRecordAgainstInvoice}
+                  disabled={!chosen || requestAmount > chosenBalance || recordingPayment}
+                  data-testid="select-invoice-record"
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                >
+                  {recordingPayment ? 'Recording…' : 'Record'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Invoice Request Detail Modal — opens from "View" on a pending request */}
       {viewingRequest && (

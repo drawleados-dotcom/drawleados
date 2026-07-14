@@ -310,16 +310,22 @@ async def get_invoices(
     gst_type: Optional[str] = None,
     source: Optional[str] = None,
     from_date: Optional[str] = None,
-    to_date: Optional[str] = None
+    to_date: Optional[str] = None,
+    project_id: Optional[str] = None,
 ):
     """Get all invoices with filters. `source` filters by origin
-    (e.g. `payment_schedule` for invoices auto-raised from a project split)."""
+    (e.g. `payment_schedule` for invoices auto-raised from a project split).
+    `project_id` scopes to invoices raised against a specific project — used
+    by the Payment Schedule "Select Invoice" popup to list a project's
+    already-raised invoices to record a payment request against."""
     query = {"is_deleted": False}
-    
+
     if status:
         query["status"] = status
     if source:
         query["source"] = source
+    if project_id:
+        query["project_id"] = project_id
     if gst_type:
         # "Non-GST" tab in Cashbook should also include Unregistered invoices
         # (gst_type='no_tax') — they are non-tax invoices and belong in the

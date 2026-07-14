@@ -49,6 +49,10 @@ class DeleteProjectRequest(BaseModel):
     password: str
 
 
+class RecordSplitAgainstInvoiceRequest(BaseModel):
+    invoice_id: str
+
+
 class ProjectTaskCreate(BaseModel):
     task_name: str
     description: Optional[str] = ""
@@ -487,6 +491,86 @@ async def request_invoice_for_split(project_id: str, split_id: str, request: Req
         "status": "pending",
     }
 
+
+@projects_router.post("/{project_id}/payment-schedule/{split_id}/record-against-invoice")
+async def record_split_against_invoice(project_id: str, split_id: str, payload: RecordSplitAgainstInvoiceRequest, request: Request):
+    """"Select Invoice" flow — instead of raising a brand-new invoice for this
+    split, apply the split's requested amount as a payment against an
+    already-existing invoice for the same project (e.g. one recurring invoice
+    covering several monthly payment-schedule rows). Voids this split's own
+    pending placeholder invoice (if any) since it's now fulfilled via the
+    selected invoice instead."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    role = (user.role or "").lower()
+    if role not in ("super_admin", "admin", "finance"):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Finance can record a payment")
+
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    sched = project.get("payment_schedule") or {}
+    splits = list(sched.get("splits") or [])
+    idx = next((i for i, s in enumerate(splits) if (s or {}).get("id") == split_id), -1)
+    if idx < 0:
+        raise HTTPException(status_code=404, detail="Split not found")
+    sp = splits[idx]
+    if sp.get("collected"):
+        raise HTTPException(status_code=400, detail="This split is already collected")
+
+    request_amount = float(sp.get("amount") or 0)
+    if request_amount <= 0:
+        raise HTTPException(status_code=400, detail="Split has zero amount")
+
+    invoice = await db.invoices.find_one({"invoice_id": payload.invoice_id, "is_deleted": False})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    total_amount = float(invoice.get("total_amount") or 0)
+    paid_amount = float(invoice.get("paid_amount") or 0)
+    balance = total_amount - paid_amount
+    if request_amount > balance:
+        raise HTTPException(status_code=400, detail=f"Payment request amount (₹{request_amount:,.2f}) exceeds the invoice balance (₹{balance:,.2f})")
+
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    new_paid = paid_amount + request_amount
+    new_status = "paid" if new_paid >= total_amount else "partially_paid"
+    await db.invoices.update_one(
+        {"invoice_id": payload.invoice_id},
+        {"$set": {"paid_amount": new_paid, "status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    # Void this split's own pending placeholder invoice (from a prior "Raise
+    # Invoice Request"), if any — it's now fulfilled via the selected invoice.
+    old_invoice_id = sp.get("invoice_id")
+    if old_invoice_id and old_invoice_id != payload.invoice_id:
+        await db.invoices.update_one(
+            {"invoice_id": old_invoice_id, "status": "pending"},
+            {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+    splits[idx] = {
+        **sp,
+        "collected": True,
+        "collected_date": today_iso,
+        "collected_by": user.user_id,
+        "invoice_id": payload.invoice_id,
+        "invoice_number": invoice.get("invoice_number"),
+    }
+    sched["splits"] = splits
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {"payment_schedule": sched, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {
+        "ok": True,
+        "split_id": split_id,
+        "invoice_id": payload.invoice_id,
+        "invoice_number": invoice.get("invoice_number"),
+        "amount": request_amount,
+        "invoice_new_paid_amount": new_paid,
+        "invoice_new_status": new_status,
+    }
 
 
 @projects_router.post("/{project_id}/tasks")
