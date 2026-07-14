@@ -74,6 +74,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
   // Meta Ads daily "Submit Report" popup — task currently being reported on
   const [reportTask, setReportTask] = useState(null);
+  const [reportProject, setReportProject] = useState(null); // freshly-fetched project (for its campaigns list)
   const [reportDate, setReportDate] = useState('');
   const [reportRows, setReportRows] = useState([]);
   const [submittingReport, setSubmittingReport] = useState(false);
@@ -508,17 +509,26 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     remarks: '',
   });
 
-  const openReportModal = (task) => {
+  const openReportModal = async (task) => {
     setReportTask(task);
+    setReportProject(null);
     setReportDate(task.due_date ? task.due_date.split('T')[0] : new Date().toISOString().split('T')[0]);
     setReportRows([newReportRow()]);
-    // Campaigns are managed on the project's Campaigns tab, a separate page
-    // from My Tasks — refresh projectsForTask so a campaign added moments
-    // ago shows up immediately instead of waiting on the 15s auto-refresh.
-    loadProjectsAndCategories();
+    // Campaigns are managed on the project's own Campaigns tab, so fetch
+    // that project fresh here rather than relying on the possibly-stale
+    // cached project list from the My Tasks / Assign to Team page.
+    if (task.project_id) {
+      try {
+        const res = await axios.get(`${API}/api/projects/${task.project_id}?_=${Date.now()}`, { headers });
+        setReportProject(res.data);
+      } catch (error) {
+        toast.error('Failed to load campaigns for this project');
+      }
+    }
   };
   const closeReportModal = () => {
     setReportTask(null);
+    setReportProject(null);
     setReportRows([]);
   };
   const addReportRow = () => setReportRows(rows => [...rows, newReportRow()]);
@@ -3200,6 +3210,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   </button>
                 </div>
                 <p className={`text-sm ${textSecondary}`}>Task: <span className={textPrimary}>{reportTask.task_name}</span></p>
+                <p className={`text-sm ${textSecondary}`}>
+                  Project: <span className={textPrimary}>{reportProject?.name || reportTask.project_name || '—'}</span>
+                  {' · '}Department: <span className={textPrimary}>Meta Ads</span>
+                </p>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="max-w-xs">
@@ -3215,7 +3229,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
                 <div className="space-y-3">
                   {(() => {
-                    const campaignOptions = projectsForTask.find(p => p.project_id === reportTask.project_id)?.campaigns || [];
+                    const campaignOptions = reportProject?.campaigns || [];
                     return reportRows.map((row, idx) => (
                       <div key={row.row_id} className={`border ${borderColor} rounded-lg p-4 space-y-3`} data-testid={`report-row-${row.row_id}`}>
                         <div className="flex items-center justify-between">
