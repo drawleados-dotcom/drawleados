@@ -3260,6 +3260,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               ))}
                             </SelectContent>
                           </Select>
+                          {!reportProject && (
+                            <p className="text-xs text-amber-500 mt-1">Loading campaigns…</p>
+                          )}
+                          {reportProject && campaignOptions.length === 0 && (
+                            <p className="text-xs text-amber-500 mt-1">
+                              No campaigns saved on project "{reportProject.name}" (ID: {reportProject.project_id}). Add one on that project's Campaigns tab, then reopen Submit Report.
+                            </p>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                           <div>
