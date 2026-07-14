@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
 import ProjectScopesTab from './projects/ProjectScopesTab';
+import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
+import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -838,6 +840,7 @@ export default function ProjectsPanel({
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
             ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
+            ...(isMetaAdsProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
             ...(isMetaAdsProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
             ...(isMetaAdsProject ? [{ id: 'additional', label: 'Additional', icon: Layers }] : []),
           ];
@@ -973,10 +976,30 @@ export default function ProjectsPanel({
           />
         )}
 
+        {projectInnerTab === 'campaigns' && (
+          <ProjectCampaignsTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            canEdit={canManageProjects}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
         {projectInnerTab === 'reports' && (
-          <div className={`${bgCard} border ${borderColor} rounded-2xl p-12 text-center`} data-testid="reports-tab">
-            <p className={textSecondary}>Reports coming soon.</p>
-          </div>
+          <ProjectMetaReportsTab
+            project={selectedProject}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
         )}
 
         {projectInnerTab === 'additional' && (

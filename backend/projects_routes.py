@@ -42,6 +42,7 @@ class ProjectUpdate(BaseModel):
     project_expense: Optional[dict] = None
     pages: Optional[List[dict]] = None
     erp_users: Optional[List[dict]] = None
+    campaigns: Optional[List[dict]] = None
 
 
 class DeleteProjectRequest(BaseModel):

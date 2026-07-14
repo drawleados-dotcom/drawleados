@@ -54,6 +54,7 @@ from clients_routes import clients_router, init_clients_db
 from menu_order_routes import menu_order_router, init_menu_order_db
 from banks_routes import banks_router, init_banks_db
 from expense_split_routes import expense_split_router
+from meta_reports_routes import meta_reports_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -186,6 +187,24 @@ async def startup_tasks():
             )
     except Exception as _e:
         logging.warning(f"[startup] Cashbook no_tax backfill skipped: {_e}")
+
+    # Meta Ads categories: "Report" must be the last option in the Category
+    # dropdown (it's the trigger for the daily Submit Report flow, so it
+    # should sit at the end rather than mixed in with the work categories).
+    try:
+        meta_doc = await db.department_categories.find_one({"dept_key": "meta"}, {"_id": 0, "categories": 1})
+        cats = (meta_doc or {}).get("categories") or []
+        report_cats = [c for c in cats if (c or "").strip().lower() == "report"]
+        if report_cats and cats[-1].strip().lower() != "report":
+            other_cats = [c for c in cats if (c or "").strip().lower() != "report"]
+            reordered = other_cats + report_cats
+            await db.department_categories.update_one(
+                {"dept_key": "meta"},
+                {"$set": {"categories": reordered}},
+            )
+            logging.info("[startup] Moved 'Report' to the end of Meta Ads categories")
+    except Exception as _e:
+        logging.warning(f"[startup] Meta Ads category reorder skipped: {_e}")
 
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
@@ -2753,6 +2772,7 @@ api_router.include_router(dept_categories_router)
 api_router.include_router(dept_statuses_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
+api_router.include_router(meta_reports_router)
 api_router.include_router(db_admin_router)
 
 # Include router in main app

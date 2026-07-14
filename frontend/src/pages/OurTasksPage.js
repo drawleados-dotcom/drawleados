@@ -13,7 +13,7 @@ import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History
+  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -72,6 +72,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [approvalTask, setApprovalTask] = useState(null); // task currently being submitted for approval
   const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', note: '', work_link: '' });
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
+  // Meta Ads daily "Submit Report" popup — task currently being reported on
+  const [reportTask, setReportTask] = useState(null);
+  const [reportDate, setReportDate] = useState('');
+  const [reportRows, setReportRows] = useState([]);
+  const [submittingReport, setSubmittingReport] = useState(false);
   const [showFilters, setShowFilters] = useState(true); // Show filters by default
   
   // Advanced filters
@@ -485,6 +490,64 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       loadTasks();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to delete task');
+    }
+  };
+
+  // Meta Ads daily "Submit Report" popup — only tasks tagged Category = "Report"
+  const isReportCategory = (cat) => (cat || '').trim().toLowerCase() === 'report';
+
+  const newReportRow = () => ({
+    row_id: `r_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    campaign_id: '',
+    campaign_name: '',
+    total_leads: '',
+    cost_per_lead: '',
+    total_spend: '',
+    quality: 'good',
+    convert: '',
+    remarks: '',
+  });
+
+  const openReportModal = (task) => {
+    setReportTask(task);
+    setReportDate(task.due_date ? task.due_date.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setReportRows([newReportRow()]);
+  };
+  const closeReportModal = () => {
+    setReportTask(null);
+    setReportRows([]);
+  };
+  const addReportRow = () => setReportRows(rows => [...rows, newReportRow()]);
+  const removeReportRow = (rowId) => setReportRows(rows => rows.filter(r => r.row_id !== rowId));
+  const updateReportRow = (rowId, patch) => setReportRows(rows => rows.map(r => (r.row_id === rowId ? { ...r, ...patch } : r)));
+
+  const handleSubmitReport = async () => {
+    if (!reportDate) { toast.error('Date is required'); return; }
+    const validRows = reportRows.filter(r => r.campaign_id);
+    if (validRows.length === 0) { toast.error('Please select at least one campaign'); return; }
+    setSubmittingReport(true);
+    try {
+      await axios.post(`${API}/api/meta-reports`, {
+        project_id: reportTask.project_id,
+        task_id: reportTask.task_id,
+        date: reportDate,
+        entries: validRows.map(r => ({
+          campaign_id: r.campaign_id,
+          campaign_name: r.campaign_name,
+          total_leads: Number(r.total_leads) || 0,
+          cost_per_lead: Number(r.cost_per_lead) || 0,
+          total_spend: Number(r.total_spend) || 0,
+          quality: r.quality,
+          convert: Number(r.convert) || 0,
+          remarks: r.remarks,
+        })),
+      }, { headers });
+      toast.success('Report submitted');
+      closeReportModal();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to submit report');
+    } finally {
+      setSubmittingReport(false);
     }
   };
 
@@ -2075,6 +2138,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                 : 'Approve'}
                             </Button>
                           )}
+                          {task.department === 'meta' && isReportCategory(task.category) && task.assigned_to === user?.user_id && (
+                            <Button
+                              size="sm"
+                              className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white h-8 px-3"
+                              onClick={(e) => { e.stopPropagation(); openReportModal(task); }}
+                              data-testid={`submit-report-btn-${task.task_id}`}
+                              title="Submit today's campaign report"
+                            >
+                              <BarChart3 className="h-3 w-3 mr-1" /> Submit Report
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -3101,6 +3175,127 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   data-testid="approval-submit-btn"
                 >
                   {approvalSubmitting ? 'Sending…' : 'Send for Approval'}
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Meta Ads daily "Submit Report" popup */}
+        {reportTask && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => !submittingReport && closeReportModal()}>
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-3xl max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                    <BarChart3 className="h-5 w-5 text-[#8b5cf6]" />
+                    Submit Report
+                  </CardTitle>
+                  <button onClick={() => !submittingReport && closeReportModal()} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-sm ${textSecondary}`}>Task: <span className={textPrimary}>{reportTask.task_name}</span></p>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="max-w-xs">
+                  <Label className={textPrimary}>Date</Label>
+                  <Input
+                    type="date"
+                    value={reportDate}
+                    onChange={(e) => setReportDate(e.target.value)}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="report-date"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  {(() => {
+                    const campaignOptions = projectsForTask.find(p => p.project_id === reportTask.project_id)?.campaigns || [];
+                    return reportRows.map((row, idx) => (
+                      <div key={row.row_id} className={`border ${borderColor} rounded-lg p-4 space-y-3`} data-testid={`report-row-${row.row_id}`}>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Campaign {idx + 1}</p>
+                          {reportRows.length > 1 && (
+                            <button type="button" onClick={() => removeReportRow(row.row_id)} className="text-[#ef4444]" data-testid={`report-row-remove-${row.row_id}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div>
+                          <Label className={textPrimary}>Campaign</Label>
+                          <Select
+                            value={row.campaign_id || 'none'}
+                            onValueChange={(v) => {
+                              if (v === 'none') { updateReportRow(row.row_id, { campaign_id: '', campaign_name: '' }); return; }
+                              const c = campaignOptions.find(c => c.id === v);
+                              updateReportRow(row.row_id, { campaign_id: v, campaign_name: c?.name || '' });
+                            }}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`report-row-campaign-${row.row_id}`}>
+                              <SelectValue placeholder={campaignOptions.length ? 'Select campaign' : 'No campaigns yet — add one in the Campaigns tab'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">— None —</SelectItem>
+                              {campaignOptions.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                          <div>
+                            <Label className={textPrimary}>Total Leads</Label>
+                            <Input type="number" value={row.total_leads} onChange={(e) => updateReportRow(row.row_id, { total_leads: e.target.value })} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`report-row-leads-${row.row_id}`} />
+                          </div>
+                          <div>
+                            <Label className={textPrimary}>Cost per Lead</Label>
+                            <Input type="number" value={row.cost_per_lead} onChange={(e) => updateReportRow(row.row_id, { cost_per_lead: e.target.value })} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`report-row-cpl-${row.row_id}`} />
+                          </div>
+                          <div>
+                            <Label className={textPrimary}>Total Spend</Label>
+                            <Input type="number" value={row.total_spend} onChange={(e) => updateReportRow(row.row_id, { total_spend: e.target.value })} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`report-row-spend-${row.row_id}`} />
+                          </div>
+                          <div>
+                            <Label className={textPrimary}>Quality</Label>
+                            <Select value={row.quality} onValueChange={(v) => updateReportRow(row.row_id, { quality: v })}>
+                              <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`report-row-quality-${row.row_id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="good">Good</SelectItem>
+                                <SelectItem value="average">Average</SelectItem>
+                                <SelectItem value="poor">Poor</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label className={textPrimary}>Convert</Label>
+                            <Input type="number" value={row.convert} onChange={(e) => updateReportRow(row.row_id, { convert: e.target.value })} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`report-row-convert-${row.row_id}`} />
+                          </div>
+                          <div>
+                            <Label className={textPrimary}>Remarks</Label>
+                            <Input value={row.remarks} onChange={(e) => updateReportRow(row.row_id, { remarks: e.target.value })} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`report-row-remarks-${row.row_id}`} />
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+
+                <Button type="button" variant="outline" onClick={addReportRow} className={borderColor} data-testid="report-add-row">
+                  <Plus className="h-4 w-4 mr-1" /> Add Campaign
+                </Button>
+              </CardContent>
+              <div className="flex justify-end gap-2 px-6 pb-6">
+                <Button variant="ghost" onClick={closeReportModal} disabled={submittingReport}>Cancel</Button>
+                <Button
+                  onClick={handleSubmitReport}
+                  disabled={submittingReport}
+                  className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white"
+                  data-testid="report-submit-btn"
+                >
+                  {submittingReport ? 'Submitting…' : 'Submit Report'}
                 </Button>
               </div>
             </Card>
