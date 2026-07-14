@@ -3196,8 +3196,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         )}
 
         {/* Meta Ads daily "Submit Report" popup */}
+        {/* z-40, not z-[70]: the Campaign/Quality <Select> dropdowns inside
+            portal to document.body at z-50 (see ui/select.jsx) — z-[70] here
+            would render this modal's backdrop ON TOP of those open dropdown
+            lists, making every option invisible/unclickable. */}
         {reportTask && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={() => !submittingReport && closeReportModal()}>
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={() => !submittingReport && closeReportModal()}>
             <Card className={`${bgCard} border ${borderColor} w-full max-w-3xl max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
               <CardHeader>
                 <div className="flex items-center justify-between">
