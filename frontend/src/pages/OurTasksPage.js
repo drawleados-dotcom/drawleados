@@ -512,6 +512,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     setReportTask(task);
     setReportDate(task.due_date ? task.due_date.split('T')[0] : new Date().toISOString().split('T')[0]);
     setReportRows([newReportRow()]);
+    // Campaigns are managed on the project's Campaigns tab, a separate page
+    // from My Tasks — refresh projectsForTask so a campaign added moments
+    // ago shows up immediately instead of waiting on the 15s auto-refresh.
+    loadProjectsAndCategories();
   };
   const closeReportModal = () => {
     setReportTask(null);
