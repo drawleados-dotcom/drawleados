@@ -485,9 +485,12 @@ export default function ProjectContentCalendarTab({
 
       {/* Add Post modal — one card per post, each can fan out to multiple
           platforms and independently assign Post Title / Content Link /
-          Creative Link to different people with their own due dates. */}
+          Creative Link to different people with their own due dates.
+          z-40, not z-[70]: the Assignee/Post Type/Status <Select> dropdowns
+          portal to document.body at z-50 (ui/select.jsx) — z-[70] here would
+          render this modal's backdrop ON TOP of those open dropdown lists. */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeAddModal}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeAddModal}>
           <div
             className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col`}
             onClick={(e) => e.stopPropagation()}

@@ -271,8 +271,10 @@ export default function ProjectPagesTab({
       </Card>
 
       {/* Add / View / Edit popup */}
+      {/* z-40, not z-[70]: the Status <Select> below portals to document.body
+          at z-50 (ui/select.jsx) — z-[70] would render this modal on top of it. */}
       {modal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeModal}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeModal}>
           <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
               <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
