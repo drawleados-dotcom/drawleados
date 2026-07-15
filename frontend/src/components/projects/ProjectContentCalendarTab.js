@@ -122,6 +122,19 @@ export default function ProjectContentCalendarTab({
   });
   const list = subTab === 'all' ? monthPosts : monthPosts.filter(p => p.platform === subTab);
 
+  // Per-platform post counts for the month being viewed (drives the number
+  // badge on each platform sub-tab).
+  const platformCounts = PLATFORMS.reduce((acc, p) => {
+    acc[p.id] = p.id === 'all' ? monthPosts.length : monthPosts.filter(post => post.platform === p.id).length;
+    return acc;
+  }, {});
+
+  // Status breakdown for whatever's currently filtered (platform + month).
+  const summaryTotal = list.length;
+  const summaryCreated = list.filter(p => (p.status || 'created') === 'created').length;
+  const summaryScheduled = list.filter(p => p.status === 'scheduled').length;
+  const summaryPosted = list.filter(p => p.status === 'posted').length;
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [draftRows, setDraftRows] = useState([]);
   // Bulk-add UX: once a post is done, it collapses into a compact summary
@@ -372,8 +385,23 @@ export default function ProjectContentCalendarTab({
             data-testid={`content-calendar-subtab-${p.id}`}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${subTab === p.id ? activeCls : idleCls}`}
           >
-            {p.label}
+            {p.label} ({platformCounts[p.id] || 0})
           </button>
+        ))}
+      </div>
+
+      {/* Summary cards — reflect whatever's currently filtered (platform + month) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Total', value: summaryTotal, color: 'text-[#71717a]', accent: 'bg-[#71717a]/15' },
+          { label: 'Created', value: summaryCreated, color: 'text-slate-400', accent: 'bg-slate-500/15' },
+          { label: 'Scheduled', value: summaryScheduled, color: 'text-amber-500', accent: 'bg-amber-500/15' },
+          { label: 'Posted', value: summaryPosted, color: 'text-emerald-500', accent: 'bg-emerald-500/15' },
+        ].map(c => (
+          <div key={c.label} className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`} data-testid={`content-calendar-summary-${c.label.toLowerCase()}`}>
+            <p className={`text-xs ${textSecondary}`}>{c.label}</p>
+            <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
+          </div>
         ))}
       </div>
 
