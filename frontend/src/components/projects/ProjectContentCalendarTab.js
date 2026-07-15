@@ -7,9 +7,12 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Save, X, Pencil, CalendarDays } from 'lucide-react';
+import { Badge } from '../ui/badge';
+import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const PLATFORMS = [
   { id: 'all', label: 'All' },
@@ -53,10 +56,10 @@ const dayOfWeek = (iso) => {
 
 const newRowId = () => `cc_${Math.random().toString(36).slice(2, 10)}`;
 const todayIso = () => new Date().toISOString().slice(0, 10);
-const emptyDraftRow = (platform) => ({
+const emptyDraftRow = (platform, defaultDate) => ({
   id: newRowId(),
   platforms: platform && platform !== 'all' ? [platform] : [],
-  post_date: todayIso(),
+  post_date: defaultDate || todayIso(),
   post_title: '',
   content_link: '',
   creative_link: '',
@@ -89,7 +92,28 @@ export default function ProjectContentCalendarTab({
 
   const [subTab, setSubTab] = useState('all');
   const posts = project?.content_calendar || [];
-  const list = subTab === 'all' ? posts : posts.filter(p => p.platform === subTab);
+
+  const now = new Date();
+  const [activeMonth, setActiveMonth] = useState(now.getMonth());
+  const [activeYear, setActiveYear] = useState(now.getFullYear());
+  const isCurrentMonth = activeMonth === now.getMonth() && activeYear === now.getFullYear();
+  const yearOptions = [];
+  for (let y = now.getFullYear() - 2; y <= now.getFullYear() + 2; y++) yearOptions.push(y);
+  const goPrevMonth = () => {
+    if (activeMonth === 0) { setActiveMonth(11); setActiveYear(y => y - 1); }
+    else setActiveMonth(m => m - 1);
+  };
+  const goNextMonth = () => {
+    if (activeMonth === 11) { setActiveMonth(0); setActiveYear(y => y + 1); }
+    else setActiveMonth(m => m + 1);
+  };
+
+  const monthPosts = posts.filter(p => {
+    if (!p.post_date) return false;
+    const d = new Date(`${p.post_date}T00:00:00`);
+    return d.getMonth() === activeMonth && d.getFullYear() === activeYear;
+  });
+  const list = subTab === 'all' ? monthPosts : monthPosts.filter(p => p.platform === subTab);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [draftRows, setDraftRows] = useState([]);
@@ -130,12 +154,18 @@ export default function ProjectContentCalendarTab({
     return res.data?.task_id || null;
   };
 
+  // Default new posts to the month currently being viewed, so a post added
+  // while browsing a past/future month doesn't vanish from the filtered list.
+  const defaultPostDateForActiveMonth = () => (
+    isCurrentMonth ? todayIso() : `${activeYear}-${String(activeMonth + 1).padStart(2, '0')}-01`
+  );
+
   const openAddModal = () => {
-    setDraftRows([emptyDraftRow(subTab)]);
+    setDraftRows([emptyDraftRow(subTab, defaultPostDateForActiveMonth())]);
     setShowAddModal(true);
   };
   const closeAddModal = () => { setShowAddModal(false); setDraftRows([]); };
-  const addDraftRow = () => setDraftRows(rows => [...rows, emptyDraftRow(subTab)]);
+  const addDraftRow = () => setDraftRows(rows => [...rows, emptyDraftRow(subTab, defaultPostDateForActiveMonth())]);
   const removeDraftRow = (id) => setDraftRows(rows => rows.filter(r => r.id !== id));
   const updateDraftRow = (id, patch) => setDraftRows(rows => rows.map(r => (r.id === id ? { ...r, ...patch } : r)));
   const togglePlatform = (id, platformId, checked) => setDraftRows(rows => rows.map(r => {
@@ -276,6 +306,36 @@ export default function ProjectContentCalendarTab({
           <CalendarDays className="h-5 w-5 text-[#6366f1]" /> Content Calendar
         </h3>
         <p className={`text-xs ${textSecondary}`}>Plan and track social posts for this project.</p>
+      </div>
+
+      {/* Month navigator */}
+      <div className={`${bgCard} border ${borderColor} rounded-2xl p-4`}>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={goPrevMonth} data-testid="content-calendar-month-prev">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="text-center min-w-[160px]">
+              <p className={`text-2xl font-bold ${textPrimary}`}>{MONTH_NAMES[activeMonth]} {activeYear}</p>
+            </div>
+            <Button variant="ghost" size="icon" onClick={goNextMonth} data-testid="content-calendar-month-next">
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            {isCurrentMonth && (
+              <Badge className="bg-emerald-500/15 text-emerald-500 border-emerald-500/30 ml-2">
+                <Calendar className="h-3 w-3 mr-1" /> This Month
+              </Badge>
+            )}
+          </div>
+          <select
+            className={`text-sm rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} px-3 py-2`}
+            value={activeYear}
+            onChange={(e) => setActiveYear(Number(e.target.value))}
+            data-testid="content-calendar-year-select"
+          >
+            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Platform sub-tabs */}
