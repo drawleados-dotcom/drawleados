@@ -40,6 +40,15 @@ const statusColors = {
   'on_hold': 'bg-[#f59e0b]/20 text-[#f59e0b]'
 };
 
+// ERP task "Prompt" breadcrumb: Project > User > Page > [Sub Page] > [Super
+// Sub Page] > "Task Name" — the [Sub Page]/[Super Sub Page] levels only show
+// once that nesting exists on an ERP page; today's Page model has neither,
+// so the breadcrumb currently ends at Page.
+const buildErpPrompt = ({ projectName, userName, pageName, subPageName, superSubPageName, taskName }) => {
+  const parts = [projectName, userName, pageName, subPageName, superSubPageName].filter(Boolean);
+  return `${parts.join(' > ')}${parts.length ? ' > ' : ''}"${taskName || ''}"`;
+};
+
 export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_to_me' }) {
   const { isDark } = useTheme();
   const { user } = useAuth();
@@ -2578,6 +2587,36 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   </div>
                 </div>
 
+                {/* ERP "Prompt" breadcrumb — full width, bottom of the popup */}
+                {formData.department === 'erp' && (() => {
+                  const promptText = buildErpPrompt({
+                    projectName: formData.project_name,
+                    userName: formData.erp_user_name,
+                    pageName: formData.erp_page_name,
+                    taskName: formData.task_name,
+                  });
+                  return (
+                    <div className={`mt-4 p-4 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="erp-task-prompt">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <Label className={textPrimary}>Prompt</Label>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(promptText);
+                            toast.success('Prompt copied to clipboard');
+                          }}
+                          data-testid="erp-task-prompt-copy"
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                      <p className={`text-sm ${textPrimary} break-words`}>{promptText}</p>
+                    </div>
+                  );
+                })()}
+
                 {/* Footer buttons — full width */}
                 <div className="flex gap-3 pt-5 mt-2 border-t border-[#27272a]">
                   <Button variant="outline" onClick={() => { setShowCreateModal(false); setEditingTask(null); resetForm(); }} className="flex-1" disabled={submitting}>
@@ -2948,6 +2987,36 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     </a>
                   </div>
                 )}
+
+                {/* ERP "Prompt" breadcrumb */}
+                {viewingTask.department === 'erp' && (() => {
+                  const promptText = buildErpPrompt({
+                    projectName: viewingTask.project_name,
+                    userName: viewingTask.erp_user_name,
+                    pageName: viewingTask.erp_page_name,
+                    taskName: viewingTask.task_name,
+                  });
+                  return (
+                    <div className={`p-4 rounded-lg ${bgSecondary}`} data-testid="erp-task-prompt-view">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <p className={`text-xs ${textSecondary} flex items-center gap-1`}>Prompt</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            navigator.clipboard.writeText(promptText);
+                            toast.success('Prompt copied to clipboard');
+                          }}
+                          data-testid="erp-task-prompt-view-copy"
+                        >
+                          Copy
+                        </Button>
+                      </div>
+                      <p className={`text-sm ${textPrimary} break-words`}>{promptText}</p>
+                    </div>
+                  );
+                })()}
 
                 {/* Meeting Group Members — shown when this is a collapsed
                     meeting row (multiple assignees). Each member shows their
