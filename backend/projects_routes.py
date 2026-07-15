@@ -40,6 +40,7 @@ class ProjectUpdate(BaseModel):
     documents: Optional[List[dict]] = None
     payment_schedule: Optional[dict] = None
     project_expense: Optional[dict] = None
+    content_calendar: Optional[List[dict]] = None
     pages: Optional[List[dict]] = None
     erp_users: Optional[List[dict]] = None
     campaigns: Optional[List[dict]] = None

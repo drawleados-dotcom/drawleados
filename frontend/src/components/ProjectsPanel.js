@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
+import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
@@ -832,10 +833,13 @@ export default function ProjectsPanel({
           const isWebsiteProject = (selectedProject?.departments || []).includes('website');
           // Scopes/Reports/Additional tabs only render for Meta Ads-department projects
           const isMetaAdsProject = (selectedProject?.departments || []).includes('meta');
+          // Content Calendar tab only renders for Social Media-department projects
+          const isSocialMediaProject = (selectedProject?.departments || []).includes('social_media');
           const innerTabs = [
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
+            ...(isSocialMediaProject ? [{ id: 'content_calendar', label: 'Content Calendar', icon: Calendar }] : []),
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
@@ -915,6 +919,20 @@ export default function ProjectsPanel({
             />
           );
         })()}
+
+        {projectInnerTab === 'content_calendar' && (
+          <ProjectContentCalendarTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            canEdit={canManageProjects}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
 
         {projectInnerTab === 'pages' && (
           <ProjectPagesTab
