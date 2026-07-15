@@ -8,7 +8,7 @@ import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Calendar } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -38,14 +38,19 @@ const nextStatus = (s) => {
   return STATUS_FLOW[(i + 1) % STATUS_FLOW.length];
 };
 
-// Each of these 3 fields can be independently assigned + dated. Setting both
+// Each of these fields can be independently assigned + dated. Setting both
 // on save auto-creates a real Operations task for that person (Department =
-// Social Media), so the work shows up in their My Tasks.
+// Social Media), so the work shows up in their My Tasks. `posting` has no
+// accompanying text field — it's just "who publishes this, and by when".
 const FIELD_TASK_CONFIG = {
   post_title: { label: 'Post Title', category: 'Content Writing' },
   content_link: { label: 'Content Link', category: 'Content Calendar' },
   creative_link: { label: 'Creative Link', category: 'Designing' },
+  posting: { label: 'Posting', category: 'Posting' },
 };
+// Fields with a text/url value alongside their assignee+date (all of
+// FIELD_TASK_CONFIG except `posting`, which is assignee+date only).
+const FIELD_HAS_VALUE = { post_title: true, content_link: true, creative_link: true, posting: false };
 
 const dayOfWeek = (iso) => {
   if (!iso) return '—';
@@ -72,6 +77,8 @@ const emptyDraftRow = (platform, defaultDate) => ({
   content_link_date: '',
   creative_link_assignee: '',
   creative_link_date: '',
+  posting_assignee: '',
+  posting_date: '',
 });
 
 export default function ProjectContentCalendarTab({
@@ -117,6 +124,10 @@ export default function ProjectContentCalendarTab({
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [draftRows, setDraftRows] = useState([]);
+  // Bulk-add UX: once a post is done, it collapses into a compact summary
+  // header so a multi-post popup doesn't turn into an endless scroll of
+  // fully-expanded forms. Click the header to re-expand any post.
+  const [collapsedIds, setCollapsedIds] = useState([]);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editBuffer, setEditBuffer] = useState(null);
@@ -162,11 +173,21 @@ export default function ProjectContentCalendarTab({
 
   const openAddModal = () => {
     setDraftRows([emptyDraftRow(subTab, defaultPostDateForActiveMonth())]);
+    setCollapsedIds([]);
     setShowAddModal(true);
   };
-  const closeAddModal = () => { setShowAddModal(false); setDraftRows([]); };
-  const addDraftRow = () => setDraftRows(rows => [...rows, emptyDraftRow(subTab, defaultPostDateForActiveMonth())]);
-  const removeDraftRow = (id) => setDraftRows(rows => rows.filter(r => r.id !== id));
+  const closeAddModal = () => { setShowAddModal(false); setDraftRows([]); setCollapsedIds([]); };
+  // Adding a new post collapses every existing one, so only the post being
+  // worked on right now stays expanded.
+  const addDraftRow = () => {
+    setCollapsedIds(ids => [...new Set([...ids, ...draftRows.map(r => r.id)])]);
+    setDraftRows(rows => [...rows, emptyDraftRow(subTab, defaultPostDateForActiveMonth())]);
+  };
+  const removeDraftRow = (id) => {
+    setDraftRows(rows => rows.filter(r => r.id !== id));
+    setCollapsedIds(ids => ids.filter(x => x !== id));
+  };
+  const toggleCollapse = (id) => setCollapsedIds(ids => (ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]));
   const updateDraftRow = (id, patch) => setDraftRows(rows => rows.map(r => (r.id === id ? { ...r, ...patch } : r)));
   const togglePlatform = (id, platformId, checked) => setDraftRows(rows => rows.map(r => {
     if (r.id !== id) return r;
@@ -212,6 +233,9 @@ export default function ProjectContentCalendarTab({
             creative_link_assignee: row.creative_link_assignee,
             creative_link_date: row.creative_link_date,
             creative_link_task_id: taskIds.creative_link || null,
+            posting_assignee: row.posting_assignee,
+            posting_date: row.posting_date,
+            posting_task_id: taskIds.posting || null,
           });
         }
       }
@@ -266,7 +290,7 @@ export default function ProjectContentCalendarTab({
   const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
   const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
   const inputCls = `h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`;
-  const colCount = subTab === 'all' ? 11 : 10;
+  const colCount = subTab === 'all' ? 12 : 11;
 
   const AssigneeDateEditor = ({ field, value, onChange }) => (
     <div className="flex flex-col gap-1 mt-1">
@@ -388,6 +412,7 @@ export default function ProjectContentCalendarTab({
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[220px]`}>Description &amp; Hashtags</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Post Type</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Status</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[140px]`}>Posting</th>
                   <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
                 </tr>
               </thead>
@@ -506,6 +531,17 @@ export default function ProjectContentCalendarTab({
                           {STATUS_LABEL[row.status] || 'Created'}
                         </button>
                       </td>
+                      <td className="p-3">
+                        {isEditing ? (
+                          <AssigneeDateEditor field="posting" value={buf} onChange={patchBuf} />
+                        ) : row.posting_assignee || row.posting_date ? (
+                          <p className={`text-xs ${textPrimary}`}>
+                            {assigneeName(row.posting_assignee) || 'Unassigned'}{row.posting_date ? ` · ${row.posting_date}` : ''}
+                          </p>
+                        ) : (
+                          <span className={`text-xs ${textSecondary}`}>—</span>
+                        )}
+                      </td>
                       <td className="p-3 text-right">
                         {isEditing ? (
                           <div className="inline-flex gap-1">
@@ -560,10 +596,26 @@ export default function ProjectContentCalendarTab({
               <button onClick={closeAddModal} className={textSecondary}><X className="h-5 w-5" /></button>
             </div>
             <div className="overflow-auto p-4 flex-1 space-y-4">
-              {draftRows.map((row, idx) => (
+              {draftRows.map((row, idx) => {
+                const isCollapsed = collapsedIds.includes(row.id);
+                const platformLabels = row.platforms.map(pid => PLATFORMS.find(p => p.id === pid)?.label || pid).join(', ');
+                return (
                 <div key={row.id} className={`border ${borderColor} rounded-lg p-4 space-y-3`} data-testid={`content-calendar-draft-row-${idx}`}>
                   <div className="flex items-center justify-between">
-                    <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Post {idx + 1}</p>
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(row.id)}
+                      className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wide ${textSecondary} hover:opacity-80`}
+                      data-testid={`content-calendar-draft-toggle-${idx}`}
+                    >
+                      {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      Post {idx + 1}
+                      {isCollapsed && (
+                        <span className={`normal-case font-normal ${textPrimary}`}>
+                          {' · '}{platformLabels || 'No platform'}{row.post_title ? ` · ${row.post_title}` : ''}
+                        </span>
+                      )}
+                    </button>
                     {draftRows.length > 1 && (
                       <button type="button" onClick={() => removeDraftRow(row.id)} className="p-1 text-red-500 hover:text-red-400" title="Remove post">
                         <Trash2 className="h-4 w-4" />
@@ -571,6 +623,8 @@ export default function ProjectContentCalendarTab({
                     )}
                   </div>
 
+                  {!isCollapsed && (
+                  <>
                   <div>
                     <Label className={textPrimary}>Platforms <span className="text-red-500">*</span></Label>
                     <div className="flex flex-wrap gap-3 mt-1">
@@ -609,7 +663,9 @@ export default function ProjectContentCalendarTab({
                     <div key={field} className="grid grid-cols-3 gap-3">
                       <div>
                         <Label className={textPrimary}>{cfg.label}</Label>
-                        {field === 'post_title' ? (
+                        {!FIELD_HAS_VALUE[field] ? (
+                          <p className={`h-8 flex items-center text-xs ${textSecondary}`}>Publish the post</p>
+                        ) : field === 'post_title' ? (
                           <Input
                             value={row.post_title}
                             onChange={(e) => updateDraftRow(row.id, { post_title: e.target.value })}
@@ -683,8 +739,11 @@ export default function ProjectContentCalendarTab({
                       </Select>
                     </div>
                   </div>
+                  </>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               <Button type="button" variant="outline" size="sm" onClick={addDraftRow} data-testid="content-calendar-add-draft-row">
                 <Plus className="h-3.5 w-3.5 mr-1" /> Add Row
               </Button>
