@@ -1747,7 +1747,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             <div className="ml-auto">
               <Button
                 onClick={() => setShowCreateModal(true)}
-                className="bg-[#6366f1] hover:bg-[#4f46e5] h-9"
+                className="bg-[#f59e0b] hover:bg-[#d97706] text-white h-9"
                 data-testid="create-task-btn"
               >
                 <Plus className="h-4 w-4 mr-1.5" />
