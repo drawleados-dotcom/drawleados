@@ -924,7 +924,9 @@ export default function ProjectsPanel({
           <ProjectContentCalendarTab
             project={selectedProject}
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            onTaskCreated={onTaskCreated}
             canEdit={canManageProjects}
+            users={users}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
