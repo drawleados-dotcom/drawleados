@@ -76,13 +76,20 @@ export default function TopNav() {
   }, []);
 
   const sortedVisible = useMemo(() => {
-    if (!deptOrder || deptOrder.length === 0) return visible;
-    const idxMap = new Map(deptOrder.map((k, i) => [k, i]));
-    return [...visible].sort((a, b) => {
-      const ai = idxMap.has(a.key) ? idxMap.get(a.key) : 999;
-      const bi = idxMap.has(b.key) ? idxMap.get(b.key) : 999;
-      return ai - bi;
-    });
+    let ordered = visible;
+    if (deptOrder && deptOrder.length > 0) {
+      const idxMap = new Map(deptOrder.map((k, i) => [k, i]));
+      ordered = [...visible].sort((a, b) => {
+        const ai = idxMap.has(a.key) ? idxMap.get(a.key) : 999;
+        const bi = idxMap.has(b.key) ? idxMap.get(b.key) : 999;
+        return ai - bi;
+      });
+    }
+    // Dashboard always leads — it's the landing tab — regardless of any
+    // saved per-department order (which may predate this tab's existence).
+    const dashboard = ordered.find((it) => it.key === 'dashboard');
+    if (dashboard) ordered = [dashboard, ...ordered.filter((it) => it.key !== 'dashboard')];
+    return ordered;
   }, [visible, deptOrder]);
 
   return (

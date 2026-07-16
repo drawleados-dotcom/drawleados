@@ -12,12 +12,13 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 // (Demo user quick-login list removed in production cleanup.)
 
-// Land on Leads by default — but only for users who can actually see it,
-// so Operations-only staff (no Leads module access) still land where they
-// always have, instead of bouncing off a page they can't open.
+// Super Admin / Admin land on the Dashboard (their first tab). Everyone
+// else lands on Leads if they can see it, so Operations-only staff (no
+// Leads module access) still land where they always have, instead of
+// bouncing off a page they can't open.
 const landingPathFor = (user) => {
   const role = (user?.role || '').toLowerCase();
-  if (role === 'super_admin' || role === 'admin') return '/leads';
+  if (role === 'super_admin' || role === 'admin') return '/dashboard';
   const moduleAccess = (user?.module_access || []).map((m) => String(m).toLowerCase());
   return moduleAccess.includes('leads') ? '/leads' : '/our-tasks';
 };
