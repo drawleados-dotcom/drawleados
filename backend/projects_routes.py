@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone
 import uuid
+import secrets
+import string
 
 
 projects_router = APIRouter(prefix="/projects", tags=["projects"])
@@ -680,3 +682,91 @@ async def publish_content_calendar_entry_to_linkedin(project_id: str, entry_id: 
 
     updated = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     return updated
+
+
+# ============== CLIENT PORTAL (ERP) ==============
+# Lets a staff member create a client-facing username/password for a
+# specific project, then share a login link. The client logs in through a
+# completely separate, unauthenticated flow (see client_portal_routes.py)
+# to a strictly read-only view of that one project — no staff session
+# involved on either side.
+
+class ClientPortalSetRequest(BaseModel):
+    username: str
+
+
+def _generate_client_password(length: int = 10) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+@projects_router.get("/{project_id}/client-portal")
+async def get_client_portal(project_id: str, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can manage the client portal")
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "client_portal": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    portal = project.get("client_portal") or {}
+    return {
+        "enabled": bool(portal.get("username")),
+        "username": portal.get("username"),
+        "created_at": portal.get("created_at"),
+        "updated_at": portal.get("updated_at"),
+    }
+
+
+@projects_router.post("/{project_id}/client-portal")
+async def create_or_update_client_portal(project_id: str, payload: ClientPortalSetRequest, request: Request):
+    """Create the client login (or rename the username). Always issues a
+    fresh, randomly-generated password — returned ONCE in this response,
+    same as /reset-password — since only a hash is ever stored."""
+    from server import get_current_user, hash_password, db
+    user = await get_current_user(request)
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can manage the client portal")
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    username = payload.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
+    password = _generate_client_password()
+    now = datetime.now(timezone.utc).isoformat()
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "client_portal": {
+                "username": username,
+                "password_hash": hash_password(password),
+                "enabled": True,
+                "created_at": now,
+                "updated_at": now,
+            },
+        }},
+    )
+    return {"username": username, "password": password}
+
+
+@projects_router.post("/{project_id}/client-portal/reset-password")
+async def reset_client_portal_password(project_id: str, request: Request):
+    from server import get_current_user, hash_password, db
+    user = await get_current_user(request)
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can manage the client portal")
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "client_portal": 1})
+    if not project or not (project.get("client_portal") or {}).get("username"):
+        raise HTTPException(status_code=400, detail="Client portal is not set up for this project yet")
+
+    password = _generate_client_password()
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "client_portal.password_hash": hash_password(password),
+            "client_portal.updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+    return {"username": project["client_portal"]["username"], "password": password}

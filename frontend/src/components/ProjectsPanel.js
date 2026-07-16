@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
+import ClientPortalModal from './projects/ClientPortalModal';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
@@ -50,6 +51,7 @@ export default function ProjectsPanel({
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null); // project being viewed
   const [projectDetailCollapsed, setProjectDetailCollapsed] = useState(false);
+  const [showClientPortalModal, setShowClientPortalModal] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
@@ -643,6 +645,16 @@ export default function ProjectsPanel({
             <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
               <Plus className="h-4 w-4 mr-1" /> Add Task
             </Button>
+            {canManageProjects && (selectedProject.departments || []).includes('erp') && (
+              <Button
+                onClick={() => setShowClientPortalModal(true)}
+                variant="outline"
+                className="gap-2"
+                data-testid="project-client-portal-btn"
+              >
+                <KeyRound className="h-4 w-4" /> Client Portal
+              </Button>
+            )}
             {role === 'super_admin' && (
               <Button
                 onClick={() => { setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
@@ -1750,6 +1762,20 @@ export default function ProjectsPanel({
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Client Portal — ERP projects only, create/reset a client login + share message */}
+        {showClientPortalModal && (
+          <ClientPortalModal
+            project={selectedProject}
+            onClose={() => setShowClientPortalModal(false)}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
         )}
 
         {/* Delete Project — Super Admin only, re-enter password to confirm */}

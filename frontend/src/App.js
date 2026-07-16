@@ -31,6 +31,8 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import OperationsModalPage from './components/operations/OperationsModalPage';
 import OrgStructurePage from './pages/OrgStructurePage';
 import EmployeeAttendanceViewPage from './pages/EmployeeAttendanceViewPage';
+import ClientPortalLoginPage from './pages/ClientPortalLoginPage';
+import ClientPortalViewPage from './pages/ClientPortalViewPage';
 import './App.css';
 
 function AppRouter() {
@@ -46,6 +48,9 @@ function AppRouter() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/admin" element={<AdminSignupPage />} />
+      {/* Client Portal — separate auth from staff accounts, no ProtectedRoute */}
+      <Route path="/client-portal/:projectId" element={<ClientPortalLoginPage />} />
+      <Route path="/client-portal/:projectId/view" element={<ClientPortalViewPage />} />
       <Route
         path="/dashboard"
         element={
