@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import WeeklyChallengeTracker from '../components/dashboard/WeeklyChallengeTracker';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -310,6 +311,9 @@ const Dashboard = () => {
           </h1>
           <p className={mutedClass}>Here's your business overview</p>
         </div>
+
+        {/* 24 Weeks Challenge — Finance / Sales / Marketing weekly tracker */}
+        <WeeklyChallengeTracker isDark={isDark} isAdmin={isAdmin} />
 
         {/* Row 1: Sales & HR */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

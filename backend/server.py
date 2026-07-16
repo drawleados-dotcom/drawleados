@@ -55,6 +55,7 @@ from menu_order_routes import menu_order_router, init_menu_order_db
 from banks_routes import banks_router, init_banks_db
 from expense_split_routes import expense_split_router
 from meta_reports_routes import meta_reports_router
+from dashboard_routes import dashboard_router
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -2773,6 +2774,7 @@ api_router.include_router(dept_statuses_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
 api_router.include_router(meta_reports_router)
+api_router.include_router(dashboard_router)
 api_router.include_router(db_admin_router)
 
 # Include router in main app
