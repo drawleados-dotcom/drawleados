@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
@@ -8,7 +8,7 @@ import { Textarea } from '../ui/textarea';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/badge';
-import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Calendar } from 'lucide-react';
+import { Plus, Trash2, Save, X, Pencil, CalendarDays, ChevronLeft, ChevronRight, ChevronDown, Calendar, Linkedin, Send } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -146,6 +146,50 @@ export default function ProjectContentCalendarTab({
   const [editBuffer, setEditBuffer] = useState(null);
 
   const assigneeName = (userId) => (users || []).find(u => u.user_id === userId)?.name || '';
+
+  // LinkedIn "Publish Now" — first slice of the LinkedIn auto-scheduling
+  // plan (no background scheduler yet). Posts as the CURRENT user's own
+  // connected LinkedIn account, so we only need to know whether THEY are
+  // connected, not every project member.
+  const [linkedinConnected, setLinkedinConnected] = useState(null); // null = checking
+  const [publishingId, setPublishingId] = useState(null);
+
+  useEffect(() => {
+    axios.get(`${API}/api/oauth/linkedin/status`, { headers })
+      .then((res) => setLinkedinConnected(!!res.data?.connected))
+      .catch(() => setLinkedinConnected(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const connectLinkedIn = async () => {
+    try {
+      const res = await axios.get(`${API}/api/oauth/linkedin/connect`, { headers });
+      window.location.href = res.data.authorization_url;
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to start LinkedIn connect');
+    }
+  };
+
+  const publishToLinkedIn = async (row) => {
+    setPublishingId(row.id);
+    try {
+      const res = await axios.post(
+        `${API}/api/projects/${project.project_id}/content-calendar/${row.id}/publish-linkedin`,
+        {},
+        { headers },
+      );
+      onProjectUpdated?.(res.data);
+      toast.success('Published to LinkedIn');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to publish to LinkedIn');
+      try {
+        const fresh = await axios.get(`${API}/api/projects/${project.project_id}`, { headers });
+        onProjectUpdated?.(fresh.data);
+      } catch { /* best-effort refresh only */ }
+    } finally {
+      setPublishingId(null);
+    }
+  };
 
   const persist = async (nextPosts) => {
     if (!canEdit) return false;
@@ -406,21 +450,40 @@ export default function ProjectContentCalendarTab({
       </div>
 
       {/* Action row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className={`text-xs ${textSecondary}`}>
           {list.length === 0 ? 'No posts yet.' : `${list.length} post${list.length === 1 ? '' : 's'}`}
         </p>
-        {canEdit && (
-          <Button
-            type="button"
-            onClick={openAddModal}
-            size="sm"
-            className="bg-[#6366f1] hover:bg-[#5558dd] text-white"
-            data-testid="content-calendar-add-post-btn"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Post
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {linkedinConnected === false && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={connectLinkedIn}
+              className="text-xs"
+              data-testid="content-calendar-connect-linkedin"
+            >
+              <Linkedin className="h-3.5 w-3.5 mr-1 text-[#0a66c2]" /> Connect LinkedIn
+            </Button>
+          )}
+          {linkedinConnected === true && (
+            <span className={`text-[11px] ${textSecondary} flex items-center gap-1`} data-testid="content-calendar-linkedin-connected">
+              <Linkedin className="h-3.5 w-3.5 text-[#0a66c2]" /> LinkedIn connected
+            </span>
+          )}
+          {canEdit && (
+            <Button
+              type="button"
+              onClick={openAddModal}
+              size="sm"
+              className="bg-[#6366f1] hover:bg-[#5558dd] text-white"
+              data-testid="content-calendar-add-post-btn"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add Post
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -581,7 +644,30 @@ export default function ProjectContentCalendarTab({
                             </button>
                           </div>
                         ) : canEdit && (
-                          <div className="inline-flex gap-1">
+                          <div className="inline-flex items-center gap-1">
+                            {row.platform === 'linkedin' && (
+                              <>
+                                {row.publish_status === 'published' ? (
+                                  <Badge className="bg-emerald-500/20 text-emerald-500 text-[10px]" title={row.linkedin_post_urn || ''} data-testid={`content-calendar-linkedin-status-${row.id}`}>
+                                    Published
+                                  </Badge>
+                                ) : row.publish_status === 'failed' ? (
+                                  <Badge className="bg-red-500/20 text-red-500 text-[10px]" title={row.publish_error || ''} data-testid={`content-calendar-linkedin-status-${row.id}`}>
+                                    Failed
+                                  </Badge>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => publishToLinkedIn(row)}
+                                  disabled={publishingId === row.id || linkedinConnected !== true}
+                                  className={`p-1 ${linkedinConnected === true ? 'text-[#0a66c2] hover:opacity-80' : 'text-gray-400 cursor-not-allowed'}`}
+                                  title={linkedinConnected === true ? 'Publish now to LinkedIn' : 'Connect LinkedIn first'}
+                                  data-testid={`content-calendar-publish-linkedin-${row.id}`}
+                                >
+                                  <Send className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
                             <button type="button" onClick={() => startEdit(row)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`content-calendar-edit-${row.id}`}>
                               <Pencil className="h-4 w-4" />
                             </button>

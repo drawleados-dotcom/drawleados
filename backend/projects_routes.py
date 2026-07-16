@@ -628,3 +628,55 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         )
 
     return task
+
+
+@projects_router.post("/{project_id}/content-calendar/{entry_id}/publish-linkedin")
+async def publish_content_calendar_entry_to_linkedin(project_id: str, entry_id: str, request: Request):
+    """Manual "Publish Now" for a Content Calendar row — first slice of the
+    LinkedIn auto-scheduling plan (no background scheduler yet). Posts as
+    the CURRENT user's own connected LinkedIn account; the entry's
+    post_title + description become the post text, content_link (if any)
+    becomes the shared link."""
+    from server import get_current_user
+    from linkedin_routes import publish_linkedin_post
+
+    user = await get_current_user(request)
+
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "content_calendar": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    entry = next((e for e in (project.get("content_calendar") or []) if e.get("id") == entry_id), None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Content Calendar entry not found")
+    if entry.get("platform") != "linkedin":
+        raise HTTPException(status_code=400, detail="Only LinkedIn posts can be published this way")
+
+    text = "\n\n".join(filter(None, [entry.get("post_title"), entry.get("description")]))
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Post has no title or description to publish")
+
+    try:
+        post_urn = await publish_linkedin_post(user.user_id, text, entry.get("content_link") or None)
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$set": {
+                "content_calendar.$[elem].publish_status": "published",
+                "content_calendar.$[elem].linkedin_post_urn": post_urn,
+                "content_calendar.$[elem].publish_error": None,
+            }},
+            array_filters=[{"elem.id": entry_id}],
+        )
+    except HTTPException as e:
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$set": {
+                "content_calendar.$[elem].publish_status": "failed",
+                "content_calendar.$[elem].publish_error": e.detail,
+            }},
+            array_filters=[{"elem.id": entry_id}],
+        )
+        raise
+
+    updated = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    return updated

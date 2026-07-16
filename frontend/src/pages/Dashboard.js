@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import Layout from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -117,7 +119,21 @@ const Dashboard = () => {
   const { isDark } = useTheme();
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
-  
+
+  // LinkedIn OAuth connect redirects back here with ?linkedin_connected=true
+  // or ?linkedin_error=... (see backend/linkedin_routes.py's callback).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('linkedin_connected') === 'true') {
+      toast.success('LinkedIn connected');
+      setSearchParams({}, { replace: true });
+    } else if (searchParams.get('linkedin_error')) {
+      toast.error(`LinkedIn connect failed: ${searchParams.get('linkedin_error')}`);
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Date range states for each section
   const today = new Date();
   const [salesDateRange, setSalesDateRange] = useState({ from: today, to: today });
