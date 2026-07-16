@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound, Link2 } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
 import ClientPortalModal from './projects/ClientPortalModal';
 import ProjectErpOthersTab from './projects/ProjectErpOthersTab';
 import ProjectSeoScopeTab from './projects/ProjectSeoScopeTab';
+import ProjectBacklinksTab from './projects/ProjectBacklinksTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
@@ -884,6 +885,7 @@ export default function ProjectsPanel({
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
             ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
             ...(isSeoProject ? [{ id: 'seo_scope', label: 'Scope', icon: Target }] : []),
+            ...(isSeoProject ? [{ id: 'backlinks', label: 'Backlinks', icon: Link2 }] : []),
             ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
@@ -1042,6 +1044,22 @@ export default function ProjectsPanel({
             onAddTask={openAddTaskForSeoScope}
             onEditTask={handleEditTask}
             onDeleteTask={handleDeleteTask}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'backlinks' && (
+          <ProjectBacklinksTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            onTaskCreated={onTaskCreated}
+            canEdit={canManageProjects}
+            users={users}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}

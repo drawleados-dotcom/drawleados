@@ -46,6 +46,8 @@ class ProjectUpdate(BaseModel):
     pages: Optional[List[dict]] = None
     erp_users: Optional[List[dict]] = None
     campaigns: Optional[List[dict]] = None
+    backlinks: Optional[List[dict]] = None
+    backlink_weekly_targets: Optional[List[dict]] = None
 
 
 class DeleteProjectRequest(BaseModel):
