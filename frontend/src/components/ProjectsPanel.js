@@ -6,6 +6,8 @@ import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
 import ClientPortalModal from './projects/ClientPortalModal';
+import ProjectErpOthersTab from './projects/ProjectErpOthersTab';
+import ProjectSeoScopeTab from './projects/ProjectSeoScopeTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
@@ -471,6 +473,15 @@ export default function ProjectsPanel({
     setShowAddTask(true);
   };
 
+  // SEO Scope tab "Add Task" — defaults Department to SEO and Category to
+  // whichever sub-tab (Research / On Page SEO / Off Page SEO) is active.
+  const openAddTaskForSeoScope = (category) => {
+    const defaultCategory = category || deptCategories.find(d => d.dept_key === 'seo')?.categories?.[0] || '';
+    setEditingTaskId(null);
+    setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: 'seo', category: defaultCategory, erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' });
+    setShowAddTask(true);
+  };
+
   // Days remaining (+N) or overdue (-N) against a due date, for the "Due
   // Balance" column — compares calendar days only (ignores time-of-day).
   const dueBalanceInfo = (dueIso) => {
@@ -861,6 +872,8 @@ export default function ProjectsPanel({
           const isMetaAdsProject = (selectedProject?.departments || []).includes('meta');
           // Content Calendar tab only renders for Social Media-department projects
           const isSocialMediaProject = (selectedProject?.departments || []).includes('social_media');
+          // Scope tab only renders for SEO-department projects
+          const isSeoProject = (selectedProject?.departments || []).includes('seo');
           const innerTabs = [
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
@@ -869,6 +882,8 @@ export default function ProjectsPanel({
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
+            ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
+            ...(isSeoProject ? [{ id: 'seo_scope', label: 'Scope', icon: Target }] : []),
             ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
             ...(isMetaAdsProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
             ...(isMetaAdsProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
@@ -996,6 +1011,36 @@ export default function ProjectsPanel({
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
             canEdit={canManageProjects}
             users={users}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'erp_others' && (
+          <ProjectErpOthersTab
+            project={selectedProject}
+            users={users}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'seo_scope' && (
+          <ProjectSeoScopeTab
+            tasks={selectedProject.tasks || []}
+            users={users}
+            canManageProjects={canManageProjects}
+            onAddTask={openAddTaskForSeoScope}
+            onEditTask={handleEditTask}
+            onDeleteTask={handleDeleteTask}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
@@ -1733,6 +1778,10 @@ export default function ProjectsPanel({
                         <select
                           value={taskDraft.erp_page_id}
                           onChange={(e) => {
+                            if (e.target.value === 'others') {
+                              setTaskDraft({ ...taskDraft, erp_page_id: 'others', erp_page_name: 'Others' });
+                              return;
+                            }
                             const eu = (selectedProject?.erp_users || []).find(u => u.id === taskDraft.erp_user_id);
                             const pg = (eu?.pages || []).find(p => p.id === e.target.value);
                             setTaskDraft({ ...taskDraft, erp_page_id: e.target.value, erp_page_name: pg?.page_name || '' });
@@ -1745,6 +1794,7 @@ export default function ProjectsPanel({
                           {((selectedProject?.erp_users || []).find(u => u.id === taskDraft.erp_user_id)?.pages || []).map(pg => (
                             <option key={pg.id} value={pg.id}>{pg.page_name}</option>
                           ))}
+                          <option value="others">Others</option>
                         </select>
                       </div>
                     </div>

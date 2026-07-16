@@ -211,6 +211,36 @@ async def startup_tasks():
     except Exception as _e:
         logging.warning(f"[startup] Meta Ads category reorder skipped: {_e}")
 
+    # SEO categories: add "Off Page SEO" alongside the existing list (used
+    # by the new Scope tab's Research / On Page SEO / Off Page SEO filter).
+    try:
+        seo_doc = await db.department_categories.find_one({"dept_key": "seo"}, {"_id": 0, "categories": 1})
+        cats = (seo_doc or {}).get("categories") or []
+        if not any((c or "").strip().lower() == "off page seo" for c in cats):
+            await db.department_categories.update_one(
+                {"dept_key": "seo"},
+                {"$set": {"categories": cats + ["Off Page SEO"]}},
+                upsert=True,
+            )
+            logging.info("[startup] Added 'Off Page SEO' to SEO categories")
+    except Exception as _e:
+        logging.warning(f"[startup] SEO category backfill skipped: {_e}")
+
+    # ERP categories: add "Other" for tasks not tied to a specific page (used
+    # by the new ERP "Others" tab, mirroring the Website department's).
+    try:
+        erp_doc = await db.department_categories.find_one({"dept_key": "erp"}, {"_id": 0, "categories": 1})
+        cats = (erp_doc or {}).get("categories") or []
+        if not any((c or "").strip().lower() == "other" for c in cats):
+            await db.department_categories.update_one(
+                {"dept_key": "erp"},
+                {"$set": {"categories": cats + ["Other"]}},
+                upsert=True,
+            )
+            logging.info("[startup] Added 'Other' to ERP categories")
+    except Exception as _e:
+        logging.warning(f"[startup] ERP category backfill skipped: {_e}")
+
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
 async def health_check():

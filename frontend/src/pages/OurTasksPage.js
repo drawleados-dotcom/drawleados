@@ -2552,6 +2552,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             onValueChange={(v) => {
                               if (v === 'none') {
                                 setFormData(prev => ({ ...prev, erp_page_id: '', erp_page_name: '' }));
+                              } else if (v === 'others') {
+                                setFormData(prev => ({ ...prev, erp_page_id: 'others', erp_page_name: 'Others' }));
                               } else {
                                 const proj = projectsForTask.find(p => p.project_id === formData.project_id);
                                 const eu = (proj?.erp_users || []).find(u => u.id === formData.erp_user_id);
@@ -2569,6 +2571,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               {((projectsForTask.find(p => p.project_id === formData.project_id)?.erp_users || []).find(u => u.id === formData.erp_user_id)?.pages || []).map(pg => (
                                 <SelectItem key={pg.id} value={pg.id}>{pg.page_name}</SelectItem>
                               ))}
+                              <SelectItem value="others">Others</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
