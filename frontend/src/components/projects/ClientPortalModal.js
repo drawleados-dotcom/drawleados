@@ -20,6 +20,9 @@ export default function ClientPortalModal({ project, onClose, isDark, bgCard, bg
   // Only ever populated right after a create/reset call — this is the one
   // moment the plaintext password exists; only a hash is stored server-side.
   const [freshPassword, setFreshPassword] = useState('');
+  // Password can be auto-generated (default) or typed in manually.
+  const [passwordMode, setPasswordMode] = useState('auto'); // 'auto' | 'manual'
+  const [manualPassword, setManualPassword] = useState('');
 
   useEffect(() => {
     axios.get(`${API}/api/projects/${project.project_id}/client-portal`, { headers })
@@ -45,16 +48,29 @@ export default function ClientPortalModal({ project, onClose, isDark, bgCard, bg
       ].join('\n')
     : '';
 
+  // Returns the manual password if that mode is active (validating length),
+  // or undefined to let the backend auto-generate one. Returns `false` on
+  // a validation failure so callers know to abort.
+  const resolveManualPassword = () => {
+    if (passwordMode !== 'manual') return undefined;
+    const p = manualPassword.trim();
+    if (p.length < 6) { toast.error('Password must be at least 6 characters'); return false; }
+    return p;
+  };
+
   const createOrRename = async () => {
     if (!usernameDraft.trim()) { toast.error('Username is required'); return; }
+    const manual = resolveManualPassword();
+    if (manual === false) return;
     setSaving(true);
     try {
       const res = await axios.post(
         `${API}/api/projects/${project.project_id}/client-portal`,
-        { username: usernameDraft.trim() },
+        { username: usernameDraft.trim(), ...(manual ? { password: manual } : {}) },
         { headers },
       );
       setFreshPassword(res.data.password);
+      setManualPassword('');
       setPortal((p) => ({ ...(p || {}), enabled: true, username: res.data.username }));
       toast.success('Client login saved');
     } catch (e) {
@@ -65,10 +81,17 @@ export default function ClientPortalModal({ project, onClose, isDark, bgCard, bg
   };
 
   const resetPassword = async () => {
+    const manual = resolveManualPassword();
+    if (manual === false) return;
     setSaving(true);
     try {
-      const res = await axios.post(`${API}/api/projects/${project.project_id}/client-portal/reset-password`, {}, { headers });
+      const res = await axios.post(
+        `${API}/api/projects/${project.project_id}/client-portal/reset-password`,
+        manual ? { password: manual } : {},
+        { headers },
+      );
       setFreshPassword(res.data.password);
+      setManualPassword('');
       toast.success('Password reset');
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to reset password');
@@ -110,6 +133,37 @@ export default function ClientPortalModal({ project, onClose, isDark, bgCard, bg
                   className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                   data-testid="client-portal-username"
                 />
+              </div>
+
+              <div>
+                <Label className={textPrimary}>Password</Label>
+                <div className={`inline-flex rounded-lg border ${borderColor} p-0.5 mt-1`}>
+                  <button
+                    type="button"
+                    onClick={() => setPasswordMode('auto')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${passwordMode === 'auto' ? 'bg-[#6366f1] text-white' : textSecondary}`}
+                    data-testid="client-portal-password-mode-auto"
+                  >
+                    Auto-generate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPasswordMode('manual')}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${passwordMode === 'manual' ? 'bg-[#6366f1] text-white' : textSecondary}`}
+                    data-testid="client-portal-password-mode-manual"
+                  >
+                    Set Manually
+                  </button>
+                </div>
+                {passwordMode === 'manual' && (
+                  <Input
+                    value={manualPassword}
+                    onChange={(e) => setManualPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    className={`mt-2 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="client-portal-manual-password"
+                  />
+                )}
               </div>
 
               <div className="flex items-center gap-2">

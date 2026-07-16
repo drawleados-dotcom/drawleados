@@ -70,8 +70,24 @@ async def get_client_project_view(request: Request):
 
     tasks = await db.our_tasks.find(
         {"project_id": session["project_id"]},
-        {"_id": 0, "task_id": 1, "task_name": 1, "status": 1, "priority": 1, "due_date": 1, "category": 1, "created_at": 1},
+        {"_id": 0, "task_id": 1, "task_name": 1, "status": 1, "priority": 1, "due_date": 1, "category": 1,
+         "created_at": 1, "erp_page_id": 1},
     ).sort("created_at", -1).to_list(500)
+
+    # Trimmed User -> Pages structure (same shape as the internal ERP Users
+    # tab) so the client sees work organized by who/what it's for, not just
+    # a flat task list.
+    erp_users = [
+        {
+            "id": u.get("id"),
+            "user_name": u.get("user_name"),
+            "pages": [
+                {"id": p.get("id"), "page_name": p.get("page_name"), "status": p.get("status")}
+                for p in (u.get("pages") or [])
+            ],
+        }
+        for u in (project.get("erp_users") or [])
+    ]
 
     return {
         "project_id": project["project_id"],
@@ -82,6 +98,7 @@ async def get_client_project_view(request: Request):
         "status": project.get("status"),
         "project_type": project.get("project_type"),
         "tasks": tasks,
+        "erp_users": erp_users,
     }
 
 

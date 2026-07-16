@@ -4,7 +4,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { LogOut, Calendar, ListChecks } from 'lucide-react';
+import { LogOut, Calendar, ListChecks, Users } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -98,30 +98,74 @@ export default function ClientPortalViewPage() {
           </div>
         </div>
 
-        <div>
-          <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <ListChecks className="h-4 w-4 text-[#6366f1]" /> Tasks ({(project.tasks || []).length})
-          </h2>
-          <div className="space-y-2">
-            {(project.tasks || []).length === 0 && (
-              <p className="text-sm text-[#a1a1aa]">No tasks yet.</p>
-            )}
-            {(project.tasks || []).map((task) => (
-              <div key={task.task_id} className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between gap-3" data-testid={`client-portal-task-${task.task_id}`}>
-                <div>
-                  <p className="font-medium">{task.task_name}</p>
-                  <p className="text-xs text-[#a1a1aa] mt-1">
-                    {task.category && <>{task.category} · </>}
-                    Due {fmtDate(task.due_date)}
-                  </p>
-                </div>
-                <Badge className={STATUS_STYLE[task.status] || STATUS_STYLE.pending}>
-                  {(task.status || 'pending').replace('_', ' ')}
-                </Badge>
+        {(() => {
+          const erpUsers = project.erp_users || [];
+          const allTasks = project.tasks || [];
+          const taggedPageIds = new Set(erpUsers.flatMap((u) => (u.pages || []).map((p) => p.id)));
+          const otherTasks = allTasks.filter((t) => !t.erp_page_id || !taggedPageIds.has(t.erp_page_id));
+          const tasksForPage = (pageId) => allTasks.filter((t) => t.erp_page_id === pageId);
+
+          const taskCard = (task) => (
+            <div key={task.task_id} className="bg-[#0f0f11] border border-[#27272a] rounded-lg p-3 flex items-center justify-between gap-3" data-testid={`client-portal-task-${task.task_id}`}>
+              <div>
+                <p className="text-sm font-medium">{task.task_name}</p>
+                <p className="text-xs text-[#a1a1aa] mt-1">
+                  {task.category && <>{task.category} · </>}
+                  Due {fmtDate(task.due_date)}
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
+              <Badge className={STATUS_STYLE[task.status] || STATUS_STYLE.pending}>
+                {(task.status || 'pending').replace('_', ' ')}
+              </Badge>
+            </div>
+          );
+
+          return (
+            <>
+              {erpUsers.length > 0 && (
+                <div>
+                  <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-[#6366f1]" /> Users ({erpUsers.length})
+                  </h2>
+                  <div className="space-y-4">
+                    {erpUsers.map((u) => (
+                      <div key={u.id} className="bg-[#18181b] border border-[#27272a] rounded-2xl p-4" data-testid={`client-portal-user-${u.id}`}>
+                        <p className="font-semibold mb-3">{u.user_name}</p>
+                        <div className="space-y-3 pl-3 border-l border-[#27272a]">
+                          {(u.pages || []).length === 0 && <p className="text-xs text-[#a1a1aa]">No pages yet.</p>}
+                          {(u.pages || []).map((pg) => (
+                            <div key={pg.id} data-testid={`client-portal-page-${pg.id}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-sm font-medium text-[#a1a1aa]">{pg.page_name}</p>
+                                <Badge className="bg-[#6366f1]/15 text-[#6366f1] text-[10px]">{pg.status || 'To-Do'}</Badge>
+                              </div>
+                              <div className="space-y-2">
+                                {tasksForPage(pg.id).length === 0 && <p className="text-xs text-[#71717a]">No tasks yet.</p>}
+                                {tasksForPage(pg.id).map(taskCard)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-[#6366f1]" /> {erpUsers.length > 0 ? 'Other Tasks' : 'Tasks'} ({otherTasks.length})
+                </h2>
+                <div className="space-y-2">
+                  {otherTasks.length === 0 && (
+                    <p className="text-sm text-[#a1a1aa]">No tasks yet.</p>
+                  )}
+                  {otherTasks.map(taskCard)}
+                </div>
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );

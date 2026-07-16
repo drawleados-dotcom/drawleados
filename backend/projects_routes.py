@@ -693,11 +693,25 @@ async def publish_content_calendar_entry_to_linkedin(project_id: str, entry_id: 
 
 class ClientPortalSetRequest(BaseModel):
     username: str
+    password: Optional[str] = None  # manual override; auto-generated if omitted
+
+
+class ClientPortalPasswordRequest(BaseModel):
+    password: Optional[str] = None  # manual override; auto-generated if omitted
 
 
 def _generate_client_password(length: int = 10) -> str:
     alphabet = string.ascii_letters + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _resolve_client_password(manual: Optional[str]) -> str:
+    manual = (manual or "").strip()
+    if manual:
+        if len(manual) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        return manual
+    return _generate_client_password()
 
 
 @projects_router.get("/{project_id}/client-portal")
@@ -720,9 +734,9 @@ async def get_client_portal(project_id: str, request: Request):
 
 @projects_router.post("/{project_id}/client-portal")
 async def create_or_update_client_portal(project_id: str, payload: ClientPortalSetRequest, request: Request):
-    """Create the client login (or rename the username). Always issues a
-    fresh, randomly-generated password — returned ONCE in this response,
-    same as /reset-password — since only a hash is ever stored."""
+    """Create the client login (or rename the username). Password is either
+    typed manually (payload.password) or auto-generated — either way it's
+    returned ONCE in this response, since only a hash is ever stored."""
     from server import get_current_user, hash_password, db
     user = await get_current_user(request)
     if not await _is_operation_head_or_admin(user, db):
@@ -734,7 +748,7 @@ async def create_or_update_client_portal(project_id: str, payload: ClientPortalS
     if not username:
         raise HTTPException(status_code=400, detail="Username is required")
 
-    password = _generate_client_password()
+    password = _resolve_client_password(payload.password)
     now = datetime.now(timezone.utc).isoformat()
     await db.projects.update_one(
         {"project_id": project_id},
@@ -752,7 +766,7 @@ async def create_or_update_client_portal(project_id: str, payload: ClientPortalS
 
 
 @projects_router.post("/{project_id}/client-portal/reset-password")
-async def reset_client_portal_password(project_id: str, request: Request):
+async def reset_client_portal_password(project_id: str, payload: ClientPortalPasswordRequest, request: Request):
     from server import get_current_user, hash_password, db
     user = await get_current_user(request)
     if not await _is_operation_head_or_admin(user, db):
@@ -761,7 +775,7 @@ async def reset_client_portal_password(project_id: str, request: Request):
     if not project or not (project.get("client_portal") or {}).get("username"):
         raise HTTPException(status_code=400, detail="Client portal is not set up for this project yet")
 
-    password = _generate_client_password()
+    password = _resolve_client_password(payload.password)
     await db.projects.update_one(
         {"project_id": project_id},
         {"$set": {
