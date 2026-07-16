@@ -468,13 +468,29 @@ async def sync_sheet(sheet_type: str, request: Request):
     )
     stage_id = stage.get("stage_id") if stage else ""
 
-    # Build lookup of EXISTING sheet-imported leads keyed by lowercased email.
-    # We UPSERT — manual stage changes / edits are preserved; only new rows are inserted.
+    # Build lookups of EXISTING sheet-imported leads so re-syncing UPSERTS
+    # instead of duplicating. Matched in priority order:
+    #   1. sheet_row_index — the row's stable position in the sheet. This is
+    #      the primary key: it's the only one that reliably identifies a
+    #      row that has no name/phone/email at all (common for partially
+    #      -filled Meta Lead Ads rows), which previously always fell through
+    #      to "insert as new" on every single sync.
+    #   2. email (lowercased) — kept for leads imported before this field
+    #      existed, so they don't suddenly duplicate on the next sync.
+    #   3. phone (last 10 digits, country-code/formatting agnostic) — same
+    #      backward-compat reasoning, for phone-only rows from before.
     existing = await db.leads_v2.find(
         {"imported_from_sheet": sheet_type, "created_by": user.user_id, "is_deleted": {"$ne": True}},
-        {"_id": 0, "lead_id": 1, "email": 1},
+        {"_id": 0, "lead_id": 1, "email": 1, "phone": 1, "sheet_row_index": 1},
     ).to_list(10000)
+
+    def _normalize_phone(p):
+        digits = "".join(ch for ch in str(p or "") if ch.isdigit())
+        return digits[-10:] if len(digits) >= 10 else digits
+
+    existing_by_row_index = {e["sheet_row_index"]: e["lead_id"] for e in existing if e.get("sheet_row_index") is not None}
     existing_by_email = {(e.get("email") or "").strip().lower(): e["lead_id"] for e in existing if e.get("email")}
+    existing_by_phone = {_normalize_phone(e.get("phone")): e["lead_id"] for e in existing if _normalize_phone(e.get("phone"))}
 
     sheet_docs = []
     inserted = 0
@@ -491,7 +507,7 @@ async def sync_sheet(sheet_type: str, request: Request):
 
     now = datetime.now(timezone.utc)
     skipped_blank = 0
-    for r in body_rows:
+    for row_index, r in enumerate(body_rows):
         # Google Sheets' values.get() can report rows past the real data as
         # blank-string rows instead of omitting them entirely — this happens
         # whenever any cell in that row has ever held content or formatting
@@ -533,7 +549,12 @@ async def sync_sheet(sheet_type: str, request: Request):
             "notes", "remarks", "comments", "message",
         }
         email_key = str(email).strip().lower()
-        existing_lead_id = existing_by_email.get(email_key) if email_key else None
+        phone_key = _normalize_phone(phone)
+        existing_lead_id = (
+            existing_by_row_index.get(row_index)
+            or (existing_by_email.get(email_key) if email_key else None)
+            or (existing_by_phone.get(phone_key) if phone_key else None)
+        )
         common_fields = {
             "name": str(name).strip() or "—",
             "phone": str(phone).strip(),
@@ -547,6 +568,7 @@ async def sync_sheet(sheet_type: str, request: Request):
             "notes": str(notes).strip(),
             "imported_from_sheet": sheet_type,
             "sheet_row_id": row_id,
+            "sheet_row_index": row_index,
             "custom_fields": {k: v for k, v in record.items() if k.lower() not in mapped_cols},
             "updated_at": now,
             "is_deleted": False,
