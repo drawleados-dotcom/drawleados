@@ -97,6 +97,7 @@ async def get_client_project_view(request: Request):
         "due_date": project.get("due_date"),
         "status": project.get("status"),
         "project_type": project.get("project_type"),
+        "client_name": project.get("client_name"),
         "tasks": tasks,
         "erp_users": erp_users,
     }
