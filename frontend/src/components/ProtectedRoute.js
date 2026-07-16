@@ -15,6 +15,13 @@ const MODULE_ALIASES = {
 
 function userHasModule(user, isAdmin, module) {
   if (!module) return true;
+  // Dashboard is Super Admin/Admin's landing tab — always accessible to
+  // them, regardless of a designation's configured module_access list
+  // (which may predate this module and simply never mention it).
+  if (module === 'dashboard') {
+    const role = String(user?.role || '').toLowerCase();
+    if (role === 'super_admin' || isAdmin) return true;
+  }
   const moduleAccess = Array.isArray(user?.module_access) ? user.module_access : [];
 
   // Designation-driven module_access has HIGHEST priority for ALL roles

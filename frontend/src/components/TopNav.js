@@ -23,6 +23,9 @@ export default function TopNav() {
   const userRole = user?.role || 'employee';
 
   const hasAccess = useMemo(() => (module) => {
+    // Dashboard is Super Admin/Admin's landing tab — always visible to
+    // them, regardless of a designation's configured module_access list.
+    if (module === 'dashboard' && (userRole === 'super_admin' || userRole === 'admin')) return true;
     if (Array.isArray(moduleAccess) && moduleAccess.length > 0) {
       const aliasMap = {
         operations: ['operations', 'our_tasks'],
