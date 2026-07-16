@@ -217,6 +217,7 @@ export default function ProjectErpUsersTab({
   const [expandedPageId, setExpandedPageId] = useState(null);
   const [expandedSubTabsPageId, setExpandedSubTabsPageId] = useState(null);
   const [expandedUltraTabsSubTabId, setExpandedUltraTabsSubTabId] = useState(null);
+  const [expandedUltraTabItemsId, setExpandedUltraTabItemsId] = useState(null);
   // { mode: 'add' | 'edit', name } — add/rename a User
   const [userModal, setUserModal] = useState(null);
   // { mode: 'add' | 'view', userId, page, editing } — add/view/edit a Page under a User
@@ -225,6 +226,8 @@ export default function ProjectErpUsersTab({
   const [subTabModal, setSubTabModal] = useState(null);
   // { mode: 'add' | 'view', userId, pageId, subTabId, tab, editing } — add/view/edit an Ultra Sub Tab under a Sub Tab
   const [ultraTabModal, setUltraTabModal] = useState(null);
+  // { mode: 'add' | 'view', userId, pageId, subTabId, ultraTabId, tab, editing } — add/view/edit an Ultra Tab under an Ultra Sub Tab
+  const [ultraTabItemModal, setUltraTabItemModal] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const persistUsers = async (nextUsers) => {
@@ -387,6 +390,50 @@ export default function ProjectErpUsersTab({
         : p
     )));
     if (ok) { toast.success('Ultra sub tab removed'); closeUltraTabModal(); }
+  };
+
+  // ---- Ultra Tab CRUD (nested under an Ultra Sub Tab) ----
+  const mapUltraSubTab = (pages, pageId, subTabId, updater) => pages.map(p => (
+    p.id !== pageId ? p : {
+      ...p,
+      sub_tabs: (p.sub_tabs || []).map(st => (
+        st.id !== subTabId ? st : { ...st, ultra_sub_tabs: (st.ultra_sub_tabs || []).map(updater) }
+      )),
+    }
+  ));
+
+  const openAddUltraTabItem = (userId, pageId, subTabId, ultraTabId) => {
+    if (!canEdit) return;
+    setUltraTabItemModal({ mode: 'add', userId, pageId, subTabId, ultraTabId, tab: emptyTab('utt'), editing: true });
+  };
+  const openViewUltraTabItem = (userId, pageId, subTabId, ultraTabId, tab) => setUltraTabItemModal({ mode: 'view', userId, pageId, subTabId, ultraTabId, tab: { ...tab }, editing: false });
+  const closeUltraTabItemModal = () => setUltraTabItemModal(null);
+
+  const saveUltraTabItemModal = async () => {
+    const draft = ultraTabItemModal.tab;
+    if (!(draft.name || '').trim()) { toast.error('Ultra tab name is required'); return; }
+    setSaving(true);
+    const ok = await persistPages(ultraTabItemModal.userId, pages => mapUltraSubTab(pages, ultraTabItemModal.pageId, ultraTabItemModal.subTabId, ut => {
+      if (ut.id !== ultraTabItemModal.ultraTabId) return ut;
+      const items = ut.ultra_tabs || [];
+      const nextItems = ultraTabItemModal.mode === 'add'
+        ? [...items, { ...draft, name: draft.name.trim() }]
+        : items.map(it => (it.id === draft.id ? { ...draft, name: draft.name.trim() } : it));
+      return { ...ut, ultra_tabs: nextItems };
+    }));
+    setSaving(false);
+    if (ok) {
+      toast.success(ultraTabItemModal.mode === 'add' ? 'Ultra tab added' : 'Ultra tab updated');
+      closeUltraTabItemModal();
+    }
+  };
+
+  const deleteUltraTabItem = async (userId, pageId, subTabId, ultraTabId, itemId) => {
+    if (!canEdit) return;
+    const ok = await persistPages(userId, pages => mapUltraSubTab(pages, pageId, subTabId, ut => (
+      ut.id === ultraTabId ? { ...ut, ultra_tabs: (ut.ultra_tabs || []).filter(it => it.id !== itemId) } : ut
+    )));
+    if (ok) { toast.success('Ultra tab removed'); closeUltraTabItemModal(); }
   };
 
   return (
@@ -714,45 +761,144 @@ export default function ProjectErpUsersTab({
                                                                       </tr>
                                                                     </thead>
                                                                     <tbody>
-                                                                      {ultraTabs.map((ut, utIdx) => (
-                                                                        <tr key={ut.id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`erp-ultratab-row-${ut.id}`}>
-                                                                          <td className={`px-3 py-2 text-xs ${textSecondary}`}>{utIdx + 1}</td>
-                                                                          <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>{ut.name || '—'}</td>
-                                                                          {['ui_link', 'content_link', 'page_link'].map((key) => (
-                                                                            <td key={key} className="px-3 py-2">
-                                                                              {ut[key] ? (
-                                                                                <a
-                                                                                  href={ut[key]}
-                                                                                  target="_blank"
-                                                                                  rel="noopener noreferrer"
-                                                                                  className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
+                                                                      {ultraTabs.map((ut, utIdx) => {
+                                                                        const ultraTabItems = ut.ultra_tabs || [];
+                                                                        const isUltraTabItemsExpanded = expandedUltraTabItemsId === ut.id;
+                                                                        return (
+                                                                          <React.Fragment key={ut.id}>
+                                                                            <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-row-${ut.id}`}>
+                                                                              <td className={`px-3 py-2 text-xs ${textSecondary}`}>{utIdx + 1}</td>
+                                                                              <td className="px-3 py-2">
+                                                                                <button
+                                                                                  type="button"
+                                                                                  onClick={() => setExpandedUltraTabItemsId(isUltraTabItemsExpanded ? null : ut.id)}
+                                                                                  className={`inline-flex items-center gap-1.5 text-sm font-medium ${textPrimary} hover:opacity-80`}
+                                                                                  data-testid={`erp-ultratab-toggle-${ut.id}`}
                                                                                 >
-                                                                                  <ExternalLink className="h-3 w-3" /> Open
-                                                                                </a>
-                                                                              ) : (
-                                                                                <span className={`text-xs ${textSecondary}`}>—</span>
-                                                                              )}
-                                                                            </td>
-                                                                          ))}
-                                                                          <td className="px-3 py-2">
-                                                                            <span className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[ut.status] || STATUS_STYLE['To-Do']}`}>
-                                                                              {ut.status || 'To-Do'}
-                                                                            </span>
-                                                                          </td>
-                                                                          <td className="px-3 py-2 text-right">
-                                                                            <div className="inline-flex gap-1">
-                                                                              <button type="button" onClick={() => openViewUltraTab(u.id, row.id, st.id, ut)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-view-${ut.id}`}>
-                                                                                <Eye className="h-4 w-4" />
-                                                                              </button>
-                                                                              {canEdit && (
-                                                                                <button type="button" onClick={() => deleteUltraTab(u.id, row.id, st.id, ut.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-delete-${ut.id}`}>
-                                                                                  <Trash2 className="h-4 w-4" />
+                                                                                  {isUltraTabItemsExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                                  {ut.name || '—'}
                                                                                 </button>
-                                                                              )}
-                                                                            </div>
-                                                                          </td>
-                                                                        </tr>
-                                                                      ))}
+                                                                              </td>
+                                                                              {['ui_link', 'content_link', 'page_link'].map((key) => (
+                                                                                <td key={key} className="px-3 py-2">
+                                                                                  {ut[key] ? (
+                                                                                    <a
+                                                                                      href={ut[key]}
+                                                                                      target="_blank"
+                                                                                      rel="noopener noreferrer"
+                                                                                      className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
+                                                                                    >
+                                                                                      <ExternalLink className="h-3 w-3" /> Open
+                                                                                    </a>
+                                                                                  ) : (
+                                                                                    <span className={`text-xs ${textSecondary}`}>—</span>
+                                                                                  )}
+                                                                                </td>
+                                                                              ))}
+                                                                              <td className="px-3 py-2">
+                                                                                <span className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[ut.status] || STATUS_STYLE['To-Do']}`}>
+                                                                                  {ut.status || 'To-Do'}
+                                                                                </span>
+                                                                              </td>
+                                                                              <td className="px-3 py-2 text-right">
+                                                                                <div className="inline-flex gap-1">
+                                                                                  <button type="button" onClick={() => openViewUltraTab(u.id, row.id, st.id, ut)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-view-${ut.id}`}>
+                                                                                    <Eye className="h-4 w-4" />
+                                                                                  </button>
+                                                                                  {canEdit && (
+                                                                                    <button type="button" onClick={() => deleteUltraTab(u.id, row.id, st.id, ut.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-delete-${ut.id}`}>
+                                                                                      <Trash2 className="h-4 w-4" />
+                                                                                    </button>
+                                                                                  )}
+                                                                                </div>
+                                                                              </td>
+                                                                            </tr>
+                                                                            {isUltraTabItemsExpanded && (
+                                                                              <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-items-row-${ut.id}`}>
+                                                                                <td colSpan={7} className="p-3">
+                                                                                  <div className="flex items-center justify-between mb-2">
+                                                                                    <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Ultra Tabs</p>
+                                                                                    {canEdit && (
+                                                                                      <Button
+                                                                                        type="button"
+                                                                                        size="sm"
+                                                                                        onClick={() => openAddUltraTabItem(u.id, row.id, st.id, ut.id)}
+                                                                                        className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-7 text-xs"
+                                                                                        data-testid={`erp-ultratab-item-add-btn-${ut.id}`}
+                                                                                      >
+                                                                                        <Plus className="h-3 w-3 mr-1" /> Add Ultra Tab
+                                                                                      </Button>
+                                                                                    )}
+                                                                                  </div>
+                                                                                  <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
+                                                                                    <table className="w-full">
+                                                                                      <thead>
+                                                                                        <tr className={`border-b ${borderColor}`}>
+                                                                                          <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-10`}>S.No</th>
+                                                                                          <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Ultra Tab Name</th>
+                                                                                          <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>UI Link</th>
+                                                                                          <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Content Link</th>
+                                                                                          <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Page Link</th>
+                                                                                          <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                                                                                          <th className={`text-right px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
+                                                                                        </tr>
+                                                                                      </thead>
+                                                                                      <tbody>
+                                                                                        {ultraTabItems.map((it, itIdx) => (
+                                                                                          <tr key={it.id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`erp-ultratab-item-row-${it.id}`}>
+                                                                                            <td className={`px-3 py-2 text-xs ${textSecondary}`}>{itIdx + 1}</td>
+                                                                                            <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>{it.name || '—'}</td>
+                                                                                            {['ui_link', 'content_link', 'page_link'].map((key) => (
+                                                                                              <td key={key} className="px-3 py-2">
+                                                                                                {it[key] ? (
+                                                                                                  <a
+                                                                                                    href={it[key]}
+                                                                                                    target="_blank"
+                                                                                                    rel="noopener noreferrer"
+                                                                                                    className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
+                                                                                                  >
+                                                                                                    <ExternalLink className="h-3 w-3" /> Open
+                                                                                                  </a>
+                                                                                                ) : (
+                                                                                                  <span className={`text-xs ${textSecondary}`}>—</span>
+                                                                                                )}
+                                                                                              </td>
+                                                                                            ))}
+                                                                                            <td className="px-3 py-2">
+                                                                                              <span className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[it.status] || STATUS_STYLE['To-Do']}`}>
+                                                                                                {it.status || 'To-Do'}
+                                                                                              </span>
+                                                                                            </td>
+                                                                                            <td className="px-3 py-2 text-right">
+                                                                                              <div className="inline-flex gap-1">
+                                                                                                <button type="button" onClick={() => openViewUltraTabItem(u.id, row.id, st.id, ut.id, it)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-item-view-${it.id}`}>
+                                                                                                  <Eye className="h-4 w-4" />
+                                                                                                </button>
+                                                                                                {canEdit && (
+                                                                                                  <button type="button" onClick={() => deleteUltraTabItem(u.id, row.id, st.id, ut.id, it.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-item-delete-${it.id}`}>
+                                                                                                    <Trash2 className="h-4 w-4" />
+                                                                                                  </button>
+                                                                                                )}
+                                                                                              </div>
+                                                                                            </td>
+                                                                                          </tr>
+                                                                                        ))}
+                                                                                        {ultraTabItems.length === 0 && (
+                                                                                          <tr>
+                                                                                            <td colSpan={7} className={`p-4 text-center text-xs ${textSecondary}`}>
+                                                                                              No ultra tabs yet. {canEdit && <span>Click <span className="font-medium">Add Ultra Tab</span> to add one.</span>}
+                                                                                            </td>
+                                                                                          </tr>
+                                                                                        )}
+                                                                                      </tbody>
+                                                                                    </table>
+                                                                                  </div>
+                                                                                </td>
+                                                                              </tr>
+                                                                            )}
+                                                                          </React.Fragment>
+                                                                        );
+                                                                      })}
                                                                       {ultraTabs.length === 0 && (
                                                                         <tr>
                                                                           <td colSpan={7} className={`p-4 text-center text-xs ${textSecondary}`}>
@@ -1018,6 +1164,25 @@ export default function ProjectErpUsersTab({
         testPrefix="erp-ultratab"
         titleAdd="Add Ultra Sub Tab"
         titleEdit="Edit Ultra Sub Tab"
+      />
+
+      {/* Add / View / Edit Ultra Tab popup */}
+      <TabDetailModal
+        modal={ultraTabItemModal}
+        setModal={setUltraTabItemModal}
+        onClose={closeUltraTabItemModal}
+        onSave={saveUltraTabItemModal}
+        onDelete={() => deleteUltraTabItem(ultraTabItemModal.userId, ultraTabItemModal.pageId, ultraTabItemModal.subTabId, ultraTabItemModal.ultraTabId, ultraTabItemModal.tab.id)}
+        saving={saving}
+        canEdit={canEdit}
+        bgCard={bgCard}
+        bgSecondary={bgSecondary}
+        textPrimary={textPrimary}
+        textSecondary={textSecondary}
+        borderColor={borderColor}
+        testPrefix="erp-ultratab-item"
+        titleAdd="Add Ultra Tab"
+        titleEdit="Edit Ultra Tab"
       />
     </div>
   );
