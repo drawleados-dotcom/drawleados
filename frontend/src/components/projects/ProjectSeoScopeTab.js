@@ -6,18 +6,18 @@ import { Badge } from '../ui/badge';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-// Sub-tabs shown inside Scope — deliberately just these 4, distinct from
-// the project's full Category list (which stays available everywhere else).
-const CATEGORY_TABS = ['All', 'Research', 'On Page SEO', 'Off Page SEO'];
-
 export default function ProjectSeoScopeTab({
-  tasks, users, canManageProjects, onAddTask, onEditTask, onDeleteTask,
+  tasks, categories, users, canManageProjects, onAddTask, onEditTask, onDeleteTask,
   isDark, bgCard, bgSecondary, textPrimary, textSecondary, borderColor,
 }) {
   const now = new Date();
   const [activeMonth, setActiveMonth] = useState(now.getMonth());
   const [activeYear, setActiveYear] = useState(now.getFullYear());
   const [activeCategory, setActiveCategory] = useState('All');
+
+  // Sub-tabs mirror the project's actual Task Category list (same source
+  // as the Tasks tab's category sub-tabs) rather than a fixed subset.
+  const categoryTabs = useMemo(() => ['All', ...(categories || [])], [categories]);
 
   const isCurrentMonth = activeMonth === now.getMonth() && activeYear === now.getFullYear();
   const yearOptions = useMemo(() => {
@@ -50,10 +50,10 @@ export default function ProjectSeoScopeTab({
 
   // Per-category task counts for the month being viewed (drives the number
   // badge on each category sub-tab, same as Content Calendar's platforms).
-  const categoryCounts = useMemo(() => CATEGORY_TABS.reduce((acc, c) => {
+  const categoryCounts = useMemo(() => categoryTabs.reduce((acc, c) => {
     acc[c] = c === 'All' ? monthTasks.length : monthTasks.filter((t) => (t.category || '') === c).length;
     return acc;
-  }, {}), [monthTasks]);
+  }, {}), [monthTasks, categoryTabs]);
 
   const visibleTasks = activeCategory === 'All'
     ? monthTasks
@@ -95,7 +95,7 @@ export default function ProjectSeoScopeTab({
 
       {/* Category sub-tabs */}
       <div className={`inline-flex flex-wrap items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
-        {CATEGORY_TABS.map((c) => (
+        {categoryTabs.map((c) => (
           <button
             key={c}
             type="button"

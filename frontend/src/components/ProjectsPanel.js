@@ -1036,6 +1036,7 @@ export default function ProjectsPanel({
         {projectInnerTab === 'seo_scope' && (
           <ProjectSeoScopeTab
             tasks={selectedProject.tasks || []}
+            categories={deptCategories.find(d => d.dept_key === 'seo')?.categories || []}
             users={users}
             canManageProjects={canManageProjects}
             onAddTask={openAddTaskForSeoScope}
