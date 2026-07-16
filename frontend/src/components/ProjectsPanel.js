@@ -885,8 +885,8 @@ export default function ProjectsPanel({
             ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
             ...(isSeoProject ? [{ id: 'seo_scope', label: 'Scope', icon: Target }] : []),
             ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
-            ...(isMetaAdsProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
-            ...(isMetaAdsProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
+            ...(isMetaAdsProject || isSeoProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
+            ...(isMetaAdsProject || isSeoProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
             ...(isMetaAdsProject ? [{ id: 'additional', label: 'Additional', icon: Layers }] : []),
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks

@@ -226,6 +226,24 @@ async def startup_tasks():
     except Exception as _e:
         logging.warning(f"[startup] SEO category backfill skipped: {_e}")
 
+    # SEO categories: "Report" must be last, same reasoning as Meta Ads —
+    # it's the trigger for the daily Submit Report flow (Campaigns/Reports
+    # tabs now also apply to SEO projects).
+    try:
+        seo_doc = await db.department_categories.find_one({"dept_key": "seo"}, {"_id": 0, "categories": 1})
+        cats = (seo_doc or {}).get("categories") or []
+        report_cats = [c for c in cats if (c or "").strip().lower() == "report"]
+        if report_cats and cats[-1].strip().lower() != "report":
+            other_cats = [c for c in cats if (c or "").strip().lower() != "report"]
+            reordered = other_cats + report_cats
+            await db.department_categories.update_one(
+                {"dept_key": "seo"},
+                {"$set": {"categories": reordered}},
+            )
+            logging.info("[startup] Moved 'Report' to the end of SEO categories")
+    except Exception as _e:
+        logging.warning(f"[startup] SEO category reorder skipped: {_e}")
+
     # ERP categories: add "Other" for tasks not tied to a specific page (used
     # by the new ERP "Others" tab, mirroring the Website department's).
     try:

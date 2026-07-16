@@ -503,8 +503,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
   };
 
-  // Meta Ads daily "Submit Report" popup — only tasks tagged Category = "Report"
+  // Daily "Submit Report" popup — only tasks tagged Category = "Report", on
+  // departments that track a Campaigns list to report against (Meta Ads,
+  // SEO).
   const isReportCategory = (cat) => (cat || '').trim().toLowerCase() === 'report';
+  const REPORT_ENABLED_DEPARTMENTS = ['meta', 'seo'];
+  const REPORT_DEPARTMENT_LABEL = { meta: 'Meta Ads', seo: 'SEO' };
 
   const newReportRow = () => ({
     row_id: `r_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -2161,7 +2165,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                 : 'Approve'}
                             </Button>
                           )}
-                          {task.department === 'meta' && isReportCategory(task.category) && task.assigned_to === user?.user_id && (
+                          {REPORT_ENABLED_DEPARTMENTS.includes(task.department) && isReportCategory(task.category) && task.assigned_to === user?.user_id && (
                             <Button
                               size="sm"
                               className="bg-[#8b5cf6] hover:bg-[#7c3aed] text-white h-8 px-3"
@@ -3288,7 +3292,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 <p className={`text-sm ${textSecondary}`}>Task: <span className={textPrimary}>{reportTask.task_name}</span></p>
                 <p className={`text-sm ${textSecondary}`}>
                   Project: <span className={textPrimary}>{reportProject?.name || reportTask.project_name || '—'}</span>
-                  {' · '}Department: <span className={textPrimary}>Meta Ads</span>
+                  {' · '}Department: <span className={textPrimary}>{REPORT_DEPARTMENT_LABEL[reportTask.department] || reportTask.department}</span>
                 </p>
               </CardHeader>
               <CardContent className="space-y-5">
