@@ -93,6 +93,10 @@ export default function ProjectsPanel({
   const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false);
   const [deleteProjectPassword, setDeleteProjectPassword] = useState('');
   const [deletingProject, setDeletingProject] = useState(false);
+  // The project targeted for deletion — set from either the detail page's
+  // own Delete button (selectedProject) or a row's Delete icon in the list
+  // view (no navigation into the project required for the latter).
+  const [deleteTargetProject, setDeleteTargetProject] = useState(null);
   // Task filters inside project detail
   const [taskMemberFilter, setTaskMemberFilter] = useState('all');
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all, today, single, range
@@ -387,17 +391,22 @@ export default function ProjectsPanel({
   // Super Admin only — deleting a project requires re-entering their
   // password (verified server-side against the account's stored hash).
   const confirmDeleteProject = async () => {
-    if (!selectedProject || !deleteProjectPassword) return;
+    if (!deleteTargetProject || !deleteProjectPassword) return;
     setDeletingProject(true);
     try {
-      await axios.delete(`${API}/api/projects/${selectedProject.project_id}`, {
+      await axios.delete(`${API}/api/projects/${deleteTargetProject.project_id}`, {
         data: { password: deleteProjectPassword },
         headers,
       });
       toast.success('Project deleted');
       setShowDeleteProjectModal(false);
       setDeleteProjectPassword('');
-      setSelectedProject(null);
+      // Only navigate back to the list if we were viewing the project that
+      // just got deleted (list-row deletes leave selectedProject untouched).
+      if (selectedProject?.project_id === deleteTargetProject.project_id) {
+        setSelectedProject(null);
+      }
+      setDeleteTargetProject(null);
       loadProjects();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to delete project');
@@ -735,7 +744,7 @@ export default function ProjectsPanel({
             )}
             {role === 'super_admin' && (
               <Button
-                onClick={() => { setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
+                onClick={() => { setDeleteTargetProject(selectedProject); setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
                 variant="outline"
                 className="gap-2 border-red-500/40 text-red-500 hover:bg-red-500/10"
                 data-testid="project-delete-btn"
@@ -2079,7 +2088,7 @@ export default function ProjectsPanel({
                   </button>
                 </div>
                 <p className={`text-sm ${textSecondary}`}>
-                  This will permanently delete <b className={textPrimary}>{selectedProject.name}</b>. Tasks linked to it
+                  This will permanently delete <b className={textPrimary}>{deleteTargetProject?.name}</b>. Tasks linked to it
                   will be detached, not deleted. Enter your password to confirm.
                 </p>
                 <div>
@@ -2154,6 +2163,7 @@ export default function ProjectsPanel({
                   {deptFilter === 'website' && <th className="text-left px-4 py-3">Weblink</th>}
                   <th className="text-left px-4 py-3">Tasks</th>
                   <th className="text-left px-4 py-3">Members</th>
+                  {role === 'super_admin' && <th className="text-right px-4 py-3">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -2281,6 +2291,19 @@ export default function ProjectsPanel({
                         <Users className="h-3 w-3" />{p.members?.length || 0}
                       </span>
                     </td>
+                    {role === 'super_admin' && (
+                      <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => { setDeleteTargetProject(p); setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
+                          className="p-1 text-red-500 hover:text-red-400"
+                          title="Delete project"
+                          data-testid={`project-row-delete-${p.project_id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -2293,6 +2316,57 @@ export default function ProjectsPanel({
             )}
           </div>
         </>
+      )}
+
+      {/* Delete Project (from the list row) — Super Admin only, re-enter
+          password to confirm. Separate instance from the one inside the
+          project detail view, since this branch renders when no project
+          is open (selectedProject is null). */}
+      {showDeleteProjectModal && deleteTargetProject && (
+        <div
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]"
+          onClick={() => !deletingProject && setShowDeleteProjectModal(false)}
+        >
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4`} onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-red-500 flex items-center gap-2">
+                  <Trash2 className="h-5 w-5" /> Delete Project
+                </h3>
+                <button onClick={() => !deletingProject && setShowDeleteProjectModal(false)} className={textSecondary}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <p className={`text-sm ${textSecondary}`}>
+                This will permanently delete <b className={textPrimary}>{deleteTargetProject.name}</b>. Tasks linked to it
+                will be detached, not deleted. Enter your password to confirm.
+              </p>
+              <div>
+                <Label className={textPrimary}>Password</Label>
+                <Input
+                  type="password"
+                  autoFocus
+                  value={deleteProjectPassword}
+                  onChange={(e) => setDeleteProjectPassword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmDeleteProject(); } }}
+                  placeholder="Your account password"
+                  data-testid="delete-project-password-list"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" onClick={() => setShowDeleteProjectModal(false)} disabled={deletingProject}>Cancel</Button>
+                <Button
+                  onClick={confirmDeleteProject}
+                  disabled={deletingProject || !deleteProjectPassword}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  data-testid="delete-project-confirm-list"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" /> {deletingProject ? 'Deleting…' : 'Delete Project'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Create Project Modal */}
