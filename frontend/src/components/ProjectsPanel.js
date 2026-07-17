@@ -1944,6 +1944,20 @@ export default function ProjectsPanel({
                 {projects
                   .filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter))
                   .filter(p => statusFilter === 'all' || (p.status || 'active') === statusFilter)
+                  .sort((a, b) => {
+                    // Row order follows the department's configured status
+                    // order (same sequence as the status filter pills above)
+                    // — e.g. Onboarded, then Developing, then... Only
+                    // meaningful once a specific department is selected,
+                    // since status vocabularies are defined per department.
+                    if (deptFilter === 'all') return 0;
+                    const order = deptStatuses.find(d => d.dept_key === deptFilter)?.statuses || [];
+                    const rank = (p) => {
+                      const idx = order.indexOf(p.status || 'active');
+                      return idx === -1 ? order.length : idx;
+                    };
+                    return rank(a) - rank(b);
+                  })
                   .map(p => (
                   <tr
                     key={p.project_id}
