@@ -61,6 +61,15 @@ export default function ProjectsPanel({
   const [showResetDeliveryModal, setShowResetDeliveryModal] = useState(false);
   const [resetDeliveryDraft, setResetDeliveryDraft] = useState({ new_due_date: '', reason: '' });
   const [savingResetDelivery, setSavingResetDelivery] = useState(false);
+  // Handover — OTP-gated, Popup 1 picks the date and emails an OTP to every
+  // Super Admin, Popup 2 (opened by re-clicking the same button) is where
+  // the OTP is manually entered to actually flip status to "Hand Over".
+  const [showHandoverRequestModal, setShowHandoverRequestModal] = useState(false);
+  const [showHandoverVerifyModal, setShowHandoverVerifyModal] = useState(false);
+  const [handoverDateDraft, setHandoverDateDraft] = useState('');
+  const [handoverOtpDraft, setHandoverOtpDraft] = useState('');
+  const [handoverRemarksDraft, setHandoverRemarksDraft] = useState('');
+  const [savingHandover, setSavingHandover] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
@@ -326,6 +335,11 @@ export default function ProjectsPanel({
   useEffect(() => {
     setEditingWeblink(false);
     setWeblinkDraft('');
+    setShowHandoverRequestModal(false);
+    setShowHandoverVerifyModal(false);
+    setHandoverDateDraft('');
+    setHandoverOtpDraft('');
+    setHandoverRemarksDraft('');
   }, [selectedProject?.project_id]);
 
   const isOverdue = (dueIso) => {
@@ -370,6 +384,60 @@ export default function ProjectsPanel({
       toast.error(e.response?.data?.detail || 'Failed to reset delivery date');
     } finally {
       setSavingResetDelivery(false);
+    }
+  };
+
+  // Re-clicking the Handover button reads current status: no pending
+  // request → date-picker popup; already "otp_requested" → skip straight
+  // to the OTP-entry popup instead of re-requesting.
+  const openHandoverModal = () => {
+    if (selectedProject?.handover?.status === 'otp_requested') {
+      setHandoverOtpDraft('');
+      setHandoverRemarksDraft('');
+      setShowHandoverVerifyModal(true);
+    } else {
+      setHandoverDateDraft('');
+      setShowHandoverRequestModal(true);
+    }
+  };
+
+  const submitHandoverRequestOtp = async () => {
+    if (!handoverDateDraft) { toast.error('Please pick a handover date'); return; }
+    setSavingHandover(true);
+    try {
+      const res = await axios.post(
+        `${API}/api/projects/${selectedProject.project_id}/handover/request-otp`,
+        { handover_date: handoverDateDraft },
+        { headers },
+      );
+      setSelectedProject(res.data);
+      loadProjects();
+      toast.success('OTP sent to Super Admin');
+      setShowHandoverRequestModal(false);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to request OTP');
+    } finally {
+      setSavingHandover(false);
+    }
+  };
+
+  const submitHandoverVerifyOtp = async () => {
+    if (!handoverOtpDraft.trim()) { toast.error('Please enter the OTP'); return; }
+    setSavingHandover(true);
+    try {
+      const res = await axios.post(
+        `${API}/api/projects/${selectedProject.project_id}/handover/verify-otp`,
+        { otp: handoverOtpDraft.trim(), remarks: handoverRemarksDraft },
+        { headers },
+      );
+      setSelectedProject(res.data);
+      loadProjects();
+      toast.success('Project handed over');
+      setShowHandoverVerifyModal(false);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to verify OTP');
+    } finally {
+      setSavingHandover(false);
     }
   };
 
@@ -742,6 +810,16 @@ export default function ProjectsPanel({
                 <KeyRound className="h-4 w-4" /> Client Portal
               </Button>
             )}
+            {canManageProjects && selectedProject.status !== 'Hand Over' && (
+              <Button
+                onClick={openHandoverModal}
+                variant="outline"
+                className={`gap-2 ${selectedProject?.handover?.status === 'otp_requested' ? 'border-amber-500/40 text-amber-500 hover:bg-amber-500/10' : ''}`}
+                data-testid="project-handover-btn"
+              >
+                <KeyRound className="h-4 w-4" /> {selectedProject?.handover?.status === 'otp_requested' ? 'OTP Requested' : 'Handover'}
+              </Button>
+            )}
             {role === 'super_admin' && (
               <Button
                 onClick={() => { setDeleteTargetProject(selectedProject); setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
@@ -926,6 +1004,29 @@ export default function ProjectsPanel({
                     )}
                   </>
                 )}
+              </div>
+            )}
+
+            {/* Handover — universal, shows once a request has been made.
+                Pending: who requested + for what date, awaiting the Super
+                Admin's OTP. Completed: the final handover date + remarks. */}
+            {selectedProject.handover && (
+              <div className="flex items-center gap-2 flex-wrap pt-1" data-testid="project-handover-row">
+                <KeyRound className={`h-4 w-4 ${textSecondary}`} />
+                <span className={`text-sm ${textSecondary}`}>Handover:</span>
+                {selectedProject.handover.status === 'completed' ? (
+                  <>
+                    <Badge className="bg-[#10b981]/20 text-[#10b981]">Handed Over</Badge>
+                    <span className={`text-sm ${textPrimary}`}>{fmtDate(selectedProject.handover.handover_date)}</span>
+                    {selectedProject.handover.remarks && (
+                      <span className={`text-xs ${textSecondary}`}>— {selectedProject.handover.remarks}</span>
+                    )}
+                  </>
+                ) : selectedProject.handover.status === 'otp_requested' ? (
+                  <span className="text-xs text-amber-500">
+                    OTP requested by {selectedProject.handover.requested_by_name || 'Unknown'} for {fmtDate(selectedProject.handover.requested_date)} — awaiting Super Admin OTP
+                  </span>
+                ) : null}
               </div>
             )}
 
@@ -2071,6 +2172,108 @@ export default function ProjectsPanel({
           </div>
         )}
 
+        {/* Handover — Popup 1: pick the handover date, which emails an OTP
+            to every Super Admin. */}
+        {showHandoverRequestModal && selectedProject && (
+          <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4"
+            onClick={() => !savingHandover && setShowHandoverRequestModal(false)}
+          >
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>Handover Project</h3>
+                  <button onClick={() => !savingHandover && setShowHandoverRequestModal(false)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-sm ${textSecondary}`}>
+                  Pick the handover date. An OTP will be emailed to the Super Admin to approve this handover.
+                </p>
+                <div>
+                  <Label className={textPrimary}>Handover Date</Label>
+                  <input
+                    type="date"
+                    value={handoverDateDraft}
+                    onChange={(e) => setHandoverDateDraft(e.target.value)}
+                    className={`w-full px-2 py-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="handover-date-input"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setShowHandoverRequestModal(false)} disabled={savingHandover}>Cancel</Button>
+                  <Button
+                    onClick={submitHandoverRequestOtp}
+                    disabled={savingHandover}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    data-testid="handover-request-otp-submit"
+                  >
+                    {savingHandover ? 'Sending…' : 'Request OTP'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Handover — Popup 2: enter the OTP the Super Admin received, plus
+            remarks, to actually complete the handover. */}
+        {showHandoverVerifyModal && selectedProject && (
+          <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4"
+            onClick={() => !savingHandover && setShowHandoverVerifyModal(false)}
+          >
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>Confirm Handover</h3>
+                  <button onClick={() => !savingHandover && setShowHandoverVerifyModal(false)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-sm ${textSecondary}`}>
+                  Enter the OTP sent to the Super Admin for handover on{' '}
+                  <span className={`font-medium ${textPrimary}`}>{fmtDate(selectedProject?.handover?.requested_date)}</span>.
+                </p>
+                <div>
+                  <Label className={textPrimary}>OTP</Label>
+                  <Input
+                    type="text"
+                    autoFocus
+                    value={handoverOtpDraft}
+                    onChange={(e) => setHandoverOtpDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitHandoverVerifyOtp(); } }}
+                    placeholder="6-digit OTP"
+                    data-testid="handover-otp-input"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Remarks</Label>
+                  <textarea
+                    value={handoverRemarksDraft}
+                    onChange={(e) => setHandoverRemarksDraft(e.target.value)}
+                    rows={3}
+                    placeholder="Any remarks about this handover"
+                    className={`w-full px-2 py-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="handover-remarks-input"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setShowHandoverVerifyModal(false)} disabled={savingHandover}>Cancel</Button>
+                  <Button
+                    onClick={submitHandoverVerifyOtp}
+                    disabled={savingHandover || !handoverOtpDraft.trim()}
+                    className="bg-[#10b981] hover:bg-[#059669] text-white"
+                    data-testid="handover-verify-otp-submit"
+                  >
+                    {savingHandover ? 'Confirming…' : 'Confirm Handover'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Delete Project — Super Admin only, re-enter password to confirm */}
         {showDeleteProjectModal && (
           <div
@@ -2161,6 +2364,8 @@ export default function ProjectsPanel({
                   <th className="text-left px-4 py-3">Due Date</th>
                   <th className="text-left px-4 py-3">Due Balance</th>
                   {deptFilter === 'website' && <th className="text-left px-4 py-3">Weblink</th>}
+                  {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3">Handover Date</th>}
+                  {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3">Remarks</th>}
                   <th className="text-left px-4 py-3">Tasks</th>
                   <th className="text-left px-4 py-3">Members</th>
                   {role === 'super_admin' && <th className="text-right px-4 py-3">Actions</th>}
@@ -2279,6 +2484,16 @@ export default function ProjectsPanel({
                         ) : (
                           <span className={`text-xs ${textSecondary}`}>—</span>
                         )}
+                      </td>
+                    )}
+                    {statusFilter === 'Hand Over' && (
+                      <td className="px-4 py-3">
+                        <span className={`text-xs ${textSecondary}`}>{fmtDate(p.handover?.handover_date)}</span>
+                      </td>
+                    )}
+                    {statusFilter === 'Hand Over' && (
+                      <td className="px-4 py-3 max-w-[220px]">
+                        <span className={`text-xs ${textSecondary} truncate block`}>{p.handover?.remarks || '—'}</span>
                       </td>
                     )}
                     <td className="px-4 py-3">

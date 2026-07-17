@@ -8,7 +8,7 @@ user's Operations > My Tasks list with a project badge.
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 import secrets
 import string
@@ -788,3 +788,106 @@ async def reset_client_portal_password(project_id: str, payload: ClientPortalPas
         }},
     )
     return {"username": project["client_portal"]["username"], "password": password}
+
+
+# ============== PROJECT HANDOVER (OTP-gated) ==============
+# Head of Operations picks a handover date, which emails a one-time OTP to
+# every Super Admin — not a hardcoded address, whoever actually holds that
+# role today. Only entering that OTP back in the app (a second, separate
+# step) flips the project to the "Hand Over" status. The OTP is hashed and
+# time-limited server-side, so this can't be short-circuited by calling the
+# generic project-update endpoint instead.
+
+class HandoverRequestOtp(BaseModel):
+    handover_date: str
+
+
+class HandoverVerifyOtp(BaseModel):
+    otp: str
+    remarks: Optional[str] = ""
+
+
+@projects_router.post("/{project_id}/handover/request-otp")
+async def request_handover_otp(project_id: str, payload: HandoverRequestOtp, request: Request):
+    from server import get_current_user, hash_password, db
+    from hr_routes import send_email_notification
+    user = await get_current_user(request)
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can request a handover")
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not payload.handover_date:
+        raise HTTPException(status_code=400, detail="Handover date is required")
+
+    otp = f"{secrets.randbelow(1000000):06d}"
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=15)
+
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "handover": {
+                "status": "otp_requested",
+                "requested_date": payload.handover_date,
+                "otp_hash": hash_password(otp),
+                "otp_expires_at": expires_at.isoformat(),
+                "requested_by": user.user_id,
+                "requested_by_name": user.name,
+                "requested_at": now.isoformat(),
+            },
+        }},
+    )
+
+    super_admins = await db.users.find({"role": "super_admin"}, {"_id": 0, "email": 1}).to_list(20)
+    for admin in super_admins:
+        if admin.get("email"):
+            await send_email_notification(
+                admin["email"],
+                f"Handover approval needed: {project.get('name')}",
+                (
+                    f"<p><b>{user.name}</b> is requesting to hand over project <b>{project.get('name')}</b> "
+                    f"on {payload.handover_date}.</p>"
+                    f"<p>Approval OTP: <b style=\"font-size:20px\">{otp}</b> (expires in 15 minutes)</p>"
+                ),
+            )
+
+    updated = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    return updated
+
+
+@projects_router.post("/{project_id}/handover/verify-otp")
+async def verify_handover_otp(project_id: str, payload: HandoverVerifyOtp, request: Request):
+    from server import get_current_user, verify_password, db
+    user = await get_current_user(request)
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can confirm a handover")
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "handover": 1})
+    handover = (project or {}).get("handover") or {}
+    if handover.get("status") != "otp_requested":
+        raise HTTPException(status_code=400, detail="No pending handover OTP request")
+    expires_at = handover.get("otp_expires_at")
+    if not expires_at or datetime.now(timezone.utc) > datetime.fromisoformat(expires_at):
+        raise HTTPException(status_code=400, detail="OTP has expired — request a new one")
+    if not verify_password(payload.otp.strip(), handover.get("otp_hash") or ""):
+        raise HTTPException(status_code=401, detail="Incorrect OTP")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "status": "Hand Over",
+            "handover": {
+                "status": "completed",
+                "handover_date": handover.get("requested_date"),
+                "remarks": (payload.remarks or "").strip(),
+                "requested_by": handover.get("requested_by"),
+                "requested_by_name": handover.get("requested_by_name"),
+                "completed_by": user.user_id,
+                "completed_by_name": user.name,
+                "completed_at": now,
+            },
+        }},
+    )
+    updated = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    return updated

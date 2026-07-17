@@ -259,6 +259,24 @@ async def startup_tasks():
     except Exception as _e:
         logging.warning(f"[startup] ERP category backfill skipped: {_e}")
 
+    # "Hand Over" project status — last option, every department (the OTP
+    # -gated handover flow sets this directly, but it should also show up
+    # as a normal filterable status pill).
+    try:
+        dept_keys = ["website", "social_media", "meta", "seo", "finance", "hr", "business_dev", "erp"]
+        for dept_key in dept_keys:
+            dept_doc = await db.department_categories.find_one({"dept_key": dept_key}, {"_id": 0, "statuses": 1})
+            statuses = (dept_doc or {}).get("statuses") or []
+            if statuses and not any((s or "").strip().lower() == "hand over" for s in statuses):
+                await db.department_categories.update_one(
+                    {"dept_key": dept_key},
+                    {"$set": {"statuses": statuses + ["Hand Over"]}},
+                    upsert=True,
+                )
+                logging.info(f"[startup] Added 'Hand Over' status to {dept_key}")
+    except Exception as _e:
+        logging.warning(f"[startup] Hand Over status backfill skipped: {_e}")
+
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
 async def health_check():
