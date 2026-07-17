@@ -21,4 +21,12 @@ jobs:
             cd /opt/drawlead
             git fetch origin main
             git reset --hard origin/main
+            if [ -n "${{ secrets.RESEND_API_KEY }}" ]; then
+              if grep -q '^RESEND_API_KEY=' backend/.env 2>/dev/null; then
+                sed -i "s|^RESEND_API_KEY=.*|RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}|" backend/.env
+              else
+                echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> backend/.env
+              fi
+              pm2 restart drawlead-backend --update-env || true
+            fi
             /root/deploy-drawlead.sh
