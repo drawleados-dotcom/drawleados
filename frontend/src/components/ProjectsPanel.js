@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound, Link2 } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound, Link2, History } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
@@ -9,6 +9,7 @@ import ClientPortalModal from './projects/ClientPortalModal';
 import ProjectErpOthersTab from './projects/ProjectErpOthersTab';
 import ProjectSeoScopeTab from './projects/ProjectSeoScopeTab';
 import ProjectBacklinksTab from './projects/ProjectBacklinksTab';
+import ProjectDeliveryHistoryTab from './projects/ProjectDeliveryHistoryTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
@@ -57,6 +58,9 @@ export default function ProjectsPanel({
   const [showClientPortalModal, setShowClientPortalModal] = useState(false);
   const [editingWeblink, setEditingWeblink] = useState(false);
   const [weblinkDraft, setWeblinkDraft] = useState('');
+  const [showResetDeliveryModal, setShowResetDeliveryModal] = useState(false);
+  const [resetDeliveryDraft, setResetDeliveryDraft] = useState({ new_due_date: '', reason: '' });
+  const [savingResetDelivery, setSavingResetDelivery] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
@@ -319,6 +323,51 @@ export default function ProjectsPanel({
     setEditingWeblink(false);
     setWeblinkDraft('');
   }, [selectedProject?.project_id]);
+
+  const isOverdue = (dueIso) => {
+    if (!dueIso) return false;
+    const due = new Date(dueIso);
+    due.setHours(23, 59, 59, 999);
+    return due < new Date();
+  };
+
+  const openResetDeliveryModal = () => {
+    setResetDeliveryDraft({ new_due_date: '', reason: '' });
+    setShowResetDeliveryModal(true);
+  };
+
+  // Sets a fresh due_date and appends a row to delivery_date_history —
+  // recorded date, the CURRENT logged-in user (never manually chosen,
+  // regardless of their role), the new delivery date, and the reason.
+  const submitResetDeliveryDate = async () => {
+    if (!resetDeliveryDraft.new_due_date) { toast.error('Please pick a new delivery date'); return; }
+    if (!resetDeliveryDraft.reason.trim()) { toast.error('Please enter a reason'); return; }
+    setSavingResetDelivery(true);
+    try {
+      const historyEntry = {
+        id: `ddh_${Math.random().toString(36).slice(2, 10)}`,
+        recorded_at: new Date().toISOString(),
+        set_by: currentUser?.user_id || null,
+        set_by_name: currentUser?.name || 'Unknown',
+        new_due_date: resetDeliveryDraft.new_due_date,
+        reason: resetDeliveryDraft.reason.trim(),
+      };
+      const nextHistory = [...(selectedProject.delivery_date_history || []), historyEntry];
+      const res = await axios.patch(
+        `${API}/api/projects/${selectedProject.project_id}`,
+        { due_date: resetDeliveryDraft.new_due_date, delivery_date_history: nextHistory },
+        { headers },
+      );
+      setSelectedProject(res.data);
+      loadProjects();
+      toast.success('Delivery date reset');
+      setShowResetDeliveryModal(false);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to reset delivery date');
+    } finally {
+      setSavingResetDelivery(false);
+    }
+  };
 
   // Like updateProjectField, but for a row in the list view (not necessarily
   // the currently open project detail).
@@ -740,6 +789,17 @@ export default function ProjectsPanel({
                 ) : (
                   <span className={textPrimary}>{fmtDate(selectedProject.due_date)}</span>
                 )}
+                {canManageProjects && isOverdue(selectedProject.due_date) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={openResetDeliveryModal}
+                    className="h-7 px-2 border-amber-500/40 text-amber-500 hover:bg-amber-500/10"
+                    data-testid="project-reset-delivery-btn"
+                  >
+                    Reset Delivery Date
+                  </Button>
+                )}
               </div>
               <div className="flex items-center gap-2"><ListChecks className={`h-4 w-4 ${textSecondary}`} /><span className={textPrimary}>{selectedProject.tasks?.length || 0} tasks</span></div>
               {canManageProjects ? (
@@ -972,6 +1032,8 @@ export default function ProjectsPanel({
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
             ...(isMetaAdsProject ? [{ id: 'additional', label: 'Additional', icon: Layers }] : []),
+            // Delivery Date History — universal, every project regardless of department.
+            { id: 'delivery_history', label: 'Delivery History', icon: History },
           ];
           // If user was on Payment but it's now hidden, switch them to Tasks
           if (!showPaymentSchedule && projectInnerTab === 'payment') {
@@ -1198,6 +1260,18 @@ export default function ProjectsPanel({
           <div className={`${bgCard} border ${borderColor} rounded-2xl p-12 text-center`} data-testid="additional-tab">
             <p className={textSecondary}>Nothing here yet.</p>
           </div>
+        )}
+
+        {projectInnerTab === 'delivery_history' && (
+          <ProjectDeliveryHistoryTab
+            project={selectedProject}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
         )}
 
         {projectInnerTab === 'tasks' && (
@@ -1927,6 +2001,65 @@ export default function ProjectsPanel({
             textSecondary={textSecondary}
             borderColor={borderColor}
           />
+        )}
+
+        {/* Reset Delivery Date — shows once the due date has passed. User is
+            always the current logged-in person, never manually chosen. */}
+        {showResetDeliveryModal && selectedProject && (
+          <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4"
+            onClick={() => !savingResetDelivery && setShowResetDeliveryModal(false)}
+          >
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>Reset Delivery Date</h3>
+                  <button onClick={() => !savingResetDelivery && setShowResetDeliveryModal(false)} className={textSecondary}>
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className={`text-sm ${textSecondary}`}>
+                  Current delivery date <span className={`font-medium ${textPrimary}`}>{fmtDate(selectedProject.due_date)}</span> has passed.
+                </p>
+                <div>
+                  <Label className={textPrimary}>New Delivery Date</Label>
+                  <input
+                    type="date"
+                    value={resetDeliveryDraft.new_due_date}
+                    onChange={(e) => setResetDeliveryDraft(d => ({ ...d, new_due_date: e.target.value }))}
+                    className={`w-full px-2 py-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="reset-delivery-new-date"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Set By</Label>
+                  <p className={`text-sm ${textPrimary} px-2 py-2 rounded border ${borderColor} ${bgSecondary}`}>{currentUser?.name || 'You'}</p>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Reason</Label>
+                  <textarea
+                    value={resetDeliveryDraft.reason}
+                    onChange={(e) => setResetDeliveryDraft(d => ({ ...d, reason: e.target.value }))}
+                    rows={3}
+                    placeholder="Why is the delivery date changing?"
+                    className={`w-full px-2 py-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    data-testid="reset-delivery-reason"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setShowResetDeliveryModal(false)} disabled={savingResetDelivery}>Cancel</Button>
+                  <Button
+                    onClick={submitResetDeliveryDate}
+                    disabled={savingResetDelivery}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    data-testid="reset-delivery-submit"
+                  >
+                    {savingResetDelivery ? 'Saving…' : 'Record & Update'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Delete Project — Super Admin only, re-enter password to confirm */}

@@ -49,6 +49,7 @@ class ProjectUpdate(BaseModel):
     backlinks: Optional[List[dict]] = None
     backlink_weekly_targets: Optional[List[dict]] = None
     website_link: Optional[str] = None
+    delivery_date_history: Optional[List[dict]] = None
 
 
 class DeleteProjectRequest(BaseModel):
