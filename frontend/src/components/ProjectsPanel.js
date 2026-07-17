@@ -780,6 +780,36 @@ export default function ProjectsPanel({
               )}
             </div>
 
+            {/* Weblink — Website-department projects only */}
+            {(selectedProject.departments || []).includes('website') && (
+              <div className="flex items-center gap-2 flex-wrap pt-1" data-testid="project-weblink-row">
+                <Globe className={`h-4 w-4 ${textSecondary}`} />
+                <span className={`text-sm ${textSecondary}`}>Weblink:</span>
+                {canManageProjects ? (
+                  <input
+                    key={selectedProject.project_id}
+                    type="url"
+                    defaultValue={selectedProject.website_link || ''}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim();
+                      if (next !== (selectedProject.website_link || '')) {
+                        updateProjectField('website_link', next);
+                      }
+                    }}
+                    placeholder="https://example.com"
+                    className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm flex-1 min-w-[220px]`}
+                    data-testid="project-edit-website-link"
+                  />
+                ) : selectedProject.website_link ? (
+                  <a href={selectedProject.website_link} target="_blank" rel="noopener noreferrer" className="text-sm text-[#6366f1] hover:underline">
+                    {selectedProject.website_link}
+                  </a>
+                ) : (
+                  <span className={`text-sm ${textSecondary}`}>—</span>
+                )}
+              </div>
+            )}
+
             {/* Departments — chips with inline edit */}
             <div className="flex items-start gap-2 flex-wrap pt-1" data-testid="project-departments-row">
               <span className={`text-sm ${textSecondary} pt-0.5`}>Departments:</span>
@@ -1938,6 +1968,7 @@ export default function ProjectsPanel({
                   <th className="text-left px-4 py-3">Start Date</th>
                   <th className="text-left px-4 py-3">Due Date</th>
                   <th className="text-left px-4 py-3">Due Balance</th>
+                  {deptFilter === 'website' && <th className="text-left px-4 py-3">Weblink</th>}
                   <th className="text-left px-4 py-3">Tasks</th>
                   <th className="text-left px-4 py-3">Members</th>
                 </tr>
@@ -2040,6 +2071,23 @@ export default function ProjectsPanel({
                         );
                       })()}
                     </td>
+                    {deptFilter === 'website' && (
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        {p.website_link ? (
+                          <a
+                            href={p.website_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-[#6366f1] hover:underline"
+                            data-testid={`project-row-weblink-${p.project_id}`}
+                          >
+                            Visit
+                          </a>
+                        ) : (
+                          <span className={`text-xs ${textSecondary}`}>—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="px-4 py-3">
                       <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
                         <ListChecks className="h-3 w-3" />{p.task_count || 0}

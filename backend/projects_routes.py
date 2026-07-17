@@ -48,6 +48,7 @@ class ProjectUpdate(BaseModel):
     campaigns: Optional[List[dict]] = None
     backlinks: Optional[List[dict]] = None
     backlink_weekly_targets: Optional[List[dict]] = None
+    website_link: Optional[str] = None
 
 
 class DeleteProjectRequest(BaseModel):
