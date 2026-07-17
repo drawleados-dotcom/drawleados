@@ -891,7 +891,11 @@ async def request_handover_otp(project_id: str, payload: HandoverRequestOtp, req
             f"Project Handover Email: {project.get('name')}",
             email_html,
         )
-        notify_results.append({"email": email, "status": (result or {}).get("status")})
+        notify_results.append({
+            "email": email,
+            "status": (result or {}).get("status"),
+            "message": (result or {}).get("message"),
+        })
         if (result or {}).get("status") != "success":
             import logging
             logging.getLogger(__name__).warning(f"[handover] OTP email to {email} did not confirm success: {result}")

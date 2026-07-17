@@ -420,9 +420,10 @@ export default function ProjectsPanel({
       if (results.length === 0) {
         toast.success('Handover requested');
       } else if (failed.length === results.length) {
-        toast.error(`Email did not send (${failed[0]?.status || 'unknown'}). Check email configuration.`);
+        const reason = failed[0]?.message || failed[0]?.status || 'unknown reason';
+        toast.error(`Email did not send: ${reason}`, { duration: 10000 });
       } else if (failed.length > 0) {
-        toast.warning(`OTP sent, but failed for: ${failed.map(f => f.email).join(', ')}`);
+        toast.warning(`OTP sent, but failed for ${failed.map(f => f.email).join(', ')}: ${failed[0]?.message || failed[0]?.status}`, { duration: 10000 });
       } else {
         toast.success(`OTP sent to: ${results.map(r => r.email).join(', ')}`);
       }
