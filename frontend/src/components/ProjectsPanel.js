@@ -55,6 +55,8 @@ export default function ProjectsPanel({
   const [selectedProject, setSelectedProject] = useState(null); // project being viewed
   const [projectDetailCollapsed, setProjectDetailCollapsed] = useState(false);
   const [showClientPortalModal, setShowClientPortalModal] = useState(false);
+  const [editingWeblink, setEditingWeblink] = useState(false);
+  const [weblinkDraft, setWeblinkDraft] = useState('');
   const [showAddTask, setShowAddTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
@@ -302,6 +304,21 @@ export default function ProjectsPanel({
       toast.error(e.response?.data?.detail || 'Failed to update project');
     }
   };
+
+  // A bare domain (e.g. "www.drawlead.com") in an <a href> resolves as a
+  // RELATIVE path against the current origin instead of navigating out —
+  // always force a protocol so the link actually leaves the app.
+  const normalizeUrl = (url) => {
+    const trimmed = (url || '').trim();
+    if (!trimmed) return '';
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  };
+
+  // Reset the Weblink edit state whenever a different project is opened.
+  useEffect(() => {
+    setEditingWeblink(false);
+    setWeblinkDraft('');
+  }, [selectedProject?.project_id]);
 
   // Like updateProjectField, but for a row in the list view (not necessarily
   // the currently open project detail).
@@ -780,32 +797,65 @@ export default function ProjectsPanel({
               )}
             </div>
 
-            {/* Weblink — Website-department projects only */}
+            {/* Weblink — Website-department projects only. Read-only by
+                default; Edit reveals the input + Save/Cancel, so the domain
+                only changes on an explicit action. */}
             {(selectedProject.departments || []).includes('website') && (
               <div className="flex items-center gap-2 flex-wrap pt-1" data-testid="project-weblink-row">
                 <Globe className={`h-4 w-4 ${textSecondary}`} />
                 <span className={`text-sm ${textSecondary}`}>Weblink:</span>
-                {canManageProjects ? (
-                  <input
-                    key={selectedProject.project_id}
-                    type="url"
-                    defaultValue={selectedProject.website_link || ''}
-                    onBlur={(e) => {
-                      const next = e.target.value.trim();
-                      if (next !== (selectedProject.website_link || '')) {
-                        updateProjectField('website_link', next);
-                      }
-                    }}
-                    placeholder="https://example.com"
-                    className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm flex-1 min-w-[220px]`}
-                    data-testid="project-edit-website-link"
-                  />
-                ) : selectedProject.website_link ? (
-                  <a href={selectedProject.website_link} target="_blank" rel="noopener noreferrer" className="text-sm text-[#6366f1] hover:underline">
-                    {selectedProject.website_link}
-                  </a>
+                {editingWeblink ? (
+                  <>
+                    <input
+                      type="text"
+                      value={weblinkDraft}
+                      onChange={(e) => setWeblinkDraft(e.target.value)}
+                      placeholder="https://example.com"
+                      autoFocus
+                      className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm flex-1 min-w-[220px]`}
+                      data-testid="project-edit-website-link"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        await updateProjectField('website_link', normalizeUrl(weblinkDraft));
+                        setEditingWeblink(false);
+                      }}
+                      className="h-7 px-2 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                      data-testid="project-weblink-save"
+                    >
+                      Save
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditingWeblink(false)} className="h-7 px-2">
+                      Cancel
+                    </Button>
+                  </>
                 ) : (
-                  <span className={`text-sm ${textSecondary}`}>—</span>
+                  <>
+                    {selectedProject.website_link ? (
+                      <a
+                        href={normalizeUrl(selectedProject.website_link)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-[#6366f1] hover:underline"
+                      >
+                        {selectedProject.website_link}
+                      </a>
+                    ) : (
+                      <span className={`text-sm ${textSecondary}`}>—</span>
+                    )}
+                    {canManageProjects && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setWeblinkDraft(selectedProject.website_link || ''); setEditingWeblink(true); }}
+                        className="h-7 px-2"
+                        data-testid="project-weblink-edit-btn"
+                      >
+                        <Pencil className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -2075,7 +2125,7 @@ export default function ProjectsPanel({
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {p.website_link ? (
                           <a
-                            href={p.website_link}
+                            href={normalizeUrl(p.website_link)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs text-[#6366f1] hover:underline"
