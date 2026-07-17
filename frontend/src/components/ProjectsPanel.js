@@ -876,14 +876,16 @@ export default function ProjectsPanel({
           // Scope tab only renders for SEO-department projects
           const isSeoProject = (selectedProject?.departments || []).includes('seo');
           const innerTabs = [
+            // ERP / Website: department-specific tabs lead, ahead of the
+            // generic Tasks/Payment Schedule/Expense tabs.
+            ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
+            ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
+            ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
+            ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
             ...(isSocialMediaProject ? [{ id: 'content_calendar', label: 'Content Calendar', icon: Calendar }] : []),
-            ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
-            ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
-            ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
-            ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
             ...(isSeoProject ? [{ id: 'seo_scope', label: 'Scope', icon: Target }] : []),
             ...(isSeoProject ? [{ id: 'backlinks', label: 'Backlinks', icon: Link2 }] : []),
             ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
