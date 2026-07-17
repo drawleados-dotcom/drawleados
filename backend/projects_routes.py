@@ -807,6 +807,22 @@ class HandoverVerifyOtp(BaseModel):
     remarks: Optional[str] = ""
 
 
+def _fmt_handover_date(value) -> str:
+    if not value:
+        return "—"
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).strftime("%d %b %Y")
+    except Exception:
+        return str(value)[:10]
+
+
+# The canonical Super Admin mailbox — always notified regardless of what the
+# `role` field on any given user doc says, since a handover approval email
+# silently missing this inbox (e.g. a second "super_admin"-role account, or a
+# role typo) is exactly the failure this feature exists to prevent.
+CANONICAL_SUPER_ADMIN_EMAIL = "vinoth@drawlead.com"
+
+
 @projects_router.post("/{project_id}/handover/request-otp")
 async def request_handover_otp(project_id: str, payload: HandoverRequestOtp, request: Request):
     from server import get_current_user, hash_password, db
@@ -814,7 +830,7 @@ async def request_handover_otp(project_id: str, payload: HandoverRequestOtp, req
     user = await get_current_user(request)
     if not await _is_operation_head_or_admin(user, db):
         raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can request a handover")
-    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1})
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if not payload.handover_date:
@@ -839,20 +855,49 @@ async def request_handover_otp(project_id: str, payload: HandoverRequestOtp, req
         }},
     )
 
-    super_admins = await db.users.find({"role": "super_admin"}, {"_id": 0, "email": 1}).to_list(20)
-    for admin in super_admins:
-        if admin.get("email"):
-            await send_email_notification(
-                admin["email"],
-                f"Handover approval needed: {project.get('name')}",
-                (
-                    f"<p><b>{user.name}</b> is requesting to hand over project <b>{project.get('name')}</b> "
-                    f"on {payload.handover_date}.</p>"
-                    f"<p>Approval OTP: <b style=\"font-size:20px\">{otp}</b> (expires in 15 minutes)</p>"
-                ),
-            )
+    tasks = await db.our_tasks.find({"project_id": project_id}, {"_id": 0, "time_tracking": 1}).to_list(2000)
+    total_seconds = sum(int((t.get("time_tracking") or {}).get("total_seconds") or 0) for t in tasks)
+    hours_label = f"{total_seconds // 3600}h {(total_seconds % 3600) // 60}m"
+    departments_label = ", ".join(project.get("departments") or []) or "—"
+
+    email_html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #6366f1;">Project Handover Approval Needed</h2>
+        <p><b>{user.name}</b> is requesting to hand over the project below on <b>{payload.handover_date}</b>.</p>
+        <table style="width:100%; border-collapse: collapse; margin: 16px 0;">
+            <tr><td style="padding:6px 0; color:#71717a;">Project Name</td><td style="padding:6px 0;"><b>{project.get('name', '—')}</b></td></tr>
+            <tr><td style="padding:6px 0; color:#71717a;">Client Name</td><td style="padding:6px 0;">{project.get('client_name') or '—'}</td></tr>
+            <tr><td style="padding:6px 0; color:#71717a;">Departments</td><td style="padding:6px 0;">{departments_label}</td></tr>
+            <tr><td style="padding:6px 0; color:#71717a;">Status</td><td style="padding:6px 0;">{project.get('status') or 'active'}</td></tr>
+            <tr><td style="padding:6px 0; color:#71717a;">Start Date</td><td style="padding:6px 0;">{_fmt_handover_date(project.get('start_date'))}</td></tr>
+            <tr><td style="padding:6px 0; color:#71717a;">Due / Deadline</td><td style="padding:6px 0;">{_fmt_handover_date(project.get('due_date'))}</td></tr>
+            <tr><td style="padding:6px 0; color:#71717a;">Hours Spent</td><td style="padding:6px 0;">{hours_label}</td></tr>
+            <tr><td style="padding:6px 0; color:#71717a;">Requested By</td><td style="padding:6px 0;">{user.name}</td></tr>
+        </table>
+        <p style="margin: 20px 0;">Share this OTP with the requesting operator to approve the handover:</p>
+        <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #6366f1;">{otp}</p>
+        <p style="color:#71717a; font-size: 12px;">This OTP expires in 15 minutes. If you did not expect this request, do not share it.</p>
+    </div>
+    """
+
+    super_admins = await db.users.find({"role": "super_admin"}, {"_id": 0, "email": 1}).to_list(50)
+    recipient_emails = {(a.get("email") or "").strip() for a in super_admins if a.get("email")}
+    recipient_emails.add(CANONICAL_SUPER_ADMIN_EMAIL)
+
+    notify_results = []
+    for email in recipient_emails:
+        result = await send_email_notification(
+            email,
+            f"Project Handover Email: {project.get('name')}",
+            email_html,
+        )
+        notify_results.append({"email": email, "status": (result or {}).get("status")})
+        if (result or {}).get("status") != "success":
+            import logging
+            logging.getLogger(__name__).warning(f"[handover] OTP email to {email} did not confirm success: {result}")
 
     updated = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    updated["handover_notify_results"] = notify_results
     return updated
 
 

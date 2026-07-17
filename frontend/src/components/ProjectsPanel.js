@@ -412,7 +412,20 @@ export default function ProjectsPanel({
       );
       setSelectedProject(res.data);
       loadProjects();
-      toast.success('OTP sent to Super Admin');
+      // Backend reports the actual send result per recipient — surface it
+      // rather than assuming success, since a "mocked"/"error" result means
+      // the OTP never actually reached anyone's inbox.
+      const results = res.data.handover_notify_results || [];
+      const failed = results.filter(r => r.status !== 'success');
+      if (results.length === 0) {
+        toast.success('Handover requested');
+      } else if (failed.length === results.length) {
+        toast.error(`Email did not send (${failed[0]?.status || 'unknown'}). Check email configuration.`);
+      } else if (failed.length > 0) {
+        toast.warning(`OTP sent, but failed for: ${failed.map(f => f.email).join(', ')}`);
+      } else {
+        toast.success(`OTP sent to: ${results.map(r => r.email).join(', ')}`);
+      }
       setShowHandoverRequestModal(false);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to request OTP');
