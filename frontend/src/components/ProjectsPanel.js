@@ -622,15 +622,6 @@ export default function ProjectsPanel({
 
   const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
 
-  // Scopes tab "Add Task" — defaults Department to this project's Meta Ads
-  // department (Project itself is implicit: we're already inside it).
-  const openAddTaskForScopes = () => {
-    const defaultCategory = deptCategories.find(d => d.dept_key === 'meta')?.categories?.[0] || '';
-    setEditingTaskId(null);
-    setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: 'meta', category: defaultCategory, erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' });
-    setShowAddTask(true);
-  };
-
   // SEO Scope tab "Add Task" — defaults Department to SEO and Category to
   // whichever sub-tab (Research / On Page SEO / Off Page SEO) is active.
   const openAddTaskForSeoScope = (category) => {
@@ -1339,12 +1330,13 @@ export default function ProjectsPanel({
 
         {projectInnerTab === 'scopes' && (
           <ProjectScopesTab
+            project={selectedProject}
             tasks={selectedProject.tasks || []}
             users={users}
             canManageProjects={canManageProjects}
-            onAddTask={openAddTaskForScopes}
             onEditTask={handleEditTask}
             onDeleteTask={handleDeleteTask}
+            onTasksChanged={() => { refreshSelectedProject(); loadProjects(); }}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
