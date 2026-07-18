@@ -211,6 +211,25 @@ async def startup_tasks():
     except Exception as _e:
         logging.warning(f"[startup] Meta Ads category reorder skipped: {_e}")
 
+    # Meta Ads categories: add "Creatives" and "Payment Billing" (used by the
+    # Scopes tab's pill bar + bespoke Add Task flow), inserted ahead of
+    # "Report" so the reorder-to-last invariant above still holds.
+    try:
+        meta_doc = await db.department_categories.find_one({"dept_key": "meta"}, {"_id": 0, "categories": 1})
+        cats = (meta_doc or {}).get("categories") or []
+        missing = [c for c in ["Creatives", "Payment Billing"] if not any((x or "").strip().lower() == c.lower() for x in cats)]
+        if missing:
+            report_cats = [c for c in cats if (c or "").strip().lower() == "report"]
+            other_cats = [c for c in cats if (c or "").strip().lower() != "report"]
+            await db.department_categories.update_one(
+                {"dept_key": "meta"},
+                {"$set": {"categories": other_cats + missing + report_cats}},
+                upsert=True,
+            )
+            logging.info(f"[startup] Added {missing} to Meta Ads categories")
+    except Exception as _e:
+        logging.warning(f"[startup] Meta Ads Creatives/Payment Billing backfill skipped: {_e}")
+
     # SEO categories: add "Off Page SEO" alongside the existing list (used
     # by the new Scope tab's Research / On Page SEO / Off Page SEO filter).
     try:
