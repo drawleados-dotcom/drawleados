@@ -24,7 +24,9 @@ const emptyTaskForm = (defaultType) => ({
   task_type: defaultType,
   creative_format: 'static',
   content_assignee: '',
+  content_due_date: '',
   designer_assignee: '',
+  designer_due_date: '',
   video_editor_assignee: '',
   assignee: '',
   report_frequency: 'daily',
@@ -103,16 +105,17 @@ export default function ProjectScopesTab({
       if (taskForm.task_type === 'Creatives') {
         if (taskForm.creative_format === 'static') {
           if (!taskForm.content_assignee) { toast.error('Please choose a Content assignee'); return; }
+          if (!taskForm.content_due_date) { toast.error('Please choose a Content deadline'); return; }
           if (!taskForm.designer_assignee) { toast.error('Please choose a Designer assignee'); return; }
-          if (!taskForm.due_date) { toast.error('Please choose a deadline'); return; }
+          if (!taskForm.designer_due_date) { toast.error('Please choose a Designer deadline'); return; }
           await createOneTask({
             task_name: `${baseName} (Content)`, description: 'Creative type: Static',
-            assigned_to: taskForm.content_assignee, due_date: taskForm.due_date,
+            assigned_to: taskForm.content_assignee, due_date: taskForm.content_due_date,
             department: 'meta', category: 'Creatives',
           });
           await createOneTask({
             task_name: `${baseName} (Design)`, description: 'Creative type: Static',
-            assigned_to: taskForm.designer_assignee, due_date: taskForm.due_date,
+            assigned_to: taskForm.designer_assignee, due_date: taskForm.designer_due_date,
             department: 'meta', category: 'Creatives',
           });
           toast.success('2 tasks created — appear in each assignee\'s My Tasks');
@@ -361,6 +364,24 @@ export default function ProjectScopesTab({
                           {(users || []).map(u => <option key={u.user_id} value={u.user_id}>{u.name}</option>)}
                         </select>
                       </div>
+                      <div>
+                        <Label className={textPrimary}>Content Deadline *</Label>
+                        <Input
+                          type="date"
+                          value={taskForm.content_due_date}
+                          onChange={(e) => setTaskForm(f => ({ ...f, content_due_date: e.target.value }))}
+                          data-testid="scopes-task-form-content-due-date"
+                        />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Designer Deadline *</Label>
+                        <Input
+                          type="date"
+                          value={taskForm.designer_due_date}
+                          onChange={(e) => setTaskForm(f => ({ ...f, designer_due_date: e.target.value }))}
+                          data-testid="scopes-task-form-designer-due-date"
+                        />
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -434,7 +455,7 @@ export default function ProjectScopesTab({
                 </div>
               )}
 
-              {taskForm.task_type !== 'Report' && (
+              {taskForm.task_type !== 'Report' && !(taskForm.task_type === 'Creatives' && taskForm.creative_format === 'static') && (
                 <div>
                   <Label className={textPrimary}>Deadline *</Label>
                   <Input
