@@ -28,6 +28,7 @@ import {
   Search,
   Calendar,
   Briefcase,
+  Building2,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -461,6 +462,30 @@ const Sidebar = () => {
           <UserCircle className="h-5 w-5" strokeWidth={2} />
           {!isCollapsed && 'My Profile'}
         </Link>
+
+        {/* Clients Master View / Service and Packages — Super Admin-only additions */}
+        {userRole === 'super_admin' && (
+          <>
+            <Link
+              to="/client-master"
+              data-testid="nav-client-master"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/client-master' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Clients Master View' : ''}
+            >
+              <Building2 className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Clients Master View'}
+            </Link>
+            <Link
+              to="/service-packages"
+              data-testid="nav-service-packages"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/service-packages' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'Service and Packages' : ''}
+            >
+              <Package className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'Service and Packages'}
+            </Link>
+          </>
+        )}
 
         {/* 6. Settings */}
         {hasAccess('settings') && (
