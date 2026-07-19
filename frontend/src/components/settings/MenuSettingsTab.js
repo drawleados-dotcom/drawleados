@@ -23,6 +23,8 @@ const DEFAULT_MODULES = [
   { key: 'documentations', label: 'Docs' },
   { key: 'sales',          label: 'Sales' },
   { key: 'meta_ads',       label: 'Meta Ads' },
+  { key: 'client_master',  label: 'Clients Master View' },
+  { key: 'service_packages', label: 'Service and Packages' },
   { key: 'settings',       label: 'Settings' },
 ];
 

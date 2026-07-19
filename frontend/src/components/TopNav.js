@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import {
   LayoutDashboard, Users, User, Settings as SettingsIcon, Package, DollarSign,
   UserCircle, Shield, MessageSquare, Megaphone, ClipboardList, ClipboardCheck,
-  Globe, FolderOpen, Calendar, Briefcase, FileSpreadsheet, Search,
+  Globe, FolderOpen, Calendar, Briefcase, FileSpreadsheet, Search, Building2,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -26,6 +26,9 @@ export default function TopNav() {
     // Dashboard is Super Admin/Admin's landing tab — always visible to
     // them, regardless of a designation's configured module_access list.
     if (module === 'dashboard' && (userRole === 'super_admin' || userRole === 'admin')) return true;
+    // Client Master / Service & Packages — Super Admin-only additions, always
+    // visible regardless of a curated module_access list.
+    if ((module === 'client_master' || module === 'service_packages') && userRole === 'super_admin') return true;
     if (Array.isArray(moduleAccess) && moduleAccess.length > 0) {
       const aliasMap = {
         operations: ['operations', 'our_tasks'],
@@ -54,6 +57,8 @@ export default function TopNav() {
     { key: 'documentations', path: '/documentations', label: 'Docs',            icon: FolderOpen },
     { key: 'sales',         path: '/sales',           label: 'Sales',           icon: Briefcase },
     { key: 'meta_ads',      path: '/meta-ads',        label: 'Meta Ads',        icon: FileSpreadsheet },
+    { key: 'client_master', path: '/client-master',   label: 'Clients Master View', icon: Building2 },
+    { key: 'service_packages', path: '/service-packages', label: 'Service and Packages', icon: Package },
     { key: 'settings',      path: '/settings',        label: 'Settings',        icon: SettingsIcon },
     { key: 'my_profile',    path: '/hr',              label: 'My Profile',      icon: UserCircle },
   ];

@@ -53,6 +53,7 @@ from sheets_routes import sheets_router
 from org_tree_routes import org_tree_router, init_org_tree_db
 from db_admin_routes import db_admin_router, init_db_admin
 from clients_routes import clients_router, init_clients_db
+from client_master_routes import client_master_router
 from menu_order_routes import menu_order_router, init_menu_order_db
 from banks_routes import banks_router, init_banks_db
 from expense_split_routes import expense_split_router
@@ -353,8 +354,13 @@ class Service(BaseModel):
 
 class ServiceCreate(BaseModel):
     name: str
-    category: str
-    billing_type: str
+    category: Optional[str] = ""
+    billing_type: str  # "one-time" | "recurring"
+    amount: Optional[float] = 0
+
+
+class ServicePackageCreate(BaseModel):
+    name: str
     amount: float
 
 class LeadSource(BaseModel):
@@ -1948,20 +1954,27 @@ async def get_available_roles(current_user: User = Depends(get_current_user)):
 
 # ============== SERVICE ROUTES ==============
 
+def _require_super_admin_or_admin(user: User):
+    if user.role not in ("super_admin", "admin"):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin can manage the service catalog")
+
+
 @api_router.post("/services")
 async def create_service(service_data: ServiceCreate, user: User = Depends(get_current_user)):
+    _require_super_admin_or_admin(user)
     service_id = f"service_{uuid.uuid4().hex[:12]}"
     service_doc = {
         "service_id": service_id,
         "name": service_data.name,
-        "category": service_data.category,
+        "category": service_data.category or "",
         "billing_type": service_data.billing_type,
-        "amount": service_data.amount,
+        "amount": service_data.amount or 0,
+        "packages": [],
         "is_active": True,
         "created_at": datetime.now(timezone.utc),
         "created_by": user.user_id
     }
-    
+
     await db.services.insert_one(service_doc)
     result = await db.services.find_one({"service_id": service_id}, {"_id": 0})
     return result
@@ -1969,10 +1982,13 @@ async def create_service(service_data: ServiceCreate, user: User = Depends(get_c
 @api_router.get("/services")
 async def get_services(user: User = Depends(get_current_user)):
     services = await db.services.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(1000)
+    for s in services:
+        s.setdefault("packages", [])
     return services
 
 @api_router.put("/services/{service_id}")
 async def update_service(service_id: str, service_data: ServiceCreate, user: User = Depends(get_current_user)):
+    _require_super_admin_or_admin(user)
     await db.services.update_one(
         {"service_id": service_id},
         {"$set": service_data.model_dump()}
@@ -1982,11 +1998,57 @@ async def update_service(service_id: str, service_data: ServiceCreate, user: Use
 
 @api_router.delete("/services/{service_id}")
 async def delete_service(service_id: str, user: User = Depends(get_current_user)):
+    _require_super_admin_or_admin(user)
     await db.services.update_one(
         {"service_id": service_id},
         {"$set": {"is_active": False}}
     )
     return {"message": "Service deleted"}
+
+
+# ---- Service Packages (nested under each service) ----
+
+@api_router.post("/services/{service_id}/packages")
+async def add_service_package(service_id: str, payload: ServicePackageCreate, user: User = Depends(get_current_user)):
+    _require_super_admin_or_admin(user)
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Package name is required")
+    service = await db.services.find_one({"service_id": service_id, "is_active": True})
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    package = {
+        "package_id": f"pkg_{uuid.uuid4().hex[:12]}",
+        "name": name,
+        "amount": payload.amount,
+    }
+    await db.services.update_one({"service_id": service_id}, {"$push": {"packages": package}})
+    return package
+
+@api_router.put("/services/{service_id}/packages/{package_id}")
+async def update_service_package(service_id: str, package_id: str, payload: ServicePackageCreate, user: User = Depends(get_current_user)):
+    _require_super_admin_or_admin(user)
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Package name is required")
+    res = await db.services.update_one(
+        {"service_id": service_id, "packages.package_id": package_id},
+        {"$set": {"packages.$.name": name, "packages.$.amount": payload.amount}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Package not found")
+    return {"package_id": package_id, "name": name, "amount": payload.amount}
+
+@api_router.delete("/services/{service_id}/packages/{package_id}")
+async def delete_service_package(service_id: str, package_id: str, user: User = Depends(get_current_user)):
+    _require_super_admin_or_admin(user)
+    res = await db.services.update_one(
+        {"service_id": service_id},
+        {"$pull": {"packages": {"package_id": package_id}}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return {"message": "Package removed"}
 
 # ============== SOURCE ROUTES ==============
 
@@ -2834,6 +2896,7 @@ async def seed_data():
 # Include finance and operations routers in api_router BEFORE including api_router in app
 api_router.include_router(finance_router)
 api_router.include_router(clients_router)
+api_router.include_router(client_master_router)
 api_router.include_router(menu_order_router)
 api_router.include_router(banks_router)
 api_router.include_router(expense_split_router)

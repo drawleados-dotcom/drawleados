@@ -22,6 +22,13 @@ function userHasModule(user, isAdmin, module) {
     const role = String(user?.role || '').toLowerCase();
     if (role === 'super_admin' || isAdmin) return true;
   }
+  // Client Master / Service & Packages are Super Admin-only additions —
+  // always visible to super_admin regardless of a curated module_access
+  // list (which predates these modules and never mentions them).
+  if (module === 'client_master' || module === 'service_packages') {
+    const role = String(user?.role || '').toLowerCase();
+    if (role === 'super_admin') return true;
+  }
   const moduleAccess = Array.isArray(user?.module_access) ? user.module_access : [];
 
   // Designation-driven module_access has HIGHEST priority for ALL roles

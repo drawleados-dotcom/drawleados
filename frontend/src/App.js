@@ -33,6 +33,8 @@ import OrgStructurePage from './pages/OrgStructurePage';
 import EmployeeAttendanceViewPage from './pages/EmployeeAttendanceViewPage';
 import ClientPortalLoginPage from './pages/ClientPortalLoginPage';
 import ClientPortalViewPage from './pages/ClientPortalViewPage';
+import ClientMasterPage from './pages/ClientMasterPage';
+import ServicePackagesPage from './pages/ServicePackagesPage';
 import './App.css';
 
 function AppRouter() {
@@ -96,6 +98,22 @@ function AppRouter() {
         element={
           <ProtectedRoute module="settings">
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client-master"
+        element={
+          <ProtectedRoute module="client_master">
+            <ClientMasterPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/service-packages"
+        element={
+          <ProtectedRoute module="service_packages">
+            <ServicePackagesPage />
           </ProtectedRoute>
         }
       />
