@@ -10,17 +10,10 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Checkbox } from '../components/ui/checkbox';
-import { Plus, Pencil, Trash2, Users, FileText, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, FileText, Search, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
-
-const STATUS_OPTIONS = [
-  { value: 'active', label: 'Active', cls: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30' },
-  { value: 'delivered', label: 'Delivered', cls: 'bg-blue-500/15 text-blue-500 border-blue-500/30' },
-  { value: 'dropped', label: 'Dropped', cls: 'bg-red-500/15 text-red-500 border-red-500/30' },
-  { value: 'not_satisfied', label: 'Not Satisfied', cls: 'bg-amber-500/15 text-amber-500 border-amber-500/30' },
-  { value: 'unfinished', label: 'Unfinished', cls: 'bg-slate-500/15 text-slate-400 border-slate-500/30' },
-];
-const STATUS_MAP = Object.fromEntries(STATUS_OPTIONS.map(s => [s.value, s]));
+import ClientAnalyticsTab from '../components/clientMaster/ClientAnalyticsTab';
+import { STATUS_OPTIONS, STATUS_MAP } from '../lib/clientStatus';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -47,6 +40,7 @@ export default function ClientMasterPage() {
   const [services, setServices] = useState([]);
   const [sources, setSources] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const [monthFilter, setMonthFilter] = useState(''); // "YYYY-MM"
   const [searchFilter, setSearchFilter] = useState('');
@@ -243,6 +237,36 @@ export default function ClientMasterPage() {
           </Button>
         </div>
 
+        {/* Tab bar */}
+        <div className={`inline-flex p-1 rounded-lg ${isDark ? 'bg-[#18181b]' : 'bg-gray-100'}`}>
+          <button
+            onClick={() => setActiveTab('overview')}
+            data-testid="client-master-tab-overview"
+            className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-all whitespace-nowrap ${
+              activeTab === 'overview'
+                ? 'bg-[#6366f1] text-white'
+                : isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Users className="h-4 w-4" /> Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            data-testid="client-master-tab-analytics"
+            className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-all whitespace-nowrap ${
+              activeTab === 'analytics'
+                ? 'bg-[#6366f1] text-white'
+                : isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <BarChart3 className="h-4 w-4" /> Analytics
+          </button>
+        </div>
+
+        {activeTab === 'analytics' ? (
+          <ClientAnalyticsTab clients={clients} isDark={isDark} />
+        ) : (
+        <>
         {/* Summary */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
@@ -366,6 +390,8 @@ export default function ClientMasterPage() {
             </table>
           </div>
         </div>
+        </>
+        )}
       </div>
 
       {/* Add/Edit Client modal */}
