@@ -4,6 +4,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import api from '../utils/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Combobox } from '../components/ui/combobox';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
@@ -39,6 +40,7 @@ export default function ClientMasterPage() {
   const [clients, setClients] = useState([]);
   const [services, setServices] = useState([]);
   const [sources, setSources] = useState([]);
+  const [financeClients, setFinanceClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -60,14 +62,16 @@ export default function ClientMasterPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [clientsRes, servicesRes, sourcesRes] = await Promise.all([
+      const [clientsRes, servicesRes, sourcesRes, financeClientsRes] = await Promise.all([
         api.get('/client-master'),
         api.get('/services'),
         api.get('/sources'),
+        api.get('/finance/clients?include_summary=false'),
       ]);
       setClients(clientsRes.data || []);
       setServices(servicesRes.data || []);
       setSources(sourcesRes.data || []);
+      setFinanceClients(financeClientsRes.data || []);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to load Client Master data');
     } finally {
@@ -404,7 +408,14 @@ export default function ClientMasterPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Client Name *</Label>
-                <Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} data-testid="client-form-name" />
+                <Combobox
+                  value={form.name}
+                  onChange={(v) => setForm(f => ({ ...f, name: v }))}
+                  options={financeClients.map(c => ({ value: c.client_id, label: c.display_name }))}
+                  placeholder="Type or select a client"
+                  emptyText="No matching Finance client — you can still use this as a new name"
+                  data-testid="client-form-name"
+                />
               </div>
               <div>
                 <Label>Source of the Client</Label>
