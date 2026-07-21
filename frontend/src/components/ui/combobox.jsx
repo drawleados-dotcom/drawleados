@@ -49,30 +49,39 @@ const Combobox = React.forwardRef(({
       </PopoverAnchor>
       <PopoverContent
         align="start"
-        className="w-[--radix-popover-trigger-width] p-1 max-h-64 overflow-y-auto"
+        className="w-[--radix-popover-trigger-width] p-1"
         onOpenAutoFocus={(e) => e.preventDefault()}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        {loading ? (
-          <p className="px-2 py-3 text-sm text-muted-foreground">{loadingText}</p>
-        ) : filtered.length === 0 ? (
-          <p className="px-2 py-3 text-sm text-muted-foreground">{emptyText}</p>
-        ) : (
-          filtered.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => selectOption(opt)}
-              className={cn(
-                "w-full text-left px-2 py-1.5 text-sm rounded-sm flex items-center justify-between gap-2",
-                "hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <span>{opt.label}</span>
-              {opt.sublabel && <span className="text-xs text-muted-foreground shrink-0">{opt.sublabel}</span>}
-            </button>
-          ))
-        )}
+        {/* Scroll lives on this inner div, not PopoverContent itself — Popper
+            applies a CSS transform to PopoverContent for positioning, and the
+            surrounding modal Dialog's scroll-lock swallows wheel events on
+            transformed/portal content unless we drive scrollTop manually. */}
+        <div
+          className="max-h-64 overflow-y-auto"
+          onWheel={(e) => { e.currentTarget.scrollTop += e.deltaY; e.preventDefault() }}
+        >
+          {loading ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">{loadingText}</p>
+          ) : filtered.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-muted-foreground">{emptyText}</p>
+          ) : (
+            filtered.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => selectOption(opt)}
+                className={cn(
+                  "w-full text-left px-2 py-1.5 text-sm rounded-sm flex items-center justify-between gap-2",
+                  "hover:bg-accent hover:text-accent-foreground"
+                )}
+              >
+                <span>{opt.label}</span>
+                {opt.sublabel && <span className="text-xs text-muted-foreground shrink-0">{opt.sublabel}</span>}
+              </button>
+            ))
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   )

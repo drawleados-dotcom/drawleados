@@ -97,9 +97,17 @@ export default function SourceSelect({ value, onChange, sources, onSourcesChange
       </PopoverAnchor>
       <PopoverContent
         align="start"
-        className="w-[--radix-popover-trigger-width] p-1 max-h-72 overflow-y-auto"
+        className="w-[--radix-popover-trigger-width] p-1"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
+        {/* Scroll lives on this inner div, not PopoverContent itself — Popper
+            applies a CSS transform to PopoverContent for positioning, and the
+            surrounding modal Dialog's scroll-lock swallows wheel events on
+            transformed/portal content unless we drive scrollTop manually. */}
+        <div
+          className="max-h-72 overflow-y-auto"
+          onWheel={(e) => { e.currentTarget.scrollTop += e.deltaY; e.preventDefault() }}
+        >
         {sources.map((s) => (
           <div key={s.source_id} className="flex items-center gap-1" data-testid={`client-form-source-row-${s.source_id}`}>
             {editingId === s.source_id ? (
@@ -173,6 +181,7 @@ export default function SourceSelect({ value, onChange, sources, onSourcesChange
               <Plus className="h-3.5 w-3.5" /> Add New Source
             </button>
           )}
+        </div>
         </div>
       </PopoverContent>
     </Popover>
