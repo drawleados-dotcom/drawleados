@@ -4,7 +4,8 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { LogOut, Calendar, ListChecks, Users as UsersIcon, User as UserIcon, ChevronDown, ChevronRight, Building2 } from 'lucide-react';
+import { LogOut, Calendar, ListChecks, Users as UsersIcon, User as UserIcon, ChevronDown, ChevronRight, Building2, Plus } from 'lucide-react';
+import AddTaskModal from '../components/clientPortal/AddTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -37,6 +38,7 @@ export default function ClientPortalViewPage() {
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState('tasks'); // 'tasks' | 'users' | 'profile'
+  const [showAddTask, setShowAddTask] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
@@ -155,9 +157,18 @@ export default function ClientPortalViewPage() {
           <p className="text-xs text-gray-500 uppercase tracking-wide">Client Portal</p>
           <h1 className="text-lg sm:text-xl font-bold truncate max-w-[60vw]">{project.name}</h1>
         </div>
-        <Button variant="outline" onClick={handleLogout} className="gap-2" data-testid="client-portal-logout">
-          <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Logout</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            onClick={() => setShowAddTask(true)}
+            className="gap-2 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+            data-testid="client-portal-add-task-btn"
+          >
+            <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add Task</span>
+          </Button>
+          <Button variant="outline" onClick={handleLogout} className="gap-2" data-testid="client-portal-logout">
+            <LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Logout</span>
+          </Button>
+        </div>
       </div>
 
       <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-4">
@@ -276,6 +287,15 @@ export default function ClientPortalViewPage() {
           );
         })}
       </div>
+
+      <AddTaskModal
+        open={showAddTask}
+        onClose={() => setShowAddTask(false)}
+        projectName={project.name}
+        erpUsers={erpUsers}
+        sessionToken={sessionToken}
+        onCreated={load}
+      />
     </div>
   );
 }

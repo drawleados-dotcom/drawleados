@@ -9,6 +9,7 @@ strictly read-only snapshot of that one project.
 """
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from typing import Optional
 from datetime import datetime, timezone
 import uuid
 
@@ -24,6 +25,19 @@ def init_client_portal_db(database):
 class ClientLoginRequest(BaseModel):
     username: str
     password: str
+
+
+class ClientPortalTaskCreate(BaseModel):
+    task_name: str
+    priority: str = "medium"  # low, medium, high
+    erp_user_id: Optional[str] = None
+    erp_user_name: Optional[str] = None
+    erp_page_id: Optional[str] = None
+    erp_page_name: Optional[str] = None
+    erp_subtab_id: Optional[str] = None
+    erp_subtab_name: Optional[str] = None
+    erp_ultra_subtab_id: Optional[str] = None
+    erp_ultra_subtab_name: Optional[str] = None
 
 
 async def _get_client_session(request: Request) -> dict:
@@ -74,15 +88,31 @@ async def get_client_project_view(request: Request):
          "created_at": 1, "erp_page_id": 1},
     ).sort("created_at", -1).to_list(500)
 
-    # Trimmed User -> Pages structure (same shape as the internal ERP Users
-    # tab) so the client sees work organized by who/what it's for, not just
-    # a flat task list.
+    # Trimmed User -> Pages -> Sub Tabs -> Ultra Sub Tabs structure (same
+    # shape as the internal ERP Users tab) so the client sees work organized
+    # by who/what it's for, not just a flat task list, and can tag a new
+    # task down to Page / Sub Page / Super Sub Page when reporting one.
     erp_users = [
         {
             "id": u.get("id"),
             "user_name": u.get("user_name"),
             "pages": [
-                {"id": p.get("id"), "page_name": p.get("page_name"), "status": p.get("status")}
+                {
+                    "id": p.get("id"),
+                    "page_name": p.get("page_name"),
+                    "status": p.get("status"),
+                    "sub_tabs": [
+                        {
+                            "id": st.get("id"),
+                            "name": st.get("name"),
+                            "ultra_sub_tabs": [
+                                {"id": ut.get("id"), "name": ut.get("name")}
+                                for ut in (st.get("ultra_sub_tabs") or [])
+                            ],
+                        }
+                        for st in (p.get("sub_tabs") or [])
+                    ],
+                }
                 for p in (u.get("pages") or [])
             ],
         }
@@ -101,6 +131,59 @@ async def get_client_project_view(request: Request):
         "tasks": tasks,
         "erp_users": erp_users,
     }
+
+
+@client_portal_router.post("/tasks")
+async def create_client_portal_task(payload: ClientPortalTaskCreate, request: Request):
+    """Client-reported task/bug — always scoped to the logged-in client's own
+    project and the ERP department, so the client never picks a project."""
+    session = await _get_client_session(request)
+
+    task_name = (payload.task_name or "").strip()
+    if not task_name:
+        raise HTTPException(status_code=400, detail="Please describe the task or bug")
+    if payload.priority not in ("low", "medium", "high"):
+        raise HTTPException(status_code=400, detail="Priority must be low, medium, or high")
+
+    project = await db.projects.find_one({"project_id": session["project_id"]}, {"_id": 0, "name": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    now = datetime.now(timezone.utc).isoformat()
+    task = {
+        "task_id": f"ot_{uuid.uuid4().hex[:12]}",
+        "task_name": task_name,
+        "description": "",
+        "status": "pending",
+        "priority": payload.priority,
+        "type": "general",
+        "assigned_to": None,
+        "created_by": None,
+        "created_via": "client_portal",
+        "department": "erp",
+        "category": None,
+        "project_id": session["project_id"],
+        "project_name": project.get("name"),
+        "erp_user_id": payload.erp_user_id,
+        "erp_user_name": payload.erp_user_name,
+        "erp_page_id": payload.erp_page_id,
+        "erp_page_name": payload.erp_page_name,
+        "erp_subtab_id": payload.erp_subtab_id,
+        "erp_subtab_name": payload.erp_subtab_name,
+        "erp_ultra_subtab_id": payload.erp_ultra_subtab_id,
+        "erp_ultra_subtab_name": payload.erp_ultra_subtab_name,
+        "work_link": None,
+        "due_date": None,
+        "due_time": None,
+        "all_day": False,
+        "recurrence": "none",
+        "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.our_tasks.insert_one(task)
+    task.pop("_id", None)
+    return task
 
 
 @client_portal_router.post("/logout")
