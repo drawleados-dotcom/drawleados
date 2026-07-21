@@ -14,6 +14,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Plus, Pencil, Trash2, Users, FileText, Search, BarChart3 } from 'lucide-react';
 import { toast } from 'sonner';
 import ClientAnalyticsTab from '../components/clientMaster/ClientAnalyticsTab';
+import SourceSelect from '../components/clientMaster/SourceSelect';
 import { STATUS_OPTIONS, STATUS_MAP } from '../lib/clientStatus';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -51,8 +52,6 @@ export default function ClientMasterPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm());
-  const [addingSource, setAddingSource] = useState(false);
-  const [newSourceName, setNewSourceName] = useState('');
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
@@ -113,26 +112,6 @@ export default function ClientMasterPage() {
     setShowModal(true);
   };
   const closeModal = () => { setShowModal(false); setEditingId(null); };
-
-  const onSourceChange = (value) => {
-    if (value === '__new__') { setAddingSource(true); return; }
-    setForm(f => ({ ...f, source: value }));
-  };
-  const cancelAddSource = () => { setAddingSource(false); setNewSourceName(''); };
-  const confirmAddSource = async () => {
-    const name = newSourceName.trim();
-    if (!name) { toast.error('Source name is required'); return; }
-    try {
-      const res = await api.post('/sources', { name });
-      setSources(prev => [...prev, res.data]);
-      setForm(f => ({ ...f, source: res.data.name }));
-      setAddingSource(false);
-      setNewSourceName('');
-      toast.success('Source added');
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to add source');
-    }
-  };
 
   const onServiceTypeChange = (v) => setForm(f => ({ ...f, service_type: v, service_id: '', package_id: '', package_amount: '' }));
   const onServiceChange = (serviceId) => setForm(f => ({ ...f, service_id: serviceId, package_id: '', package_amount: '' }));
@@ -419,32 +398,12 @@ export default function ClientMasterPage() {
               </div>
               <div>
                 <Label>Source of the Client</Label>
-                {addingSource ? (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      autoFocus
-                      value={newSourceName}
-                      onChange={(e) => setNewSourceName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmAddSource(); } }}
-                      placeholder="New source name"
-                      data-testid="client-form-new-source-input"
-                    />
-                    <Button type="button" size="sm" onClick={confirmAddSource} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="client-form-new-source-save">
-                      Add
-                    </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={cancelAddSource}>Cancel</Button>
-                  </div>
-                ) : (
-                  <Select value={form.source || undefined} onValueChange={onSourceChange}>
-                    <SelectTrigger data-testid="client-form-source"><SelectValue placeholder="Select a source" /></SelectTrigger>
-                    <SelectContent>
-                      {sources.map(s => <SelectItem key={s.source_id} value={s.name}>{s.name}</SelectItem>)}
-                      <SelectItem value="__new__" className="text-[#6366f1] font-medium">
-                        <span className="inline-flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Source</span>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
+                <SourceSelect
+                  value={form.source}
+                  onChange={(name) => setForm(f => ({ ...f, source: name }))}
+                  sources={sources}
+                  onSourcesChange={setSources}
+                />
               </div>
             </div>
 

@@ -2072,6 +2072,18 @@ async def get_sources(user: User = Depends(get_current_user)):
     sources = await db.lead_sources.find({"is_active": True}, {"_id": 0}).sort("name", 1).to_list(1000)
     return sources
 
+@api_router.put("/sources/{source_id}")
+async def update_source(source_id: str, source_data: LeadSourceCreate, user: User = Depends(get_current_user)):
+    source = await db.lead_sources.find_one({"source_id": source_id})
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    name = source_data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Source name is required")
+    await db.lead_sources.update_one({"source_id": source_id}, {"$set": {"name": name}})
+    result = await db.lead_sources.find_one({"source_id": source_id}, {"_id": 0})
+    return result
+
 # ============== STATUS ROUTES ==============
 
 @api_router.post("/statuses")
