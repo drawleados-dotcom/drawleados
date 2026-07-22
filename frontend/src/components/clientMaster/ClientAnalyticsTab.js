@@ -21,6 +21,10 @@ const PERIOD_OPTIONS = [
   { value: 'this_year', label: 'This Year' },
 ];
 
+const START_YEAR = 2022;
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: CURRENT_YEAR - START_YEAR + 1 }, (_, i) => START_YEAR + i);
+
 // Falls back to deriving month/year from onboarding_date for any client
 // record that predates the dedicated Month/Year fields.
 const clientMonthYear = (c) => {
@@ -86,6 +90,11 @@ const KpiCard = ({ icon: Icon, label, value, sub, color, bgCard, borderColor, te
 
 export default function ClientAnalyticsTab({ clients = [], isDark }) {
   const [period, setPeriod] = useState('all');
+  const [yearFilter, setYearFilter] = useState('all');
+  // Year and Period are mutually exclusive — picking one resets the other,
+  // so it's always clear which single filter is driving the board.
+  const onPeriodChange = (v) => { setPeriod(v); setYearFilter('all'); };
+  const onYearChange = (v) => { setYearFilter(v); setPeriod('all'); };
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
@@ -101,7 +110,12 @@ export default function ClientAnalyticsTab({ clients = [], isDark }) {
     fontSize: '12px',
   };
 
-  const filtered = useMemo(() => clients.filter((c) => inPeriod(c, period)), [clients, period]);
+  const filtered = useMemo(() => {
+    if (yearFilter !== 'all') {
+      return clients.filter((c) => clientMonthYear(c)?.year === Number(yearFilter));
+    }
+    return clients.filter((c) => inPeriod(c, period));
+  }, [clients, period, yearFilter]);
 
   const totals = useMemo(() => {
     const totalClients = filtered.length;
@@ -149,6 +163,18 @@ export default function ClientAnalyticsTab({ clients = [], isDark }) {
     return buckets;
   }, [clients]);
 
+  const yearlyData = useMemo(() => {
+    const buckets = YEARS.map((y) => ({ year: String(y), count: 0, amount: 0 }));
+    const byYear = Object.fromEntries(buckets.map((b) => [b.year, b]));
+    clients.forEach((c) => {
+      const my = clientMonthYear(c);
+      if (!my) return;
+      const key = String(my.year);
+      if (byYear[key]) { byYear[key].count += 1; byYear[key].amount += amt(c); }
+    });
+    return buckets;
+  }, [clients]);
+
   const topClients = useMemo(
     () => [...filtered].sort((a, b) => amt(b) - amt(a)).slice(0, 8),
     [filtered]
@@ -172,12 +198,21 @@ export default function ClientAnalyticsTab({ clients = [], isDark }) {
           <h2 className={`text-lg font-semibold ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>Client Analytics Board</h2>
           <p className={`text-xs ${textSecondary}`}>Live summary computed from every record in Client Master.</p>
         </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-44" data-testid="client-analytics-period"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {PERIOD_OPTIONS.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={period} onValueChange={onPeriodChange}>
+            <SelectTrigger className="w-44" data-testid="client-analytics-period"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PERIOD_OPTIONS.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={yearFilter} onValueChange={onYearChange}>
+            <SelectTrigger className="w-32" data-testid="client-analytics-year"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {YEARS.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* KPI row */}
@@ -309,6 +344,35 @@ export default function ClientAnalyticsTab({ clients = [], isDark }) {
               <YAxis allowDecimals={false} tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} width={40} tickFormatter={(v) => `₹${v >= 1000 ? `${Math.round(v / 1000)}k` : v}`} />
               <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']} cursor={{ fill: isDark ? '#27272a55' : '#f3f4f655' }} />
               <Bar dataKey="amount" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Yearly trend */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+          <h3 className={`text-sm font-semibold ${textPrimary} mb-4`}>New Clients — Yearly ({START_YEAR}–{CURRENT_YEAR})</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={yearlyData} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+              <XAxis dataKey="year" tick={{ fill: tickColor, fontSize: 11 }} axisLine={{ stroke: gridStroke }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} width={28} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`${value} clients`, 'Onboarded']} cursor={{ fill: isDark ? '#27272a55' : '#f3f4f655' }} />
+              <Bar dataKey="count" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+          <h3 className={`text-sm font-semibold ${textPrimary} mb-4`}>Revenue — Yearly ({START_YEAR}–{CURRENT_YEAR})</h3>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={yearlyData} margin={{ top: 8, right: 8, bottom: 4, left: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+              <XAxis dataKey="year" tick={{ fill: tickColor, fontSize: 11 }} axisLine={{ stroke: gridStroke }} tickLine={false} />
+              <YAxis allowDecimals={false} tick={{ fill: tickColor, fontSize: 11 }} axisLine={false} tickLine={false} width={40} tickFormatter={(v) => `₹${v >= 1000 ? `${Math.round(v / 1000)}k` : v}`} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']} cursor={{ fill: isDark ? '#27272a55' : '#f3f4f655' }} />
+              <Bar dataKey="amount" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={32} />
             </BarChart>
           </ResponsiveContainer>
         </div>
