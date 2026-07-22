@@ -39,7 +39,7 @@ const DEPARTMENTS = [
 
 export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
-  viewOnly = false,
+  viewOnly = false, contentCalendarViewOnly,
 }) {
   // Permission: the parent (OurTasksPage) already resolves this correctly — privileged
   // roles via their own View/Edit toggle, everyone else via their designation's
@@ -49,6 +49,10 @@ export default function ProjectsPanel({
   // designation title didn't match that literal string (e.g. "Head of Operations").
   const role = (currentUser?.role || '').toLowerCase();
   const canManageProjects = !viewOnly;
+  // Content Calendar ignores admins'/super admins' own View/Edit self-toggle (that
+  // toggle is a personal "look, don't touch" convenience, not a real restriction on
+  // them) — falls back to the general viewOnly rule if the parent didn't pass one.
+  const canManageContentCalendar = !(contentCalendarViewOnly ?? viewOnly);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1227,7 +1231,7 @@ export default function ProjectsPanel({
             project={selectedProject}
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
             onTaskCreated={onTaskCreated}
-            canEdit={canManageProjects}
+            canEdit={canManageContentCalendar}
             users={users}
             isDark={isDark}
             bgCard={bgCard}

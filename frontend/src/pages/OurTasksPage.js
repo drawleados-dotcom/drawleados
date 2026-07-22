@@ -1495,6 +1495,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           const effectiveViewOnly = isPrivileged
             ? (projectsViewMode === 'view')
             : designationGrantsView; // edit-grantees default to live edit (no forced view)
+          // Content Calendar stays editable for admins/super admins regardless of their
+          // own View/Edit self-toggle (it's a convenience toggle for them, not a real
+          // restriction — the backend already trusts their PATCH either way). Regular
+          // staff still follow their designation's operations_projects setting.
+          const contentCalendarViewOnly = isPrivileged ? false : designationGrantsView;
           return (
             <>
               {/* View / Edit toggle — privileged users + designations granted Edit */}
@@ -1538,6 +1543,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 currentUser={user}
                 onTaskCreated={loadTasks}
                 viewOnly={effectiveViewOnly}
+                contentCalendarViewOnly={contentCalendarViewOnly}
               />
             </>
           );
