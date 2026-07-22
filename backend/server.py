@@ -297,6 +297,31 @@ async def startup_tasks():
     except Exception as _e:
         logging.warning(f"[startup] Hand Over status backfill skipped: {_e}")
 
+    # Client Master: backfill onboarding_month/onboarding_year (added for the
+    # dedicated Month/Year fields in Add Client) from onboarding_date on any
+    # docs that predate this feature.
+    try:
+        cursor = db.client_master.find(
+            {"onboarding_date": {"$exists": True, "$ne": None}, "onboarding_month": {"$exists": False}},
+            {"_id": 1, "onboarding_date": 1},
+        )
+        backfilled = 0
+        async for doc in cursor:
+            date_str = doc.get("onboarding_date") or ""
+            try:
+                year, month = int(date_str[0:4]), int(date_str[5:7])
+            except (ValueError, IndexError):
+                continue
+            await db.client_master.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"onboarding_month": month, "onboarding_year": year}},
+            )
+            backfilled += 1
+        if backfilled:
+            logging.info(f"[startup] Backfilled onboarding_month/onboarding_year on {backfilled} Client Master docs")
+    except Exception as _e:
+        logging.warning(f"[startup] Client Master onboarding_month/year backfill skipped: {_e}")
+
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
 async def health_check():

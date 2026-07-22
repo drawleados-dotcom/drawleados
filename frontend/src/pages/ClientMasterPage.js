@@ -19,10 +19,29 @@ import { STATUS_OPTIONS, STATUS_MAP } from '../lib/clientStatus';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
+const MONTH_OPTIONS = [
+  { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
+  { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
+  { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
+  { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' },
+];
+
+// Derives {month, year} from an ISO date string, falling back to today's if
+// the date is missing/invalid — used both to seed the form and to keep the
+// Month/Year fields in sync whenever Onboarding Date changes.
+const monthYearFromDate = (dateStr) => {
+  const d = dateStr ? new Date(`${dateStr}T00:00:00`) : null;
+  const fallback = new Date();
+  if (!d || Number.isNaN(d.getTime())) return { month: fallback.getMonth() + 1, year: fallback.getFullYear() };
+  return { month: d.getMonth() + 1, year: d.getFullYear() };
+};
+
 const emptyForm = () => ({
   name: '',
   source: '',
   onboarding_date: todayIso(),
+  onboarding_month: monthYearFromDate(todayIso()).month,
+  onboarding_year: monthYearFromDate(todayIso()).year,
   service_type: 'one-time',
   service_id: '',
   package_id: '',
@@ -93,10 +112,13 @@ export default function ClientMasterPage() {
   const openAdd = () => { setEditingId(null); setForm(emptyForm()); setShowModal(true); };
   const openEdit = (c) => {
     setEditingId(c.client_id);
+    const fallbackMonthYear = monthYearFromDate(c.onboarding_date || todayIso());
     setForm({
       name: c.name || '',
       source: c.source || '',
       onboarding_date: c.onboarding_date || todayIso(),
+      onboarding_month: c.onboarding_month || fallbackMonthYear.month,
+      onboarding_year: c.onboarding_year || fallbackMonthYear.year,
       service_type: c.service_type || 'one-time',
       service_id: c.service_id || '',
       package_id: c.package_id || '',
@@ -129,11 +151,17 @@ export default function ClientMasterPage() {
     if (form.service_type === 'recurring' && !form.is_ongoing && !form.end_date) {
       toast.error('Please pick an end date, or mark it as ongoing ("till now")'); return;
     }
+    const onboardingMonth = Number(form.onboarding_month);
+    const onboardingYear = Number(form.onboarding_year);
+    if (!(onboardingMonth >= 1 && onboardingMonth <= 12)) { toast.error('Onboarding month is invalid'); return; }
+    if (!(onboardingYear >= 2000 && onboardingYear <= 2100)) { toast.error('Onboarding year is invalid'); return; }
 
     const payload = {
       name: form.name.trim(),
       source: form.source.trim() || null,
       onboarding_date: form.onboarding_date,
+      onboarding_month: onboardingMonth,
+      onboarding_year: onboardingYear,
       service_type: form.service_type,
       service_id: form.service_id,
       service_name: selectedService?.name || '',
@@ -177,7 +205,13 @@ export default function ClientMasterPage() {
 
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
-      if (monthFilter && !(c.onboarding_date || '').startsWith(monthFilter)) return false;
+      if (monthFilter) {
+        const [filterYear, filterMonth] = monthFilter.split('-').map(Number);
+        const fallback = monthYearFromDate(c.onboarding_date);
+        const clientMonth = c.onboarding_month || fallback.month;
+        const clientYear = c.onboarding_year || fallback.year;
+        if (clientMonth !== filterMonth || clientYear !== filterYear) return false;
+      }
       if (searchFilter && !(c.name || '').toLowerCase().includes(searchFilter.toLowerCase())) return false;
       if (sourceFilter && c.source !== sourceFilter) return false;
       return true;
@@ -407,9 +441,38 @@ export default function ClientMasterPage() {
               </div>
             </div>
 
-            <div>
-              <Label>Onboarding Date</Label>
-              <Input type="date" value={form.onboarding_date} onChange={(e) => setForm(f => ({ ...f, onboarding_date: e.target.value }))} data-testid="client-form-onboarding-date" />
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label>Onboarding Date</Label>
+                <Input
+                  type="date"
+                  value={form.onboarding_date}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const { month, year } = monthYearFromDate(v);
+                    setForm(f => ({ ...f, onboarding_date: v, onboarding_month: month, onboarding_year: year }));
+                  }}
+                  data-testid="client-form-onboarding-date"
+                />
+              </div>
+              <div>
+                <Label>Month</Label>
+                <Select value={String(form.onboarding_month)} onValueChange={(v) => setForm(f => ({ ...f, onboarding_month: Number(v) }))}>
+                  <SelectTrigger data-testid="client-form-onboarding-month"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MONTH_OPTIONS.map(m => <SelectItem key={m.value} value={String(m.value)}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Year</Label>
+                <Input
+                  type="number"
+                  value={form.onboarding_year}
+                  onChange={(e) => setForm(f => ({ ...f, onboarding_year: e.target.value === '' ? '' : Number(e.target.value) }))}
+                  data-testid="client-form-onboarding-year"
+                />
+              </div>
             </div>
 
             <div>

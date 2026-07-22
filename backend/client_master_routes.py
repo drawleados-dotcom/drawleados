@@ -19,6 +19,8 @@ class ClientMasterCreate(BaseModel):
     name: str
     source: Optional[str] = None
     onboarding_date: Optional[str] = None  # ISO date; defaults to today
+    onboarding_month: Optional[int] = None  # 1-12; defaults from onboarding_date
+    onboarding_year: Optional[int] = None  # defaults from onboarding_date
     service_type: str  # "one-time" | "recurring"
     service_id: Optional[str] = None
     service_name: Optional[str] = None
@@ -38,6 +40,8 @@ class ClientMasterUpdate(BaseModel):
     name: Optional[str] = None
     source: Optional[str] = None
     onboarding_date: Optional[str] = None
+    onboarding_month: Optional[int] = None
+    onboarding_year: Optional[int] = None
     service_type: Optional[str] = None
     service_id: Optional[str] = None
     service_name: Optional[str] = None
@@ -73,11 +77,14 @@ async def create_client_master(payload: ClientMasterCreate, request: Request):
         raise HTTPException(status_code=400, detail="Invalid status")
 
     now = datetime.now(timezone.utc).isoformat()
+    onboarding_date = payload.onboarding_date or now[:10]
     doc = {
         **payload.model_dump(),
         "client_id": f"cm_{uuid.uuid4().hex[:12]}",
         "name": name,
-        "onboarding_date": payload.onboarding_date or now[:10],
+        "onboarding_date": onboarding_date,
+        "onboarding_month": payload.onboarding_month or int(onboarding_date[5:7]),
+        "onboarding_year": payload.onboarding_year or int(onboarding_date[0:4]),
         "total_amount": float(payload.package_amount or 0),
         "created_by": user.user_id,
         "created_at": now,

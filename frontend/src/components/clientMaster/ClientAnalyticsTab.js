@@ -21,17 +21,26 @@ const PERIOD_OPTIONS = [
   { value: 'this_year', label: 'This Year' },
 ];
 
-const inPeriod = (dateStr, period) => {
+// Falls back to deriving month/year from onboarding_date for any client
+// record that predates the dedicated Month/Year fields.
+const clientMonthYear = (c) => {
+  if (c.onboarding_month && c.onboarding_year) return { month: c.onboarding_month, year: c.onboarding_year };
+  const d = c.onboarding_date ? new Date(c.onboarding_date) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  return { month: d.getMonth() + 1, year: d.getFullYear() };
+};
+
+const inPeriod = (client, period) => {
   if (period === 'all') return true;
-  if (!dateStr) return false;
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return false;
+  const my = clientMonthYear(client);
+  if (!my) return false;
   const now = new Date();
-  if (period === 'this_month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  if (period === 'this_year') return d.getFullYear() === now.getFullYear();
+  if (period === 'this_month') return my.year === now.getFullYear() && my.month === now.getMonth() + 1;
+  if (period === 'this_year') return my.year === now.getFullYear();
   const monthsBack = { last_3: 3, last_6: 6, last_12: 12 }[period];
   const cutoff = new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 1);
-  return d >= cutoff;
+  const clientMonthStart = new Date(my.year, my.month - 1, 1);
+  return clientMonthStart >= cutoff;
 };
 
 const amt = (c) => Number(c.total_amount ?? c.package_amount ?? 0) || 0;
@@ -57,7 +66,6 @@ const groupBy = (rows, keyFn) => {
   return Array.from(map.values());
 };
 
-const monthKey = (dateStr) => (dateStr || '').slice(0, 7);
 const monthLabel = (key) => {
   const [y, m] = key.split('-').map(Number);
   if (!y || !m) return key;
@@ -93,7 +101,7 @@ export default function ClientAnalyticsTab({ clients = [], isDark }) {
     fontSize: '12px',
   };
 
-  const filtered = useMemo(() => clients.filter((c) => inPeriod(c.onboarding_date, period)), [clients, period]);
+  const filtered = useMemo(() => clients.filter((c) => inPeriod(c, period)), [clients, period]);
 
   const totals = useMemo(() => {
     const totalClients = filtered.length;
@@ -133,7 +141,9 @@ export default function ClientAnalyticsTab({ clients = [], isDark }) {
     }
     const byKey = Object.fromEntries(buckets.map((b) => [b.key, b]));
     clients.forEach((c) => {
-      const key = monthKey(c.onboarding_date);
+      const my = clientMonthYear(c);
+      if (!my) return;
+      const key = `${my.year}-${String(my.month).padStart(2, '0')}`;
       if (byKey[key]) { byKey[key].count += 1; byKey[key].amount += amt(c); }
     });
     return buckets;
