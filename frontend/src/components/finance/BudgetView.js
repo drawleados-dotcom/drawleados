@@ -165,23 +165,23 @@ const BudgetView = () => {
   return (
     <div className="space-y-4" data-testid="budget-view">
       {/* Header */}
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Wallet className="h-5 w-5 text-[#10b981]" />
           <div>
-            <h3 className="text-lg font-bold text-[#fafafa]">Budget</h3>
-            <p className="text-xs text-[#a1a1aa]">Set a fixed budget per sub-category for the month. Cashbook expenses tagged to that sub-category reduce the balance.</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">Budget</h3>
+            <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">Set a fixed budget per sub-category for the month. Cashbook expenses tagged to that sub-category reduce the balance.</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
-            <SelectTrigger className="w-[130px] bg-[#27272a] border-[#3f3f46] text-[#fafafa]" data-testid="budget-month-select">
+            <SelectTrigger className="w-[130px] bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa]" data-testid="budget-month-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
-            <SelectTrigger className="w-[100px] bg-[#27272a] border-[#3f3f46] text-[#fafafa]" data-testid="budget-year-select">
+            <SelectTrigger className="w-[100px] bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa]" data-testid="budget-year-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>{[2024, 2025, 2026, 2027].map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
@@ -190,26 +190,26 @@ const BudgetView = () => {
       </div>
 
       {loading && (
-        <div className="text-center py-12 text-[#a1a1aa]">
+        <div className="text-center py-12 text-gray-600 dark:text-[#a1a1aa]">
           <Loader2 className="h-6 w-6 mx-auto animate-spin mb-2" /> Loading…
         </div>
       )}
 
       {!loading && tops.length === 0 && (
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-12 text-center" data-testid="budget-empty">
-          <Wallet className="h-10 w-10 mx-auto text-[#52525b] mb-3" />
-          <p className="text-[#fafafa] font-medium mb-1">No expense categories yet</p>
-          <p className="text-xs text-[#a1a1aa]">Add categories in the <b>Expense Split</b> tab to start budgeting.</p>
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-12 text-center" data-testid="budget-empty">
+          <Wallet className="h-10 w-10 mx-auto text-gray-500 dark:text-[#52525b] mb-3" />
+          <p className="text-gray-900 dark:text-[#fafafa] font-medium mb-1">No expense categories yet</p>
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">Add categories in the <b>Expense Split</b> tab to start budgeting.</p>
         </div>
       )}
 
       {!loading && tops.length > 0 && (
         <>
           {/* Dynamic top-category sub-tabs (All pinned first) */}
-          <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a] flex-wrap" data-testid="budget-tabs">
+          <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] flex-wrap" data-testid="budget-tabs">
             <button
               onClick={() => setActiveTopId('all')}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isAllTab ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isAllTab ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'text-gray-600 dark:text-[#a1a1aa] hover:text-white'}`}
               data-testid="budget-tab-all"
             >
               <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle bg-[#10b981]" />
@@ -221,7 +221,7 @@ const BudgetView = () => {
                 <button
                   key={c.category_id}
                   onClick={() => setActiveTopId(c.category_id)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'text-gray-600 dark:text-[#a1a1aa] hover:text-white'}`}
                   data-testid={`budget-tab-${c.category_id}`}
                 >
                   <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle" style={{ backgroundColor: c.color }} />
@@ -243,10 +243,10 @@ const BudgetView = () => {
             const grandBalance = grandBudget - grandSpent;
             return (
               <>
-                <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3" data-testid="budget-all-summary">
+                <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3" data-testid="budget-all-summary">
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">All Categories</p>
-                    <p className="text-lg font-bold text-[#fafafa]">Grand Totals <span className="text-xs font-mono text-[#a1a1aa]">({MONTHS[month - 1]} {year})</span></p>
+                    <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">All Categories</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">Grand Totals <span className="text-xs font-mono text-gray-600 dark:text-[#a1a1aa]">({MONTHS[month - 1]} {year})</span></p>
                   </div>
                   <div className="flex items-center gap-4">
                     <Stat l="Total Budget" v={fmt(grandBudget)} />
@@ -254,18 +254,18 @@ const BudgetView = () => {
                     <Stat l="Balance" v={fmt(grandBalance)} green={grandBalance >= 0} red={grandBalance < 0} />
                   </div>
                 </div>
-                <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
-                    <p className="text-sm font-medium text-[#fafafa]">Top Categories</p>
-                    <span className="text-xs text-[#a1a1aa]">{tops.length} groups</span>
+                <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-200 dark:border-[#27272a] flex items-center justify-between">
+                    <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">Top Categories</p>
+                    <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">{tops.length} groups</span>
                   </div>
-                  <div className="divide-y divide-[#27272a]">
+                  <div className="divide-y divide-gray-200 dark:divide-[#27272a]">
                     {totals.map(({ t, budget, spent, balance }) => (
                       <div key={t.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`budget-all-row-${t.category_id}`}>
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-[#fafafa]">{t.name}</p>
-                          <p className="text-[10px] text-[#a1a1aa]">{(t.sub_categories || []).length} sub-categories</p>
+                          <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{t.name}</p>
+                          <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa]">{(t.sub_categories || []).length} sub-categories</p>
                         </div>
                         <Stat l="Budget" v={fmt(budget)} />
                         <Stat l="Paid" v={fmt(spent)} red={spent > budget && budget > 0} />
@@ -280,10 +280,10 @@ const BudgetView = () => {
 
           {/* Active top header */}
           {!isAllTab && activeTop && (
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+            <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
               <div>
-                <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">Top Category</p>
-                <p className="text-lg font-bold text-[#fafafa]">{activeTop.name}</p>
+                <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">Top Category</p>
+                <p className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">{activeTop.name}</p>
               </div>
               {isTaxTop ? (() => {
                 const totalAmount = taxInvoices.reduce((s, inv) => s + Number(inv.total_amount || 0), 0);
@@ -309,26 +309,26 @@ const BudgetView = () => {
 
           {/* Tax view — invoice-driven, replaces editable sub-rows for the Tax top */}
           {!isAllTab && isTaxTop && (
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid="budget-tax-view">
-              <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
+            <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden" data-testid="budget-tax-view">
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-[#27272a] flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Receipt className="h-4 w-4 text-[#a78bfa]" />
-                  <p className="text-sm font-medium text-[#fafafa]">Tax Invoices · {MONTHS[month - 1]} {year}</p>
+                  <Receipt className="h-4 w-4 text-violet-600 dark:text-[#a78bfa]" />
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">Tax Invoices · {MONTHS[month - 1]} {year}</p>
                 </div>
-                <span className="text-xs text-[#a1a1aa]">
+                <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">
                   {loadingTax ? 'Loading…' : `${taxInvoices.length} invoice${taxInvoices.length === 1 ? '' : 's'}`}
                 </span>
               </div>
               {loadingTax ? (
-                <div className="py-10 text-center text-[#a1a1aa]"><Loader2 className="h-5 w-5 mx-auto animate-spin mb-1" /> Loading…</div>
+                <div className="py-10 text-center text-gray-600 dark:text-[#a1a1aa]"><Loader2 className="h-5 w-5 mx-auto animate-spin mb-1" /> Loading…</div>
               ) : taxInvoices.length === 0 ? (
-                <div className="py-10 text-center text-xs text-[#a1a1aa]">
+                <div className="py-10 text-center text-xs text-gray-600 dark:text-[#a1a1aa]">
                   No invoices found for this month. Create one from the Invoice tab.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm" data-testid="budget-tax-table">
-                    <thead className="bg-[#0c0a09] text-[#a1a1aa] uppercase text-[10px] tracking-wider">
+                    <thead className="bg-gray-50 dark:bg-[#0c0a09] text-gray-600 dark:text-[#a1a1aa] uppercase text-[10px] tracking-wider">
                       <tr>
                         <th className="text-left px-4 py-2">Invoice / Client</th>
                         <th className="text-center px-3 py-2">View</th>
@@ -350,28 +350,28 @@ const BudgetView = () => {
                         const taxPaid = total > 0 ? (paidAmt / total) * tax : 0;
                         const taxBalance = Math.max(0, tax - taxPaid);
                         return (
-                          <tr key={inv.invoice_id} className="border-t border-[#27272a] hover:bg-[#a78bfa]/5" data-testid={`budget-tax-row-${inv.invoice_id}`}>
+                          <tr key={inv.invoice_id} className="border-t border-gray-200 dark:border-[#27272a] hover:bg-[#a78bfa]/5" data-testid={`budget-tax-row-${inv.invoice_id}`}>
                             <td className="px-4 py-3">
-                              <p className={`text-sm font-medium text-[#fafafa]`}>{inv.invoice_number || '—'}</p>
-                              <p className="text-[10px] text-[#a1a1aa]">{inv.client_name || '—'}</p>
+                              <p className={`text-sm font-medium text-gray-900 dark:text-[#fafafa]`}>{inv.invoice_number || '—'}</p>
+                              <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa]">{inv.client_name || '—'}</p>
                             </td>
                             <td className="px-3 py-3 text-center">
                               <a
                                 href={`/finance?tab=invoice&invoice_id=${inv.invoice_id}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-[#a78bfa] hover:underline text-xs"
+                                className="inline-flex items-center gap-1 text-violet-600 dark:text-[#a78bfa] hover:underline text-xs"
                                 data-testid={`budget-tax-view-${inv.invoice_id}`}
                               >
                                 <ExternalLink className="h-3 w-3" /> View
                               </a>
                             </td>
-                            <td className="px-3 py-3 text-right text-[#fafafa] font-medium">{fmt(total)}</td>
-                            <td className="px-3 py-3 text-right text-[#a1a1aa]">{pct > 0 ? `${pct.toFixed(0)}%` : '—'}</td>
+                            <td className="px-3 py-3 text-right text-gray-900 dark:text-[#fafafa] font-medium">{fmt(total)}</td>
+                            <td className="px-3 py-3 text-right text-gray-600 dark:text-[#a1a1aa]">{pct > 0 ? `${pct.toFixed(0)}%` : '—'}</td>
                             <td className="px-3 py-3 text-right text-[#f59e0b] font-medium">{fmt(tax)}</td>
                             <td className="px-4 py-3 text-right" style={{ color: taxBalance > 0 ? '#ef4444' : '#10b981' }}>
                               {fmt(taxBalance)}
-                              <p className="text-[10px] text-[#71717a] mt-0.5">Paid {fmt(taxPaid)}</p>
+                              <p className="text-[10px] text-gray-500 dark:text-[#71717a] mt-0.5">Paid {fmt(taxPaid)}</p>
                             </td>
                           </tr>
                         );
@@ -388,9 +388,9 @@ const BudgetView = () => {
                           return s + Math.max(0, tax - taxPaid);
                         }, 0);
                         return (
-                          <tr className="border-t-2 border-[#27272a] bg-[#0c0a09]">
-                            <td colSpan={2} className="px-4 py-3 text-xs uppercase text-[#a1a1aa] font-semibold">Totals</td>
-                            <td className="px-3 py-3 text-right text-[#fafafa] font-bold">{fmt(totalSum)}</td>
+                          <tr className="border-t-2 border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#0c0a09]">
+                            <td colSpan={2} className="px-4 py-3 text-xs uppercase text-gray-600 dark:text-[#a1a1aa] font-semibold">Totals</td>
+                            <td className="px-3 py-3 text-right text-gray-900 dark:text-[#fafafa] font-bold">{fmt(totalSum)}</td>
                             <td></td>
                             <td className="px-3 py-3 text-right text-[#f59e0b] font-bold">{fmt(taxSum)}</td>
                             <td className="px-4 py-3 text-right font-bold" style={{ color: balSum > 0 ? '#ef4444' : '#10b981' }}>{fmt(balSum)}</td>
@@ -406,14 +406,14 @@ const BudgetView = () => {
 
           {/* Sub-categories — Budget editable (hidden in All view AND Tax view) */}
           {!isAllTab && !isTaxTop && (
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
-              <p className="text-sm font-medium text-[#fafafa]">Sub-Categories — Budget for {MONTHS[month - 1]} {year}</p>
-              <span className="text-xs text-[#a1a1aa]">{activeTop?.sub_categories?.length || 0} items</span>
+          <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 dark:border-[#27272a] flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">Sub-Categories — Budget for {MONTHS[month - 1]} {year}</p>
+              <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">{activeTop?.sub_categories?.length || 0} items</span>
             </div>
-            <div className="divide-y divide-[#27272a]">
+            <div className="divide-y divide-gray-200 dark:divide-[#27272a]">
               {(activeTop?.sub_categories || []).length === 0 && (
-                <div className="px-4 py-8 text-center text-xs text-[#71717a]">
+                <div className="px-4 py-8 text-center text-xs text-gray-500 dark:text-[#71717a]">
                   No sub-categories for <b>{activeTop?.name}</b>. Add one from the Expense Split tab.
                 </div>
               )}
@@ -438,27 +438,27 @@ const BudgetView = () => {
                     <div className="col-span-4 flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                       <div>
-                        <p className="text-sm text-[#fafafa]">{s.name}</p>
+                        <p className="text-sm text-gray-900 dark:text-[#fafafa]">{s.name}</p>
                         {isPayroll && (
-                          <p className="text-[10px] text-[#a78bfa]" data-testid={`budget-auto-tag-${s.category_id}`}>
+                          <p className="text-[10px] text-violet-600 dark:text-[#a78bfa]" data-testid={`budget-auto-tag-${s.category_id}`}>
                             Auto · Σ gross salary from Monthly Payroll · read-only
                           </p>
                         )}
                       </div>
                     </div>
                     <div className="col-span-3 text-right">
-                      <p className="text-[10px] uppercase tracking-wide text-[#71717a]">Budget</p>
+                      <p className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-[#71717a]">Budget</p>
                       {isEditing && !isPayroll ? (
                         <Input
                           type="number"
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value)}
-                          className="h-8 text-right bg-[#27272a] border-[#3f3f46] text-[#fafafa] text-sm"
+                          className="h-8 text-right bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] text-sm"
                           data-testid={`budget-input-${s.category_id}`}
                           autoFocus
                         />
                       ) : (
-                        <p className="text-sm font-semibold text-[#fafafa]">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-[#fafafa]">
                           <IndianRupee className="inline h-3 w-3 -mt-0.5" />{String(fmt(displayBudget)).replace(/^₹/, '')}
                         </p>
                       )}
@@ -471,7 +471,7 @@ const BudgetView = () => {
                     </div>
                     <div className="col-span-1 flex items-center justify-end gap-1">
                       {isPayroll ? (
-                        <span className={`text-[10px] text-[#a78bfa]`} data-testid={`budget-locked-${s.category_id}`}>
+                        <span className={`text-[10px] text-violet-600 dark:text-[#a78bfa]`} data-testid={`budget-locked-${s.category_id}`}>
                           Auto-locked
                         </span>
                       ) : isEditing ? (
@@ -490,7 +490,7 @@ const BudgetView = () => {
                             variant="ghost"
                             onClick={cancelEdit}
                             disabled={isSaving}
-                            className="h-7 w-7 p-0 text-[#a1a1aa] hover:text-white"
+                            className="h-7 w-7 p-0 text-gray-600 dark:text-[#a1a1aa] hover:text-white"
                             data-testid={`budget-cancel-${s.category_id}`}
                           >
                             <X className="h-3 w-3" />
@@ -501,7 +501,7 @@ const BudgetView = () => {
                           size="sm"
                           variant="ghost"
                           onClick={() => startEdit({ ...s, budget: displayBudget })}
-                          className="h-7 px-2 text-[#a78bfa] hover:bg-[#a78bfa]/10"
+                          className="h-7 px-2 text-violet-600 dark:text-[#a78bfa] hover:bg-[#a78bfa]/10"
                           data-testid={`budget-edit-${s.category_id}`}
                         >
                           <Pencil className="h-3 w-3 mr-1" /> Edit
@@ -522,8 +522,8 @@ const BudgetView = () => {
 
 const Stat = ({ l, v, red, green }) => (
   <div className="text-right min-w-[90px]">
-    <p className="text-[10px] uppercase tracking-wide text-[#71717a]">{l}</p>
-    <p className={`text-sm font-semibold ${red ? 'text-red-400' : green ? 'text-emerald-400' : 'text-[#fafafa]'}`}>
+    <p className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-[#71717a]">{l}</p>
+    <p className={`text-sm font-semibold ${red ? 'text-red-400' : green ? 'text-emerald-400' : 'text-gray-900 dark:text-[#fafafa]'}`}>
       <IndianRupee className="inline h-3 w-3 -mt-0.5" />{String(v).replace(/^₹/, '')}
     </p>
   </div>

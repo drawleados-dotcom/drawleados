@@ -37,11 +37,11 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   const [activeGstType, setActiveGstType] = useState(lockedGstType || 'gst');
   const gstType = lockedGstType || activeGstType;
 
-  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
-  const bgSecondary = isDark ? 'bg-[#0c0a09]' : 'bg-gray-50';
-  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
-  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
-  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
+  const bgCard = isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-gray-50 dark:bg-[#0c0a09]' : 'bg-gray-50';
+  const borderColor = isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200';
+  const textPrimary = isDark ? 'text-gray-900 dark:text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500';
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -598,7 +598,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                       <div className="inline-flex items-center gap-2">
                         <button
                           onClick={() => openEdit(e)}
-                          className="text-[#6366f1] hover:text-[#818cf8]"
+                          className="text-[#6366f1] hover:text-indigo-600 dark:hover:text-[#818cf8]"
                           title="Edit entry"
                           data-testid={`cb-edit-${e.entry_id}`}
                         >
@@ -606,7 +606,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                         </button>
                         <button
                           onClick={() => deleteEntry(e)}
-                          className="text-[#f87171] hover:text-[#fca5a5]"
+                          className="text-red-600 dark:text-[#f87171] hover:text-red-600 dark:hover:text-[#fca5a5]"
                           title="Delete entry"
                           data-testid={`cb-del-${e.entry_id}`}
                         >
@@ -651,7 +651,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                         {e.expense_group_id && (
                           <button
                             onClick={() => viewGroup(e.expense_group_id)}
-                            className="text-[#6366f1] hover:text-[#818cf8]"
+                            className="text-[#6366f1] hover:text-indigo-600 dark:hover:text-[#818cf8]"
                             title="View payment summary"
                             data-testid={`cb-view-${e.expense_group_id}`}
                           >
@@ -660,7 +660,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                         )}
                         <button
                           onClick={() => openEdit(e)}
-                          className="text-[#6366f1] hover:text-[#818cf8]"
+                          className="text-[#6366f1] hover:text-indigo-600 dark:hover:text-[#818cf8]"
                           title="Edit entry"
                           data-testid={`cb-edit-${e.entry_id}`}
                         >
@@ -668,7 +668,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                         </button>
                         <button
                           onClick={() => deleteEntry(e)}
-                          className="text-[#f87171] hover:text-[#fca5a5]"
+                          className="text-red-600 dark:text-[#f87171] hover:text-red-600 dark:hover:text-[#fca5a5]"
                           title="Delete entry"
                           data-testid={`cb-del-${e.entry_id}`}
                         >
@@ -948,7 +948,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                       ) : aiCredits.length === 0 ? (
                         <p className={`text-xs italic ${textSecondary}`}>This project has no pending credit rows.</p>
                       ) : (
-                        <div className={`rounded-lg border ${borderColor} divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'} max-h-64 overflow-y-auto`}>
+                        <div className={`rounded-lg border ${borderColor} divide-y ${isDark ? 'divide-gray-200 dark:divide-[#27272a]' : 'divide-gray-200'} max-h-64 overflow-y-auto`}>
                           {/* Header row */}
                           <div className={`flex items-center px-3 py-2 text-[10px] uppercase tracking-wide ${textSecondary}`}>
                             <span className="w-8">
@@ -969,7 +969,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                             return (
                               <label
                                 key={c.id}
-                                className={`flex items-center px-3 py-2 text-sm cursor-pointer ${checked ? (isDark ? 'bg-[#27272a]' : 'bg-gray-100') : ''}`}
+                                className={`flex items-center px-3 py-2 text-sm cursor-pointer ${checked ? (isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-100') : ''}`}
                                 data-testid={`ai-credit-row-${c.id}`}
                               >
                                 <span className="w-8">

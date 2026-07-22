@@ -102,14 +102,14 @@ const ClientsTab = () => {
           <h2 className="text-2xl font-bold flex items-center gap-2" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             <Users className="h-6 w-6 text-[#6366f1]" /> Clients
           </h2>
-          <p className="text-sm text-[#a1a1aa] mt-0.5">Manage your client directory and invoice history</p>
+          <p className="text-sm text-gray-600 dark:text-[#a1a1aa] mt-0.5">Manage your client directory and invoice history</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             onClick={handleMigrate}
             disabled={migrating}
             variant="outline"
-            className="border-[#27272a] text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#1c1c1f]"
+            className="border-gray-200 dark:border-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa] hover:bg-gray-50 dark:hover:bg-[#1c1c1f]"
             data-testid="migrate-clients-btn"
             title="Auto-create clients from existing invoices"
           >
@@ -128,34 +128,34 @@ const ClientsTab = () => {
 
       {/* Summary Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4">
-          <div className="text-xs text-[#a1a1aa] uppercase mb-1.5">Total Clients</div>
+        <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-4">
+          <div className="text-xs text-gray-600 dark:text-[#a1a1aa] uppercase mb-1.5">Total Clients</div>
           <div className="text-2xl font-bold flex items-center gap-2">
             <Users className="h-5 w-5 text-[#6366f1]" /> {clients.length}
           </div>
         </div>
-        <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4">
-          <div className="text-xs text-[#a1a1aa] uppercase mb-1.5">Total Invoiced</div>
+        <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-4">
+          <div className="text-xs text-gray-600 dark:text-[#a1a1aa] uppercase mb-1.5">Total Invoiced</div>
           <div className="text-2xl font-bold text-[#6366f1]">{fmtCurrency(totals.invoiced)}</div>
         </div>
-        <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4">
-          <div className="text-xs text-[#a1a1aa] uppercase mb-1.5">Total Paid</div>
-          <div className="text-2xl font-bold text-[#4ade80]">{fmtCurrency(totals.paid)}</div>
+        <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-4">
+          <div className="text-xs text-gray-600 dark:text-[#a1a1aa] uppercase mb-1.5">Total Paid</div>
+          <div className="text-2xl font-bold text-green-600 dark:text-[#4ade80]">{fmtCurrency(totals.paid)}</div>
         </div>
-        <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4">
-          <div className="text-xs text-[#a1a1aa] uppercase mb-1.5">Outstanding</div>
-          <div className="text-2xl font-bold text-[#f87171]">{fmtCurrency(totals.outstanding)}</div>
+        <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-4">
+          <div className="text-xs text-gray-600 dark:text-[#a1a1aa] uppercase mb-1.5">Outstanding</div>
+          <div className="text-2xl font-bold text-red-600 dark:text-[#f87171]">{fmtCurrency(totals.outstanding)}</div>
         </div>
       </div>
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#a1a1aa]" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600 dark:text-[#a1a1aa]" />
         <Input
           placeholder="Search by name, company, email, GSTIN..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 bg-[#09090b] border-[#27272a] text-[#fafafa]"
+          className="pl-9 bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]"
           data-testid="clients-search-input"
         />
       </div>
@@ -166,9 +166,9 @@ const ClientsTab = () => {
           <Loader2 className="h-8 w-8 animate-spin text-[#6366f1]" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-12 text-center text-[#a1a1aa]">
+        <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-12 text-center text-gray-600 dark:text-[#a1a1aa]">
           <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p className="font-medium text-[#fafafa]">
+          <p className="font-medium text-gray-900 dark:text-[#fafafa]">
             {search ? 'No matching clients found' : 'No clients yet'}
           </p>
           <p className="text-sm mt-1">
@@ -176,9 +176,9 @@ const ClientsTab = () => {
           </p>
         </div>
       ) : (
-        <div className="bg-[#09090b] border border-[#27272a] rounded-lg overflow-hidden">
+        <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-[#1c1c1f] text-[#a1a1aa] text-xs uppercase">
+            <thead className="bg-gray-50 dark:bg-[#1c1c1f] text-gray-600 dark:text-[#a1a1aa] text-xs uppercase">
               <tr>
                 <th className="px-4 py-3 text-left">Client</th>
                 <th className="px-4 py-3 text-left">Contact</th>
@@ -197,45 +197,45 @@ const ClientsTab = () => {
                 return (
                   <tr
                     key={c.client_id}
-                    className="border-t border-[#27272a] hover:bg-[#1c1c1f]/40 transition-colors"
+                    className="border-t border-gray-200 dark:border-[#27272a] hover:bg-gray-50/40 dark:hover:bg-[#1c1c1f]/40 transition-colors"
                     data-testid={`client-row-${c.client_id}`}
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {c.customer_type === 'Business'
-                          ? <Building2 className="h-4 w-4 text-[#a1a1aa]" />
-                          : <UserIcon className="h-4 w-4 text-[#a1a1aa]" />}
+                          ? <Building2 className="h-4 w-4 text-gray-600 dark:text-[#a1a1aa]" />
+                          : <UserIcon className="h-4 w-4 text-gray-600 dark:text-[#a1a1aa]" />}
                         <div>
-                          <div className="font-medium text-[#fafafa]">{c.display_name}</div>
+                          <div className="font-medium text-gray-900 dark:text-[#fafafa]">{c.display_name}</div>
                           {c.company_name && c.company_name !== c.display_name && (
-                            <div className="text-xs text-[#a1a1aa]">{c.company_name}</div>
+                            <div className="text-xs text-gray-600 dark:text-[#a1a1aa]">{c.company_name}</div>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-[#d4d4d8]">
+                    <td className="px-4 py-3 text-gray-700 dark:text-[#d4d4d8]">
                       <div>{c.email || '—'}</div>
-                      <div className="text-xs text-[#a1a1aa]">{c.mobile || c.work_phone || ''}</div>
+                      <div className="text-xs text-gray-600 dark:text-[#a1a1aa]">{c.mobile || c.work_phone || ''}</div>
                     </td>
-                    <td className="px-4 py-3 text-[#a1a1aa] font-mono text-xs">{c.gstin || '—'}</td>
-                    <td className="px-4 py-3 text-right text-[#fafafa] font-medium">
+                    <td className="px-4 py-3 text-gray-600 dark:text-[#a1a1aa] font-mono text-xs">{c.gstin || '—'}</td>
+                    <td className="px-4 py-3 text-right text-gray-900 dark:text-[#fafafa] font-medium">
                       {fmtCurrency(s.total_invoiced, c.currency)}
                     </td>
-                    <td className="px-4 py-3 text-right text-[#4ade80]">
+                    <td className="px-4 py-3 text-right text-green-600 dark:text-[#4ade80]">
                       {fmtCurrency(s.total_paid, c.currency)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className={Number(s.outstanding) > 0 ? 'text-[#f87171] font-medium' : 'text-[#a1a1aa]'}>
+                      <span className={Number(s.outstanding) > 0 ? 'text-red-600 dark:text-[#f87171] font-medium' : 'text-gray-600 dark:text-[#a1a1aa]'}>
                         {fmtCurrency(s.outstanding, c.currency)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center text-[#fafafa]">{s.invoice_count || 0}</td>
-                    <td className="px-4 py-3 text-[#a1a1aa] text-xs">{fmtDate(s.last_invoice_date)}</td>
+                    <td className="px-4 py-3 text-center text-gray-900 dark:text-[#fafafa]">{s.invoice_count || 0}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-[#a1a1aa] text-xs">{fmtDate(s.last_invoice_date)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => setSummaryClientId(c.client_id)}
-                          className="p-1.5 rounded hover:bg-[#27272a] text-[#6366f1]"
+                          className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-[#27272a] text-[#6366f1]"
                           title="View Summary"
                           data-testid={`view-summary-${c.client_id}`}
                         >
@@ -243,7 +243,7 @@ const ClientsTab = () => {
                         </button>
                         <button
                           onClick={() => { setEditClient(c); setShowAdd(true); }}
-                          className="p-1.5 rounded hover:bg-[#27272a] text-[#a1a1aa]"
+                          className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-[#27272a] text-gray-600 dark:text-[#a1a1aa]"
                           title="Edit"
                           data-testid={`edit-client-${c.client_id}`}
                         >
@@ -251,7 +251,7 @@ const ClientsTab = () => {
                         </button>
                         <button
                           onClick={() => handleDelete(c)}
-                          className="p-1.5 rounded hover:bg-[#27272a] text-[#f87171]"
+                          className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-[#27272a] text-red-600 dark:text-[#f87171]"
                           title="Delete"
                           data-testid={`delete-client-${c.client_id}`}
                         >

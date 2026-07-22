@@ -165,18 +165,18 @@ const ExpenseSplitTab = () => {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+      <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <Layers className="h-5 w-5 text-[#a78bfa]" />
+            <Layers className="h-5 w-5 text-violet-600 dark:text-[#a78bfa]" />
             <div>
-              <h3 className="text-lg font-bold text-[#fafafa]">Expense Split</h3>
-              <p className="text-xs text-[#a1a1aa]">Allocate income across top & sub categories by locked percentage</p>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">Expense Split</h3>
+              <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">Allocate income across top & sub categories by locked percentage</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Select value={String(month)} onValueChange={(v) => setMonth(parseInt(v))}>
-              <SelectTrigger className="w-[130px] bg-[#27272a] border-[#3f3f46] text-[#fafafa]" data-testid="split-month-select">
+              <SelectTrigger className="w-[130px] bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa]" data-testid="split-month-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -184,7 +184,7 @@ const ExpenseSplitTab = () => {
               </SelectContent>
             </Select>
             <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
-              <SelectTrigger className="w-[100px] bg-[#27272a] border-[#3f3f46] text-[#fafafa]" data-testid="split-year-select">
+              <SelectTrigger className="w-[100px] bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa]" data-testid="split-year-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -222,16 +222,16 @@ const ExpenseSplitTab = () => {
       {/* Categories — horizontal pills like Master Expense */}
       <div className="space-y-3">
         {loading && (
-          <div className="text-center py-12 text-[#a1a1aa]">
+          <div className="text-center py-12 text-gray-600 dark:text-[#a1a1aa]">
             <Loader2 className="h-6 w-6 mx-auto animate-spin mb-2" />
             Loading…
           </div>
         )}
         {!loading && orderedCategories.length === 0 && (
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-12 text-center" data-testid="split-empty">
-            <Layers className="h-10 w-10 mx-auto text-[#52525b] mb-3" />
-            <p className="text-[#fafafa] font-medium mb-1">No top categories yet</p>
-            <p className="text-xs text-[#a1a1aa] mb-4">Create your first top category (e.g. Overhead 30%) to start splitting income.</p>
+          <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-12 text-center" data-testid="split-empty">
+            <Layers className="h-10 w-10 mx-auto text-gray-500 dark:text-[#52525b] mb-3" />
+            <p className="text-gray-900 dark:text-[#fafafa] font-medium mb-1">No top categories yet</p>
+            <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mb-4">Create your first top category (e.g. Overhead 30%) to start splitting income.</p>
             <Button onClick={() => openAdd(null)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white">
               <Plus className="h-4 w-4 mr-1" /> Add Top Category
             </Button>
@@ -247,10 +247,10 @@ const ExpenseSplitTab = () => {
           return (
             <>
               {/* Tab pills */}
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a] flex-wrap" data-testid="split-tabs">
+              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] flex-wrap" data-testid="split-tabs">
                 <button
                   onClick={() => setActiveTopId('all')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isAllTab ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${isAllTab ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'text-gray-600 dark:text-[#a1a1aa] hover:text-white'}`}
                   data-testid="split-tab-all"
                 >
                   <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle bg-[#a78bfa]" />
@@ -262,7 +262,7 @@ const ExpenseSplitTab = () => {
                     <button
                       key={c.category_id}
                       onClick={() => setActiveTopId(c.category_id)}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'text-gray-600 dark:text-[#a1a1aa] hover:text-white'}`}
                       data-testid={`split-tab-${c.category_id}`}
                     >
                       <span className="inline-block w-2 h-2 rounded-full mr-2 align-middle" style={{ backgroundColor: c.color }} />
@@ -275,10 +275,10 @@ const ExpenseSplitTab = () => {
               {/* ALL view — grand totals + per-top row summary */}
               {isAllTab && (
                 <>
-                  <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3" data-testid="split-all-summary">
+                  <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3" data-testid="split-all-summary">
                     <div>
-                      <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">All Categories</p>
-                      <p className="text-lg font-bold text-[#fafafa]">Grand Totals <span className="text-xs font-mono text-[#a1a1aa]">({months[month - 1].l} {year})</span></p>
+                      <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">All Categories</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">Grand Totals <span className="text-xs font-mono text-gray-600 dark:text-[#a1a1aa]">({months[month - 1].l} {year})</span></p>
                     </div>
                     <div className="flex items-center gap-4 text-xs">
                       <Stat l="Allocated" v={fmt(totalAllocated)} />
@@ -286,18 +286,18 @@ const ExpenseSplitTab = () => {
                       <Stat l="Balance" v={fmt(totalBalanceAll)} red={totalBalanceAll < 0} />
                     </div>
                   </div>
-                  <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
-                    <div className="px-4 py-3 border-b border-[#27272a] flex items-center justify-between">
-                      <p className="text-sm font-medium text-[#fafafa]">Top Categories</p>
-                      <span className="text-xs text-[#a1a1aa]">{orderedCategories.length} groups</span>
+                  <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-200 dark:border-[#27272a] flex items-center justify-between">
+                      <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">Top Categories</p>
+                      <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">{orderedCategories.length} groups</span>
                     </div>
-                    <div className="divide-y divide-[#27272a]">
+                    <div className="divide-y divide-gray-200 dark:divide-[#27272a]">
                       {orderedCategories.map((c) => (
                         <div key={c.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`split-all-row-${c.category_id}`}>
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
                           <div className="flex-1">
-                            <p className="text-sm font-medium text-[#fafafa]">{c.name}</p>
-                            <p className="text-[10px] text-[#a1a1aa]">{c.percent}% of Income · {(c.sub_categories || []).length} sub-categories</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{c.name}</p>
+                            <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa]">{c.percent}% of Income · {(c.sub_categories || []).length} sub-categories</p>
                           </div>
                           <Stat l="Allocated" v={fmt(c.allocated)} />
                           <Stat l="Spent" v={fmt(c.spent)} red={c.over_budget} />
@@ -311,25 +311,25 @@ const ExpenseSplitTab = () => {
 
               {/* Active top — full editor (rename / re-percent / delete / sub list) */}
               {!isAllTab && activeTop && (
-                <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid={`split-top-${activeTop.category_id}`}>
+                <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden" data-testid={`split-top-${activeTop.category_id}`}>
                   {/* Top row header */}
-                  <div className="flex items-center gap-3 p-4 border-b border-[#27272a]">
+                  <div className="flex items-center gap-3 p-4 border-b border-gray-200 dark:border-[#27272a]">
                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: activeTop.color }} />
                     {editing === activeTop.category_id ? (
                       <div className="flex-1 flex items-center gap-2">
                         <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="h-8 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-sm max-w-[200px]" />
+                          className="h-8 bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-sm max-w-[200px]" />
                         <Input type="number" value={editForm.percent} onChange={(e) => setEditForm({ ...editForm, percent: e.target.value })}
-                          className="h-8 w-20 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-sm" />
-                        <span className="text-xs text-[#a1a1aa]">%</span>
+                          className="h-8 w-20 bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-sm" />
+                        <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">%</span>
                         <Button size="sm" onClick={() => saveEdit(activeTop)} className="bg-emerald-600 hover:bg-emerald-700 h-7 px-2"><Check className="h-3.5 w-3.5" /></Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-7 px-2 text-[#a1a1aa]"><X className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-7 px-2 text-gray-600 dark:text-[#a1a1aa]"><X className="h-3.5 w-3.5" /></Button>
                       </div>
                     ) : (
                       <>
                         <div className="flex-1">
-                          <p className="text-base font-bold text-[#fafafa]">{activeTop.name}</p>
-                          <p className="text-[10px] text-[#a1a1aa]">{activeTop.percent}% of Income</p>
+                          <p className="text-base font-bold text-gray-900 dark:text-[#fafafa]">{activeTop.name}</p>
+                          <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa]">{activeTop.percent}% of Income</p>
                         </div>
                         {activeTop.over_budget && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/15 text-red-400">OVER BUDGET</span>
@@ -342,19 +342,19 @@ const ExpenseSplitTab = () => {
                       <Stat l="Balance" v={fmt(activeTop.balance)} red={activeTop.balance < 0} />
                     </div>
                     <div className="flex items-center gap-1 ml-2">
-                      <Button size="sm" variant="ghost" onClick={() => openAdd(activeTop)} className="text-[#a1a1aa] hover:text-[#fafafa] h-7 px-2" title="Add Sub Category" data-testid={`split-add-sub-${activeTop.category_id}`}>
+                      <Button size="sm" variant="ghost" onClick={() => openAdd(activeTop)} className="text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa] h-7 px-2" title="Add Sub Category" data-testid={`split-add-sub-${activeTop.category_id}`}>
                         <Plus className="h-3.5 w-3.5 mr-1" /> Sub
                       </Button>
                       {editing !== activeTop.category_id && (
-                        <Button size="sm" variant="ghost" onClick={() => startEdit(activeTop)} className="text-[#a1a1aa] hover:text-[#fafafa] h-7 w-7 p-0" title="Edit"><Edit2 className="h-3.5 w-3.5" /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => startEdit(activeTop)} className="text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa] h-7 w-7 p-0" title="Edit"><Edit2 className="h-3.5 w-3.5" /></Button>
                       )}
                       <Button size="sm" variant="ghost" onClick={() => remove(activeTop)} className="text-red-400 hover:bg-red-500/10 h-7 w-7 p-0" title="Delete"><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
 
                   {/* Progress bar */}
-                  <div className="px-4 py-2 border-b border-[#27272a]">
-                    <div className="h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                  <div className="px-4 py-2 border-b border-gray-200 dark:border-[#27272a]">
+                    <div className="h-1.5 rounded-full bg-gray-100 dark:bg-[#27272a] overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${activeTop.over_budget ? 'bg-red-500' : 'bg-emerald-500'}`}
                         style={{ width: `${Math.min(100, (activeTop.spent / Math.max(activeTop.allocated || 1, 1)) * 100)}%` }}
@@ -365,28 +365,28 @@ const ExpenseSplitTab = () => {
                   {/* Sub-categories — flat list */}
                   <div>
                     {(activeTop.sub_categories || []).length === 0 ? (
-                      <div className="px-4 py-8 text-center text-xs text-[#71717a]">
-                        No sub-categories yet. <button onClick={() => openAdd(activeTop)} className="text-[#a78bfa] hover:underline">Add one</button>
+                      <div className="px-4 py-8 text-center text-xs text-gray-500 dark:text-[#71717a]">
+                        No sub-categories yet. <button onClick={() => openAdd(activeTop)} className="text-violet-600 dark:text-[#a78bfa] hover:underline">Add one</button>
                       </div>
                     ) : (
-                      <div className="divide-y divide-[#27272a]">
+                      <div className="divide-y divide-gray-200 dark:divide-[#27272a]">
                         {(activeTop.sub_categories || []).map((sub) => (
                           <div key={sub.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`split-sub-${sub.category_id}`}>
                             <span className="w-2 h-2 rounded-full flex-shrink-0 opacity-70" style={{ backgroundColor: sub.color }} />
                             {editing === sub.category_id ? (
                               <div className="flex-1 flex items-center gap-2">
                                 <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                  className="h-7 bg-[#0c0a09] border-[#27272a] text-[#fafafa] text-xs" />
+                                  className="h-7 bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-xs" />
                                 <Button size="sm" onClick={() => saveEdit(sub)} className="bg-emerald-600 hover:bg-emerald-700 h-6 px-2"><Check className="h-3 w-3" /></Button>
-                                <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-6 px-2 text-[#a1a1aa]"><X className="h-3 w-3" /></Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-6 px-2 text-gray-600 dark:text-[#a1a1aa]"><X className="h-3 w-3" /></Button>
                               </div>
                             ) : (
-                              <span className="flex-1 text-sm text-[#fafafa]">{sub.name}</span>
+                              <span className="flex-1 text-sm text-gray-900 dark:text-[#fafafa]">{sub.name}</span>
                             )}
                             <Stat l="Spent" v={fmt(sub.spent)} compact red={sub.over_budget} />
                             <div className="flex items-center gap-1 ml-2">
                               {editing !== sub.category_id && (
-                                <Button size="sm" variant="ghost" onClick={() => startEdit(sub)} className="text-[#a1a1aa] hover:text-[#fafafa] h-6 w-6 p-0"><Edit2 className="h-3 w-3" /></Button>
+                                <Button size="sm" variant="ghost" onClick={() => startEdit(sub)} className="text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa] h-6 w-6 p-0"><Edit2 className="h-3 w-3" /></Button>
                               )}
                               <Button size="sm" variant="ghost" onClick={() => remove(sub)} className="text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button>
                             </div>
@@ -404,7 +404,7 @@ const ExpenseSplitTab = () => {
 
       {/* Add Modal */}
       <Dialog open={!!addModal} onOpenChange={(o) => !o && setAddModal(null)}>
-        <DialogContent className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-md" data-testid="split-add-modal">
+        <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-w-md" data-testid="split-add-modal">
           <DialogHeader>
             <DialogTitle>
               {addModal?.parent_id ? `Add Sub-Category to ${addModal.parent_name}` : 'Add Top Category'}
@@ -412,12 +412,12 @@ const ExpenseSplitTab = () => {
           </DialogHeader>
           <div className="space-y-3 mt-2">
             <div>
-              <Label className="text-[#fafafa]">Name *</Label>
+              <Label className="text-gray-900 dark:text-[#fafafa]">Name *</Label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder={addModal?.parent_id ? 'e.g. Rent' : 'e.g. Overhead'}
-                className="bg-[#0c0a09] border-[#27272a] text-[#fafafa]"
+                className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]"
                 autoFocus
                 data-testid="split-name-input"
               />
@@ -426,9 +426,9 @@ const ExpenseSplitTab = () => {
                 just nominal buckets that roll their spend up to the parent. */}
             {!addModal?.parent_id && (
               <div>
-                <Label className="text-[#fafafa]">
+                <Label className="text-gray-900 dark:text-[#fafafa]">
                   Percent *{' '}
-                  <span className="text-[#71717a] text-xs font-normal">(of Income)</span>
+                  <span className="text-gray-500 dark:text-[#71717a] text-xs font-normal">(of Income)</span>
                 </Label>
                 <div className="flex items-center gap-2">
                   <Input
@@ -438,20 +438,20 @@ const ExpenseSplitTab = () => {
                     placeholder="e.g. 30"
                     step="0.1"
                     min="0"
-                    className="bg-[#0c0a09] border-[#27272a] text-[#fafafa]"
+                    className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]"
                     data-testid="split-percent-input"
                   />
-                  <span className="text-[#a1a1aa]">%</span>
+                  <span className="text-gray-600 dark:text-[#a1a1aa]">%</span>
                 </div>
                 {form.percent && (
-                  <p className="text-xs text-[#a1a1aa] mt-1">
+                  <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mt-1">
                     = {fmt((income * parseFloat(form.percent || 0)) / 100)} for {months[month - 1].l} {year}
                   </p>
                 )}
               </div>
             )}
             <div>
-              <Label className="text-[#fafafa]">Color</Label>
+              <Label className="text-gray-900 dark:text-[#fafafa]">Color</Label>
               <div className="flex gap-2 flex-wrap mt-1">
                 {COLORS.map((c) => (
                   <button
@@ -466,7 +466,7 @@ const ExpenseSplitTab = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setAddModal(null)} className="text-[#a1a1aa]">Cancel</Button>
+            <Button variant="ghost" onClick={() => setAddModal(null)} className="text-gray-600 dark:text-[#a1a1aa]">Cancel</Button>
             <Button onClick={submitAdd} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="split-save-btn">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
             </Button>
@@ -479,15 +479,15 @@ const ExpenseSplitTab = () => {
 
 const StatCard = ({ label, value, accent = 'indigo', icon: Icon, tag }) => {
   const colors = {
-    indigo: 'text-[#a78bfa]',
+    indigo: 'text-violet-600 dark:text-[#a78bfa]',
     emerald: 'text-emerald-400',
     red: 'text-red-400',
     amber: 'text-amber-400',
   };
   return (
-    <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-3">
+    <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-3">
       <div className="flex items-center justify-between mb-1">
-        <p className="text-[11px] uppercase tracking-wide text-[#a1a1aa]">{label}</p>
+        <p className="text-[11px] uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">{label}</p>
         {Icon && <Icon className={`h-4 w-4 ${colors[accent]}`} />}
       </div>
       <p className={`text-lg font-bold ${colors[accent]}`}>{value}</p>
@@ -498,8 +498,8 @@ const StatCard = ({ label, value, accent = 'indigo', icon: Icon, tag }) => {
 
 const Stat = ({ l, v, red, compact }) => (
   <div className={compact ? 'text-right min-w-[55px]' : 'text-right min-w-[80px]'}>
-    <p className="text-[10px] uppercase tracking-wide text-[#71717a]">{l}</p>
-    <p className={`${compact ? 'text-xs' : 'text-sm'} font-semibold ${red ? 'text-red-400' : 'text-[#fafafa]'}`}>{v}</p>
+    <p className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-[#71717a]">{l}</p>
+    <p className={`${compact ? 'text-xs' : 'text-sm'} font-semibold ${red ? 'text-red-400' : 'text-gray-900 dark:text-[#fafafa]'}`}>{v}</p>
   </div>
 );
 

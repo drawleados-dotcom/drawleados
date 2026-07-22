@@ -532,7 +532,7 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>Invoice Preview</span>
@@ -540,7 +540,7 @@ const InvoicePreviewModal = ({ invoice, onClose }) => {
               <Button
                 size="sm"
                 onClick={handlePrint}
-                className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
+                className="bg-gray-100 dark:bg-[#27272a] hover:bg-gray-200 dark:hover:bg-[#3f3f46] text-gray-900 dark:text-[#fafafa]"
               >
                 <Printer className="h-4 w-4 mr-1" />
                 Print

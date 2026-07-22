@@ -58,11 +58,11 @@ const PipelineTab = () => {
   const token = localStorage.getItem('session_token');
   const headers = { Authorization: `Bearer ${token}` };
 
-  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
-  const bgSecondary = isDark ? 'bg-[#0c0a09]' : 'bg-gray-50';
-  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
-  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
-  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
+  const bgCard = isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-gray-50 dark:bg-[#0c0a09]' : 'bg-gray-50';
+  const borderColor = isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200';
+  const textPrimary = isDark ? 'text-gray-900 dark:text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500';
 
   const [stages, setStages] = useState([]);
   const [leads, setLeads] = useState([]);

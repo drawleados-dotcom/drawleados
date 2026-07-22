@@ -31,7 +31,7 @@ const STATUS_COLORS = {
   approved: 'bg-[#10b981]/20 text-[#10b981]',
   generated: 'bg-[#14b8a6]/20 text-[#14b8a6]',
   partially_paid: 'bg-[#f59e0b]/20 text-[#f59e0b]',
-  paid: 'bg-[#a78bfa]/20 text-[#a78bfa]',
+  paid: 'bg-[#a78bfa]/20 text-violet-600 dark:text-[#a78bfa]',
   not_created: 'bg-gray-500/15 text-gray-500',
 };
 const STATUS_LABELS = {
@@ -128,35 +128,35 @@ const PayrollTab = () => {
   return (
     <div className="space-y-4" data-testid="finance-payroll-tab">
       {/* Header + Month Scheduler */}
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
+      <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Users className="h-5 w-5 text-[#a78bfa]" />
+          <Users className="h-5 w-5 text-violet-600 dark:text-[#a78bfa]" />
           <div>
-            <h3 className="text-lg font-bold text-[#fafafa]">Payroll</h3>
-            <p className="text-xs text-[#a1a1aa]">Monthly payroll snapshot — sourced from HR Admin → Payroll Management</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-[#fafafa]">Payroll</h3>
+            <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">Monthly payroll snapshot — sourced from HR Admin → Payroll Management</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-[#71717a]" />
-          <span className="text-sm text-[#fafafa] font-medium">Month:</span>
-          <Button size="sm" variant="ghost" onClick={() => stepMonth(-1)} className="h-9 w-9 p-0 text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-prev">
+          <Calendar className="h-4 w-4 text-gray-500 dark:text-[#71717a]" />
+          <span className="text-sm text-gray-900 dark:text-[#fafafa] font-medium">Month:</span>
+          <Button size="sm" variant="ghost" onClick={() => stepMonth(-1)} className="h-9 w-9 p-0 text-gray-600 dark:text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-prev">
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <select
             value={month}
             onChange={(e) => setMonth(parseInt(e.target.value))}
-            className="p-2 rounded-lg bg-[#27272a] border border-[#3f3f46] text-[#fafafa] text-sm min-w-[130px]"
+            className="p-2 rounded-lg bg-gray-100 dark:bg-[#27272a] border border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] text-sm min-w-[130px]"
             data-testid="fin-payroll-month"
           >
             {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
           </select>
-          <Button size="sm" variant="ghost" onClick={() => stepMonth(1)} className="h-9 w-9 p-0 text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-next">
+          <Button size="sm" variant="ghost" onClick={() => stepMonth(1)} className="h-9 w-9 p-0 text-gray-600 dark:text-[#a1a1aa] hover:text-[#6366f1]" data-testid="fin-payroll-next">
             <ChevronRight className="h-4 w-4" />
           </Button>
           <select
             value={year}
             onChange={(e) => setYear(parseInt(e.target.value))}
-            className="p-2 rounded-lg bg-[#27272a] border border-[#3f3f46] text-[#fafafa] text-sm min-w-[100px]"
+            className="p-2 rounded-lg bg-gray-100 dark:bg-[#27272a] border border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] text-sm min-w-[100px]"
             data-testid="fin-payroll-year"
           >
             {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
@@ -170,11 +170,11 @@ const PayrollTab = () => {
         {summaryCards.map((c) => (
           <div
             key={c.label}
-            className="bg-[#18181b] border border-[#27272a] rounded-xl p-4"
+            className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4"
             data-testid={c.testId}
           >
             <div className="flex items-center justify-between">
-              <p className="text-xs uppercase tracking-wide text-[#a1a1aa]">{c.label}</p>
+              <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">{c.label}</p>
               <c.Icon className="h-4 w-4" style={{ color: c.accent }} />
             </div>
             <p className="text-2xl font-bold mt-2" style={{ color: c.accent, fontFamily: 'Plus Jakarta Sans' }}>{c.value}</p>
@@ -183,17 +183,17 @@ const PayrollTab = () => {
       </div>
 
       {/* Employee rows */}
-      <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+      <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
         {loading ? (
-          <div className="py-12 text-center text-[#a1a1aa]">
+          <div className="py-12 text-center text-gray-600 dark:text-[#a1a1aa]">
             <Loader2 className="h-6 w-6 mx-auto animate-spin mb-2" /> Loading payroll…
           </div>
         ) : rows.length === 0 ? (
-          <div className="py-12 text-center text-[#a1a1aa]">No employees</div>
+          <div className="py-12 text-center text-gray-600 dark:text-[#a1a1aa]">No employees</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-[#0c0a09] text-[#a1a1aa] uppercase text-[11px] tracking-wider">
+              <thead className="bg-gray-50 dark:bg-[#0c0a09] text-gray-600 dark:text-[#a1a1aa] uppercase text-[11px] tracking-wider">
                 <tr>
                   <th className="text-left px-4 py-3">Employee</th>
                   <th className="text-left px-4 py-3">Month / Year</th>
@@ -217,39 +217,39 @@ const PayrollTab = () => {
                   const perDay = p?.calculation?.per_day_salary;
                   const netSalary = p?.net_salary;
                   return (
-                    <tr key={emp.user_id} className="border-t border-[#27272a] hover:bg-[#6366f1]/5 transition-colors" data-testid={`fin-payroll-row-${emp.user_id}`}>
+                    <tr key={emp.user_id} className="border-t border-gray-200 dark:border-[#27272a] hover:bg-[#6366f1]/5 transition-colors" data-testid={`fin-payroll-row-${emp.user_id}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-white text-[11px] font-semibold">
                             {emp.name?.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-[#fafafa]">{emp.name}</p>
-                            <p className="text-[10px] text-[#a1a1aa]">{emp.designation || '—'}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{emp.name}</p>
+                            <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa]">{emp.designation || '—'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-[#fafafa]">{periodLabel}</td>
-                      <td className="px-4 py-3 text-[#a1a1aa]">{salaryDate}</td>
-                      <td className="px-4 py-3 text-right text-[#fafafa]">{workingDays}</td>
+                      <td className="px-4 py-3 text-gray-900 dark:text-[#fafafa]">{periodLabel}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-[#a1a1aa]">{salaryDate}</td>
+                      <td className="px-4 py-3 text-right text-gray-900 dark:text-[#fafafa]">{workingDays}</td>
                       <td className="px-4 py-3 text-right text-[#10b981] font-medium">{present}</td>
-                      <td className="px-4 py-3 text-right text-[#fafafa]">{netDays}</td>
-                      <td className="px-4 py-3 text-right text-[#a1a1aa]">{perDay != null ? `₹${Number(perDay).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}</td>
+                      <td className="px-4 py-3 text-right text-gray-900 dark:text-[#fafafa]">{netDays}</td>
+                      <td className="px-4 py-3 text-right text-gray-600 dark:text-[#a1a1aa]">{perDay != null ? `₹${Number(perDay).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}</td>
                       <td className="px-4 py-3 text-right font-semibold text-[#10b981]">{netSalary != null ? fmtINR(netSalary) : '—'}</td>
                       <td className="px-4 py-3 text-center">
                         <Badge className={STATUS_COLORS[status] || STATUS_COLORS.not_created}>{STATUS_LABELS[status] || status}</Badge>
                         {status === 'partially_paid' && (
-                          <p className="text-[10px] text-[#a1a1aa] mt-1">
+                          <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa] mt-1">
                             ₹{Number(p.amount_paid || 0).toLocaleString('en-IN')} / {fmtINR(netSalary)}
                           </p>
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {p ? (
-                          <Button size="sm" variant="ghost" onClick={() => setViewing(p)} className="text-[#a78bfa] hover:bg-[#a78bfa]/10 h-7 px-2" data-testid={`fin-payroll-view-${emp.user_id}`}>
+                          <Button size="sm" variant="ghost" onClick={() => setViewing(p)} className="text-violet-600 dark:text-[#a78bfa] hover:bg-[#a78bfa]/10 h-7 px-2" data-testid={`fin-payroll-view-${emp.user_id}`}>
                             <Eye className="h-3.5 w-3.5 mr-1" /> View
                           </Button>
-                        ) : <span className="text-xs text-[#a1a1aa]">—</span>}
+                        ) : <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">—</span>}
                       </td>
                     </tr>
                   );
@@ -262,19 +262,19 @@ const PayrollTab = () => {
 
       {/* Payslip View Modal */}
       <Dialog open={!!viewing} onOpenChange={(o) => !o && setViewing(null)}>
-        <DialogContent className="bg-[#18181b] border border-[#27272a] max-w-2xl">
+        <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] max-w-2xl">
           {viewing && (
             <>
               <DialogHeader>
-                <DialogTitle className="text-[#fafafa] flex items-center gap-2">
+                <DialogTitle className="text-gray-900 dark:text-[#fafafa] flex items-center gap-2">
                   <FileText className="h-5 w-5 text-[#6366f1]" />
                   Payslip — {MONTHS[viewing.month - 1]} {viewing.year}
                 </DialogTitle>
-                <DialogDescription className="text-[#a1a1aa]">
+                <DialogDescription className="text-gray-600 dark:text-[#a1a1aa]">
                   Salary details for the selected month.
                 </DialogDescription>
               </DialogHeader>
-              <div className="flex items-center gap-2 text-sm text-[#a1a1aa] -mt-2">
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-[#a1a1aa] -mt-2">
                 <Badge className={STATUS_COLORS[viewing.status] || STATUS_COLORS.not_created}>
                   {STATUS_LABELS[viewing.status] || viewing.status}
                 </Badge>
@@ -284,18 +284,18 @@ const PayrollTab = () => {
               </div>
               <div className="space-y-4 py-2">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a]">
-                    <p className="text-[10px] uppercase tracking-wide text-[#a1a1aa]">Designation</p>
-                    <p className="text-sm font-medium text-[#fafafa]">{viewing.employee_designation || '—'}</p>
+                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a]">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">Designation</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{viewing.employee_designation || '—'}</p>
                   </div>
-                  <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a]">
-                    <p className="text-[10px] uppercase tracking-wide text-[#a1a1aa]">Salary Date</p>
-                    <p className="text-sm font-medium text-[#fafafa]">{viewing.created_at ? new Date(viewing.created_at).toLocaleDateString('en-GB') : '—'}</p>
+                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a]">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">Salary Date</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{viewing.created_at ? new Date(viewing.created_at).toLocaleDateString('en-GB') : '—'}</p>
                   </div>
                 </div>
                 {viewing.attendance && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide text-[#a1a1aa] mb-2">Attendance</p>
+                    <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa] mb-2">Attendance</p>
                     <div className="grid grid-cols-4 gap-2">
                       {[
                         { l: 'Working Days', v: viewing.attendance?.total_working_days ?? '—' },
@@ -303,8 +303,8 @@ const PayrollTab = () => {
                         { l: 'Absent', v: viewing.attendance?.absent_days ?? 0, accent: '#ef4444' },
                         { l: 'Paid Leave', v: (viewing.attendance?.casual_leaves ?? 0) + (viewing.attendance?.sick_leaves ?? 0) },
                       ].map((s) => (
-                        <div key={s.l} className="p-2.5 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
-                          <p className="text-[10px] uppercase text-[#a1a1aa]">{s.l}</p>
+                        <div key={s.l} className="p-2.5 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a] text-center">
+                          <p className="text-[10px] uppercase text-gray-600 dark:text-[#a1a1aa]">{s.l}</p>
                           <p className="text-base font-bold mt-1" style={{ color: s.accent || undefined }}>{s.v}</p>
                         </div>
                       ))}
@@ -312,43 +312,43 @@ const PayrollTab = () => {
                   </div>
                 )}
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-[#a1a1aa] mb-2">Salary Breakdown</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa] mb-2">Salary Breakdown</p>
                   <div className="grid grid-cols-3 gap-2">
-                    <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
-                      <p className="text-[10px] uppercase text-[#a1a1aa]">Gross</p>
-                      <p className="text-base font-bold text-[#fafafa] mt-1">₹{Number(viewing.base_salary || 0).toLocaleString('en-IN')}</p>
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a] text-center">
+                      <p className="text-[10px] uppercase text-gray-600 dark:text-[#a1a1aa]">Gross</p>
+                      <p className="text-base font-bold text-gray-900 dark:text-[#fafafa] mt-1">₹{Number(viewing.base_salary || 0).toLocaleString('en-IN')}</p>
                     </div>
-                    <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
-                      <p className="text-[10px] uppercase text-[#a1a1aa]">Per Day</p>
-                      <p className="text-base font-bold text-[#fafafa] mt-1">₹{Number(viewing.calculation?.per_day_salary || 0).toLocaleString('en-IN')}</p>
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a] text-center">
+                      <p className="text-[10px] uppercase text-gray-600 dark:text-[#a1a1aa]">Per Day</p>
+                      <p className="text-base font-bold text-gray-900 dark:text-[#fafafa] mt-1">₹{Number(viewing.calculation?.per_day_salary || 0).toLocaleString('en-IN')}</p>
                     </div>
-                    <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
-                      <p className="text-[10px] uppercase text-[#a1a1aa]">Net Pay</p>
+                    <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a] text-center">
+                      <p className="text-[10px] uppercase text-gray-600 dark:text-[#a1a1aa]">Net Pay</p>
                       <p className="text-base font-bold mt-1 text-[#10b981]">₹{Number(viewing.net_salary || 0).toLocaleString('en-IN')}</p>
                     </div>
                   </div>
                   {viewing.status === 'partially_paid' && (
                     <div className="grid grid-cols-2 gap-2 mt-2">
-                      <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
-                        <p className="text-[10px] uppercase text-[#a1a1aa]">Paid So Far</p>
+                      <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a] text-center">
+                        <p className="text-[10px] uppercase text-gray-600 dark:text-[#a1a1aa]">Paid So Far</p>
                         <p className="text-base font-bold mt-1 text-[#10b981]">₹{Number(viewing.amount_paid || 0).toLocaleString('en-IN')}</p>
                       </div>
-                      <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a] text-center">
-                        <p className="text-[10px] uppercase text-[#a1a1aa]">Remaining</p>
+                      <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a] text-center">
+                        <p className="text-[10px] uppercase text-gray-600 dark:text-[#a1a1aa]">Remaining</p>
                         <p className="text-base font-bold mt-1 text-[#f59e0b]">₹{(Number(viewing.net_salary || 0) - Number(viewing.amount_paid || 0)).toLocaleString('en-IN')}</p>
                       </div>
                     </div>
                   )}
                 </div>
                 {viewing.hr_remarks && (
-                  <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a]">
-                    <p className="text-[10px] uppercase tracking-wide text-[#a1a1aa]">HR Remarks</p>
-                    <p className="text-sm text-[#fafafa] italic mt-1">&ldquo;{viewing.hr_remarks}&rdquo;</p>
+                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a]">
+                    <p className="text-[10px] uppercase tracking-wide text-gray-600 dark:text-[#a1a1aa]">HR Remarks</p>
+                    <p className="text-sm text-gray-900 dark:text-[#fafafa] italic mt-1">&ldquo;{viewing.hr_remarks}&rdquo;</p>
                   </div>
                 )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setViewing(null)} className="border-[#27272a]">Close</Button>
+                <Button variant="outline" onClick={() => setViewing(null)} className="border-gray-200 dark:border-[#27272a]">Close</Button>
                 {(viewing.status === 'generated' || viewing.status === 'partially_paid' || viewing.status === 'paid') && (
                   <Button onClick={downloadPDF} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="fin-payroll-view-download">
                     <Download className="h-4 w-4 mr-1" /> Download PDF

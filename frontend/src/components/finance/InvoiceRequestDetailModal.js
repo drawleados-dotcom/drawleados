@@ -117,13 +117,13 @@ const InvoiceRequestDetailModal = ({ request, onClose, onRaiseInvoice }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-2xl" data-testid="invreq-detail-modal">
+      <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-w-2xl" data-testid="invreq-detail-modal">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Receipt className="h-5 w-5 text-[#a78bfa]" />
+            <Receipt className="h-5 w-5 text-violet-600 dark:text-[#a78bfa]" />
             Invoice Request — {request?.company_name}
           </DialogTitle>
-          <p className="text-xs text-[#a1a1aa]">
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">
             Review the request raised from the Leads pipeline, link / create the client, then raise the actual invoice.
           </p>
         </DialogHeader>
@@ -151,35 +151,35 @@ const InvoiceRequestDetailModal = ({ request, onClose, onRaiseInvoice }) => {
         </div>
 
         {/* Billing address */}
-        <div className="mt-2 p-3 rounded-lg bg-[#0c0a09] border border-[#27272a]">
-          <p className="text-[10px] uppercase tracking-wide text-[#71717a] mb-1">Billing Address</p>
-          <p className="text-sm text-[#fafafa] whitespace-pre-wrap min-h-[20px]">
-            {request?.billing_address || <span className="text-[#71717a] italic">Not provided</span>}
+        <div className="mt-2 p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a]">
+          <p className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-[#71717a] mb-1">Billing Address</p>
+          <p className="text-sm text-gray-900 dark:text-[#fafafa] whitespace-pre-wrap min-h-[20px]">
+            {request?.billing_address || <span className="text-gray-500 dark:text-[#71717a] italic">Not provided</span>}
           </p>
         </div>
 
         {/* Notes */}
         {request?.notes && (
-          <div className="mt-2 p-3 rounded-lg bg-[#0c0a09] border border-[#27272a]">
-            <p className="text-[10px] uppercase tracking-wide text-[#71717a] mb-1">Notes / Service Details</p>
-            <p className="text-sm text-[#fafafa] whitespace-pre-wrap">{request.notes}</p>
+          <div className="mt-2 p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a]">
+            <p className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-[#71717a] mb-1">Notes / Service Details</p>
+            <p className="text-sm text-gray-900 dark:text-[#fafafa] whitespace-pre-wrap">{request.notes}</p>
           </div>
         )}
 
         {/* Action panel — Step 1: Client, Step 2: Invoice */}
-        <div className="mt-4 p-4 rounded-xl bg-gradient-to-br from-[#1e1b4b]/40 to-[#0c0a09] border border-[#3730a3]/40">
+        <div className="mt-4 p-4 rounded-xl bg-gradient-to-br from-indigo-100 dark:from-[#1e1b4b]/40 to-[#0c0a09] border border-indigo-200 dark:border-[#3730a3]/40">
           {loadingClients ? (
-            <div className="flex items-center justify-center py-4 text-[#a1a1aa] text-sm">
+            <div className="flex items-center justify-center py-4 text-gray-600 dark:text-[#a1a1aa] text-sm">
               <Loader2 className="h-4 w-4 animate-spin mr-2" /> Checking clients…
             </div>
           ) : !linkedClient ? (
             <>
               <div className="flex items-start gap-3 mb-3">
-                <UserPlus className="h-5 w-5 text-[#a78bfa] flex-shrink-0 mt-0.5" />
+                <UserPlus className="h-5 w-5 text-violet-600 dark:text-[#a78bfa] flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-[#fafafa]">Step 1 — Create the Finance Client</p>
-                  <p className="text-xs text-[#a1a1aa] mt-0.5">
-                    No matching client found for <b className="text-[#fafafa]">{request?.company_name}</b>. We&apos;ll auto-fill the form from this request.
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">Step 1 — Create the Finance Client</p>
+                  <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mt-0.5">
+                    No matching client found for <b className="text-gray-900 dark:text-[#fafafa]">{request?.company_name}</b>. We&apos;ll auto-fill the form from this request.
                   </p>
                 </div>
               </div>
@@ -201,17 +201,17 @@ const InvoiceRequestDetailModal = ({ request, onClose, onRaiseInvoice }) => {
               <div className="flex items-start gap-3 mb-3">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-[#fafafa]">
+                  <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">
                     Client linked: <span className="text-emerald-400">{linkedClient.display_name}</span>
                   </p>
-                  <p className="text-xs text-[#a1a1aa] mt-0.5">
+                  <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mt-0.5">
                     {linkedClient.gstin && <>GSTIN: <span className="font-mono">{linkedClient.gstin}</span> · </>}
                     {linkedClient.gst_treatment || (isGst ? 'GST' : 'Non-GST')}
                   </p>
                 </div>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400">READY</span>
               </div>
-              <div className="flex items-center gap-2 mb-3 text-xs text-[#a1a1aa]">
+              <div className="flex items-center gap-2 mb-3 text-xs text-gray-600 dark:text-[#a1a1aa]">
                 <AlertCircle className="h-3.5 w-3.5" />
                 Step 2 — Open the Invoice form pre-filled with this client + the requested amount.
               </div>
@@ -226,8 +226,8 @@ const InvoiceRequestDetailModal = ({ request, onClose, onRaiseInvoice }) => {
           )}
         </div>
 
-        <div className="flex justify-end mt-4 pt-3 border-t border-[#27272a]">
-          <Button variant="ghost" onClick={onClose} className="text-[#a1a1aa]">
+        <div className="flex justify-end mt-4 pt-3 border-t border-gray-200 dark:border-[#27272a]">
+          <Button variant="ghost" onClick={onClose} className="text-gray-600 dark:text-[#a1a1aa]">
             <X className="h-4 w-4 mr-1" /> Close
           </Button>
         </div>
@@ -237,12 +237,12 @@ const InvoiceRequestDetailModal = ({ request, onClose, onRaiseInvoice }) => {
 };
 
 const DetailField = ({ icon: Icon, label, value, mono = false }) => (
-  <div className="p-3 rounded-lg bg-[#0c0a09] border border-[#27272a]">
+  <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a]">
     <div className="flex items-center gap-1.5 mb-1">
-      {Icon && <Icon className="h-3 w-3 text-[#71717a]" />}
-      <p className="text-[10px] uppercase tracking-wide text-[#71717a]">{label}</p>
+      {Icon && <Icon className="h-3 w-3 text-gray-500 dark:text-[#71717a]" />}
+      <p className="text-[10px] uppercase tracking-wide text-gray-500 dark:text-[#71717a]">{label}</p>
     </div>
-    <div className={`text-sm text-[#fafafa] ${mono ? 'font-mono' : ''}`}>{value}</div>
+    <div className={`text-sm text-gray-900 dark:text-[#fafafa] ${mono ? 'font-mono' : ''}`}>{value}</div>
   </div>
 );
 

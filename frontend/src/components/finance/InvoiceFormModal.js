@@ -319,14 +319,14 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
     }
   };
 
-  const inputCls = 'bg-[#09090b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]';
-  const labelCls = 'text-[#fafafa] mb-1.5 block text-sm font-medium';
+  const inputCls = 'bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] focus:border-[#6366f1]';
+  const labelCls = 'text-gray-900 dark:text-[#fafafa] mb-1.5 block text-sm font-medium';
 
   return (
     <>
       <Dialog open={true} onOpenChange={onClose}>
         <DialogContent
-          className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-5xl max-h-[92vh] overflow-y-auto"
+          className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-w-5xl max-h-[92vh] overflow-y-auto"
           data-testid="invoice-form-modal"
         >
           <DialogHeader>
@@ -334,7 +334,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
               <FileText className="h-6 w-6 text-[#6366f1]" />
               {invoice ? 'Edit Invoice' : 'New Invoice'}
             </DialogTitle>
-            <p className="text-sm text-[#a1a1aa]">
+            <p className="text-sm text-gray-600 dark:text-[#a1a1aa]">
               {(formData.gst_type || 'gst') === 'gst'
                 ? 'Create a GST-compliant invoice (Registered Business)'
                 : 'Create a simple invoice without tax (Unregistered Business)'}
@@ -344,8 +344,8 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
           {/* Business Type toggle — Registered (GST) hides nothing;
               Unregistered hides the per-line Tax % column and the Total Tax row.
               Stored on formData.gst_type ('gst' | 'no_tax'). */}
-          <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-3 mt-3 flex flex-wrap items-center gap-2" data-testid="invoice-business-type">
-            <span className="text-sm text-[#a1a1aa] mr-2">Invoice Type:</span>
+          <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-3 mt-3 flex flex-wrap items-center gap-2" data-testid="invoice-business-type">
+            <span className="text-sm text-gray-600 dark:text-[#a1a1aa] mr-2">Invoice Type:</span>
             {[
               { id: 'gst', label: 'Registered (GST)', hint: 'with tax column' },
               { id: 'no_tax', label: 'Unregistered', hint: 'no tax' },
@@ -362,7 +362,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                       setItems((prev) => prev.map((it) => ({ ...it, gst_rate: 0 })));
                     }
                   }}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium border ${active ? 'bg-[#6366f1] border-[#6366f1] text-white' : 'bg-[#18181b] border-[#27272a] text-[#a1a1aa] hover:text-white'}`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium border ${active ? 'bg-[#6366f1] border-[#6366f1] text-white' : 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:text-white'}`}
                   data-testid={`invoice-type-${opt.id}`}
                 >
                   {opt.label}
@@ -374,7 +374,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
 
           <form className="space-y-5 mt-2">
             {/* Customer Name */}
-            <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4">
+            <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-4">
               <Label className={labelCls}>
                 Customer Name <span className="text-red-500">*</span>
               </Label>
@@ -386,9 +386,9 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                   <SelectTrigger className={inputCls + ' flex-1'} data-testid="invoice-client-select">
                     <SelectValue placeholder={loadingClients ? 'Loading clients...' : 'Select a client'} />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa] max-h-72">
+                  <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-h-72">
                     {clients.length === 0 && (
-                      <div className="px-3 py-4 text-sm text-[#a1a1aa] text-center">
+                      <div className="px-3 py-4 text-sm text-gray-600 dark:text-[#a1a1aa] text-center">
                         No clients yet. Click &quot;+ Add Client&quot; below.
                       </div>
                     )}
@@ -396,7 +396,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                       <SelectItem key={c.client_id} value={c.client_id}>
                         <div className="flex items-center justify-between gap-3 w-full">
                           <span>{c.display_name}</span>
-                          {c.gstin && <span className="text-xs text-[#a1a1aa] font-mono">{c.gstin}</span>}
+                          {c.gstin && <span className="text-xs text-gray-600 dark:text-[#a1a1aa] font-mono">{c.gstin}</span>}
                         </div>
                       </SelectItem>
                     ))}
@@ -413,7 +413,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                 </Button>
               </div>
               {selectedClient && (
-                <div className="mt-3 text-xs text-[#a1a1aa] flex flex-wrap gap-x-4 gap-y-1">
+                <div className="mt-3 text-xs text-gray-600 dark:text-[#a1a1aa] flex flex-wrap gap-x-4 gap-y-1">
                   {selectedClient.email && <span>📧 {selectedClient.email}</span>}
                   {(selectedClient.mobile || selectedClient.work_phone) && (
                     <span>📞 {selectedClient.mobile || selectedClient.work_phone}</span>
@@ -455,7 +455,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                   <SelectTrigger className={inputCls} data-testid="invoice-terms">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                  <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                     {Object.keys(PAYMENT_TERMS_MAP).map((t) => (
                       <SelectItem key={t} value={t}>{t}</SelectItem>
                     ))}
@@ -480,7 +480,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
             {/* Item Table */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <Label className="text-[#fafafa] font-semibold text-base">Item Table</Label>
+                <Label className="text-gray-900 dark:text-[#fafafa] font-semibold text-base">Item Table</Label>
                 <Button
                   type="button"
                   onClick={addItem}
@@ -491,9 +491,9 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                   <Plus className="h-4 w-4 mr-1" /> Add New Row
                 </Button>
               </div>
-              <div className="border border-[#27272a] rounded-lg overflow-hidden">
+              <div className="border border-gray-200 dark:border-[#27272a] rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
-                  <thead className="bg-[#1c1c1f] text-[#a1a1aa] text-xs uppercase">
+                  <thead className="bg-gray-50 dark:bg-[#1c1c1f] text-gray-600 dark:text-[#a1a1aa] text-xs uppercase">
                     <tr>
                       <th className="px-3 py-2 text-left">Item Details</th>
                       <th className="px-3 py-2 text-right w-20">Qty</th>
@@ -508,20 +508,20 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                   </thead>
                   <tbody>
                     {items.map((it, idx) => (
-                      <tr key={idx} className="border-t border-[#27272a]">
+                      <tr key={idx} className="border-t border-gray-200 dark:border-[#27272a]">
                         <td className="px-3 py-2">
                           <Input
                             placeholder="Type or select an item"
                             value={it.service_name}
                             onChange={(e) => handleItemChange(idx, 'service_name', e.target.value)}
-                            className="bg-[#09090b] border-[#27272a] text-[#fafafa] mb-1"
+                            className="bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] mb-1"
                             data-testid={`invoice-item-name-${idx}`}
                           />
                           <Input
                             placeholder="Description (optional)"
                             value={it.description}
                             onChange={(e) => handleItemChange(idx, 'description', e.target.value)}
-                            className="bg-[#09090b] border-[#27272a] text-[#fafafa] text-xs"
+                            className="bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-xs"
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -529,7 +529,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                             type="number" min="0" step="0.01"
                             value={it.quantity}
                             onChange={(e) => handleItemChange(idx, 'quantity', e.target.value)}
-                            className="bg-[#09090b] border-[#27272a] text-[#fafafa] text-right"
+                            className="bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-right"
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -537,7 +537,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                             type="number" min="0" step="0.01"
                             value={it.rate}
                             onChange={(e) => handleItemChange(idx, 'rate', e.target.value)}
-                            className="bg-[#09090b] border-[#27272a] text-[#fafafa] text-right"
+                            className="bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-right"
                           />
                         </td>
                         <td className="px-3 py-2">
@@ -545,7 +545,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                             type="number" min="0" max="100" step="0.1"
                             value={it.discount_percent}
                             onChange={(e) => handleItemChange(idx, 'discount_percent', e.target.value)}
-                            className="bg-[#09090b] border-[#27272a] text-[#fafafa] text-right"
+                            className="bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-right"
                           />
                         </td>
                         {(formData.gst_type || 'gst') === 'gst' && (
@@ -554,10 +554,10 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                               value={String(it.gst_rate)}
                               onValueChange={(v) => handleItemChange(idx, 'gst_rate', v)}
                             >
-                              <SelectTrigger className="bg-[#09090b] border-[#27272a] text-[#fafafa]">
+                              <SelectTrigger className="bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                              <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                                 {GST_RATES.map((r) => (
                                   <SelectItem key={r} value={String(r)}>{r}%</SelectItem>
                                 ))}
@@ -565,7 +565,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                             </Select>
                           </td>
                         )}
-                        <td className="px-3 py-2 text-right font-medium text-[#fafafa]">
+                        <td className="px-3 py-2 text-right font-medium text-gray-900 dark:text-[#fafafa]">
                           ₹{(calc.lines[idx]?.total || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                         </td>
                         <td className="px-3 py-2 text-center">
@@ -573,7 +573,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                             type="button"
                             onClick={() => removeItem(idx)}
                             disabled={items.length === 1}
-                            className="text-[#f87171] disabled:opacity-30 hover:bg-[#27272a] p-1 rounded"
+                            className="text-red-600 dark:text-[#f87171] disabled:opacity-30 hover:bg-gray-100 dark:hover:bg-[#27272a] p-1 rounded"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -596,7 +596,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                   className={inputCls}
                   data-testid="invoice-notes"
                 />
-                <p className="text-xs text-[#a1a1aa] mt-1">Will be displayed on the invoice</p>
+                <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mt-1">Will be displayed on the invoice</p>
 
                 <button
                   type="button"
@@ -624,36 +624,36 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                     onCheckedChange={(v) => set('enable_payment_gateway', v)}
                     data-testid="invoice-payment-gateway-toggle"
                   />
-                  <span className="text-sm text-[#fafafa]">Add Payment Gateway</span>
-                  <span className="text-xs text-[#a1a1aa]">(coming soon)</span>
+                  <span className="text-sm text-gray-900 dark:text-[#fafafa]">Add Payment Gateway</span>
+                  <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">(coming soon)</span>
                 </div>
               </div>
 
-              <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4 space-y-2.5">
-                <div className="flex justify-between text-[#a1a1aa] text-sm">
+              <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-4 space-y-2.5">
+                <div className="flex justify-between text-gray-600 dark:text-[#a1a1aa] text-sm">
                   <span>Sub Total</span>
                   <span>₹{calc.subtotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                 </div>
                 {calc.totalDiscount > 0 && (
-                  <div className="flex justify-between text-[#a1a1aa] text-sm">
+                  <div className="flex justify-between text-gray-600 dark:text-[#a1a1aa] text-sm">
                     <span>Total Discount</span>
-                    <span className="text-[#f87171]">- ₹{calc.totalDiscount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    <span className="text-red-600 dark:text-[#f87171]">- ₹{calc.totalDiscount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 {(formData.gst_type || 'gst') === 'gst' && (
                   <>
-                    <div className="flex justify-between text-[#a1a1aa] text-sm">
+                    <div className="flex justify-between text-gray-600 dark:text-[#a1a1aa] text-sm">
                       <span>Taxable Amount</span>
                       <span>₹{calc.afterDiscount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                     </div>
-                    <div className="flex justify-between text-[#a1a1aa] text-sm">
+                    <div className="flex justify-between text-gray-600 dark:text-[#a1a1aa] text-sm">
                       <span>Total Tax</span>
                       <span>+ ₹{calc.totalGst.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                     </div>
                   </>
                 )}
-                <div className="border-t border-[#27272a] pt-2.5 flex justify-between font-bold text-lg">
-                  <span className="text-[#fafafa]">Total (₹)</span>
+                <div className="border-t border-gray-200 dark:border-[#27272a] pt-2.5 flex justify-between font-bold text-lg">
+                  <span className="text-gray-900 dark:text-[#fafafa]">Total (₹)</span>
                   <span className="text-[#6366f1]">
                     ₹{calc.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                   </span>
@@ -662,15 +662,15 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
             </div>
 
             {/* Actions */}
-            <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-[#27272a]">
-              <div className="flex items-center gap-2 text-xs text-[#a1a1aa]">
+            <div className="flex flex-wrap justify-between items-center gap-3 pt-4 border-t border-gray-200 dark:border-[#27272a]">
+              <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-[#a1a1aa]">
                 <Settings className="h-3.5 w-3.5" />
                 Template:
                 <Select value={formData.template_type} onValueChange={(v) => set('template_type', v)}>
-                  <SelectTrigger className="bg-[#09090b] border-[#27272a] text-[#fafafa] h-8 w-32 text-xs">
+                  <SelectTrigger className="bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] h-8 w-32 text-xs">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                  <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                     <SelectItem value="minimal">Minimal</SelectItem>
                     <SelectItem value="corporate">Corporate</SelectItem>
                     <SelectItem value="modern">Modern</SelectItem>
@@ -683,7 +683,7 @@ const InvoiceFormModal = ({ invoice, onClose, onSave, presetClientId, presetGstT
                   type="button"
                   onClick={onClose}
                   disabled={loading}
-                  className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
+                  className="bg-gray-100 dark:bg-[#27272a] hover:bg-gray-200 dark:hover:bg-[#3f3f46] text-gray-900 dark:text-[#fafafa]"
                   data-testid="invoice-cancel-btn"
                 >
                   Cancel

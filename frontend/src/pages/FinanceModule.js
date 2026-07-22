@@ -16,7 +16,7 @@ const FinanceModule = () => {
               Finance & Billing
             </span>
           </h1>
-          <p className="text-[#a1a1aa] text-xs">Complete financial management system with customizable tabs</p>
+          <p className="text-gray-600 dark:text-[#a1a1aa] text-xs">Complete financial management system with customizable tabs</p>
         </div>
 
         {/* Main Expense/Finance Tab */}

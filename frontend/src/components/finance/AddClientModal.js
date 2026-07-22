@@ -133,20 +133,20 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
     { id: 'remarks', label: 'Remarks', icon: FileText },
   ];
 
-  const inputCls = 'bg-[#09090b] border-[#27272a] text-[#fafafa] focus:border-[#6366f1]';
-  const labelCls = 'text-[#fafafa] mb-1.5 block text-sm';
+  const inputCls = 'bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] focus:border-[#6366f1]';
+  const labelCls = 'text-gray-900 dark:text-[#fafafa] mb-1.5 block text-sm';
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent
-        className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-4xl max-h-[92vh] overflow-y-auto"
+        className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-w-4xl max-h-[92vh] overflow-y-auto"
         data-testid="add-client-modal"
       >
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             {client ? 'Edit Client' : 'New Client'}
           </DialogTitle>
-          <p className="text-sm text-[#a1a1aa]">
+          <p className="text-sm text-gray-600 dark:text-[#a1a1aa]">
             {client ? 'Update client details' : 'Add a new client to your finance directory'}
           </p>
         </DialogHeader>
@@ -167,7 +167,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                     className="accent-[#6366f1]"
                     data-testid={`client-type-${t.toLowerCase()}`}
                   />
-                  <span className="text-[#fafafa] flex items-center gap-1.5">
+                  <span className="text-gray-900 dark:text-[#fafafa] flex items-center gap-1.5">
                     {t === 'Business' ? <Building2 className="h-4 w-4" /> : <User className="h-4 w-4" />}
                     {t}
                   </span>
@@ -182,7 +182,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
             <div className="grid grid-cols-3 gap-3">
               <Select value={formData.salutation || ''} onValueChange={(v) => set('salutation', v)}>
                 <SelectTrigger className={inputCls}><SelectValue placeholder="Salutation" /></SelectTrigger>
-                <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                   {['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.'].map((s) => (
                     <SelectItem key={s} value={s}>{s}</SelectItem>
                   ))}
@@ -240,7 +240,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
               <Label className={labelCls}>Currency</Label>
               <Select value={formData.currency} onValueChange={(v) => set('currency', v)}>
                 <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                   <SelectItem value="INR">INR — Indian Rupee</SelectItem>
                   <SelectItem value="USD">USD — US Dollar</SelectItem>
                   <SelectItem value="EUR">EUR — Euro</SelectItem>
@@ -285,8 +285,8 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
           </div>
 
           {/* Tabs */}
-          <div className="border-t border-[#27272a] pt-4">
-            <div className="flex gap-1 mb-4 border-b border-[#27272a]">
+          <div className="border-t border-gray-200 dark:border-[#27272a] pt-4">
+            <div className="flex gap-1 mb-4 border-b border-gray-200 dark:border-[#27272a]">
               {TABS.map((t) => {
                 const Icon = t.icon;
                 const active = activeTab === t.id;
@@ -297,8 +297,8 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                     onClick={() => setActiveTab(t.id)}
                     className={`px-4 py-2 text-sm flex items-center gap-1.5 border-b-2 transition-colors ${
                       active
-                        ? 'border-[#6366f1] text-[#fafafa]'
-                        : 'border-transparent text-[#a1a1aa] hover:text-[#fafafa]'
+                        ? 'border-[#6366f1] text-gray-900 dark:text-[#fafafa]'
+                        : 'border-transparent text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa]'
                     }`}
                     data-testid={`client-tab-${t.id}`}
                   >
@@ -320,7 +320,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                       <SelectTrigger className={inputCls}>
                         <SelectValue placeholder="Select a GST treatment" />
                       </SelectTrigger>
-                      <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                      <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                         {GST_TREATMENTS.map((g) => (
                           <SelectItem key={g} value={g}>{g}</SelectItem>
                         ))}
@@ -335,7 +335,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                       <SelectTrigger className={inputCls}>
                         <SelectValue placeholder="Select state" />
                       </SelectTrigger>
-                      <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa] max-h-60">
+                      <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-h-60">
                         {INDIAN_STATES.map((s) => (
                           <SelectItem key={s} value={s}>{s}</SelectItem>
                         ))}
@@ -380,7 +380,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                           onChange={(e) => set('tax_preference', e.target.value)}
                           className="accent-[#6366f1]"
                         />
-                        <span className="text-[#fafafa]">{t}</span>
+                        <span className="text-gray-900 dark:text-[#fafafa]">{t}</span>
                       </label>
                     ))}
                   </div>
@@ -391,7 +391,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                     <Label className={labelCls}>Payment Terms</Label>
                     <Select value={formData.payment_terms} onValueChange={(v) => set('payment_terms', v)}>
                       <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
-                      <SelectContent className="bg-[#18181b] border-[#27272a] text-[#fafafa]">
+                      <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
                         {PAYMENT_TERMS.map((p) => (
                           <SelectItem key={p} value={p}>{p}</SelectItem>
                         ))}
@@ -404,7 +404,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                       onCheckedChange={(v) => set('enable_portal', v)}
                       data-testid="client-enable-portal"
                     />
-                    <Label className="text-[#fafafa] text-sm">Allow portal access for this client</Label>
+                    <Label className="text-gray-900 dark:text-[#fafafa] text-sm">Allow portal access for this client</Label>
                   </div>
                 </div>
               </div>
@@ -413,7 +413,7 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
             {activeTab === 'address' && (
               <div className="space-y-5">
                 <div>
-                  <h4 className="text-sm font-semibold text-[#fafafa] mb-3">Billing Address</h4>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-[#fafafa] mb-3">Billing Address</h4>
                   <Textarea
                     rows={2}
                     placeholder="Street, Building..."
@@ -438,11 +438,11 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
                     checked={shippingSameAsBilling}
                     onCheckedChange={handleShippingSameAsBilling}
                   />
-                  <Label className="text-[#fafafa] text-sm">Shipping address same as billing</Label>
+                  <Label className="text-gray-900 dark:text-[#fafafa] text-sm">Shipping address same as billing</Label>
                 </div>
 
                 <div>
-                  <h4 className="text-sm font-semibold text-[#fafafa] mb-3">Shipping Address</h4>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-[#fafafa] mb-3">Shipping Address</h4>
                   <Textarea
                     rows={2}
                     placeholder="Street, Building..."
@@ -480,12 +480,12 @@ const AddClientModal = ({ client, onClose, onSaved }) => {
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-[#27272a]">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-[#27272a]">
             <Button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
+              className="bg-gray-100 dark:bg-[#27272a] hover:bg-gray-200 dark:hover:bg-[#3f3f46] text-gray-900 dark:text-[#fafafa]"
               data-testid="client-cancel-btn"
             >
               Cancel

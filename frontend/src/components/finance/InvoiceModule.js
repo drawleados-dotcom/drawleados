@@ -506,10 +506,10 @@ const InvoiceModule = () => {
   const formatCurrency = (amt) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt || 0);
 
   // Theme classes
-  const cardClass = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
-  const textClass = isDark ? 'text-[#fafafa]' : 'text-gray-900';
-  const mutedClass = isDark ? 'text-[#71717a]' : 'text-gray-500';
-  const inputClass = isDark ? 'bg-[#27272a] border-[#3f3f46] text-white' : 'bg-white border-gray-300';
+  const cardClass = isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200';
+  const textClass = isDark ? 'text-gray-900 dark:text-[#fafafa]' : 'text-gray-900';
+  const mutedClass = isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500';
+  const inputClass = isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] text-white' : 'bg-white border-gray-300';
 
   const totals = calculateTotals();
 
@@ -525,7 +525,7 @@ const InvoiceModule = () => {
           <div className="flex gap-2">
             <Button 
               variant="outline" 
-              className={isDark ? 'border-[#3f3f46]' : ''}
+              className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}
               onClick={() => {
                 const data = filteredInvoices.map(inv => ({
                   'Invoice #': inv.invoice_number,
@@ -577,7 +577,7 @@ const InvoiceModule = () => {
 
       {/* Sub-tabs: All Invoices  |  New Invoice Req (from Leads) */}
       <Tabs value={activeMainTab} onValueChange={setActiveMainTab} className="w-full">
-        <TabsList className={`grid w-full max-w-md grid-cols-2 ${isDark ? 'bg-[#18181b]' : ''}`}>
+        <TabsList className={`grid w-full max-w-md grid-cols-2 ${isDark ? 'bg-white dark:bg-[#18181b]' : ''}`}>
           <TabsTrigger value="all" data-testid="tab-all-invoices">All Invoices</TabsTrigger>
           <TabsTrigger value="requests" data-testid="tab-new-invoice-req">
             New Invoice Req
@@ -617,9 +617,9 @@ const InvoiceModule = () => {
       </div>
 
       {/* Invoice List */}
-      <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+      <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
         <table className="w-full text-sm">
-          <thead className={isDark ? 'bg-[#27272a]' : 'bg-gray-100'}>
+          <thead className={isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-100'}>
             <tr>
               <th className={`p-3 text-left ${textClass}`}>Invoice #</th>
               <th className={`p-3 text-left ${textClass}`}>Client</th>
@@ -631,9 +631,9 @@ const InvoiceModule = () => {
               <th className={`p-3 text-center ${textClass}`}>Actions</th>
             </tr>
           </thead>
-          <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+          <tbody className={`divide-y ${isDark ? 'divide-gray-200 dark:divide-[#27272a]' : 'divide-gray-100'}`}>
             {filteredInvoices.map(inv => (
-              <tr key={inv.invoice_id} className={isDark ? 'hover:bg-[#1f1f23]' : 'hover:bg-gray-50'}>
+              <tr key={inv.invoice_id} className={isDark ? 'hover:bg-gray-50 dark:hover:bg-[#1f1f23]' : 'hover:bg-gray-50'}>
                 <td className={`p-3 font-medium ${textClass}`}>{inv.invoice_number}</td>
                 <td className={`p-3 ${mutedClass}`}>
                   <div>
@@ -717,9 +717,9 @@ const InvoiceModule = () => {
           <div className={`p-3 rounded-lg border ${cardClass} text-xs ${mutedClass}`}>
             Requests raised from the Leads pipeline (when a lead is moved to <b>Invoice Raise</b>). Accept to open a pre-filled Create Invoice form, or Reject to remove.
           </div>
-          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
             <table className="w-full text-sm">
-              <thead className={isDark ? 'bg-[#27272a]' : 'bg-gray-100'}>
+              <thead className={isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-100'}>
                 <tr>
                   <th className={`p-3 text-left ${textClass}`}>Company</th>
                   <th className={`p-3 text-left ${textClass}`}>Lead</th>
@@ -731,9 +731,9 @@ const InvoiceModule = () => {
                   <th className={`p-3 text-center ${textClass}`}>Actions</th>
                 </tr>
               </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+              <tbody className={`divide-y ${isDark ? 'divide-gray-200 dark:divide-[#27272a]' : 'divide-gray-100'}`}>
                 {invoiceRequests.map((req) => (
-                  <tr key={req.request_id} className={isDark ? 'hover:bg-[#1f1f23]' : 'hover:bg-gray-50'} data-testid={`invreq-row-${req.request_id}`}>
+                  <tr key={req.request_id} className={isDark ? 'hover:bg-gray-50 dark:hover:bg-[#1f1f23]' : 'hover:bg-gray-50'} data-testid={`invreq-row-${req.request_id}`}>
                     <td className={`p-3 font-medium ${textClass}`}>{req.company_name}</td>
                     <td className={`p-3 ${mutedClass}`}>{req.lead_name || '-'}</td>
                     <td className="p-3">
@@ -784,7 +784,7 @@ const InvoiceModule = () => {
 
       {/* Create Invoice Modal */}
       <Dialog open={showCreateModal} onOpenChange={(open) => { setShowCreateModal(open); if (!open) { setAcceptingRequestId(null); } }}>
-        <DialogContent className={`max-w-4xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-4xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={textClass}>Create New Invoice</DialogTitle>
           </DialogHeader>
@@ -918,7 +918,7 @@ const InvoiceModule = () => {
             <TabsContent value="items" className="space-y-4 mt-4">
               <div className="space-y-3">
                 {invoiceForm.items.map((item, index) => (
-                  <div key={index} className={`p-4 rounded-lg border ${isDark ? 'border-[#3f3f46] bg-[#1f1f23]' : 'border-gray-200 bg-gray-50'}`}>
+                  <div key={index} className={`p-4 rounded-lg border ${isDark ? 'border-gray-300 dark:border-[#3f3f46] bg-gray-50 dark:bg-[#1f1f23]' : 'border-gray-200 bg-gray-50'}`}>
                     <div className="grid grid-cols-12 gap-3">
                       <div className="col-span-4">
                         <Label className={`text-xs ${mutedClass}`}>Service/Product *</Label>
@@ -1184,7 +1184,7 @@ const InvoiceModule = () => {
 
       {/* View Invoice Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className={`max-w-3xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-3xl ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={textClass}>Invoice Details</DialogTitle>
           </DialogHeader>
@@ -1237,9 +1237,9 @@ const InvoiceModule = () => {
               {selectedInvoice.items && selectedInvoice.items.length > 0 && (
                 <div>
                   <h4 className={`font-semibold mb-2 ${textClass}`}>Items</h4>
-                  <div className={`rounded-lg border ${isDark ? 'border-[#3f3f46]' : 'border-gray-200'}`}>
+                  <div className={`rounded-lg border ${isDark ? 'border-gray-300 dark:border-[#3f3f46]' : 'border-gray-200'}`}>
                     <table className="w-full text-sm">
-                      <thead className={isDark ? 'bg-[#27272a]' : 'bg-gray-100'}>
+                      <thead className={isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-100'}>
                         <tr>
                           <th className="p-2 text-left">Item</th>
                           <th className="p-2 text-right">Qty</th>
@@ -1249,7 +1249,7 @@ const InvoiceModule = () => {
                       </thead>
                       <tbody>
                         {selectedInvoice.items.map((item, idx) => (
-                          <tr key={idx} className={isDark ? 'border-t border-[#3f3f46]' : 'border-t'}>
+                          <tr key={idx} className={isDark ? 'border-t border-gray-300 dark:border-[#3f3f46]' : 'border-t'}>
                             <td className={`p-2 ${textClass}`}>{item.service_name}</td>
                             <td className={`p-2 text-right ${mutedClass}`}>{item.quantity}</td>
                             <td className={`p-2 text-right ${mutedClass}`}>{formatCurrency(item.rate)}</td>
@@ -1263,7 +1263,7 @@ const InvoiceModule = () => {
               )}
 
               {/* Totals */}
-              <div className={`p-4 rounded-lg ${isDark ? 'bg-[#1f1f23]' : 'bg-gray-50'}`}>
+              <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-50 dark:bg-[#1f1f23]' : 'bg-gray-50'}`}>
                 <div className="space-y-2 text-right">
                   <div className="flex justify-between">
                     <span className={mutedClass}>Subtotal</span>

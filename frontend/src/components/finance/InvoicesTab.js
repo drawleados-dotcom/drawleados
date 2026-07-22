@@ -385,7 +385,7 @@ const InvoicesTab = () => {
   };
 
   if (loading) {
-    return <div className="text-[#a1a1aa]">Loading invoices...</div>;
+    return <div className="text-gray-600 dark:text-[#a1a1aa]">Loading invoices...</div>;
   }
 
   return (
@@ -398,12 +398,12 @@ const InvoicesTab = () => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             data-testid="search-invoices"
-            className="max-w-xs bg-[#18181b] border-[#27272a] text-[#fafafa]"
+            className="max-w-xs bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]"
           />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-[#18181b] border border-[#27272a] text-[#fafafa] px-4 py-2 rounded-lg focus:border-[#6366f1] focus:outline-none"
+            className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] px-4 py-2 rounded-lg focus:border-[#6366f1] focus:outline-none"
           >
             <option value="all">All Status</option>
             <option value="draft">Draft</option>
@@ -412,26 +412,26 @@ const InvoicesTab = () => {
             <option value="overdue">Overdue</option>
           </select>
           <Select value={monthFilter} onValueChange={setMonthFilter}>
-            <SelectTrigger className="w-32 bg-[#18181b] border-[#27272a] text-[#fafafa]">
+            <SelectTrigger className="w-32 bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
               <Calendar className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Month" />
             </SelectTrigger>
-            <SelectContent className="bg-[#18181b] border-[#27272a]">
-              <SelectItem value="all" className="text-[#fafafa]">All Months</SelectItem>
+            <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]">
+              <SelectItem value="all" className="text-gray-900 dark:text-[#fafafa]">All Months</SelectItem>
               {months.map((m) => (
-                <SelectItem key={m.value} value={m.value} className="text-[#fafafa]">
+                <SelectItem key={m.value} value={m.value} className="text-gray-900 dark:text-[#fafafa]">
                   {m.label}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select value={yearFilter} onValueChange={setYearFilter}>
-            <SelectTrigger className="w-24 bg-[#18181b] border-[#27272a] text-[#fafafa]">
+            <SelectTrigger className="w-24 bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-[#18181b] border-[#27272a]">
+            <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]">
               {years.map((y) => (
-                <SelectItem key={y} value={y} className="text-[#fafafa]">
+                <SelectItem key={y} value={y} className="text-gray-900 dark:text-[#fafafa]">
                   {y}
                 </SelectItem>
               ))}
@@ -442,7 +442,7 @@ const InvoicesTab = () => {
           <Button
             onClick={handleExport}
             data-testid="export-invoices"
-            className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa]"
+            className="bg-gray-100 dark:bg-[#27272a] hover:bg-gray-200 dark:hover:bg-[#3f3f46] text-gray-900 dark:text-[#fafafa]"
           >
             <Download className="h-4 w-4 mr-2" />
             Export
@@ -460,44 +460,44 @@ const InvoicesTab = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4">
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-          <p className="text-xs text-[#a1a1aa] mb-1">Total Invoices</p>
-          <p className="text-2xl font-bold text-[#fafafa]">{filteredInvoices.length}</p>
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4">
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mb-1">Total Invoices</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-[#fafafa]">{filteredInvoices.length}</p>
         </div>
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-          <p className="text-xs text-[#a1a1aa] mb-1">Total Amount</p>
-          <p className="text-2xl font-bold text-[#fafafa]">₹{totals.total.toLocaleString()}</p>
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4">
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mb-1">Total Amount</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-[#fafafa]">₹{totals.total.toLocaleString()}</p>
         </div>
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-          <p className="text-xs text-[#a1a1aa] mb-1">Paid</p>
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4">
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mb-1">Paid</p>
           <p className="text-2xl font-bold text-[#10b981]">₹{totals.paid.toLocaleString()}</p>
         </div>
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
-          <p className="text-xs text-[#a1a1aa] mb-1">Overdue</p>
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4">
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mb-1">Overdue</p>
           <p className="text-2xl font-bold text-[#ef4444]">₹{totals.overdue.toLocaleString()}</p>
         </div>
       </div>
 
       {/* View Tabs */}
       <Tabs value={activeView} onValueChange={setActiveView}>
-        <TabsList className="bg-[#09090b] border border-[#27272a] p-1">
+        <TabsList className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] p-1">
           <TabsTrigger
             value="list"
-            className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs"
+            className="data-[state=active]:bg-gray-100 dark:bg-[#27272a] data-[state=active]:text-white text-xs"
           >
             <FileText className="h-4 w-4 mr-2" />
             Invoice List
           </TabsTrigger>
           <TabsTrigger
             value="report"
-            className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs"
+            className="data-[state=active]:bg-gray-100 dark:bg-[#27272a] data-[state=active]:text-white text-xs"
           >
             <BarChart3 className="h-4 w-4 mr-2" />
             Monthly Report
           </TabsTrigger>
           <TabsTrigger
             value="requests"
-            className="data-[state=active]:bg-[#27272a] data-[state=active]:text-white text-xs relative"
+            className="data-[state=active]:bg-gray-100 dark:bg-[#27272a] data-[state=active]:text-white text-xs relative"
             data-testid="tab-new-invoice-req"
           >
             <FileText className="h-4 w-4 mr-2" />
@@ -514,7 +514,7 @@ const InvoicesTab = () => {
         <TabsContent value="list">
           {/* Tax filter pill strip: GST · Non-GST · All — drives the Invoice List */}
           <div className="mb-3 flex items-center gap-2 flex-wrap">
-            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]">
               {[
                 { id: 'gst', label: 'GST' },
                 { id: 'non_gst', label: 'Non-GST' },
@@ -533,7 +533,7 @@ const InvoicesTab = () => {
                     type="button"
                     onClick={() => setTaxFilter(t.id)}
                     data-testid={`invoice-tax-tab-${t.id}`}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'text-gray-600 dark:text-[#a1a1aa] hover:text-white'}`}
                   >
                     {t.label}
                     <span className="ml-1.5 text-[10px] opacity-70">({count})</span>
@@ -542,68 +542,68 @@ const InvoicesTab = () => {
               })}
             </div>
           </div>
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full" data-testid="invoices-table">
-                <thead className="bg-[#09090b] border-b border-[#27272a]">
+                <thead className="bg-gray-50 dark:bg-[#09090b] border-b border-gray-200 dark:border-[#27272a]">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       Invoice #
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       Client
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       Date
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       Due Date
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       Amount
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       GST Type
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">
+                    <th className="px-6 py-4 text-right text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#27272a]">
+                <tbody className="divide-y divide-gray-200 dark:divide-[#27272a]">
                   {filteredInvoices.length > 0 ? (
                     filteredInvoices.map((invoice) => (
-                      <tr key={invoice.invoice_id} className="hover:bg-[#27272a]/20 transition-colors">
+                      <tr key={invoice.invoice_id} className="hover:bg-gray-100/20 dark:hover:bg-[#27272a]/20 transition-colors">
                         <td className="px-6 py-4">
                           <p className="text-sm font-medium text-[#6366f1]">{invoice.invoice_number}</p>
                         </td>
                         <td className="px-6 py-4">
                           <div>
-                            <p className="text-sm font-medium text-[#fafafa]">{invoice.client_name}</p>
+                            <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{invoice.client_name}</p>
                             {invoice.client_gst_number && (
-                              <p className="text-xs text-[#a1a1aa] mt-1">GST: {invoice.client_gst_number}</p>
+                              <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mt-1">GST: {invoice.client_gst_number}</p>
                             )}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-[#fafafa]">
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-[#fafafa]">
                           {new Date(invoice.invoice_date).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 text-sm text-[#fafafa]">
+                        <td className="px-6 py-4 text-sm text-gray-900 dark:text-[#fafafa]">
                           {invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : '-'}
                         </td>
                         <td className="px-6 py-4">
-                          <p className="text-sm font-semibold text-[#fafafa]">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-[#fafafa]">
                             ₹{invoice.total_amount?.toLocaleString()}
                           </p>
                           {invoice.gst_amount > 0 && (
-                            <p className="text-xs text-[#a1a1aa]">GST: ₹{invoice.gst_amount?.toLocaleString()}</p>
+                            <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">GST: ₹{invoice.gst_amount?.toLocaleString()}</p>
                           )}
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-xs text-[#a1a1aa] uppercase">{invoice.gst_type || 'N/A'}</span>
+                          <span className="text-xs text-gray-600 dark:text-[#a1a1aa] uppercase">{invoice.gst_type || 'N/A'}</span>
                         </td>
                         <td className="px-6 py-4">
                           <Select
@@ -624,11 +624,11 @@ const InvoicesTab = () => {
                                 {invoice.status?.toUpperCase()}
                               </span>
                             </SelectTrigger>
-                            <SelectContent className="bg-[#18181b] border-[#27272a]">
-                              <SelectItem value="draft" className="text-[#fafafa]">Draft</SelectItem>
-                              <SelectItem value="sent" className="text-[#fafafa]">Sent</SelectItem>
-                              <SelectItem value="paid" className="text-[#fafafa]">Paid</SelectItem>
-                              <SelectItem value="overdue" className="text-[#fafafa]">Overdue</SelectItem>
+                            <SelectContent className="bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]">
+                              <SelectItem value="draft" className="text-gray-900 dark:text-[#fafafa]">Draft</SelectItem>
+                              <SelectItem value="sent" className="text-gray-900 dark:text-[#fafafa]">Sent</SelectItem>
+                              <SelectItem value="paid" className="text-gray-900 dark:text-[#fafafa]">Paid</SelectItem>
+                              <SelectItem value="overdue" className="text-gray-900 dark:text-[#fafafa]">Overdue</SelectItem>
                             </SelectContent>
                           </Select>
                         </td>
@@ -639,7 +639,7 @@ const InvoicesTab = () => {
                               onClick={() => handlePreviewInvoice(invoice)}
                               title="View & Download"
                               data-testid={`preview-invoice-${invoice.invoice_id}`}
-                              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8"
+                              className="bg-gray-100 dark:bg-[#27272a] hover:bg-gray-200 dark:hover:bg-[#3f3f46] text-gray-900 dark:text-[#fafafa] h-8"
                             >
                               <Eye className="h-3 w-3" />
                             </Button>
@@ -647,7 +647,7 @@ const InvoicesTab = () => {
                               size="sm"
                               onClick={() => handleEditInvoice(invoice)}
                               title="Edit"
-                              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8"
+                              className="bg-gray-100 dark:bg-[#27272a] hover:bg-gray-200 dark:hover:bg-[#3f3f46] text-gray-900 dark:text-[#fafafa] h-8"
                             >
                               <Edit className="h-3 w-3" />
                             </Button>
@@ -655,7 +655,7 @@ const InvoicesTab = () => {
                               size="sm"
                               onClick={() => handleDuplicateInvoice(invoice.invoice_id)}
                               title="Duplicate"
-                              className="bg-[#27272a] hover:bg-[#3f3f46] text-[#fafafa] h-8"
+                              className="bg-gray-100 dark:bg-[#27272a] hover:bg-gray-200 dark:hover:bg-[#3f3f46] text-gray-900 dark:text-[#fafafa] h-8"
                             >
                               <Copy className="h-3 w-3" />
                             </Button>
@@ -663,7 +663,7 @@ const InvoicesTab = () => {
                               size="sm"
                               onClick={() => handleDeleteInvoice(invoice.invoice_id)}
                               title="Delete"
-                              className="bg-[#27272a] hover:bg-[#ef4444] text-[#fafafa] h-8"
+                              className="bg-gray-100 dark:bg-[#27272a] hover:bg-[#ef4444] text-gray-900 dark:text-[#fafafa] h-8"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
@@ -673,7 +673,7 @@ const InvoicesTab = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="px-6 py-8 text-center text-[#a1a1aa]">
+                      <td colSpan={8} className="px-6 py-8 text-center text-gray-600 dark:text-[#a1a1aa]">
                         No invoices found for the selected filters
                       </td>
                     </tr>
@@ -688,8 +688,8 @@ const InvoicesTab = () => {
         <TabsContent value="report">
           <div className="grid grid-cols-2 gap-6">
             {/* Monthly Revenue Chart */}
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-[#fafafa] mb-4">
+            <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-[#fafafa] mb-4">
                 Monthly Revenue - {yearFilter}
               </h3>
               {monthlyData.length > 0 ? (
@@ -713,15 +713,15 @@ const InvoicesTab = () => {
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[300px] flex items-center justify-center text-[#a1a1aa]">
+                <div className="h-[300px] flex items-center justify-center text-gray-600 dark:text-[#a1a1aa]">
                   No data available for {yearFilter}
                 </div>
               )}
             </div>
 
             {/* Status Distribution Pie Chart */}
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-[#fafafa] mb-4">
+            <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-[#fafafa] mb-4">
                 Invoice Status Distribution
               </h3>
               {statusDistribution.length > 0 ? (
@@ -755,7 +755,7 @@ const InvoicesTab = () => {
                     {statusDistribution.map((entry, index) => (
                       <div key={index} className="flex items-center gap-2">
                         <div className="h-3 w-3 rounded-full" style={{ backgroundColor: entry.color }} />
-                        <span className="text-xs text-[#a1a1aa]">
+                        <span className="text-xs text-gray-600 dark:text-[#a1a1aa]">
                           {entry.name}: ₹{entry.value.toLocaleString()}
                         </span>
                       </div>
@@ -763,36 +763,36 @@ const InvoicesTab = () => {
                   </div>
                 </>
               ) : (
-                <div className="h-[250px] flex items-center justify-center text-[#a1a1aa]">
+                <div className="h-[250px] flex items-center justify-center text-gray-600 dark:text-[#a1a1aa]">
                   No data available
                 </div>
               )}
             </div>
 
             {/* Monthly Summary Table */}
-            <div className="col-span-2 bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
-              <div className="p-4 border-b border-[#27272a]">
-                <h3 className="text-lg font-semibold text-[#fafafa]">
+            <div className="col-span-2 bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
+              <div className="p-4 border-b border-gray-200 dark:border-[#27272a]">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-[#fafafa]">
                   Month-wise Summary - {yearFilter}
                 </h3>
               </div>
               <table className="w-full">
-                <thead className="bg-[#09090b]">
+                <thead className="bg-gray-50 dark:bg-[#09090b]">
                   <tr>
-                    <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Month</th>
-                    <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Invoices</th>
-                    <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Total</th>
-                    <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Paid</th>
-                    <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Pending</th>
-                    <th className="text-left p-4 text-xs font-medium text-[#a1a1aa] uppercase">Overdue</th>
+                    <th className="text-left p-4 text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase">Month</th>
+                    <th className="text-left p-4 text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase">Invoices</th>
+                    <th className="text-left p-4 text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase">Total</th>
+                    <th className="text-left p-4 text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase">Paid</th>
+                    <th className="text-left p-4 text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase">Pending</th>
+                    <th className="text-left p-4 text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase">Overdue</th>
                   </tr>
                 </thead>
                 <tbody>
                   {monthlyData.map((month, index) => (
-                    <tr key={index} className="border-t border-[#27272a] hover:bg-[#27272a]/30">
-                      <td className="p-4 text-sm font-medium text-[#fafafa]">{month.month}</td>
-                      <td className="p-4 text-sm text-[#fafafa]">{month.count}</td>
-                      <td className="p-4 text-sm text-[#fafafa]">₹{month.total.toLocaleString()}</td>
+                    <tr key={index} className="border-t border-gray-200 dark:border-[#27272a] hover:bg-gray-100/30 dark:hover:bg-[#27272a]/30">
+                      <td className="p-4 text-sm font-medium text-gray-900 dark:text-[#fafafa]">{month.month}</td>
+                      <td className="p-4 text-sm text-gray-900 dark:text-[#fafafa]">{month.count}</td>
+                      <td className="p-4 text-sm text-gray-900 dark:text-[#fafafa]">₹{month.total.toLocaleString()}</td>
                       <td className="p-4 text-sm text-[#10b981]">₹{month.paid.toLocaleString()}</td>
                       <td className="p-4 text-sm text-[#3b82f6]">₹{month.pending.toLocaleString()}</td>
                       <td className="p-4 text-sm text-[#ef4444]">₹{month.overdue.toLocaleString()}</td>
@@ -800,7 +800,7 @@ const InvoicesTab = () => {
                   ))}
                   {monthlyData.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-[#a1a1aa]">
+                      <td colSpan={6} className="p-8 text-center text-gray-600 dark:text-[#a1a1aa]">
                         No invoices found for {yearFilter}
                       </td>
                     </tr>
@@ -813,15 +813,15 @@ const InvoicesTab = () => {
 
         {/* New Invoice Req tab — pending requests raised from Leads */}
         <TabsContent value="requests" data-testid="invoice-requests-pane">
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-4 mb-3 text-xs text-[#a1a1aa]">
-            Requests raised from the Leads pipeline (when a lead is moved to <span className="text-[#fafafa] font-semibold">Invoice Raise</span>). Click <span className="text-[#fafafa] font-semibold">Accept</span> to auto-create a Draft invoice pre-filled with company, amount and GST data — you can finalize it from the Edit modal.
+          <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-4 mb-3 text-xs text-gray-600 dark:text-[#a1a1aa]">
+            Requests raised from the Leads pipeline (when a lead is moved to <span className="text-gray-900 dark:text-[#fafafa] font-semibold">Invoice Raise</span>). Click <span className="text-gray-900 dark:text-[#fafafa] font-semibold">Accept</span> to auto-create a Draft invoice pre-filled with company, amount and GST data — you can finalize it from the Edit modal.
           </div>
 
           {/* Source pill strip for the Payment Request view:
               All · New Invoice (from Leads) · Payment Schedule (from a project split).
               Filters the requests list below by their origin. */}
           <div className="mb-3 flex items-center gap-2 flex-wrap">
-            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-[#18181b] border border-[#27272a]">
+            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]">
               {[
                 { id: 'all', label: 'All' },
                 { id: 'new', label: 'New Invoice Req' },
@@ -840,7 +840,7 @@ const InvoicesTab = () => {
                     type="button"
                     onClick={() => setSourceFilter(t.id)}
                     data-testid={`invoice-request-source-${t.id}`}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-[#27272a] text-white' : 'text-[#a1a1aa] hover:text-white'}`}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${active ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'text-gray-600 dark:text-[#a1a1aa] hover:text-white'}`}
                   >
                     {t.label}
                     <span className="ml-1.5 text-[10px] opacity-70">({count})</span>
@@ -853,23 +853,23 @@ const InvoicesTab = () => {
           {/* Payment Schedule sub-table (separate data source: pending invoices
               auto-raised from project Payment Schedule splits) */}
           {sourceFilter === 'payment_schedule' && (
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden" data-testid="ps-invoice-requests-table">
+            <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden" data-testid="ps-invoice-requests-table">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-[#09090b] border-b border-[#27272a]">
+                  <thead className="bg-gray-50 dark:bg-[#09090b] border-b border-gray-200 dark:border-[#27272a]">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Invoice #</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Project / Milestone</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Client</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Amount</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Raised</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Status / Action</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Invoice #</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Project / Milestone</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Client</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Raised</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Status / Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#27272a]">
+                  <tbody className="divide-y divide-gray-200 dark:divide-[#27272a]">
                     {psInvoices.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-[#a1a1aa]">
+                        <td colSpan={6} className="px-4 py-12 text-center text-gray-600 dark:text-[#a1a1aa]">
                           No pending Payment Schedule invoice requests.
                         </td>
                       </tr>
@@ -879,15 +879,15 @@ const InvoicesTab = () => {
                         const project = (inv.items?.[0]?.description || '').replace(/^Project:\s*/, '') || '—';
                         const raisedNow = !!inv._raised_now;
                         return (
-                          <tr key={inv.invoice_id} className="hover:bg-[#27272a]/20 transition-colors" data-testid={`ps-invreq-row-${inv.invoice_id}`}>
-                            <td className="px-4 py-3 text-sm font-mono text-[#fafafa]">{inv.invoice_number}</td>
-                            <td className="px-4 py-3 text-sm text-[#a1a1aa]">
-                              <div className="text-[#fafafa] font-medium">{milestone}</div>
+                          <tr key={inv.invoice_id} className="hover:bg-gray-100/20 dark:hover:bg-[#27272a]/20 transition-colors" data-testid={`ps-invreq-row-${inv.invoice_id}`}>
+                            <td className="px-4 py-3 text-sm font-mono text-gray-900 dark:text-[#fafafa]">{inv.invoice_number}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-[#a1a1aa]">
+                              <div className="text-gray-900 dark:text-[#fafafa] font-medium">{milestone}</div>
                               <div className="text-xs">{project}</div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-[#a1a1aa]">{inv.client_name || '—'}</td>
-                            <td className="px-4 py-3 text-right text-sm font-semibold text-[#fafafa]">₹{Number(inv.total_amount || 0).toLocaleString('en-IN')}</td>
-                            <td className="px-4 py-3 text-xs text-[#a1a1aa]">{inv.created_at ? new Date(inv.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                            <td className="px-4 py-3 text-sm text-gray-600 dark:text-[#a1a1aa]">{inv.client_name || '—'}</td>
+                            <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-[#fafafa]">₹{Number(inv.total_amount || 0).toLocaleString('en-IN')}</td>
+                            <td className="px-4 py-3 text-xs text-gray-600 dark:text-[#a1a1aa]">{inv.created_at ? new Date(inv.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                             <td className="px-4 py-3">
                               <div className="flex justify-end gap-2 items-center">
                                 {raisedNow ? (
@@ -904,7 +904,7 @@ const InvoicesTab = () => {
                                       variant="outline"
                                       onClick={() => openSelectInvoice(inv)}
                                       data-testid={`ps-invreq-select-${inv.invoice_id}`}
-                                      className="border-[#3f3f46] text-[#fafafa] hover:bg-[#27272a] h-8 px-3 text-xs"
+                                      className="border-gray-300 dark:border-[#3f3f46] text-gray-900 dark:text-[#fafafa] hover:bg-gray-100 dark:hover:bg-[#27272a] h-8 px-3 text-xs"
                                     >
                                       <Eye className="h-3.5 w-3.5 mr-1" /> Select Invoice
                                     </Button>
@@ -932,23 +932,23 @@ const InvoicesTab = () => {
 
           {/* Lead / New Invoice Req sub-table — original behaviour */}
           {sourceFilter !== 'payment_schedule' && (
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-[#09090b] border-b border-[#27272a]">
+                <thead className="bg-gray-50 dark:bg-[#09090b] border-b border-gray-200 dark:border-[#27272a]">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Company</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Lead</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">GST</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">GST #</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Mode</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Notes</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Raised</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Company</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Lead</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">GST</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">GST #</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Amount</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Mode</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Notes</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Raised</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-600 dark:text-[#a1a1aa] uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#27272a]">
+                <tbody className="divide-y divide-gray-200 dark:divide-[#27272a]">
                   {(() => {
                     const filteredRequests = invoiceRequests.filter((req) => {
                       const src = req.source || 'lead';
@@ -959,26 +959,26 @@ const InvoicesTab = () => {
                     if (filteredRequests.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={9} className="px-4 py-12 text-center text-[#a1a1aa]">
+                          <td colSpan={9} className="px-4 py-12 text-center text-gray-600 dark:text-[#a1a1aa]">
                             No pending invoice requests.
                           </td>
                         </tr>
                       );
                     }
                     return filteredRequests.map((req) => (
-                    <tr key={req.request_id} className="hover:bg-[#27272a]/20 transition-colors" data-testid={`invreq-row-${req.request_id}`}>
-                      <td className="px-4 py-3 text-sm font-medium text-[#fafafa]">{req.company_name}</td>
-                      <td className="px-4 py-3 text-sm text-[#a1a1aa]">{req.lead_name || '-'}</td>
+                    <tr key={req.request_id} className="hover:bg-gray-100/20 dark:hover:bg-[#27272a]/20 transition-colors" data-testid={`invreq-row-${req.request_id}`}>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-[#fafafa]">{req.company_name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-[#a1a1aa]">{req.lead_name || '-'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${req.gst_type === 'gst' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>
                           {req.gst_type === 'gst' ? 'GST' : 'Non-GST'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs font-mono text-[#a1a1aa]">{req.gst_number || '-'}</td>
-                      <td className="px-4 py-3 text-right text-sm font-semibold text-[#fafafa]">₹{Number(req.amount || 0).toLocaleString('en-IN')}</td>
-                      <td className="px-4 py-3 text-sm capitalize text-[#a1a1aa]">{req.payment_mode || '-'}</td>
-                      <td className="px-4 py-3 text-xs text-[#a1a1aa] max-w-[260px] truncate" title={req.notes}>{req.notes || '-'}</td>
-                      <td className="px-4 py-3 text-xs text-[#a1a1aa]">{req.created_at ? new Date(req.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
+                      <td className="px-4 py-3 text-xs font-mono text-gray-600 dark:text-[#a1a1aa]">{req.gst_number || '-'}</td>
+                      <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900 dark:text-[#fafafa]">₹{Number(req.amount || 0).toLocaleString('en-IN')}</td>
+                      <td className="px-4 py-3 text-sm capitalize text-gray-600 dark:text-[#a1a1aa]">{req.payment_mode || '-'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-[#a1a1aa] max-w-[260px] truncate" title={req.notes}>{req.notes || '-'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-[#a1a1aa]">{req.created_at ? new Date(req.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -1057,13 +1057,13 @@ const InvoicesTab = () => {
           onClick={(e) => { if (e.target === e.currentTarget) setPsRaiseChoice(null); }}
           data-testid="ps-raise-choice-popup"
         >
-          <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="text-lg font-semibold text-[#fafafa] mb-1">Raise Invoice</h3>
-            <p className="text-sm text-[#a1a1aa] mb-5">
+          <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-[#fafafa] mb-1">Raise Invoice</h3>
+            <p className="text-sm text-gray-600 dark:text-[#a1a1aa] mb-5">
               {psRaiseChoice.invoice.invoice_number} · ₹{Number(psRaiseChoice.invoice.total_amount || 0).toLocaleString('en-IN')}
             </p>
             <div className="space-y-2 mb-5">
-              <label className="text-xs uppercase tracking-wider text-[#a1a1aa]">Invoice Type</label>
+              <label className="text-xs uppercase tracking-wider text-gray-600 dark:text-[#a1a1aa]">Invoice Type</label>
               <div className="flex gap-2">
                 {[
                   { id: 'gst', label: 'GST' },
@@ -1081,7 +1081,7 @@ const InvoicesTab = () => {
                           ? (opt.id === 'gst'
                               ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
                               : 'bg-amber-500/15 border-amber-500/40 text-amber-300')
-                          : 'bg-[#09090b] border-[#27272a] text-[#a1a1aa] hover:text-white'
+                          : 'bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:text-white'
                       }`}
                     >
                       {opt.label}
@@ -1095,7 +1095,7 @@ const InvoicesTab = () => {
                 variant="ghost"
                 onClick={() => setPsRaiseChoice(null)}
                 data-testid="ps-raise-cancel"
-                className="text-[#a1a1aa] hover:text-white"
+                className="text-gray-600 dark:text-[#a1a1aa] hover:text-white"
               >
                 Cancel
               </Button>
@@ -1127,17 +1127,17 @@ const InvoicesTab = () => {
             onClick={(e) => { if (e.target === e.currentTarget && !recordingPayment) setSelectInvoicePopup(null); }}
             data-testid="select-invoice-popup"
           >
-            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
-              <h3 className="text-lg font-semibold text-[#fafafa] mb-1">Select Invoice</h3>
-              <p className="text-sm text-[#a1a1aa] mb-5">
+            <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] overflow-y-auto">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-[#fafafa] mb-1">Select Invoice</h3>
+              <p className="text-sm text-gray-600 dark:text-[#a1a1aa] mb-5">
                 {pendingInvoice.invoice_number} · Requested ₹{requestAmount.toLocaleString('en-IN')}
               </p>
 
-              <label className="text-xs uppercase tracking-wider text-[#a1a1aa]">Invoice</label>
+              <label className="text-xs uppercase tracking-wider text-gray-600 dark:text-[#a1a1aa]">Invoice</label>
               {loadingProjectInvoices ? (
-                <p className="text-sm text-[#a1a1aa] mt-2 mb-4">Loading invoices…</p>
+                <p className="text-sm text-gray-600 dark:text-[#a1a1aa] mt-2 mb-4">Loading invoices…</p>
               ) : projectInvoices.length === 0 ? (
-                <p className="text-sm text-[#a1a1aa] mt-2 mb-4">No other invoices found for this project.</p>
+                <p className="text-sm text-gray-600 dark:text-[#a1a1aa] mt-2 mb-4">No other invoices found for this project.</p>
               ) : (
                 <div className="mt-2 mb-4 space-y-2 max-h-48 overflow-y-auto">
                   {projectInvoices.map((i) => {
@@ -1152,7 +1152,7 @@ const InvoicesTab = () => {
                         className={`w-full text-left px-3 py-2.5 rounded-lg border text-sm transition-colors ${
                           active
                             ? 'bg-[#6366f1]/15 border-[#6366f1] text-white'
-                            : 'bg-[#09090b] border-[#27272a] text-[#a1a1aa] hover:text-white'
+                            : 'bg-gray-50 dark:bg-[#09090b] border-gray-200 dark:border-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:text-white'
                         }`}
                       >
                         <div className="flex justify-between font-medium">
@@ -1169,10 +1169,10 @@ const InvoicesTab = () => {
               )}
 
               {chosen && (
-                <div className="bg-[#09090b] border border-[#27272a] rounded-lg p-4 mb-5 space-y-1.5 text-sm">
-                  <div className="flex justify-between text-[#a1a1aa]"><span>Total Payment Request Amount</span><span className="text-[#fafafa] font-medium">₹{requestAmount.toLocaleString('en-IN')}</span></div>
-                  <div className="flex justify-between text-[#a1a1aa]"><span>Invoice Amount</span><span className="text-[#fafafa] font-medium">₹{chosenTotal.toLocaleString('en-IN')}</span></div>
-                  <div className="flex justify-between text-[#a1a1aa]"><span>Balance</span><span className="text-[#fafafa] font-medium">₹{chosenBalance.toLocaleString('en-IN')}</span></div>
+                <div className="bg-gray-50 dark:bg-[#09090b] border border-gray-200 dark:border-[#27272a] rounded-lg p-4 mb-5 space-y-1.5 text-sm">
+                  <div className="flex justify-between text-gray-600 dark:text-[#a1a1aa]"><span>Total Payment Request Amount</span><span className="text-gray-900 dark:text-[#fafafa] font-medium">₹{requestAmount.toLocaleString('en-IN')}</span></div>
+                  <div className="flex justify-between text-gray-600 dark:text-[#a1a1aa]"><span>Invoice Amount</span><span className="text-gray-900 dark:text-[#fafafa] font-medium">₹{chosenTotal.toLocaleString('en-IN')}</span></div>
+                  <div className="flex justify-between text-gray-600 dark:text-[#a1a1aa]"><span>Balance</span><span className="text-gray-900 dark:text-[#fafafa] font-medium">₹{chosenBalance.toLocaleString('en-IN')}</span></div>
                   {requestAmount > chosenBalance && (
                     <p className="text-xs text-rose-400 pt-1">Requested amount exceeds this invoice's balance.</p>
                   )}
@@ -1185,7 +1185,7 @@ const InvoicesTab = () => {
                   onClick={() => setSelectInvoicePopup(null)}
                   disabled={recordingPayment}
                   data-testid="select-invoice-cancel"
-                  className="text-[#a1a1aa] hover:text-white"
+                  className="text-gray-600 dark:text-[#a1a1aa] hover:text-white"
                 >
                   Cancel
                 </Button>

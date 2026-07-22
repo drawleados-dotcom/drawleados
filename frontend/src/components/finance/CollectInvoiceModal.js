@@ -103,14 +103,14 @@ const CollectInvoiceModal = ({ invoice, onClose, onSaved }) => {
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent
-        className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-md"
+        className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-w-md"
         data-testid="collect-invoice-modal"
       >
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <IndianRupee className="h-5 w-5 text-[#10b981]" /> Collect Payment
           </DialogTitle>
-          <p className="text-xs text-[#a1a1aa]">
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">
             Invoice {invoice.invoice_number || invoice.invoice_id} • {invoice.client_name || ''} •{' '}
             <span className={`uppercase font-semibold ${gstType === 'gst' ? 'text-[#10b981]' : 'text-[#f59e0b]'}`}>{gstType.replace('_', '-')}</span>
           </p>
@@ -119,32 +119,32 @@ const CollectInvoiceModal = ({ invoice, onClose, onSaved }) => {
         <div className="space-y-3 mt-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-[#fafafa]">Amount *</Label>
+              <Label className="text-gray-900 dark:text-[#fafafa]">Amount *</Label>
               <Input
                 type="number"
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 placeholder="0.00"
-                className="bg-[#0c0a09] border-[#27272a] text-sm"
+                className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-sm"
                 data-testid="collect-amount-input"
                 autoFocus
               />
-              <p className="text-[10px] text-[#a1a1aa] mt-1">Balance due: ₹{balance.toLocaleString('en-IN')}</p>
+              <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa] mt-1">Balance due: ₹{balance.toLocaleString('en-IN')}</p>
             </div>
             <div>
-              <Label className="text-[#fafafa]">Date *</Label>
+              <Label className="text-gray-900 dark:text-[#fafafa]">Date *</Label>
               <Input
                 type="date"
                 value={form.date}
                 onChange={(e) => setForm({ ...form, date: e.target.value })}
-                className="bg-[#0c0a09] border-[#27272a] text-sm"
+                className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-sm"
                 data-testid="collect-date-input"
               />
             </div>
           </div>
 
           <div>
-            <Label className="text-[#fafafa]">Payment Mode *</Label>
+            <Label className="text-gray-900 dark:text-[#fafafa]">Payment Mode *</Label>
             <div className="grid grid-cols-4 gap-1 mt-1">
               {PAYMENT_MODES.map((m) => (
                 <button
@@ -154,8 +154,8 @@ const CollectInvoiceModal = ({ invoice, onClose, onSaved }) => {
                   data-testid={`collect-mode-${m.key}`}
                   className={`px-2 py-1.5 rounded-md text-xs border transition-colors ${
                     form.payment_mode === m.key
-                      ? 'border-[#6366f1] bg-[#6366f1]/15 text-[#fafafa]'
-                      : 'border-[#27272a] text-[#a1a1aa] hover:text-[#fafafa]'
+                      ? 'border-[#6366f1] bg-[#6366f1]/15 text-gray-900 dark:text-[#fafafa]'
+                      : 'border-gray-200 dark:border-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa]'
                   }`}
                 >
                   {m.label}
@@ -166,22 +166,22 @@ const CollectInvoiceModal = ({ invoice, onClose, onSaved }) => {
 
           {form.payment_mode === 'bank' && (
             <div>
-              <Label className="text-[#fafafa]">
+              <Label className="text-gray-900 dark:text-[#fafafa]">
                 {gstType === 'gst' ? 'GST Bank Account *' : 'Non-GST Bank Account *'}
               </Label>
               {loadingBanks ? (
-                <div className="flex items-center gap-2 text-[#a1a1aa] text-xs h-10">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-[#a1a1aa] text-xs h-10">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading banks…
                 </div>
               ) : banks.length === 0 ? (
-                <p className="text-xs text-[#f87171] mt-1">
+                <p className="text-xs text-red-600 dark:text-[#f87171] mt-1">
                   No {gstType.toUpperCase()} bank accounts yet — add one under Finance → Banks → {gstType === 'gst' ? 'GST Accounts' : 'Non-GST Accounts'}.
                 </p>
               ) : (
                 <select
                   value={form.bank_id}
                   onChange={(e) => setForm({ ...form, bank_id: e.target.value })}
-                  className="w-full h-10 px-3 mt-1 rounded-md border border-[#27272a] bg-[#0c0a09] text-[#fafafa] text-sm"
+                  className="w-full h-10 px-3 mt-1 rounded-md border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#0c0a09] text-gray-900 dark:text-[#fafafa] text-sm"
                   data-testid="collect-bank-select"
                 >
                   <option value="">Select bank account...</option>
@@ -196,19 +196,19 @@ const CollectInvoiceModal = ({ invoice, onClose, onSaved }) => {
           )}
 
           <div>
-            <Label className="text-[#fafafa]">Notes (optional)</Label>
+            <Label className="text-gray-900 dark:text-[#fafafa]">Notes (optional)</Label>
             <Input
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               placeholder="UTR / Cheque #, internal note"
-              className="bg-[#0c0a09] border-[#27272a] text-sm"
+              className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-sm"
               data-testid="collect-notes-input"
             />
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-[#27272a] mt-3">
-          <Button variant="ghost" onClick={onClose} className="text-[#a1a1aa]">Cancel</Button>
+        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-[#27272a] mt-3">
+          <Button variant="ghost" onClick={onClose} className="text-gray-600 dark:text-[#a1a1aa]">Cancel</Button>
           <Button
             onClick={submit}
             disabled={saving}

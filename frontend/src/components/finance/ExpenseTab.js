@@ -1059,22 +1059,22 @@ const ExpenseTab = () => {
       });
 
     const Filter = (
-      <div className={`flex items-center gap-2 flex-wrap p-3 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid="dashboard-filters">
-        <Calendar className={`h-4 w-4 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`} />
-        <span className={`text-xs uppercase tracking-wider mr-1 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Period</span>
+      <div className={`flex items-center gap-2 flex-wrap p-3 rounded-xl border ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid="dashboard-filters">
+        <Calendar className={`h-4 w-4 ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`} />
+        <span className={`text-xs uppercase tracking-wider mr-1 ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>Period</span>
         <Input
           type="date"
           value={dashFilter.from || ''}
           onChange={(e) => setDashFilter({ ...dashFilter, from: e.target.value })}
-          className={`h-8 text-xs w-[150px] ${isDark ? 'bg-[#0c0a09] border-[#27272a] text-[#fafafa]' : ''}`}
+          className={`h-8 text-xs w-[150px] ${isDark ? 'bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]' : ''}`}
           data-testid="dashboard-date-from"
         />
-        <span className={`text-xs ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>→</span>
+        <span className={`text-xs ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>→</span>
         <Input
           type="date"
           value={dashFilter.to || ''}
           onChange={(e) => setDashFilter({ ...dashFilter, to: e.target.value })}
-          className={`h-8 text-xs w-[150px] ${isDark ? 'bg-[#0c0a09] border-[#27272a] text-[#fafafa]' : ''}`}
+          className={`h-8 text-xs w-[150px] ${isDark ? 'bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa]' : ''}`}
           data-testid="dashboard-date-to"
         />
         <Button size="sm" variant="ghost" className="h-8 text-xs" data-testid="dashboard-filter-today"
@@ -1102,15 +1102,15 @@ const ExpenseTab = () => {
 
     // Compact card — used in dense single-viewport dashboard.
     const Card = ({ label, value, accent, sub, testId, Icon }) => (
-      <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
+      <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
         <div className="flex items-center gap-2 mb-1">
           <div className="p-1.5 rounded-md" style={{ backgroundColor: `${accent}22` }}>
             {Icon && <Icon className="h-3.5 w-3.5" style={{ color: accent }} />}
           </div>
-          <p className={`text-[11px] font-medium leading-tight truncate ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
+          <p className={`text-[11px] font-medium leading-tight truncate ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
         </div>
         <p className="text-base font-bold leading-tight" style={{ color: accent }}>{formatCurrency(value)}</p>
-        {sub && <p className={`text-[9px] mt-0.5 leading-tight truncate ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
+        {sub && <p className={`text-[9px] mt-0.5 leading-tight truncate ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
       </div>
     );
 
@@ -1124,20 +1124,20 @@ const ExpenseTab = () => {
           const nonGstTotal = Number(bankBreakdown?.bank_breakdown?.non_gst?.total || 0);
           const allTotal = gstTotal + nonGstTotal;
           const Pill = ({ label, sub, value, accent, testId }) => (
-            <div className={`flex-1 min-w-[160px] p-2.5 rounded-lg border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
+            <div className={`flex-1 min-w-[160px] p-2.5 rounded-lg border ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid={testId}>
               <div className="flex items-center justify-between">
-                <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
+                <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>{label}</p>
                 <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accent }} />
               </div>
               <p className="text-base font-bold mt-0.5 leading-tight" style={{ color: accent }}>{formatCurrency(value)}</p>
-              {sub && <p className={`text-[9px] leading-tight ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
+              {sub && <p className={`text-[9px] leading-tight ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>{sub}</p>}
             </div>
           );
           return (
             <div data-testid="cash-in-book-strip">
               <div className="flex items-center justify-between mb-1.5">
                 <h3 className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Book</h3>
-                <p className={`text-[9px] ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>Snapshot — independent of period filter</p>
+                <p className={`text-[9px] ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>Snapshot — independent of period filter</p>
               </div>
               <div className="flex gap-2 flex-wrap">
                 <Pill label="All" sub="GST + Non-GST" value={allTotal} accent="#6366f1" testId="cash-in-book-all" />
@@ -1165,7 +1165,7 @@ const ExpenseTab = () => {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <h3 className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense</h3>
-            <Button onClick={exportDashboard} variant="outline" size="sm" className={`h-7 text-[11px] ${isDark ? 'border-[#3f3f46]' : ''}`} data-testid="dashboard-export-btn">
+            <Button onClick={exportDashboard} variant="outline" size="sm" className={`h-7 text-[11px] ${isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}`} data-testid="dashboard-export-btn">
               <Download className="h-3 w-3 mr-1" /> Export
             </Button>
           </div>
@@ -1205,22 +1205,22 @@ const ExpenseTab = () => {
       non_gst: null,
     };
     const BankColumn = ({ title, color, data, testId }) => (
-      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-gray-50 border-gray-200'}`} data-testid={testId}>
+      <div className={`p-5 rounded-xl border ${isDark ? 'bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a]' : 'bg-gray-50 border-gray-200'}`} data-testid={testId}>
         <div className="flex items-center justify-between mb-4">
-          <h4 className={`text-sm font-semibold uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>{title}</h4>
+          <h4 className={`text-sm font-semibold uppercase tracking-wider ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>{title}</h4>
           <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
         </div>
         <div className="space-y-2">
           {(data?.banks || []).length === 0 ? (
-            <p className={`text-xs italic ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No bank accounts yet.</p>
+            <p className={`text-xs italic ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>No bank accounts yet.</p>
           ) : (data.banks || []).map((b) => (
             <div key={b.bank_id} className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0 flex-1">
-                <span className={`text-sm ${isDark ? 'text-[#d4d4d8]' : 'text-gray-700'} truncate`} data-testid={`bank-holder-${b.bank_id}`}>{b.label}</span>
+                <span className={`text-sm ${isDark ? 'text-gray-700 dark:text-[#d4d4d8]' : 'text-gray-700'} truncate`} data-testid={`bank-holder-${b.bank_id}`}>{b.label}</span>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {b.bank_name && (
                     <span
-                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap ${isDark ? 'bg-[#6366f1]/15 text-[#a78bfa]' : 'bg-indigo-100 text-indigo-600'}`}
+                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap ${isDark ? 'bg-[#6366f1]/15 text-violet-600 dark:text-[#a78bfa]' : 'bg-indigo-100 text-indigo-600'}`}
                       data-testid={`bank-name-tag-${b.bank_id}`}
                     >
                       {b.bank_name}
@@ -1228,7 +1228,7 @@ const ExpenseTab = () => {
                   )}
                   {b.account_type && (
                     <span
-                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap capitalize ${isDark ? 'bg-[#22c55e]/15 text-[#4ade80]' : 'bg-emerald-100 text-emerald-600'}`}
+                      className={`text-[10px] leading-none px-1.5 py-0.5 rounded-full whitespace-nowrap capitalize ${isDark ? 'bg-[#22c55e]/15 text-green-600 dark:text-[#4ade80]' : 'bg-emerald-100 text-emerald-600'}`}
                       data-testid={`account-type-tag-${b.bank_id}`}
                     >
                       {b.account_type}
@@ -1239,14 +1239,14 @@ const ExpenseTab = () => {
               <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(b.amount)}</span>
             </div>
           ))}
-          <div className={`pt-2 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} space-y-2`}>
-            <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cash</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cash)}</span></div>
-            <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Cheque</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cheque)}</span></div>
+          <div className={`pt-2 mt-2 border-t ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'} space-y-2`}>
+            <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>Cash</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cash)}</span></div>
+            <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>Cheque</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.cheque)}</span></div>
             {(Number(data?.upi || 0) > 0) && (
-              <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>UPI</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.upi)}</span></div>
+              <div className="flex items-center justify-between"><span className={`text-sm ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>UPI</span><span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(data?.upi)}</span></div>
             )}
           </div>
-          <div className={`pt-2.5 mt-2 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'} flex items-center justify-between`}>
+          <div className={`pt-2.5 mt-2 border-t ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'} flex items-center justify-between`}>
             <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</span>
             <span className="text-lg font-bold" style={{ color }}>{formatCurrency(data?.total)}</span>
           </div>
@@ -1254,35 +1254,35 @@ const ExpenseTab = () => {
       </div>
     );
     return (
-      <div className={`p-5 rounded-xl border ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid="cashbook-totalbook">
+      <div className={`p-5 rounded-xl border ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200'}`} data-testid="cashbook-totalbook">
         <button
           onClick={toggleCashBook}
           className="w-full flex items-center justify-between gap-3 flex-wrap"
           data-testid="cashbook-totalbook-toggle"
         >
           <div className="flex items-center gap-2">
-            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-transform ${cashBookOpen ? 'rotate-90' : ''} ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>
+            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md transition-transform ${cashBookOpen ? 'rotate-90' : ''} ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>
               <ChevronRight className="h-4 w-4" />
             </span>
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cash in Total Book</h3>
           </div>
           <div className="flex items-center gap-4 ml-auto">
             <div className="text-right">
-              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>GST</p>
+              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>GST</p>
               <p className="text-base font-bold text-[#22c55e]">{formatCurrency(Number(bd?.gst?.total || 0))}</p>
             </div>
             <div className="text-right">
-              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Non-GST</p>
+              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>Non-GST</p>
               <p className="text-base font-bold text-[#f59e0b]">{formatCurrency(Number(bd?.non_gst?.total || 0))}</p>
             </div>
             <div className="text-right">
-              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-[#a1a1aa]' : 'text-gray-500'}`}>Total</p>
+              <p className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500'}`}>Total</p>
               <p className="text-xl font-bold text-[#6366f1]">{formatCurrency(Number(bd?.gst?.total || 0) + Number(bd?.non_gst?.total || 0))}</p>
             </div>
           </div>
         </button>
         {cashBookOpen && (
-          <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4 mt-4 pt-4 border-t ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`} data-testid="cashbook-totalbook-details">
+          <div className={`grid grid-cols-1 ${has2col ? 'md:grid-cols-2' : ''} gap-4 mt-4 pt-4 border-t ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`} data-testid="cashbook-totalbook-details">
             <BankColumn title="GST Accounts" color="#22c55e" data={bd.gst} testId="bank-col-gst" />
             {has2col && bd.non_gst && (
               <BankColumn title="Non-GST Accounts" color="#f59e0b" data={bd.non_gst} testId="bank-col-non-gst" />
@@ -1301,11 +1301,11 @@ const ExpenseTab = () => {
 
     return (
       <div className="space-y-4">
-        <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+        <div className={`p-4 rounded-xl ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-6">
               <div>
-                <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Amount in Account</p>
+                <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Amount in Account</p>
                 <p className={`text-3xl font-bold ${balance >= 0 ? 'text-[#22c55e]' : 'text-[#ef4444]'}`}>
                   {formatCurrency(balance)}
                 </p>
@@ -1318,7 +1318,7 @@ const ExpenseTab = () => {
                     className={`px-3 py-1.5 text-sm rounded-md transition-all ${
                       selectedAccount?.account_id === acc.account_id
                         ? 'bg-[#6366f1] text-white'
-                        : isDark ? 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        : isDark ? 'bg-gray-100 dark:bg-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:bg-gray-200 dark:hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     {acc.name}
@@ -1328,7 +1328,7 @@ const ExpenseTab = () => {
             </div>
             <div className="flex items-center gap-3">
               <Select value={selectedMonth.toString()} onValueChange={v => setSelectedMonth(parseInt(v))}>
-                <SelectTrigger className={`w-[120px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+                <SelectTrigger className={`w-[120px] ${isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1338,7 +1338,7 @@ const ExpenseTab = () => {
                 </SelectContent>
               </Select>
               <Select value={selectedYear.toString()} onValueChange={v => setSelectedYear(parseInt(v))}>
-                <SelectTrigger className={`w-[90px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+                <SelectTrigger className={`w-[90px] ${isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1353,7 +1353,7 @@ const ExpenseTab = () => {
 
         <div className="grid grid-cols-2 gap-4">
           {/* Cash In */}
-          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
             <div className="bg-[#22c55e] text-white p-3 flex items-center justify-between">
               <h3 className="font-semibold">Cash In</h3>
               <div className="flex items-center gap-3">
@@ -1365,7 +1365,7 @@ const ExpenseTab = () => {
             </div>
             <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-xs">
-                <thead className={`sticky top-0 ${isDark ? 'bg-[#18181b]' : 'bg-gray-50'}`}>
+                <thead className={`sticky top-0 ${isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-gray-50'}`}>
                   <tr>
                     <th className="p-2 text-left">#</th>
                     <th className="p-2 text-left">Date</th>
@@ -1375,9 +1375,9 @@ const ExpenseTab = () => {
                     <th className="p-2 text-right">Total</th>
                   </tr>
                 </thead>
-                <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+                <tbody className={`divide-y ${isDark ? 'divide-gray-200 dark:divide-[#27272a]' : 'divide-gray-100'}`}>
                   {(cashbookData?.credit?.entries || []).map((entry, idx) => (
-                    <tr key={entry.income_id || idx} className={isDark ? 'hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
+                    <tr key={entry.income_id || idx} className={isDark ? 'hover:bg-white dark:hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
                       <td className="p-2">{idx + 1}</td>
                       <td className="p-2">{entry.date}</td>
                       <td className={`p-2 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{entry.source}</td>
@@ -1393,7 +1393,7 @@ const ExpenseTab = () => {
                     </tr>
                   ))}
                   {(!cashbookData?.credit?.entries?.length) && (
-                    <tr><td colSpan={6} className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No entries</td></tr>
+                    <tr><td colSpan={6} className={`p-6 text-center ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>No entries</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1401,7 +1401,7 @@ const ExpenseTab = () => {
           </div>
 
           {/* Cash Out */}
-          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
             <div className="bg-[#ef4444] text-white p-3 flex items-center justify-between">
               <h3 className="font-semibold">Cash Out</h3>
               <div className="flex items-center gap-3">
@@ -1413,7 +1413,7 @@ const ExpenseTab = () => {
             </div>
             <div className="overflow-x-auto max-h-[400px]">
               <table className="w-full text-xs">
-                <thead className={`sticky top-0 ${isDark ? 'bg-[#18181b]' : 'bg-gray-50'}`}>
+                <thead className={`sticky top-0 ${isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-gray-50'}`}>
                   <tr>
                     <th className="p-2 text-left">#</th>
                     <th className="p-2 text-left">Date</th>
@@ -1423,11 +1423,11 @@ const ExpenseTab = () => {
                     <th className="p-2 text-left">Remarks</th>
                   </tr>
                 </thead>
-                <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+                <tbody className={`divide-y ${isDark ? 'divide-gray-200 dark:divide-[#27272a]' : 'divide-gray-100'}`}>
                   {(cashbookData?.debit?.entries || []).map((entry, idx) => {
                     const catColor = getCatColor(entry.category_name);
                     return (
-                      <tr key={entry.payment_id || idx} className={isDark ? 'hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
+                      <tr key={entry.payment_id || idx} className={isDark ? 'hover:bg-white dark:hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
                         <td className="p-2">{idx + 1}</td>
                         <td className="p-2">{entry.payment_date}</td>
                         <td className={`p-2 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{entry.entry_name || 'Expense'}</td>
@@ -1442,7 +1442,7 @@ const ExpenseTab = () => {
                     );
                   })}
                   {(!cashbookData?.debit?.entries?.length) && (
-                    <tr><td colSpan={6} className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No entries</td></tr>
+                    <tr><td colSpan={6} className={`p-6 text-center ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>No entries</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1452,7 +1452,7 @@ const ExpenseTab = () => {
 
         {/* Export Button */}
         <div className="flex justify-end">
-          <Button onClick={exportCashbook} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+          <Button onClick={exportCashbook} variant="outline" className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
             <Download className="h-4 w-4 mr-2" /> Export Cashbook
           </Button>
         </div>
@@ -1463,16 +1463,16 @@ const ExpenseTab = () => {
   // ============ RENDER EXPENSE (Category-based with accordion) ============
   const renderExpense = () => (
     <div className="space-y-4">
-      <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+      <div className={`p-4 rounded-xl ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense Categories</h3>
-            <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Click on a category to view and add expenses</p>
+            <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Click on a category to view and add expenses</p>
           </div>
           <div className="flex items-center gap-3">
             {/* Date Filters */}
             <Select value={selectedMonth.toString()} onValueChange={v => setSelectedMonth(parseInt(v))}>
-              <SelectTrigger className={`w-[120px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+              <SelectTrigger className={`w-[120px] ${isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1480,7 +1480,7 @@ const ExpenseTab = () => {
               </SelectContent>
             </Select>
             <Select value={selectedYear.toString()} onValueChange={v => setSelectedYear(parseInt(v))}>
-              <SelectTrigger className={`w-[90px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+              <SelectTrigger className={`w-[90px] ${isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -1504,32 +1504,32 @@ const ExpenseTab = () => {
           const totalPaid = items.reduce((sum, i) => sum + (i.total_paid || 0), 0);
           
           return (
-            <div key={cat.category_id} className={`rounded-xl border overflow-hidden ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+            <div key={cat.category_id} className={`rounded-xl border overflow-hidden ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
               {/* Category Header */}
               <div
                 onClick={() => toggleCategory(cat.category_id)}
                 className={`p-4 cursor-pointer flex items-center justify-between transition-all ${
-                  isDark ? 'bg-[#18181b] hover:bg-[#1f1f23]' : 'bg-white hover:bg-gray-50'
+                  isDark ? 'bg-white dark:bg-[#18181b] hover:bg-gray-50 dark:hover:bg-[#1f1f23]' : 'bg-white hover:bg-gray-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <ChevronDown className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''} ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`} />
+                  <ChevronDown className={`h-5 w-5 transition-transform ${isExpanded ? 'rotate-180' : ''} ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`} />
                   <Badge style={{ backgroundColor: color.bg, color: color.text }}>{cat.name}</Badge>
-                  <span className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                  <span className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>
                     {items.length} items
                   </span>
                 </div>
                 <div className="flex items-center gap-6">
                   <div className="text-right">
-                    <p className={`text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total</p>
+                    <p className={`text-xs ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Total</p>
                     <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(totalAmount)}</p>
                   </div>
                   <div className="text-right">
-                    <p className={`text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
+                    <p className={`text-xs ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
                     <p className="font-semibold text-[#22c55e]">{formatCurrency(totalPaid)}</p>
                   </div>
                   <div className="text-right">
-                    <p className={`text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
+                    <p className={`text-xs ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
                     <p className="font-semibold text-[#ef4444]">{formatCurrency(totalAmount - totalPaid)}</p>
                   </div>
                   <Button
@@ -1540,7 +1540,7 @@ const ExpenseTab = () => {
                       setTargetCategory(cat);
                       setShowAddExpenseToCategory(true);
                     }}
-                    className={isDark ? 'hover:bg-[#27272a]' : ''}
+                    className={isDark ? 'hover:bg-gray-100 dark:hover:bg-[#27272a]' : ''}
                     title="Add item to this category"
                     data-testid={`category-add-${cat.category_id}`}
                   >
@@ -1550,7 +1550,7 @@ const ExpenseTab = () => {
                     size="sm"
                     variant="ghost"
                     onClick={(e) => { e.stopPropagation(); handleEditCategory(cat); }}
-                    className={`${isDark ? 'hover:bg-[#27272a]' : 'hover:bg-gray-100'} text-[#6366f1]`}
+                    className={`${isDark ? 'hover:bg-gray-100 dark:hover:bg-[#27272a]' : 'hover:bg-gray-100'} text-[#6366f1]`}
                     title="Rename category"
                     data-testid={`category-edit-${cat.category_id}`}
                   >
@@ -1571,11 +1571,11 @@ const ExpenseTab = () => {
 
               {/* Expanded Items */}
               {isExpanded && (
-                <div className={`border-t ${isDark ? 'border-[#27272a] bg-[#0f0f11]' : 'border-gray-100 bg-gray-50'}`}>
+                <div className={`border-t ${isDark ? 'border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#0f0f11]' : 'border-gray-100 bg-gray-50'}`}>
                   {items.length > 0 ? (
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className={isDark ? 'text-[#71717a]' : 'text-gray-500'}>
+                        <tr className={isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}>
                           <th className="p-3 text-left font-medium">Name</th>
                           <th className="p-3 text-right font-medium">Total</th>
                           <th className="p-3 text-right font-medium">Paid</th>
@@ -1583,20 +1583,20 @@ const ExpenseTab = () => {
                           <th className="p-3 text-left font-medium">Description</th>
                         </tr>
                       </thead>
-                      <tbody className={`divide-y ${isDark ? 'divide-[#1f1f23]' : 'divide-gray-100'}`}>
+                      <tbody className={`divide-y ${isDark ? 'divide-gray-200 dark:divide-[#1f1f23]' : 'divide-gray-100'}`}>
                         {items.map(item => (
-                          <tr key={item.entry_id} className={isDark ? 'hover:bg-[#18181b]' : 'hover:bg-white'}>
+                          <tr key={item.entry_id} className={isDark ? 'hover:bg-white dark:hover:bg-[#18181b]' : 'hover:bg-white'}>
                             <td className={`p-3 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.name}</td>
                             <td className="p-3 text-right">{formatCurrency(item.total_amount)}</td>
                             <td className="p-3 text-right text-[#22c55e]">{formatCurrency(item.total_paid || 0)}</td>
                             <td className="p-3 text-right text-[#ef4444]">{formatCurrency(item.balance || (item.total_amount - (item.total_paid || 0)))}</td>
-                            <td className={`p-3 text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>{item.description}</td>
+                            <td className={`p-3 text-xs ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>{item.description}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   ) : (
-                    <div className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>
+                    <div className={`p-6 text-center ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>
                       No items in this category.
                       <button
                         onClick={() => {
@@ -1618,7 +1618,7 @@ const ExpenseTab = () => {
 
       {/* Export Button */}
       <div className="flex justify-end">
-        <Button onClick={exportExpense} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+        <Button onClick={exportExpense} variant="outline" className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
           <Download className="h-4 w-4 mr-2" /> Export Expenses
         </Button>
       </div>
@@ -1630,7 +1630,7 @@ const ExpenseTab = () => {
     if (selectedCategory) {
       return (
         <div className="space-y-4">
-          <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <div className={`p-4 rounded-xl ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Button variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>
@@ -1638,31 +1638,31 @@ const ExpenseTab = () => {
                 </Button>
                 <div>
                   <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{selectedCategory.name}</h3>
-                  <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                  <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>
                     {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
                   </p>
                 </div>
               </div>
               <div className="flex gap-6 text-sm">
                 <div className="text-center">
-                  <p className={isDark ? 'text-[#71717a]' : 'text-gray-500'}>Total</p>
+                  <p className={isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}>Total</p>
                   <p className={`font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(budgetData?.summary?.total)}</p>
                 </div>
                 <div className="text-center">
-                  <p className={isDark ? 'text-[#71717a]' : 'text-gray-500'}>Paid</p>
+                  <p className={isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}>Paid</p>
                   <p className="font-bold text-[#22c55e]">{formatCurrency(budgetData?.summary?.paid)}</p>
                 </div>
                 <div className="text-center">
-                  <p className={isDark ? 'text-[#71717a]' : 'text-gray-500'}>Balance</p>
+                  <p className={isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}>Balance</p>
                   <p className="font-bold text-[#ef4444]">{formatCurrency(budgetData?.summary?.balance)}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+          <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
             <table className="w-full text-sm">
-              <thead className={isDark ? 'bg-[#27272a]' : 'bg-gray-100'}>
+              <thead className={isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-100'}>
                 <tr>
                   <th className="p-3 text-left">Name</th>
                   <th className="p-3 text-right">Total</th>
@@ -1672,9 +1672,9 @@ const ExpenseTab = () => {
                   <th className="p-3 text-left">Remarks</th>
                 </tr>
               </thead>
-              <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+              <tbody className={`divide-y ${isDark ? 'divide-gray-200 dark:divide-[#27272a]' : 'divide-gray-100'}`}>
                 {(budgetData?.entries || []).map(item => (
-                  <tr key={item.entry_id} className={isDark ? 'hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
+                  <tr key={item.entry_id} className={isDark ? 'hover:bg-white dark:hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
                     <td className={`p-3 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.name}</td>
                     <td className="p-3 text-right">{formatCurrency(item.total_amount)}</td>
                     <td className="p-3 text-right text-[#22c55e]">{formatCurrency(item.paid)}</td>
@@ -1688,11 +1688,11 @@ const ExpenseTab = () => {
                         {item.status}
                       </Badge>
                     </td>
-                    <td className={`p-3 text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>{item.remarks}</td>
+                    <td className={`p-3 text-xs ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>{item.remarks}</td>
                   </tr>
                 ))}
                 {(!budgetData?.entries?.length) && (
-                  <tr><td colSpan={6} className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No items</td></tr>
+                  <tr><td colSpan={6} className={`p-6 text-center ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>No items</td></tr>
                 )}
               </tbody>
             </table>
@@ -1703,11 +1703,11 @@ const ExpenseTab = () => {
 
     return (
       <div className="space-y-4">
-        <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+        <div className={`p-4 rounded-xl ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Expense Budget</h3>
-              <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+              <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>
                 {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
               </p>
             </div>
@@ -1721,7 +1721,7 @@ const ExpenseTab = () => {
                     className={`px-2.5 py-1.5 text-xs rounded-md transition-all ${
                       selectedMonth === m.value
                         ? 'bg-[#6366f1] text-white'
-                        : isDark ? 'bg-[#27272a] text-[#a1a1aa] hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        : isDark ? 'bg-gray-100 dark:bg-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:bg-gray-200 dark:hover:bg-[#3f3f46]' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
                     {m.label.slice(0, 3)}
@@ -1729,7 +1729,7 @@ const ExpenseTab = () => {
                 ))}
               </div>
               <Select value={selectedYear.toString()} onValueChange={v => setSelectedYear(parseInt(v))}>
-                <SelectTrigger className={`w-[90px] ${isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}`}>
+                <SelectTrigger className={`w-[90px] ${isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1743,16 +1743,16 @@ const ExpenseTab = () => {
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-            <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total Budget</p>
+          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+            <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Total Budget</p>
             <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(budgetData?.summary?.total)}</p>
           </div>
-          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-            <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
+          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+            <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Paid</p>
             <p className="text-2xl font-bold text-[#22c55e]">{formatCurrency(budgetData?.summary?.paid)}</p>
           </div>
-          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-            <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
+          <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+            <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
             <p className="text-2xl font-bold text-[#ef4444]">{formatCurrency(budgetData?.summary?.balance)}</p>
           </div>
         </div>
@@ -1765,24 +1765,24 @@ const ExpenseTab = () => {
                 key={cat.category_id}
                 onClick={() => setSelectedCategory(cat)}
                 className={`p-4 rounded-xl border cursor-pointer transition-all hover:shadow-lg ${
-                  isDark ? 'bg-[#18181b] border-[#27272a] hover:border-[#3f3f46]' : 'bg-white border-gray-200 hover:border-gray-300'
+                  isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a] hover:border-gray-300 dark:hover:border-[#3f3f46]' : 'bg-white border-gray-200 hover:border-gray-300'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <Badge style={{ backgroundColor: color.bg, color: color.text }}>{cat.name}</Badge>
-                  <ChevronRight className={`h-4 w-4 ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`} />
+                  <ChevronRight className={`h-4 w-4 ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`} />
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div>
-                    <p className={isDark ? 'text-[#71717a]' : 'text-gray-400'}>Total</p>
+                    <p className={isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}>Total</p>
                     <p className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(cat.total || 0)}</p>
                   </div>
                   <div>
-                    <p className={isDark ? 'text-[#71717a]' : 'text-gray-400'}>Paid</p>
+                    <p className={isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}>Paid</p>
                     <p className="font-semibold text-[#22c55e]">{formatCurrency(cat.paid || 0)}</p>
                   </div>
                   <div>
-                    <p className={isDark ? 'text-[#71717a]' : 'text-gray-400'}>Balance</p>
+                    <p className={isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}>Balance</p>
                     <p className="font-semibold text-[#ef4444]">{formatCurrency(cat.balance || 0)}</p>
                   </div>
                 </div>
@@ -1793,7 +1793,7 @@ const ExpenseTab = () => {
 
         {/* Export Button */}
         <div className="flex justify-end">
-          <Button onClick={exportBudget} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+          <Button onClick={exportBudget} variant="outline" className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
             <Download className="h-4 w-4 mr-2" /> Export Budget
           </Button>
         </div>
@@ -1807,11 +1807,11 @@ const ExpenseTab = () => {
   // ============ RENDER OUTSTANDING ============
   const renderOutstanding = () => (
     <div className="space-y-4">
-      <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+      <div className={`p-4 rounded-xl ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
         <div className="flex items-center justify-between">
           <div>
             <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Outstanding Revenue</h3>
-            <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Track expected payments</p>
+            <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Track expected payments</p>
           </div>
           <Button onClick={() => setShowAddOutstanding(true)} className="bg-[#6366f1] hover:bg-[#5855eb]">
             <Plus className="h-4 w-4 mr-2" /> Add Outstanding
@@ -1820,29 +1820,29 @@ const ExpenseTab = () => {
       </div>
 
       <div className="grid grid-cols-3 gap-4">
-        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total Expected</p>
+        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Total Expected</p>
           <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {formatCurrency(outstandingData.reduce((sum, o) => sum + o.amount, 0))}
           </p>
         </div>
-        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Received</p>
+        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Received</p>
           <p className="text-2xl font-bold text-[#22c55e]">
             {formatCurrency(outstandingData.reduce((sum, o) => sum + (o.received_amount || 0), 0))}
           </p>
         </div>
-        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
-          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
+        <div className={`p-4 rounded-xl text-center ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+          <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Balance</p>
           <p className="text-2xl font-bold text-[#ef4444]">
             {formatCurrency(outstandingData.reduce((sum, o) => sum + (o.balance || 0), 0))}
           </p>
         </div>
       </div>
 
-      <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
+      <div className={`rounded-xl overflow-hidden border ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
         <table className="w-full text-sm">
-          <thead className={`${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+          <thead className={`${isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-100'}`}>
             <tr>
               <th className="p-3 text-left">#</th>
               <th className="p-3 text-left">Expected Date</th>
@@ -1856,11 +1856,11 @@ const ExpenseTab = () => {
               <th className="p-3 text-center">Actions</th>
             </tr>
           </thead>
-          <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-100'}`}>
+          <tbody className={`divide-y ${isDark ? 'divide-gray-200 dark:divide-[#27272a]' : 'divide-gray-100'}`}>
             {outstandingData.map((item, idx) => {
               const typeColor = getProjectColor(item.project_type);
               return (
-                <tr key={item.outstanding_id} className={isDark ? 'hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
+                <tr key={item.outstanding_id} className={isDark ? 'hover:bg-white dark:hover:bg-[#18181b]' : 'hover:bg-gray-50'}>
                   <td className="p-3">{idx + 1}</td>
                   <td className="p-3">{item.expected_date}</td>
                   <td className={`p-3 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.project_name}</td>
@@ -1881,7 +1881,7 @@ const ExpenseTab = () => {
                   </td>
                   <td className="p-3 text-right text-[#22c55e]">{formatCurrency(item.received_amount)}</td>
                   <td className="p-3 text-right text-[#ef4444]">{formatCurrency(item.balance)}</td>
-                  <td className={`p-3 text-xs ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>{item.remarks}</td>
+                  <td className={`p-3 text-xs ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>{item.remarks}</td>
                   <td className="p-3 text-center">
                     {item.balance > 0 && (
                       <Button
@@ -1892,7 +1892,7 @@ const ExpenseTab = () => {
                           setPaymentForm({ ...paymentForm, amount: item.balance.toString() });
                           setShowRecordPayment(true);
                         }}
-                        className={isDark ? 'border-[#3f3f46]' : ''}
+                        className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}
                       >
                         Record Payment
                       </Button>
@@ -1905,7 +1905,7 @@ const ExpenseTab = () => {
               );
             })}
             {outstandingData.length === 0 && (
-              <tr><td colSpan={10} className={`p-6 text-center ${isDark ? 'text-[#71717a]' : 'text-gray-400'}`}>No outstanding revenue</td></tr>
+              <tr><td colSpan={10} className={`p-6 text-center ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-400'}`}>No outstanding revenue</td></tr>
             )}
           </tbody>
         </table>
@@ -1913,7 +1913,7 @@ const ExpenseTab = () => {
 
       {/* Export Button */}
       <div className="flex justify-end">
-        <Button onClick={exportOutstanding} variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+        <Button onClick={exportOutstanding} variant="outline" className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
           <Download className="h-4 w-4 mr-2" /> Export Outstanding
         </Button>
       </div>
@@ -1926,14 +1926,14 @@ const ExpenseTab = () => {
     
     return (
       <div className="space-y-4">
-        <div className={`p-4 rounded-xl ${isDark ? 'bg-[#18181b] border border-[#27272a]' : 'bg-white border border-gray-200'}`}>
+        <div className={`p-4 rounded-xl ${isDark ? 'bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a]' : 'bg-white border border-gray-200'}`}>
           <div className="flex items-center justify-between">
             <div>
               <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{tab.label}</h3>
-              <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Custom tab - add your data</p>
+              <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Custom tab - add your data</p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className={isDark ? 'border-[#3f3f46]' : ''}>
+              <Button variant="outline" className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
                 <Plus className="h-4 w-4 mr-2" /> Add Row
               </Button>
               <Button variant="outline" onClick={() => deleteCustomTab(tab.id)} className="text-red-500 hover:text-red-600">
@@ -1943,10 +1943,10 @@ const ExpenseTab = () => {
           </div>
         </div>
 
-        <div className={`p-8 rounded-xl border-2 border-dashed text-center ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-          <FileSpreadsheet className={`h-12 w-12 mx-auto mb-4 ${isDark ? 'text-[#3f3f46]' : 'text-gray-300'}`} />
-          <p className={`text-lg font-medium ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Custom Tab: {tab.label}</p>
-          <p className={`text-sm ${isDark ? 'text-[#52525b]' : 'text-gray-400'}`}>This is a customizable tab. Add your data here.</p>
+        <div className={`p-8 rounded-xl border-2 border-dashed text-center ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
+          <FileSpreadsheet className={`h-12 w-12 mx-auto mb-4 ${isDark ? 'text-gray-400 dark:text-[#3f3f46]' : 'text-gray-300'}`} />
+          <p className={`text-lg font-medium ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Custom Tab: {tab.label}</p>
+          <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#52525b]' : 'text-gray-400'}`}>This is a customizable tab. Add your data here.</p>
           <Button className="mt-4 bg-[#6366f1] hover:bg-[#5855eb]">
             <Plus className="h-4 w-4 mr-2" /> Add Data
           </Button>
@@ -1960,7 +1960,7 @@ const ExpenseTab = () => {
     <div className="space-y-6" data-testid="expense-tab">
       {/* Tab Navigation */}
       <div className="flex items-center justify-between">
-        <div className={`flex p-1 rounded-lg overflow-x-auto ${isDark ? 'bg-[#18181b]' : 'bg-gray-100'}`}>
+        <div className={`flex p-1 rounded-lg overflow-x-auto ${isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-gray-100'}`}>
           {tabs.map(tab => {
             const Icon = tab.icon;
             return (
@@ -1971,7 +1971,7 @@ const ExpenseTab = () => {
                 className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-[#6366f1] text-white'
-                    : isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                    : isDark ? 'text-gray-600 dark:text-[#a1a1aa] hover:text-white' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
                 <Icon className="h-4 w-4" />
@@ -1994,7 +1994,7 @@ const ExpenseTab = () => {
           <button
             onClick={() => setShowAddTab(true)}
             className={`px-3 py-2 text-sm font-medium rounded-md flex items-center gap-1 transition-all ${
-              isDark ? 'text-[#71717a] hover:text-[#a1a1aa]' : 'text-gray-400 hover:text-gray-600'
+              isDark ? 'text-gray-500 dark:text-[#71717a] hover:text-gray-600 dark:hover:text-[#a1a1aa]' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
             <Plus className="h-4 w-4" />
@@ -2002,10 +2002,10 @@ const ExpenseTab = () => {
         </div>
         
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={loadAll} className={isDark ? 'border-[#3f3f46]' : ''}>
+          <Button variant="outline" size="sm" onClick={loadAll} className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
             <RefreshCw className="h-4 w-4 mr-1" /> Refresh
           </Button>
-          <Button variant="outline" size="sm" onClick={initializeData} className={isDark ? 'border-[#3f3f46]' : ''}>
+          <Button variant="outline" size="sm" onClick={initializeData} className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
             Initialize
           </Button>
         </div>
@@ -2021,9 +2021,9 @@ const ExpenseTab = () => {
           {activeTab === 'dashboard' && (
             <div className="space-y-3">
               {(() => {
-                const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
-                const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
-                const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+                const pillBox = isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200';
+                const activeCls = isDark ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+                const idleCls = isDark ? 'text-gray-600 dark:text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
                 return (
                   <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
                     <button onClick={() => setDashboardSubTab('dashboard')} data-testid="dashboard-subtab-dashboard" className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${dashboardSubTab === 'dashboard' ? activeCls : idleCls}`}>Dashboard</button>
@@ -2036,12 +2036,12 @@ const ExpenseTab = () => {
               {dashboardSubTab === 'weekly' && (
                 <WeekWiseTab
                   isDark={isDark}
-                  bgCard={isDark ? 'bg-[#0a0a0a]' : 'bg-white'}
-                  bgSecondary={isDark ? 'bg-[#18181b]' : 'bg-gray-50'}
-                  bgInput={isDark ? 'bg-[#18181b]' : 'bg-white'}
-                  textPrimary={isDark ? 'text-[#fafafa]' : 'text-gray-900'}
-                  textSecondary={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}
-                  borderColor={isDark ? 'border-[#27272a]' : 'border-gray-200'}
+                  bgCard={isDark ? 'bg-gray-50 dark:bg-[#0a0a0a]' : 'bg-white'}
+                  bgSecondary={isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-gray-50'}
+                  bgInput={isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-white'}
+                  textPrimary={isDark ? 'text-gray-900 dark:text-[#fafafa]' : 'text-gray-900'}
+                  textSecondary={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}
+                  borderColor={isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}
                 />
               )}
               {dashboardSubTab === 'payment_schedule' && (
@@ -2052,9 +2052,9 @@ const ExpenseTab = () => {
 
           {/* Cashbook with Banks sub-tab */}
           {activeTab === 'cashbook' && (() => {
-            const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
-            const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
-            const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+            const pillBox = isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200';
+            const activeCls = isDark ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+            const idleCls = isDark ? 'text-gray-600 dark:text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
             return (
               <div className="space-y-3">
                 {renderCashInTotalBook()}
@@ -2082,9 +2082,9 @@ const ExpenseTab = () => {
 
           {/* Expense with Master / Split / Budget / Payroll sub-tabs */}
           {activeTab === 'expense' && (() => {
-            const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
-            const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
-            const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+            const pillBox = isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200';
+            const activeCls = isDark ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+            const idleCls = isDark ? 'text-gray-600 dark:text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
             return (
               <div className="space-y-3">
                 <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
@@ -2127,9 +2127,9 @@ const ExpenseTab = () => {
 
           {/* Invoice with Projects + Clients sub-tabs */}
           {activeTab === 'invoice' && (() => {
-            const pillBox = isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200';
-            const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
-            const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
+            const pillBox = isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white border-gray-200';
+            const activeCls = isDark ? 'bg-gray-100 dark:bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
+            const idleCls = isDark ? 'text-gray-600 dark:text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
             return (
               <div className="space-y-3">
                 <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
@@ -2169,18 +2169,18 @@ const ExpenseTab = () => {
 
       {/* Add Custom Tab Modal */}
       <Dialog open={showAddTab} onOpenChange={setShowAddTab}>
-        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Add Custom Tab</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Create a new tab for custom data</DialogDescription>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>Create a new tab for custom data</DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Tab Name</label>
+            <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Tab Name</label>
             <Input
               placeholder="e.g., Q1 Budget, Project Expenses"
               value={newTabName}
               onChange={e => setNewTabName(e.target.value)}
-              className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}
+              className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}
             />
           </div>
           <DialogFooter>
@@ -2192,12 +2192,12 @@ const ExpenseTab = () => {
 
       {/* Add Credit Modal - Multi-Step Flow */}
       <Dialog open={showAddCredit} onOpenChange={(open) => { if (!open) { setShowAddCredit(false); setCreditStep(1); } }}>
-        <DialogContent className={`max-w-2xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-2xl ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>
               Add Cash In {creditStep > 1 && `- Step ${creditStep}/3`}
             </DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>
               {creditStep === 1 && 'Select invoice type'}
               {creditStep === 2 && 'Select existing invoice or create new'}
               {creditStep === 3 && 'Enter payment details'}
@@ -2207,12 +2207,12 @@ const ExpenseTab = () => {
           {/* Step 1: Select Invoice Type */}
           {creditStep === 1 && (
             <div className="py-6">
-              <p className={`text-sm mb-4 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Select the type of invoice:</p>
+              <p className={`text-sm mb-4 ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Select the type of invoice:</p>
               <div className="grid grid-cols-2 gap-4">
                 <button
                   onClick={() => handleInvoiceTypeSelect('GST')}
                   className={`p-6 rounded-xl border-2 transition-all hover:border-[#6366f1] ${
-                    isDark ? 'bg-[#27272a] border-[#3f3f46] hover:bg-[#2d2d32]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                    isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] hover:bg-gray-100 dark:hover:bg-[#2d2d32]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                   }`}
                 >
                   <div className="flex flex-col items-center">
@@ -2220,13 +2220,13 @@ const ExpenseTab = () => {
                       <Receipt className="h-8 w-8 text-[#22c55e]" />
                     </div>
                     <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>GST Invoice</span>
-                    <span className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>With 18% GST</span>
+                    <span className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>With 18% GST</span>
                   </div>
                 </button>
                 <button
                   onClick={() => handleInvoiceTypeSelect('NO GST')}
                   className={`p-6 rounded-xl border-2 transition-all hover:border-[#6366f1] ${
-                    isDark ? 'bg-[#27272a] border-[#3f3f46] hover:bg-[#2d2d32]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                    isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] hover:bg-gray-100 dark:hover:bg-[#2d2d32]' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
                   }`}
                 >
                   <div className="flex flex-col items-center">
@@ -2234,7 +2234,7 @@ const ExpenseTab = () => {
                       <FileText className="h-8 w-8 text-[#f59e0b]" />
                     </div>
                     <span className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>NO GST Invoice</span>
-                    <span className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Without GST</span>
+                    <span className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Without GST</span>
                   </div>
                 </button>
               </div>
@@ -2260,7 +2260,7 @@ const ExpenseTab = () => {
 
               {unpaidInvoices.length > 0 ? (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  <p className={`text-sm font-medium mb-2 ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
+                  <p className={`text-sm font-medium mb-2 ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>
                     Select from unpaid invoices:
                   </p>
                   {unpaidInvoices.map(inv => (
@@ -2268,7 +2268,7 @@ const ExpenseTab = () => {
                       key={inv.invoice_id}
                       onClick={() => handleInvoiceSelect(inv)}
                       className={`w-full p-4 rounded-lg border text-left transition-all hover:border-[#6366f1] ${
-                        isDark ? 'bg-[#27272a] border-[#3f3f46] hover:bg-[#2d2d32]' : 'bg-white border-gray-200 hover:bg-gray-50'
+                        isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46] hover:bg-gray-100 dark:hover:bg-[#2d2d32]' : 'bg-white border-gray-200 hover:bg-gray-50'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -2279,7 +2279,7 @@ const ExpenseTab = () => {
                             </span>
                             <Badge className="text-xs bg-orange-100 text-orange-700">{inv.status}</Badge>
                           </div>
-                          <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                          <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>
                             {inv.client_name} • {inv.invoice_date}
                           </p>
                         </div>
@@ -2296,12 +2296,12 @@ const ExpenseTab = () => {
                   ))}
                 </div>
               ) : (
-                <div className={`p-8 rounded-xl border-2 border-dashed text-center ${isDark ? 'border-[#27272a]' : 'border-gray-200'}`}>
-                  <FileText className={`h-12 w-12 mx-auto mb-3 ${isDark ? 'text-[#3f3f46]' : 'text-gray-300'}`} />
-                  <p className={`text-lg font-medium ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                <div className={`p-8 rounded-xl border-2 border-dashed text-center ${isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200'}`}>
+                  <FileText className={`h-12 w-12 mx-auto mb-3 ${isDark ? 'text-gray-400 dark:text-[#3f3f46]' : 'text-gray-300'}`} />
+                  <p className={`text-lg font-medium ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>
                     No unpaid {creditForm.invoice_type} invoices
                   </p>
-                  <p className={`text-sm ${isDark ? 'text-[#52525b]' : 'text-gray-400'}`}>
+                  <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#52525b]' : 'text-gray-400'}`}>
                     Create a new invoice to record this income
                   </p>
                 </div>
@@ -2324,18 +2324,18 @@ const ExpenseTab = () => {
               </div>
 
               {creditForm.selected_invoice && (
-                <div className={`p-4 rounded-lg mb-4 ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
+                <div className={`p-4 rounded-lg mb-4 ${isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-50'}`}>
                   <div className="flex justify-between items-center">
                     <div>
                       <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                         {creditForm.selected_invoice.client_name}
                       </p>
-                      <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                      <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>
                         Invoice: {creditForm.selected_invoice.invoice_number}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className={`text-sm ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>Total: {formatCurrency(creditForm.selected_invoice.total_amount)}</p>
+                      <p className={`text-sm ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>Total: {formatCurrency(creditForm.selected_invoice.total_amount)}</p>
                       <p className="font-semibold text-[#ef4444]">
                         Due: {formatCurrency(creditForm.selected_invoice.total_amount - (creditForm.selected_invoice.paid_amount || 0))}
                       </p>
@@ -2346,13 +2346,13 @@ const ExpenseTab = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Date</label>
-                  <Input type="date" value={creditForm.date} onChange={e => setCreditForm({...creditForm, date: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Date</label>
+                  <Input type="date" value={creditForm.date} onChange={e => setCreditForm({...creditForm, date: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
                 </div>
                 <div>
-                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Type</label>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Type</label>
                   <Select value={creditForm.payment_type} onValueChange={v => setCreditForm({...creditForm, payment_type: v})}>
-                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Advance">Advance</SelectItem>
                       <SelectItem value="Partial">Partial</SelectItem>
@@ -2361,9 +2361,9 @@ const ExpenseTab = () => {
                   </Select>
                 </div>
                 <div>
-                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Cycle</label>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Cycle</label>
                   <Select value={creditForm.payment_cycle} onValueChange={v => setCreditForm({...creditForm, payment_cycle: v})}>
-                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="One-Time">One-Time</SelectItem>
                       <SelectItem value="Monthly">Monthly</SelectItem>
@@ -2374,22 +2374,22 @@ const ExpenseTab = () => {
                   </Select>
                 </div>
                 <div>
-                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
                   <Select value={creditForm.bank_account_id || selectedAccount?.account_id} onValueChange={v => setCreditForm({...creditForm, bank_account_id: v})}>
-                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
+                    <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
                     <SelectContent>
                       {accounts.map(acc => <SelectItem key={acc.account_id} value={acc.account_id}>{acc.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Amount Received</label>
-                  <Input type="number" placeholder="0.00" value={creditForm.amount} onChange={e => setCreditForm({...creditForm, amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Amount Received</label>
+                  <Input type="number" placeholder="0.00" value={creditForm.amount} onChange={e => setCreditForm({...creditForm, amount: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
                 </div>
                 <div>
-                  <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Tax % (if applicable)</label>
+                  <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Tax % (if applicable)</label>
                   <Select value={creditForm.tax_percent.toString()} onValueChange={v => setCreditForm({...creditForm, tax_percent: parseInt(v)})}>
-                    <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {[0, 5, 12, 18, 28].map(t => <SelectItem key={t} value={t.toString()}>{t}%</SelectItem>)}
                     </SelectContent>
@@ -2410,10 +2410,10 @@ const ExpenseTab = () => {
 
       {/* Create Invoice Modal */}
       <Dialog open={showCreateInvoice} onOpenChange={setShowCreateInvoice}>
-        <DialogContent className={`max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-2xl max-h-[90vh] overflow-y-auto ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Create New Invoice</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>
               Create a {creditForm.invoice_type} invoice
             </DialogDescription>
           </DialogHeader>
@@ -2422,31 +2422,31 @@ const ExpenseTab = () => {
             {/* Client Details */}
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Client Name *</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Client Name *</label>
                 <Input 
                   placeholder="Client/Company name" 
                   value={invoiceForm.client_name} 
                   onChange={e => setInvoiceForm({...invoiceForm, client_name: e.target.value})} 
-                  className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} 
+                  className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} 
                 />
               </div>
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Client Email</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Client Email</label>
                 <Input 
                   type="email"
                   placeholder="client@example.com" 
                   value={invoiceForm.client_email} 
                   onChange={e => setInvoiceForm({...invoiceForm, client_email: e.target.value})} 
-                  className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} 
+                  className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} 
                 />
               </div>
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Due Date</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Due Date</label>
                 <Input 
                   type="date"
                   value={invoiceForm.due_date} 
                   onChange={e => setInvoiceForm({...invoiceForm, due_date: e.target.value})} 
-                  className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} 
+                  className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} 
                 />
               </div>
             </div>
@@ -2454,21 +2454,21 @@ const ExpenseTab = () => {
             {/* Invoice Items */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Invoice Items</label>
-                <Button size="sm" variant="outline" onClick={addInvoiceItem} className={isDark ? 'border-[#3f3f46]' : ''}>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Invoice Items</label>
+                <Button size="sm" variant="outline" onClick={addInvoiceItem} className={isDark ? 'border-gray-300 dark:border-[#3f3f46]' : ''}>
                   <Plus className="h-3 w-3 mr-1" /> Add Item
                 </Button>
               </div>
               <div className="space-y-2">
                 {invoiceForm.items.map((item, index) => (
-                  <div key={index} className={`p-3 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
+                  <div key={index} className={`p-3 rounded-lg ${isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-50'}`}>
                     <div className="grid grid-cols-12 gap-2 items-center">
                       <div className="col-span-6">
                         <Input 
                           placeholder="Description" 
                           value={item.description} 
                           onChange={e => updateInvoiceItem(index, 'description', e.target.value)} 
-                          className={`text-sm ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`} 
+                          className={`text-sm ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-300 dark:border-[#3f3f46]' : ''}`} 
                         />
                       </div>
                       <div className="col-span-2">
@@ -2477,7 +2477,7 @@ const ExpenseTab = () => {
                           placeholder="Qty" 
                           value={item.quantity} 
                           onChange={e => updateInvoiceItem(index, 'quantity', parseInt(e.target.value) || 0)} 
-                          className={`text-sm ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`} 
+                          className={`text-sm ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-300 dark:border-[#3f3f46]' : ''}`} 
                         />
                       </div>
                       <div className="col-span-3">
@@ -2486,7 +2486,7 @@ const ExpenseTab = () => {
                           placeholder="Rate" 
                           value={item.rate} 
                           onChange={e => updateInvoiceItem(index, 'rate', parseFloat(e.target.value) || 0)} 
-                          className={`text-sm ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`} 
+                          className={`text-sm ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-300 dark:border-[#3f3f46]' : ''}`} 
                         />
                       </div>
                       <div className="col-span-1 text-center">
@@ -2497,7 +2497,7 @@ const ExpenseTab = () => {
                         )}
                       </div>
                     </div>
-                    <div className={`text-right text-sm mt-1 ${isDark ? 'text-[#71717a]' : 'text-gray-500'}`}>
+                    <div className={`text-right text-sm mt-1 ${isDark ? 'text-gray-500 dark:text-[#71717a]' : 'text-gray-500'}`}>
                       = {formatCurrency(item.quantity * item.rate)}
                     </div>
                   </div>
@@ -2506,16 +2506,16 @@ const ExpenseTab = () => {
             </div>
 
             {/* Tax & Total */}
-            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-50'}`}>
+            <div className={`p-4 rounded-lg ${isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-50'}`}>
               <div className="flex items-center justify-between mb-2">
-                <span className={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}>Subtotal</span>
+                <span className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}>Subtotal</span>
                 <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatCurrency(calculateInvoiceTotal().subtotal)}</span>
               </div>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <span className={isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}>Tax</span>
+                  <span className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}>Tax</span>
                   <Select value={invoiceForm.tax_percent.toString()} onValueChange={v => setInvoiceForm({...invoiceForm, tax_percent: parseInt(v)})}>
-                    <SelectTrigger className={`w-20 h-8 ${isDark ? 'bg-[#18181b] border-[#3f3f46]' : ''}`}><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={`w-20 h-8 ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-300 dark:border-[#3f3f46]' : ''}`}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {[0, 5, 12, 18, 28].map(t => <SelectItem key={t} value={t.toString()}>{t}%</SelectItem>)}
                     </SelectContent>
@@ -2545,26 +2545,26 @@ const ExpenseTab = () => {
 
       {/* Add Debit Modal */}
       <Dialog open={showAddDebit} onOpenChange={setShowAddDebit}>
-        <DialogContent className={`max-w-xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-xl ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Add Cash Out</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Record expense payment</DialogDescription>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>Record expense payment</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Date</label>
-                <Input type="date" value={debitForm.date} onChange={e => setDebitForm({...debitForm, date: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Date</label>
+                <Input type="date" value={debitForm.date} onChange={e => setDebitForm({...debitForm, date: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
               </div>
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Amount</label>
-                <Input type="number" placeholder="0.00" value={debitForm.amount} onChange={e => setDebitForm({...debitForm, amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Amount</label>
+                <Input type="number" placeholder="0.00" value={debitForm.amount} onChange={e => setDebitForm({...debitForm, amount: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
               </div>
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Category</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Category</label>
               <Select value={debitForm.category_id} onValueChange={v => setDebitForm({...debitForm, category_id: v, existing_item_id: '', is_new_item: false})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
                   {categories.map(cat => <SelectItem key={cat.category_id} value={cat.category_id}>{cat.name}</SelectItem>)}
                 </SelectContent>
@@ -2572,7 +2572,7 @@ const ExpenseTab = () => {
             </div>
             {debitForm.category_id && (
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Expense To</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Expense To</label>
                 <Select value={debitForm.existing_item_id || 'new'} onValueChange={v => {
                   if (v === 'new') setDebitForm({...debitForm, existing_item_id: '', is_new_item: true});
                   else {
@@ -2581,7 +2581,7 @@ const ExpenseTab = () => {
                     setDebitForm({...debitForm, existing_item_id: v, expense_to: item?.name || '', is_new_item: false});
                   }
                 }}>
-                  <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select or add new" /></SelectTrigger>
+                  <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue placeholder="Select or add new" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="new"><Plus className="h-3 w-3 inline mr-1" />Add New</SelectItem>
                     {(categoryItems[debitForm.category_id] || []).map(item => <SelectItem key={item.entry_id} value={item.entry_id}>{item.name}</SelectItem>)}
@@ -2591,23 +2591,23 @@ const ExpenseTab = () => {
             )}
             {debitForm.is_new_item && (
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>New Expense Name</label>
-                <Input placeholder="e.g., Anbarasan, Office Rent" value={debitForm.expense_to} onChange={e => setDebitForm({...debitForm, expense_to: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>New Expense Name</label>
+                <Input placeholder="e.g., Anbarasan, Office Rent" value={debitForm.expense_to} onChange={e => setDebitForm({...debitForm, expense_to: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
                 <Select value={debitForm.bank_account_id || selectedAccount?.account_id} onValueChange={v => setDebitForm({...debitForm, bank_account_id: v})}>
-                  <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
+                  <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
                   <SelectContent>
                     {accounts.map(acc => <SelectItem key={acc.account_id} value={acc.account_id}>{acc.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Remarks</label>
-                <Input placeholder="Optional notes" value={debitForm.remarks} onChange={e => setDebitForm({...debitForm, remarks: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+                <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Remarks</label>
+                <Input placeholder="Optional notes" value={debitForm.remarks} onChange={e => setDebitForm({...debitForm, remarks: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
               </div>
             </div>
           </div>
@@ -2620,23 +2620,23 @@ const ExpenseTab = () => {
 
       {/* Add Expense to Category Modal */}
       <Dialog open={showAddExpenseToCategory} onOpenChange={setShowAddExpenseToCategory}>
-        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Add Expense to {targetCategory?.name}</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Add a new expense item</DialogDescription>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>Add a new expense item</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Name</label>
-              <Input placeholder="e.g., Office Rent, Employee Name" value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Name</label>
+              <Input placeholder="e.g., Office Rent, Employee Name" value={expenseForm.name} onChange={e => setExpenseForm({...expenseForm, name: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Total Amount</label>
-              <Input type="number" placeholder="0.00" value={expenseForm.total_amount} onChange={e => setExpenseForm({...expenseForm, total_amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Total Amount</label>
+              <Input type="number" placeholder="0.00" value={expenseForm.total_amount} onChange={e => setExpenseForm({...expenseForm, total_amount: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Description</label>
-              <Input placeholder="Optional description" value={expenseForm.description} onChange={e => setExpenseForm({...expenseForm, description: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Description</label>
+              <Input placeholder="Optional description" value={expenseForm.description} onChange={e => setExpenseForm({...expenseForm, description: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
           </div>
           <DialogFooter>
@@ -2648,20 +2648,20 @@ const ExpenseTab = () => {
 
       {/* Add Category Modal */}
       <Dialog open={showAddCategory} onOpenChange={setShowAddCategory}>
-        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Add Category</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Create a new expense category</DialogDescription>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>Create a new expense category</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Category Name</label>
-              <Input placeholder="e.g., Travel, Utilities" value={categoryForm.name} onChange={e => setCategoryForm({...categoryForm, name: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Category Name</label>
+              <Input placeholder="e.g., Travel, Utilities" value={categoryForm.name} onChange={e => setCategoryForm({...categoryForm, name: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Department</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Department</label>
               <Select value={categoryForm.department} onValueChange={v => setCategoryForm({...categoryForm, department: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select department" /></SelectTrigger>
+                <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue placeholder="Select department" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="HR">HR</SelectItem>
                   <SelectItem value="Operations">Operations</SelectItem>
@@ -2681,29 +2681,29 @@ const ExpenseTab = () => {
 
       {/* Add Outstanding Modal */}
       <Dialog open={showAddOutstanding} onOpenChange={setShowAddOutstanding}>
-        <DialogContent className={`max-w-xl ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-xl ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Add Outstanding Revenue</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>Track expected payment</DialogDescription>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>Track expected payment</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="col-span-2">
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Project Name</label>
-              <Input placeholder="Project/Client name" value={outstandingForm.project_name} onChange={e => setOutstandingForm({...outstandingForm, project_name: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Project Name</label>
+              <Input placeholder="Project/Client name" value={outstandingForm.project_name} onChange={e => setOutstandingForm({...outstandingForm, project_name: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Project Type</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Project Type</label>
               <Select value={outstandingForm.project_type} onValueChange={v => setOutstandingForm({...outstandingForm, project_type: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.keys(PROJECT_TYPE_COLORS).map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Revenue Type</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Revenue Type</label>
               <Select value={outstandingForm.revenue_type} onValueChange={v => setOutstandingForm({...outstandingForm, revenue_type: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="One-time">One-time</SelectItem>
                   <SelectItem value="Monthly">Monthly</SelectItem>
@@ -2712,16 +2712,16 @@ const ExpenseTab = () => {
               </Select>
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Expected Date</label>
-              <Input type="date" value={outstandingForm.expected_date} onChange={e => setOutstandingForm({...outstandingForm, expected_date: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Expected Date</label>
+              <Input type="date" value={outstandingForm.expected_date} onChange={e => setOutstandingForm({...outstandingForm, expected_date: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Amount</label>
-              <Input type="number" placeholder="0.00" value={outstandingForm.amount} onChange={e => setOutstandingForm({...outstandingForm, amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Amount</label>
+              <Input type="number" placeholder="0.00" value={outstandingForm.amount} onChange={e => setOutstandingForm({...outstandingForm, amount: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div className="col-span-2">
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Remarks</label>
-              <Input placeholder="Optional notes" value={outstandingForm.remarks} onChange={e => setOutstandingForm({...outstandingForm, remarks: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Remarks</label>
+              <Input placeholder="Optional notes" value={outstandingForm.remarks} onChange={e => setOutstandingForm({...outstandingForm, remarks: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
           </div>
           <DialogFooter>
@@ -2733,26 +2733,26 @@ const ExpenseTab = () => {
 
       {/* Record Payment Modal */}
       <Dialog open={showRecordPayment} onOpenChange={setShowRecordPayment}>
-        <DialogContent className={`max-w-md ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white'}`}>
+        <DialogContent className={`max-w-md ${isDark ? 'bg-white dark:bg-[#18181b] border-gray-200 dark:border-[#27272a]' : 'bg-white'}`}>
           <DialogHeader>
             <DialogTitle className={isDark ? 'text-white' : ''}>Record Payment</DialogTitle>
-            <DialogDescription className={isDark ? 'text-[#a1a1aa]' : ''}>
+            <DialogDescription className={isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : ''}>
               {selectedOutstanding?.project_name} - Balance: {formatCurrency(selectedOutstanding?.balance)}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Amount</label>
-              <Input type="number" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Amount</label>
+              <Input type="number" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Date</label>
-              <Input type="date" value={paymentForm.payment_date} onChange={e => setPaymentForm({...paymentForm, payment_date: e.target.value})} className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''} />
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Date</label>
+              <Input type="date" value={paymentForm.payment_date} onChange={e => setPaymentForm({...paymentForm, payment_date: e.target.value})} className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''} />
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Type</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Payment Type</label>
               <Select value={paymentForm.payment_type} onValueChange={v => setPaymentForm({...paymentForm, payment_type: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
+                <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Advance">Advance</SelectItem>
                   <SelectItem value="Partial">Partial</SelectItem>
@@ -2761,9 +2761,9 @@ const ExpenseTab = () => {
               </Select>
             </div>
             <div>
-              <label className={`text-sm font-medium ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-600'}`}>Bank Account</label>
               <Select value={paymentForm.bank_account_id || selectedAccount?.account_id} onValueChange={v => setPaymentForm({...paymentForm, bank_account_id: v})}>
-                <SelectTrigger className={isDark ? 'bg-[#27272a] border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
+                <SelectTrigger className={isDark ? 'bg-gray-100 dark:bg-[#27272a] border-gray-300 dark:border-[#3f3f46]' : ''}><SelectValue placeholder="Select account" /></SelectTrigger>
                 <SelectContent>
                   {accounts.map(acc => <SelectItem key={acc.account_id} value={acc.account_id}>{acc.name}</SelectItem>)}
                 </SelectContent>

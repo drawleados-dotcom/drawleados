@@ -62,12 +62,12 @@ const LeadInvoiceRaiseModal = ({ lead, onClose, onSubmitted }) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="bg-[#18181b] border border-[#27272a] text-[#fafafa] max-w-lg" data-testid="lead-invoice-raise-modal">
+      <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] max-w-lg" data-testid="lead-invoice-raise-modal">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-[#6366f1]" /> Raise Invoice — {lead?.name || ''}
           </DialogTitle>
-          <p className="text-xs text-[#a1a1aa]">Send a billing request to Finance. They'll review, edit if needed, and raise the actual invoice.</p>
+          <p className="text-xs text-gray-600 dark:text-[#a1a1aa]">Send a billing request to Finance. They'll review, edit if needed, and raise the actual invoice.</p>
         </DialogHeader>
 
         {/* GST vs Non-GST toggle */}
@@ -83,8 +83,8 @@ const LeadInvoiceRaiseModal = ({ lead, onClose, onSubmitted }) => {
               data-testid={`lead-invreq-${t.v}`}
               className={`flex-1 px-3 py-2 rounded-md text-sm border transition-colors ${
                 gstType === t.v
-                  ? 'border-[#6366f1] bg-[#6366f1]/15 text-[#fafafa] font-semibold'
-                  : 'border-[#27272a] text-[#a1a1aa] hover:text-[#fafafa]'
+                  ? 'border-[#6366f1] bg-[#6366f1]/15 text-gray-900 dark:text-[#fafafa] font-semibold'
+                  : 'border-gray-200 dark:border-[#27272a] text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa]'
               }`}
             >
               {t.label}
@@ -95,45 +95,45 @@ const LeadInvoiceRaiseModal = ({ lead, onClose, onSubmitted }) => {
         <div className="space-y-3 mt-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-[#fafafa]">Name of the Company *</Label>
-              <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} placeholder="ABC Pvt Ltd" className="bg-[#0c0a09] border-[#27272a]" autoFocus data-testid="invreq-company-input" />
+              <Label className="text-gray-900 dark:text-[#fafafa]">Name of the Company *</Label>
+              <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} placeholder="ABC Pvt Ltd" className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a]" autoFocus data-testid="invreq-company-input" />
             </div>
             <div>
-              <Label className="text-[#fafafa]">Lead Name</Label>
-              <Input value={form.lead_name} onChange={(e) => setForm({ ...form, lead_name: e.target.value })} placeholder="Contact person" className="bg-[#0c0a09] border-[#27272a]" />
+              <Label className="text-gray-900 dark:text-[#fafafa]">Lead Name</Label>
+              <Input value={form.lead_name} onChange={(e) => setForm({ ...form, lead_name: e.target.value })} placeholder="Contact person" className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a]" />
             </div>
           </div>
           {gstType === 'gst' && (
             <div>
-              <Label className="text-[#fafafa]">GST Number *</Label>
-              <Input value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value.toUpperCase() })} placeholder="29ABCDE1234F1Z5" className="bg-[#0c0a09] border-[#27272a] font-mono" data-testid="invreq-gst-input" />
+              <Label className="text-gray-900 dark:text-[#fafafa]">GST Number *</Label>
+              <Input value={form.gst_number} onChange={(e) => setForm({ ...form, gst_number: e.target.value.toUpperCase() })} placeholder="29ABCDE1234F1Z5" className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] font-mono" data-testid="invreq-gst-input" />
             </div>
           )}
           <div>
-            <Label className="text-[#fafafa]">Billing Address</Label>
-            <Textarea value={form.billing_address} onChange={(e) => setForm({ ...form, billing_address: e.target.value })} placeholder="Full billing address" className="bg-[#0c0a09] border-[#27272a] min-h-[60px]" />
+            <Label className="text-gray-900 dark:text-[#fafafa]">Billing Address</Label>
+            <Textarea value={form.billing_address} onChange={(e) => setForm({ ...form, billing_address: e.target.value })} placeholder="Full billing address" className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] min-h-[60px]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-[#fafafa]">Amount Collected (₹)</Label>
-              <Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" className="bg-[#0c0a09] border-[#27272a]" data-testid="invreq-amount-input" />
+              <Label className="text-gray-900 dark:text-[#fafafa]">Amount Collected (₹)</Label>
+              <Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="0" className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a]" data-testid="invreq-amount-input" />
             </div>
             <div>
-              <Label className="text-[#fafafa]">Mode of Payment</Label>
+              <Label className="text-gray-900 dark:text-[#fafafa]">Mode of Payment</Label>
               <select value={form.payment_mode} onChange={(e) => setForm({ ...form, payment_mode: e.target.value })}
-                className="w-full h-10 px-3 rounded-md border border-[#27272a] bg-[#0c0a09] text-[#fafafa] text-sm capitalize">
+                className="w-full h-10 px-3 rounded-md border border-gray-200 dark:border-[#27272a] bg-gray-50 dark:bg-[#0c0a09] text-gray-900 dark:text-[#fafafa] text-sm capitalize">
                 {PAY_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <Label className="text-[#fafafa]">Notes / Service Details</Label>
-            <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Service line items / PO #" className="bg-[#0c0a09] border-[#27272a]" />
+            <Label className="text-gray-900 dark:text-[#fafafa]">Notes / Service Details</Label>
+            <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Service line items / PO #" className="bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a]" />
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 pt-3 border-t border-[#27272a] mt-3">
-          <Button variant="ghost" onClick={onClose} className="text-[#a1a1aa]"><X className="h-4 w-4 mr-1" /> Cancel</Button>
+        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200 dark:border-[#27272a] mt-3">
+          <Button variant="ghost" onClick={onClose} className="text-gray-600 dark:text-[#a1a1aa]"><X className="h-4 w-4 mr-1" /> Cancel</Button>
           <Button onClick={submit} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white gap-2" data-testid="invreq-send-btn">
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Request

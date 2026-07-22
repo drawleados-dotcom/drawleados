@@ -26,7 +26,7 @@ const RevenueTab = () => {
   };
 
   if (loading) {
-    return <div className="text-[#a1a1aa]">Loading revenue data...</div>;
+    return <div className="text-gray-600 dark:text-[#a1a1aa]">Loading revenue data...</div>;
   }
 
   const totalRevenue = stats?.total_revenue || 0;
@@ -47,52 +47,52 @@ const RevenueTab = () => {
     <div className="space-y-6" data-testid="revenue-tab">
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 hover:border-[#6366f1]/20 transition-all">
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6 hover:border-[#6366f1]/20 transition-all">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-12 w-12 rounded-lg bg-[#6366f1]/20 flex items-center justify-center">
               <DollarSign className="h-6 w-6 text-[#6366f1]" strokeWidth={1.5} />
             </div>
           </div>
-          <h3 className="text-3xl font-bold text-[#fafafa] mb-1">₹{totalRevenue.toLocaleString()}</h3>
-          <p className="text-sm text-[#a1a1aa]">Total Revenue</p>
+          <h3 className="text-3xl font-bold text-gray-900 dark:text-[#fafafa] mb-1">₹{totalRevenue.toLocaleString()}</h3>
+          <p className="text-sm text-gray-600 dark:text-[#a1a1aa]">Total Revenue</p>
         </div>
 
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 hover:border-[#10b981]/20 transition-all">
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6 hover:border-[#10b981]/20 transition-all">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-12 w-12 rounded-lg bg-[#10b981]/20 flex items-center justify-center">
               <CheckCircle className="h-6 w-6 text-[#10b981]" strokeWidth={1.5} />
             </div>
           </div>
-          <h3 className="text-3xl font-bold text-[#fafafa] mb-1">₹{paidAmount.toLocaleString()}</h3>
-          <p className="text-sm text-[#a1a1aa]">Paid</p>
+          <h3 className="text-3xl font-bold text-gray-900 dark:text-[#fafafa] mb-1">₹{paidAmount.toLocaleString()}</h3>
+          <p className="text-sm text-gray-600 dark:text-[#a1a1aa]">Paid</p>
         </div>
 
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 hover:border-[#f59e0b]/20 transition-all">
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6 hover:border-[#f59e0b]/20 transition-all">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-12 w-12 rounded-lg bg-[#f59e0b]/20 flex items-center justify-center">
               <Clock className="h-6 w-6 text-[#f59e0b]" strokeWidth={1.5} />
             </div>
           </div>
-          <h3 className="text-3xl font-bold text-[#fafafa] mb-1">₹{pendingAmount.toLocaleString()}</h3>
-          <p className="text-sm text-[#a1a1aa]">Pending</p>
+          <h3 className="text-3xl font-bold text-gray-900 dark:text-[#fafafa] mb-1">₹{pendingAmount.toLocaleString()}</h3>
+          <p className="text-sm text-gray-600 dark:text-[#a1a1aa]">Pending</p>
         </div>
 
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 hover:border-[#ef4444]/20 transition-all">
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6 hover:border-[#ef4444]/20 transition-all">
           <div className="flex items-center gap-3 mb-4">
             <div className="h-12 w-12 rounded-lg bg-[#ef4444]/20 flex items-center justify-center">
               <AlertCircle className="h-6 w-6 text-[#ef4444]" strokeWidth={1.5} />
             </div>
           </div>
-          <h3 className="text-3xl font-bold text-[#fafafa] mb-1">₹{overdueAmount.toLocaleString()}</h3>
-          <p className="text-sm text-[#a1a1aa]">Overdue</p>
+          <h3 className="text-3xl font-bold text-gray-900 dark:text-[#fafafa] mb-1">₹{overdueAmount.toLocaleString()}</h3>
+          <p className="text-sm text-gray-600 dark:text-[#a1a1aa]">Overdue</p>
         </div>
       </div>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Invoice Status Distribution */}
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6">
-          <h2 className="text-xl font-semibold text-[#fafafa] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-[#fafafa] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             Invoice Status Distribution
           </h2>
           <ResponsiveContainer width="100%" height={300}>
@@ -125,17 +125,17 @@ const RevenueTab = () => {
         </div>
 
         {/* GST vs Non-GST */}
-        <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6">
-          <h2 className="text-xl font-semibold text-[#fafafa] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>
+        <div className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] rounded-xl p-6">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-[#fafafa] mb-4" style={{ fontFamily: 'Plus Jakarta Sans' }}>
             GST vs Non-GST Revenue
           </h2>
           <div className="space-y-6">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[#fafafa] font-medium">GST Invoices</span>
+                <span className="text-gray-900 dark:text-[#fafafa] font-medium">GST Invoices</span>
                 <span className="text-[#6366f1] font-bold">₹{gstData.total?.toLocaleString() || 0}</span>
               </div>
-              <div className="h-3 bg-[#27272a] rounded-full overflow-hidden">
+              <div className="h-3 bg-gray-100 dark:bg-[#27272a] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[#6366f1] rounded-full"
                   style={{
@@ -143,7 +143,7 @@ const RevenueTab = () => {
                   }}
                 />
               </div>
-              <div className="flex items-center justify-between text-xs text-[#a1a1aa]">
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-[#a1a1aa]">
                 <span>{gstData.count || 0} invoices</span>
                 <span>GST Collected: ₹{gstData.gst_collected?.toLocaleString() || 0}</span>
               </div>
@@ -151,10 +151,10 @@ const RevenueTab = () => {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[#fafafa] font-medium">Non-GST Invoices</span>
+                <span className="text-gray-900 dark:text-[#fafafa] font-medium">Non-GST Invoices</span>
                 <span className="text-[#8b5cf6] font-bold">₹{nonGstData.total?.toLocaleString() || 0}</span>
               </div>
-              <div className="h-3 bg-[#27272a] rounded-full overflow-hidden">
+              <div className="h-3 bg-gray-100 dark:bg-[#27272a] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[#8b5cf6] rounded-full"
                   style={{
@@ -162,15 +162,15 @@ const RevenueTab = () => {
                   }}
                 />
               </div>
-              <div className="flex items-center justify-between text-xs text-[#a1a1aa]">
+              <div className="flex items-center justify-between text-xs text-gray-600 dark:text-[#a1a1aa]">
                 <span>{nonGstData.count || 0} invoices</span>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-[#27272a]">
+            <div className="pt-4 border-t border-gray-200 dark:border-[#27272a]">
               <div className="flex items-center justify-between">
-                <span className="text-[#fafafa] font-semibold">Total Invoices</span>
-                <span className="text-[#fafafa] font-bold">{stats?.total_invoices || 0}</span>
+                <span className="text-gray-900 dark:text-[#fafafa] font-semibold">Total Invoices</span>
+                <span className="text-gray-900 dark:text-[#fafafa] font-bold">{stats?.total_invoices || 0}</span>
               </div>
             </div>
           </div>

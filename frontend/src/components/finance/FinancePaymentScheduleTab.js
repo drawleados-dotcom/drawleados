@@ -90,11 +90,11 @@ export default function FinancePaymentScheduleTab({ isDark, token }) {
     }
   };
 
-  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
-  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-50';
-  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
-  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
-  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+  const bgCard = isDark ? 'bg-white dark:bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-gray-100 dark:bg-[#27272a]' : 'bg-gray-50';
+  const textPrimary = isDark ? 'text-gray-900 dark:text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-gray-600 dark:text-[#a1a1aa]' : 'text-gray-500';
+  const borderColor = isDark ? 'border-gray-200 dark:border-[#27272a]' : 'border-gray-200';
 
   // (project + me loaded in the effect above)
 
