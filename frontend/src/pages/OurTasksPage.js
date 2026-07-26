@@ -2201,6 +2201,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         )}
                         <div className={`text-xs ${textSecondary} mt-1 flex flex-wrap gap-1`}>
                           <Badge className="text-xs" variant="outline">{task.type || 'General'}</Badge>
+                          {task.sub_department_name && (
+                            <Badge className="text-xs bg-[#8b5cf6]/20 text-[#8b5cf6]" data-testid={`subdept-badge-${task.task_id}`}>
+                              <Tag className="h-3 w-3 mr-1" />{task.sub_department_name}
+                            </Badge>
+                          )}
                           {task.project_name && (
                             <Badge className="text-xs bg-[#6366f1]/20 text-[#6366f1]" data-testid={`project-badge-${task.task_id}`}>
                               <Briefcase className="h-3 w-3 mr-1" />{task.project_name}
