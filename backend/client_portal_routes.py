@@ -1,11 +1,16 @@
 """
-Client Portal — the client-facing half of the ERP "Client Portal" feature.
+Client Portal — the client-facing half of the Client Portal feature.
 
 A staff member creates a username/password for a specific project (see
 projects_routes.py's /projects/{project_id}/client-portal endpoints) and
 shares a login link. The client logs in here — completely separately from
 staff accounts, no shared session/auth mechanism — and only ever sees a
 strictly read-only snapshot of that one project.
+
+Available to both ERP-department projects (User -> Page -> Sub Tab -> Ultra
+Sub Tab tagging, via project.erp_users) and Website-department projects
+(a flat Page list, via project.pages) — reporting a task/bug tags it against
+whichever structure the project actually has.
 """
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -30,6 +35,7 @@ class ClientLoginRequest(BaseModel):
 class ClientPortalTaskCreate(BaseModel):
     task_name: str
     priority: str = "medium"  # low, medium, high
+    department: str = "erp"  # "erp" | "website" — which tagging structure this report uses
     erp_user_id: Optional[str] = None
     erp_user_name: Optional[str] = None
     erp_page_id: Optional[str] = None
@@ -38,6 +44,8 @@ class ClientPortalTaskCreate(BaseModel):
     erp_subtab_name: Optional[str] = None
     erp_ultra_subtab_id: Optional[str] = None
     erp_ultra_subtab_name: Optional[str] = None
+    website_page_id: Optional[str] = None
+    website_page_name: Optional[str] = None
 
 
 async def _get_client_session(request: Request) -> dict:
@@ -85,7 +93,7 @@ async def get_client_project_view(request: Request):
     tasks = await db.our_tasks.find(
         {"project_id": session["project_id"]},
         {"_id": 0, "task_id": 1, "task_name": 1, "status": 1, "priority": 1, "due_date": 1, "category": 1,
-         "created_at": 1, "erp_page_id": 1},
+         "created_at": 1, "erp_page_id": 1, "website_page_id": 1},
     ).sort("created_at", -1).to_list(500)
 
     # Trimmed User -> Pages -> Sub Tabs -> Ultra Sub Tabs structure (same
@@ -119,6 +127,13 @@ async def get_client_project_view(request: Request):
         for u in (project.get("erp_users") or [])
     ]
 
+    # Website department's flat Page list (no User grouping) — same trimmed
+    # shape as ProjectPagesTab, for tagging a new task to a specific page.
+    pages = [
+        {"id": p.get("id"), "page_name": p.get("page_name"), "status": p.get("status")}
+        for p in (project.get("pages") or [])
+    ]
+
     return {
         "project_id": project["project_id"],
         "name": project.get("name"),
@@ -128,15 +143,19 @@ async def get_client_project_view(request: Request):
         "status": project.get("status"),
         "project_type": project.get("project_type"),
         "client_name": project.get("client_name"),
+        "departments": project.get("departments") or [],
         "tasks": tasks,
         "erp_users": erp_users,
+        "pages": pages,
     }
 
 
 @client_portal_router.post("/tasks")
 async def create_client_portal_task(payload: ClientPortalTaskCreate, request: Request):
     """Client-reported task/bug — always scoped to the logged-in client's own
-    project and the ERP department, so the client never picks a project."""
+    project, so the client never picks a project. `department` selects which
+    tagging structure applies (ERP's User/Page/Sub Tab, or Website's flat
+    Page list) and must be one the project actually has."""
     session = await _get_client_session(request)
 
     task_name = (payload.task_name or "").strip()
@@ -144,10 +163,14 @@ async def create_client_portal_task(payload: ClientPortalTaskCreate, request: Re
         raise HTTPException(status_code=400, detail="Please describe the task or bug")
     if payload.priority not in ("low", "medium", "high"):
         raise HTTPException(status_code=400, detail="Priority must be low, medium, or high")
+    if payload.department not in ("erp", "website"):
+        raise HTTPException(status_code=400, detail="department must be erp or website")
 
-    project = await db.projects.find_one({"project_id": session["project_id"]}, {"_id": 0, "name": 1})
+    project = await db.projects.find_one({"project_id": session["project_id"]}, {"_id": 0, "name": 1, "departments": 1})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    if payload.department not in (project.get("departments") or []):
+        raise HTTPException(status_code=400, detail=f"This project has no {payload.department} department")
 
     now = datetime.now(timezone.utc).isoformat()
     task = {
@@ -160,18 +183,20 @@ async def create_client_portal_task(payload: ClientPortalTaskCreate, request: Re
         "assigned_to": None,
         "created_by": None,
         "created_via": "client_portal",
-        "department": "erp",
+        "department": payload.department,
         "category": None,
         "project_id": session["project_id"],
         "project_name": project.get("name"),
-        "erp_user_id": payload.erp_user_id,
-        "erp_user_name": payload.erp_user_name,
-        "erp_page_id": payload.erp_page_id,
-        "erp_page_name": payload.erp_page_name,
-        "erp_subtab_id": payload.erp_subtab_id,
-        "erp_subtab_name": payload.erp_subtab_name,
-        "erp_ultra_subtab_id": payload.erp_ultra_subtab_id,
-        "erp_ultra_subtab_name": payload.erp_ultra_subtab_name,
+        "erp_user_id": payload.erp_user_id if payload.department == "erp" else None,
+        "erp_user_name": payload.erp_user_name if payload.department == "erp" else None,
+        "erp_page_id": payload.erp_page_id if payload.department == "erp" else None,
+        "erp_page_name": payload.erp_page_name if payload.department == "erp" else None,
+        "erp_subtab_id": payload.erp_subtab_id if payload.department == "erp" else None,
+        "erp_subtab_name": payload.erp_subtab_name if payload.department == "erp" else None,
+        "erp_ultra_subtab_id": payload.erp_ultra_subtab_id if payload.department == "erp" else None,
+        "erp_ultra_subtab_name": payload.erp_ultra_subtab_name if payload.department == "erp" else None,
+        "website_page_id": payload.website_page_id if payload.department == "website" else None,
+        "website_page_name": payload.website_page_name if payload.department == "website" else None,
         "work_link": None,
         "due_date": None,
         "due_time": None,

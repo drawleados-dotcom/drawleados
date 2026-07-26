@@ -688,7 +688,7 @@ async def publish_content_calendar_entry_to_linkedin(project_id: str, entry_id: 
     return updated
 
 
-# ============== CLIENT PORTAL (ERP) ==============
+# ============== CLIENT PORTAL (ERP / Website) ==============
 # Lets a staff member create a client-facing username/password for a
 # specific project, then share a login link. The client logs in through a
 # completely separate, unauthenticated flow (see client_portal_routes.py)

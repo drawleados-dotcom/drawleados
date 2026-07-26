@@ -809,7 +809,7 @@ export default function ProjectsPanel({
             <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
               <Plus className="h-4 w-4 mr-1" /> Add Task
             </Button>
-            {canManageProjects && (selectedProject.departments || []).includes('erp') && (
+            {canManageProjects && ['erp', 'website'].some((d) => (selectedProject.departments || []).includes(d)) && (
               <Button
                 onClick={() => setShowClientPortalModal(true)}
                 variant="outline"
@@ -2109,7 +2109,7 @@ export default function ProjectsPanel({
           </div>
         )}
 
-        {/* Client Portal — ERP projects only, create/reset a client login + share message */}
+        {/* Client Portal — ERP/Website projects, create/reset a client login + share message */}
         {showClientPortalModal && (
           <ClientPortalModal
             project={selectedProject}

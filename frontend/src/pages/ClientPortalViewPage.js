@@ -4,7 +4,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { LogOut, Calendar, ListChecks, Users as UsersIcon, User as UserIcon, ChevronDown, ChevronRight, Building2, Plus } from 'lucide-react';
+import { LogOut, Calendar, ListChecks, Users as UsersIcon, User as UserIcon, ChevronDown, ChevronRight, Building2, Plus, Globe } from 'lucide-react';
 import AddTaskModal from '../components/clientPortal/AddTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -30,7 +30,10 @@ const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('en-IN', { day:
  * controls anywhere on this page, matching the server's read-only
  * /api/client-portal/me/project response (no financial/internal fields).
  * White/light theme only (not theme-aware) and mobile-first, with a fixed
- * bottom nav (Task / Users / Profile) as the primary navigation.
+ * bottom nav (Task / Users-or-Pages / Profile) as the primary navigation.
+ * Works for both ERP projects (User -> Page grouping, project.erp_users)
+ * and Website projects (a flat Page list, project.pages) — whichever
+ * structure the project actually has decides what the second tab shows.
  */
 export default function ClientPortalViewPage() {
   const { projectId } = useParams();
@@ -87,7 +90,14 @@ export default function ClientPortalViewPage() {
   }
   if (!project) return null;
 
+  const departments = project.departments || [];
+  const hasErp = departments.includes('erp');
+  // If a project somehow carries both departments, ERP's richer User/Page
+  // grouping takes the second tab; Website's flat Pages only shows when
+  // ERP isn't present.
+  const hasWebsite = departments.includes('website') && !hasErp;
   const erpUsers = project.erp_users || [];
+  const pages = project.pages || [];
   const allTasks = project.tasks || [];
 
   const matchesFilters = (task) => {
@@ -96,7 +106,7 @@ export default function ClientPortalViewPage() {
     return true;
   };
   const filteredTasks = allTasks.filter(matchesFilters);
-  const tasksForPage = (pageId) => allTasks.filter((t) => t.erp_page_id === pageId && matchesFilters(t));
+  const tasksForPage = (pageId) => allTasks.filter((t) => (t.erp_page_id === pageId || t.website_page_id === pageId) && matchesFilters(t));
   const visibleUsers = userFilter === 'all' ? erpUsers : erpUsers.filter((u) => u.id === userFilter);
 
   const taskCard = (task) => (
@@ -185,7 +195,7 @@ export default function ClientPortalViewPage() {
           </div>
         )}
 
-        {section === 'users' && (
+        {section === 'users' && hasErp && (
           <div>
             <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
               <UsersIcon className="h-4 w-4 text-[#6366f1]" /> Users ({erpUsers.length})
@@ -233,6 +243,33 @@ export default function ClientPortalViewPage() {
           </div>
         )}
 
+        {section === 'users' && hasWebsite && (
+          <div>
+            <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+              <Globe className="h-4 w-4 text-[#6366f1]" /> Pages ({pages.length})
+            </h2>
+            <FilterBar showUserFilter={false} />
+            <div className="space-y-3">
+              {pages.length === 0 && <p className="text-sm text-gray-500">No pages found.</p>}
+              {pages.map((pg) => {
+                const pageTasks = tasksForPage(pg.id);
+                return (
+                  <div key={pg.id} className="bg-white border border-gray-200 rounded-2xl p-4" data-testid={`client-portal-page-${pg.id}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-semibold text-gray-900">{pg.page_name}</p>
+                      <Badge className="bg-[#6366f1]/10 text-[#6366f1] text-[10px] border border-[#6366f1]/20">{pg.status || 'To-Do'}</Badge>
+                    </div>
+                    <div className="space-y-2">
+                      {pageTasks.length === 0 && <p className="text-xs text-gray-400">No matching tasks.</p>}
+                      {pageTasks.map(taskCard)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {section === 'profile' && (
           <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
             <div className="flex items-center gap-2">
@@ -268,7 +305,7 @@ export default function ClientPortalViewPage() {
       >
         {[
           { id: 'tasks', label: 'Task', icon: ListChecks },
-          { id: 'users', label: 'Users', icon: UsersIcon },
+          { id: 'users', label: hasErp ? 'Users' : 'Pages', icon: hasErp ? UsersIcon : Globe },
           { id: 'profile', label: 'Profile', icon: UserIcon },
         ].map((item) => {
           const Icon = item.icon;
@@ -292,7 +329,9 @@ export default function ClientPortalViewPage() {
         open={showAddTask}
         onClose={() => setShowAddTask(false)}
         projectName={project.name}
+        department={hasErp ? 'erp' : 'website'}
         erpUsers={erpUsers}
+        pages={pages}
         sessionToken={sessionToken}
         onCreated={load}
       />

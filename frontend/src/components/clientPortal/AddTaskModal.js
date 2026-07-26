@@ -16,22 +16,28 @@ const selectCls = 'w-full text-sm rounded-lg border border-gray-200 bg-white tex
 
 const emptyState = {
   erpUserId: '', erpPageId: '', erpSubtabId: '', erpUltraSubtabId: '',
+  websitePageId: '',
   taskName: '', priority: 'medium',
 };
 
 /** Client Portal's "Add New Task" popup — always pre-scoped to the client's
- * own project and the ERP department (never asked, unlike the internal Add
- * Task flows), field order per the client-facing brief: Date & Time (auto),
- * User, Page / Sub Page / Super Sub Page, Task or Bug, Priority. */
-export default function AddTaskModal({ open, onClose, projectName, erpUsers, sessionToken, onCreated }) {
+ * own project (never asked, unlike the internal Add Task flows), field
+ * order per the client-facing brief: Date & Time (auto), User/Page tagging,
+ * Task or Bug, Priority. `department` selects which tagging structure to
+ * show: "erp" (User / Page / Sub Page / Super Sub Page, from `erpUsers`)
+ * or "website" (a single flat Page picker, from `pages`). */
+export default function AddTaskModal({ open, onClose, projectName, department = 'erp', erpUsers, pages, sessionToken, onCreated }) {
   const [form, setForm] = useState(emptyState);
   const [submitting, setSubmitting] = useState(false);
   const [reportedAt] = useState(() => new Date());
+
+  const isErp = department === 'erp';
 
   const selectedUser = (erpUsers || []).find((u) => u.id === form.erpUserId);
   const selectedPage = (selectedUser?.pages || []).find((p) => p.id === form.erpPageId);
   const selectedSubtab = (selectedPage?.sub_tabs || []).find((st) => st.id === form.erpSubtabId);
   const selectedUltraSubtab = (selectedSubtab?.ultra_sub_tabs || []).find((ut) => ut.id === form.erpUltraSubtabId);
+  const selectedWebsitePage = (pages || []).find((p) => p.id === form.websitePageId);
 
   const handleClose = () => { setForm(emptyState); onClose(); };
 
@@ -39,18 +45,29 @@ export default function AddTaskModal({ open, onClose, projectName, erpUsers, ses
     if (!form.taskName.trim()) { toast.error('Please describe the task or bug'); return; }
     setSubmitting(true);
     try {
-      await axios.post(`${API}/api/client-portal/tasks`, {
+      const payload = {
         task_name: form.taskName.trim(),
         priority: form.priority,
-        erp_user_id: form.erpUserId || null,
-        erp_user_name: selectedUser?.user_name || null,
-        erp_page_id: form.erpPageId || null,
-        erp_page_name: selectedPage?.page_name || null,
-        erp_subtab_id: form.erpSubtabId || null,
-        erp_subtab_name: selectedSubtab?.name || null,
-        erp_ultra_subtab_id: form.erpUltraSubtabId || null,
-        erp_ultra_subtab_name: selectedUltraSubtab?.name || null,
-      }, { headers: { Authorization: `Bearer ${sessionToken}` } });
+        department,
+      };
+      if (isErp) {
+        Object.assign(payload, {
+          erp_user_id: form.erpUserId || null,
+          erp_user_name: selectedUser?.user_name || null,
+          erp_page_id: form.erpPageId || null,
+          erp_page_name: selectedPage?.page_name || null,
+          erp_subtab_id: form.erpSubtabId || null,
+          erp_subtab_name: selectedSubtab?.name || null,
+          erp_ultra_subtab_id: form.erpUltraSubtabId || null,
+          erp_ultra_subtab_name: selectedUltraSubtab?.name || null,
+        });
+      } else {
+        Object.assign(payload, {
+          website_page_id: form.websitePageId || null,
+          website_page_name: selectedWebsitePage?.page_name || null,
+        });
+      }
+      await axios.post(`${API}/api/client-portal/tasks`, payload, { headers: { Authorization: `Bearer ${sessionToken}` } });
       toast.success('Task added');
       setForm(emptyState);
       onCreated?.();
@@ -92,60 +109,77 @@ export default function AddTaskModal({ open, onClose, projectName, erpUsers, ses
             </div>
           </div>
 
-          <div>
-            <p className="text-xs font-medium text-gray-500 mb-1">User</p>
-            <select
-              value={form.erpUserId}
-              onChange={(e) => setForm((f) => ({ ...f, erpUserId: e.target.value, erpPageId: '', erpSubtabId: '', erpUltraSubtabId: '' }))}
-              className={selectCls}
-              data-testid="client-portal-task-user"
-            >
-              <option value="">— Select user —</option>
-              {(erpUsers || []).map((u) => <option key={u.id} value={u.id}>{u.user_name}</option>)}
-            </select>
-          </div>
+          {isErp ? (
+            <>
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">User</p>
+                <select
+                  value={form.erpUserId}
+                  onChange={(e) => setForm((f) => ({ ...f, erpUserId: e.target.value, erpPageId: '', erpSubtabId: '', erpUltraSubtabId: '' }))}
+                  className={selectCls}
+                  data-testid="client-portal-task-user"
+                >
+                  <option value="">— Select user —</option>
+                  {(erpUsers || []).map((u) => <option key={u.id} value={u.id}>{u.user_name}</option>)}
+                </select>
+              </div>
 
-          <div className="grid grid-cols-1 gap-3">
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Page</p>
+                  <select
+                    value={form.erpPageId}
+                    onChange={(e) => setForm((f) => ({ ...f, erpPageId: e.target.value, erpSubtabId: '', erpUltraSubtabId: '' }))}
+                    className={selectCls}
+                    disabled={!form.erpUserId}
+                    data-testid="client-portal-task-page"
+                  >
+                    <option value="">{form.erpUserId ? '— Select page —' : 'Pick a user first'}</option>
+                    {(selectedUser?.pages || []).map((p) => <option key={p.id} value={p.id}>{p.page_name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Sub Page</p>
+                  <select
+                    value={form.erpSubtabId}
+                    onChange={(e) => setForm((f) => ({ ...f, erpSubtabId: e.target.value, erpUltraSubtabId: '' }))}
+                    className={selectCls}
+                    disabled={(selectedPage?.sub_tabs || []).length === 0}
+                    data-testid="client-portal-task-subpage"
+                  >
+                    <option value="">{(selectedPage?.sub_tabs || []).length ? '— Select sub page —' : 'No sub pages'}</option>
+                    {(selectedPage?.sub_tabs || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Super Sub Page</p>
+                  <select
+                    value={form.erpUltraSubtabId}
+                    onChange={(e) => setForm((f) => ({ ...f, erpUltraSubtabId: e.target.value }))}
+                    className={selectCls}
+                    disabled={(selectedSubtab?.ultra_sub_tabs || []).length === 0}
+                    data-testid="client-portal-task-supersubpage"
+                  >
+                    <option value="">{(selectedSubtab?.ultra_sub_tabs || []).length ? '— Select super sub page —' : 'No super sub pages'}</option>
+                    {(selectedSubtab?.ultra_sub_tabs || []).map((ut) => <option key={ut.id} value={ut.id}>{ut.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            </>
+          ) : (
             <div>
               <p className="text-xs font-medium text-gray-500 mb-1">Page</p>
               <select
-                value={form.erpPageId}
-                onChange={(e) => setForm((f) => ({ ...f, erpPageId: e.target.value, erpSubtabId: '', erpUltraSubtabId: '' }))}
+                value={form.websitePageId}
+                onChange={(e) => setForm((f) => ({ ...f, websitePageId: e.target.value }))}
                 className={selectCls}
-                disabled={!form.erpUserId}
-                data-testid="client-portal-task-page"
+                data-testid="client-portal-task-website-page"
               >
-                <option value="">{form.erpUserId ? '— Select page —' : 'Pick a user first'}</option>
-                {(selectedUser?.pages || []).map((p) => <option key={p.id} value={p.id}>{p.page_name}</option>)}
+                <option value="">— Select page —</option>
+                {(pages || []).map((p) => <option key={p.id} value={p.id}>{p.page_name}</option>)}
               </select>
             </div>
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">Sub Page</p>
-              <select
-                value={form.erpSubtabId}
-                onChange={(e) => setForm((f) => ({ ...f, erpSubtabId: e.target.value, erpUltraSubtabId: '' }))}
-                className={selectCls}
-                disabled={(selectedPage?.sub_tabs || []).length === 0}
-                data-testid="client-portal-task-subpage"
-              >
-                <option value="">{(selectedPage?.sub_tabs || []).length ? '— Select sub page —' : 'No sub pages'}</option>
-                {(selectedPage?.sub_tabs || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">Super Sub Page</p>
-              <select
-                value={form.erpUltraSubtabId}
-                onChange={(e) => setForm((f) => ({ ...f, erpUltraSubtabId: e.target.value }))}
-                className={selectCls}
-                disabled={(selectedSubtab?.ultra_sub_tabs || []).length === 0}
-                data-testid="client-portal-task-supersubpage"
-              >
-                <option value="">{(selectedSubtab?.ultra_sub_tabs || []).length ? '— Select super sub page —' : 'No super sub pages'}</option>
-                {(selectedSubtab?.ultra_sub_tabs || []).map((ut) => <option key={ut.id} value={ut.id}>{ut.name}</option>)}
-              </select>
-            </div>
-          </div>
+          )}
 
           <div>
             <p className="text-xs font-medium text-gray-500 mb-1">Task or Bug <span className="text-red-500">*</span></p>
