@@ -71,6 +71,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     awaiting_ceo: 0,
   });
   const [meetingsSubActive, setMeetingsSubActive] = useState(false); // when true → render Meetings panel inside My Tasks / Assign-to-Team
+  // Super-Admin-only "Operation" umbrella pill — when active, the dept sub-tabs
+  // bar nests every non-Management department as a second row (see visibleDeptCategoriesForBar).
+  const [opGroupActive, setOpGroupActive] = useState(false);
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
@@ -315,6 +318,44 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // No designation-level restriction → everyone sees all departments
     return deptCategoriesForTask;
   }, [deptCategoriesForTask, myDesignation, user?.role]);
+
+  // Dept pills actually rendered in the sub-tabs bar. In Assign to Team,
+  // Management is a super-admin-only concern — everyone else browsing the
+  // team's tasks doesn't need it cluttering the filter bar.
+  const visibleDeptCategoriesForBar = useMemo(() => {
+    const role = (user?.role || '').toLowerCase();
+    if (mainTab === 'assign_to_team' && role !== 'super_admin') {
+      return visibleDeptCategories.filter(d => d.dept_key !== 'management');
+    }
+    return visibleDeptCategories;
+  }, [visibleDeptCategories, mainTab, user?.role]);
+
+  // Reset the Operation umbrella grouping whenever the main tab changes so
+  // it never bleeds stale state between My Tasks / Assign to Team.
+  useEffect(() => {
+    setOpGroupActive(false);
+  }, [mainTab]);
+
+  const usersById = useMemo(() => {
+    const map = {};
+    (users || []).forEach(u => { map[u.user_id] = u; });
+    return map;
+  }, [users]);
+
+  // Project-scoped tasks created by the Super Admin are routed to managers/
+  // leads (Assign to Team access) rather than the assignee's own My Tasks —
+  // doesn't apply to the creator viewing their own created tasks.
+  const isHiddenProjectTaskForAssignee = useCallback((task) => {
+    if (task.assigned_to !== user?.user_id || task.created_by === user?.user_id) return false;
+    if (!task.project_id) return false;
+    const creatorRole = (usersById[task.created_by]?.role || '').toLowerCase();
+    if (creatorRole !== 'super_admin') return false;
+    const myRole = (user?.role || '').toLowerCase();
+    const myPrivileged = myRole === 'super_admin' || myRole === 'admin';
+    const myCfg = user?.designation_config || {};
+    const hasAssignToTeamAccess = myPrivileged || !!myCfg.operations_assign_to_team;
+    return !hasAssignToTeamAccess;
+  }, [user?.user_id, user?.role, user?.designation_config, usersById]);
 
   useEffect(() => {
     loadTasks();
@@ -1181,11 +1222,20 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // predicate to compute counts for OTHER tabs without flipping `mainTab`
   // state (used by the tab badges — see myTabCount / teamTabCount below).
   const taskPasses = useCallback((task, tabCtx = mainTab) => {
+    // Management-department tasks are Super Admin-only territory for general
+    // browsing — an assignee/creator still sees their own, everyone else
+    // (dept monitoring, team-wide views) does not.
+    if (task.department === 'management') {
+      const isSuperAdminViewer = (user?.role || '').toLowerCase() === 'super_admin';
+      const isOwnTask = task.assigned_to === user?.user_id || task.created_by === user?.user_id;
+      if (!isSuperAdminViewer && !isOwnTask) return false;
+    }
     // Main Tab filter - Assigned to Me vs Assign to Team
     if (tabCtx === 'assigned_to_me') {
       // My Tasks = tasks assigned to me OR created by me (fix: was missing created_by)
       const isMine = task.assigned_to === user?.user_id || task.created_by === user?.user_id;
       if (!isMine) return false;
+      if (isHiddenProjectTaskForAssignee(task)) return false;
     } else if (tabCtx === 'assign_to_team') {
       // Super Admin / Admin / Operation Head → see EVERY task in the org
       const role = (user?.role || '').toLowerCase().trim();
@@ -1250,7 +1300,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (filters.status !== 'all' && task.status !== filters.status) return false;
 
     return true;
-  }, [mainTab, filter, filters, user, myDesignation]);
+  }, [mainTab, filter, filters, user, myDesignation, isHiddenProjectTaskForAssignee]);
 
   const filteredTasks = tasks.filter(t => taskPasses(t));
 
@@ -1368,12 +1418,15 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   };
 
   // Stats - based on main tab
-  const assignedToMeTasks = tasks.filter(t => t.assigned_to === user?.user_id && t.created_by !== user?.user_id);
+  const assignedToMeTasks = tasks.filter(t => t.assigned_to === user?.user_id && t.created_by !== user?.user_id && !isHiddenProjectTaskForAssignee(t));
   const _role = (user?.role || '').toLowerCase();
   const _desg = (user?.designation || '').toLowerCase().trim();
   const _isPrivileged = _role === 'super_admin' || _role === 'admin' || _desg === 'operation head';
   const _myDepts = (myDesignation?.operations_departments || []);
   const assignedToTeamTasks = tasks.filter(t => {
+    // Management tasks are Super Admin-only territory for general browsing —
+    // even admin / op head don't see someone else's Management task here.
+    if (t.department === 'management' && _role !== 'super_admin' && t.created_by !== user?.user_id) return false;
     if (_isPrivileged) return true; // super admin / admin / op head: see ALL tasks
     if (t.assigned_to === user?.user_id) return false; // exclude my own
     if (t.created_by === user?.user_id) return true; // tasks I created
@@ -1810,13 +1863,24 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             pendingByDept[d] = (pendingByDept[d] || 0) + 1;
           });
 
+          const role = (user?.role || '').toLowerCase();
+          const isSuperAdmin = role === 'super_admin';
+          const managementDept = visibleDeptCategoriesForBar.find(d => d.dept_key === 'management');
+          const operationDepts = visibleDeptCategoriesForBar.filter(d => d.dept_key !== 'management');
+          // Super Admin sees "Management" and "Operation" as two umbrella pills
+          // instead of a flat department row — Operation nests every other
+          // department as a second-row pill (see the block right below).
+          const useOpGrouping = isSuperAdmin && !!managementDept;
+          const managementCount = (pendingByDept['management'] || 0) + (pendingByDept['all'] || 0);
+          const operationCount = operationDepts.reduce((sum, d) => sum + (pendingByDept[d.dept_key] || 0), 0) + (pendingByDept['all'] || 0);
+
           return (
             <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
               <button
-                onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: 'all', subDepartment: 'all', project: 'all', category: 'all'}); }}
+                onClick={() => { setOpGroupActive(false); setMeetingsSubActive(false); setFilters({...filters, department: 'all', subDepartment: 'all', project: 'all', category: 'all'}); }}
                 data-testid="dept-subtab-all"
                 className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
-                  filters.department === 'all' && !meetingsSubActive
+                  filters.department === 'all' && !meetingsSubActive && !opGroupActive
                     ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
                     : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
                 }`}
@@ -1828,33 +1892,70 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   </span>
                 )}
               </button>
-              {visibleDeptCategories.map(d => {
-                // A task marked "all" (Select All) counts toward every department's badge too.
-                const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
-                const isActive = filters.department === d.dept_key && !meetingsSubActive;
-                return (
+              {useOpGrouping ? (
+                <>
                   <button
-                    key={d.dept_key}
-                    onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: d.dept_key, subDepartment: 'all', project: 'all', category: 'all'}); }}
-                    data-testid={`dept-subtab-${d.dept_key}`}
+                    onClick={() => { setOpGroupActive(false); setMeetingsSubActive(false); setFilters({...filters, department: 'management', subDepartment: 'all', project: 'all', category: 'all'}); }}
+                    data-testid="dept-subtab-management"
                     className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
-                      isActive
+                      filters.department === 'management' && !meetingsSubActive && !opGroupActive
                         ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
                         : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
                     }`}
                   >
-                    {d.label}
-                    {count > 0 && (
-                      <span
-                        className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]"
-                        data-testid={`dept-pending-${d.dept_key}`}
-                      >
-                        {count}
+                    {managementDept.label}
+                    {managementCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]">
+                        {managementCount}
                       </span>
                     )}
                   </button>
-                );
-              })}
+                  <button
+                    onClick={() => { setOpGroupActive(true); setMeetingsSubActive(false); setFilters({...filters, department: 'all', subDepartment: 'all', project: 'all', category: 'all'}); }}
+                    data-testid="dept-subtab-operation"
+                    className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
+                      opGroupActive && !meetingsSubActive
+                        ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                    }`}
+                  >
+                    Operation
+                    {operationCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]">
+                        {operationCount}
+                      </span>
+                    )}
+                  </button>
+                </>
+              ) : (
+                visibleDeptCategoriesForBar.map(d => {
+                  // A task marked "all" (Select All) counts toward every department's badge too.
+                  const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
+                  const isActive = filters.department === d.dept_key && !meetingsSubActive;
+                  return (
+                    <button
+                      key={d.dept_key}
+                      onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: d.dept_key, subDepartment: 'all', project: 'all', category: 'all'}); }}
+                      data-testid={`dept-subtab-${d.dept_key}`}
+                      className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
+                        isActive
+                          ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                      }`}
+                    >
+                      {d.label}
+                      {count > 0 && (
+                        <span
+                          className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]"
+                          data-testid={`dept-pending-${d.dept_key}`}
+                        >
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
 
               {/* Meetings sub-tab — distinct colored pill */}
               <button
@@ -1878,11 +1979,69 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           );
         })()}
 
+        {/* Operation umbrella second row — Super Admin only. Lists every
+            non-Management department as a pill, same pattern as Management's
+            own sub-department row just below. */}
+        {opGroupActive && !meetingsSubActive && (() => {
+          const operationDepts = visibleDeptCategoriesForBar.filter(d => d.dept_key !== 'management');
+          const sourceTasks = mainTab === 'assigned_to_me'
+            ? [...assignedToMeTasks, ...myOwnTasks]
+            : assignedToTeamTasks;
+          const pendingByDept = {};
+          sourceTasks.forEach(t => {
+            if ((t.status || 'pending') !== 'pending') return;
+            const d = t.department || '_unassigned';
+            pendingByDept[d] = (pendingByDept[d] || 0) + 1;
+          });
+
+          return (
+            <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="opgroup-subtabs">
+              <button
+                onClick={() => setFilters({...filters, department: 'all', subDepartment: 'all'})}
+                data-testid="opgroup-subtab-all"
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                  filters.department === 'all'
+                    ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                    : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
+                }`}
+              >
+                All Operation
+              </button>
+              {operationDepts.map(d => {
+                const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
+                const isActive = filters.department === d.dept_key;
+                return (
+                  <button
+                    key={d.dept_key}
+                    onClick={() => setFilters({...filters, department: d.dept_key, subDepartment: 'all'})}
+                    data-testid={`opgroup-subtab-${d.dept_key}`}
+                    className={`relative px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                      isActive
+                        ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
+                    }`}
+                  >
+                    {d.label}
+                    {count > 0 && (
+                      <span
+                        className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1"
+                        data-testid={`opgroup-pending-${d.dept_key}`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {/* Sub Department Sub-Tabs — nested under a specific department that
             has them configured (e.g. Management), so clicking Management
             then a sub-department pill filters the list to just that one. */}
-        {!meetingsSubActive && filters.department !== 'all' && (() => {
-          const activeDept = visibleDeptCategories.find(d => d.dept_key === filters.department);
+        {!meetingsSubActive && !opGroupActive && filters.department !== 'all' && (() => {
+          const activeDept = visibleDeptCategoriesForBar.find(d => d.dept_key === filters.department);
           const subDepts = activeDept?.sub_departments || [];
           if (subDepts.length === 0) return null;
 
