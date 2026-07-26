@@ -695,6 +695,23 @@ const LeadsPageV2 = () => {
     }
   };
 
+  // Removes leads created by the sheet-sync bug (fixed) that have no name,
+  // phone, or email at all — never touches a lead with any real data.
+  const [cleaningDummy, setCleaningDummy] = useState(false);
+  const cleanupDummyLeads = async () => {
+    if (!window.confirm('Remove sheet-import leads with no name, phone, or email? This only affects leads with nothing filled in.')) return;
+    setCleaningDummy(true);
+    try {
+      const res = await axios.post(`${API}/api/leads-v2/leads/cleanup-dummy-sheet-leads`, {}, { headers });
+      toast.success(`Removed ${res.data?.removed ?? 0} dummy lead(s)`);
+      await Promise.all([loadLeads(), loadStats()]);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Cleanup failed');
+    } finally {
+      setCleaningDummy(false);
+    }
+  };
+
   // ============== IMPORT/EXPORT ACTIONS ==============
 
   const downloadTemplate = async () => {
@@ -1020,6 +1037,21 @@ const LeadsPageV2 = () => {
                 <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
                 {syncing ? 'Syncing…' : 'Sync'}
               </Button>
+
+              {/* Cleanup — removes sheet-import leads with no name/phone/email at all */}
+              {(currentUser?.role === 'super_admin' || currentUser?.role === 'admin') && (
+                <Button
+                  onClick={cleanupDummyLeads}
+                  disabled={cleaningDummy}
+                  variant="outline"
+                  className={`${borderColor} ${bgSecondary} text-red-500 hover:text-red-400 gap-2`}
+                  data-testid="leads-cleanup-dummy-btn"
+                  title="Remove sheet-import leads with no name, phone, or email"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {cleaningDummy ? 'Cleaning…' : 'Clean Up Dummy Leads'}
+                </Button>
+              )}
 
               {/* View Toggle removed — List view is the only view */}
 

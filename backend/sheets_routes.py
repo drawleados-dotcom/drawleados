@@ -410,7 +410,12 @@ async def delete_config(sheet_type: str, request: Request):
 
 
 # ---------- Read sheet & preview / sync ----------
-def _read_sheet_rows(creds: Credentials, sheet_id: str, range_: str = "A1:Z200"):
+# Was capped at "A1:Z200" — any row appended past row 200 (e.g. a Meta Lead
+# Ads sheet that keeps growing) silently never synced, and any column past Z
+# (26) was invisible to _col()'s header lookups. Widened generously; the
+# Sheets API only returns cells that actually have data, so an oversized
+# range costs nothing extra.
+def _read_sheet_rows(creds: Credentials, sheet_id: str, range_: str = "A1:ZZ50000"):
     service = build("sheets", "v4", credentials=creds, cache_discovery=False)
     result = service.spreadsheets().values().get(
         spreadsheetId=sheet_id,
@@ -528,10 +533,14 @@ async def sync_sheet(sheet_type: str, request: Request):
             "data": record,
             "imported_at": now,
         })
-        # Map common column names → lead_v2 fields
-        name = _col(r, "name", "lead_name", "full name", "full_name", "contact name") or "—"
-        phone = _col(r, "phone", "mobile", "contact", "phone number", "phone_number")
-        email = _col(r, "email", "email id", "e-mail")
+        # Map common column names → lead_v2 fields. Includes the field names
+        # Meta Lead Ads / Zapier commonly export under (full_name, phone_number,
+        # email_address, etc.) — a header that matches none of these still
+        # falls through to a blank field (and the row still gets created,
+        # per the blank-row guard above only skipping fully-empty rows).
+        name = _col(r, "name", "lead_name", "full name", "full_name", "contact name", "customer name", "client name") or "—"
+        phone = _col(r, "phone", "mobile", "contact", "phone number", "phone_number", "whatsapp number", "contact number", "mobile number")
+        email = _col(r, "email", "email id", "e-mail", "email address", "e mail")
         location = _col(r, "location", "city", "city/town")
         website = _col(r, "website", "site", "url")
         company_name = _col(r, "company_name", "company name", "company", "organization", "business_name")
@@ -539,9 +548,9 @@ async def sync_sheet(sheet_type: str, request: Request):
         notes = _col(r, "notes", "remarks", "comments", "message")
         # Columns mapped to first-class lead fields (so they don't double-up under custom_fields)
         mapped_cols = {
-            "name", "lead_name", "full name", "full_name", "contact name",
-            "phone", "mobile", "contact", "phone number", "phone_number",
-            "email", "email id", "e-mail",
+            "name", "lead_name", "full name", "full_name", "contact name", "customer name", "client name",
+            "phone", "mobile", "contact", "phone number", "phone_number", "whatsapp number", "contact number", "mobile number",
+            "email", "email id", "e-mail", "email address", "e mail",
             "location", "city", "city/town",
             "website", "site", "url",
             "company_name", "company name", "company", "organization", "business_name",
