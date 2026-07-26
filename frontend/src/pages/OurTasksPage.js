@@ -100,6 +100,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     status: 'all', // all, pending, in_progress, completed, on_hold
     singleDate: '', // for single date filter
     department: 'all', // all or dept_key
+    subDepartment: 'all', // all or sub_department id (only meaningful once a specific department is selected)
     project: 'all', // all or project_id
     category: 'all' // all or category name (depends on selected department)
   });
@@ -168,6 +169,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     erp_user_name: '',
     erp_page_id: '',
     erp_page_name: '',
+    sub_department_id: '',
+    sub_department_name: '',
   });
 
   const [projectsForTask, setProjectsForTask] = useState([]);
@@ -418,6 +421,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       if (!formData.erp_user_id) { toast.error('Please select a User'); return; }
       if (!formData.erp_page_id) { toast.error('Please select a Page'); return; }
     }
+    // Departments with Sub Departments configured (e.g. Management) must be
+    // tagged to one — department-scoped, so this doesn't wait on a project.
+    if ((deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).length > 0 && !formData.sub_department_id) {
+      toast.error('Please select a Sub Department');
+      return;
+    }
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
       toast.error('Start date is required for recurring tasks');
@@ -471,6 +480,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (formData.department === 'erp' && formData.project_id) {
       if (!formData.erp_user_id) { toast.error('Please select a User'); return; }
       if (!formData.erp_page_id) { toast.error('Please select a Page'); return; }
+    }
+    if ((deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).length > 0 && !formData.sub_department_id) {
+      toast.error('Please select a Sub Department');
+      return;
     }
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
@@ -1002,6 +1015,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_user_name: '',
       erp_page_id: '',
       erp_page_name: '',
+      sub_department_id: '',
+      sub_department_name: '',
     });
     setShowCustomRecurrence(false);
   };
@@ -1037,6 +1052,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_user_name: task.erp_user_name || '',
       erp_page_id: task.erp_page_id || '',
       erp_page_name: task.erp_page_name || '',
+      sub_department_id: task.sub_department_id || '',
+      sub_department_name: task.sub_department_name || '',
     });
     setEditingTask(task);
   };
@@ -1209,6 +1226,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // department's view, so it always passes a specific-department filter.
     if (filters.department !== 'all' && task.department !== filters.department && task.department !== 'all') return false;
 
+    // Sub Department filter — only meaningful once a specific department is
+    // selected (the sub-tabs bar only shows it in that state).
+    if (filters.subDepartment !== 'all' && task.sub_department_id !== filters.subDepartment) return false;
+
     // Project filter
     if (filters.project !== 'all' && task.project_id !== filters.project) return false;
 
@@ -1333,6 +1354,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       taskType: 'all',
       status: 'all',
       department: 'all',
+      subDepartment: 'all',
       project: 'all',
       category: 'all'
     });
@@ -1784,7 +1806,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           return (
             <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
               <button
-                onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: 'all', project: 'all', category: 'all'}); }}
+                onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: 'all', subDepartment: 'all', project: 'all', category: 'all'}); }}
                 data-testid="dept-subtab-all"
                 className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
                   filters.department === 'all' && !meetingsSubActive
@@ -1806,7 +1828,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 return (
                   <button
                     key={d.dept_key}
-                    onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: d.dept_key, project: 'all', category: 'all'}); }}
+                    onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: d.dept_key, subDepartment: 'all', project: 'all', category: 'all'}); }}
                     data-testid={`dept-subtab-${d.dept_key}`}
                     className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
                       isActive
@@ -1845,6 +1867,65 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   </span>
                 )}
               </button>
+            </div>
+          );
+        })()}
+
+        {/* Sub Department Sub-Tabs — nested under a specific department that
+            has them configured (e.g. Management), so clicking Management
+            then a sub-department pill filters the list to just that one. */}
+        {!meetingsSubActive && filters.department !== 'all' && (() => {
+          const activeDept = visibleDeptCategories.find(d => d.dept_key === filters.department);
+          const subDepts = activeDept?.sub_departments || [];
+          if (subDepts.length === 0) return null;
+
+          const sourceTasks = mainTab === 'assigned_to_me'
+            ? [...assignedToMeTasks, ...myOwnTasks]
+            : assignedToTeamTasks;
+          const pendingBySubDept = {};
+          sourceTasks.forEach(t => {
+            if ((t.status || 'pending') !== 'pending') return;
+            if (t.department !== filters.department) return;
+            const sd = t.sub_department_id || '_unassigned';
+            pendingBySubDept[sd] = (pendingBySubDept[sd] || 0) + 1;
+          });
+
+          return (
+            <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="subdept-subtabs">
+              <button
+                onClick={() => setFilters({...filters, subDepartment: 'all'})}
+                data-testid="subdept-subtab-all"
+                className={`px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                  filters.subDepartment === 'all'
+                    ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                    : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
+                }`}
+              >
+                All {activeDept.label}
+              </button>
+              {subDepts.map(sd => {
+                const count = pendingBySubDept[sd.id] || 0;
+                const isActive = filters.subDepartment === sd.id;
+                return (
+                  <button
+                    key={sd.id}
+                    onClick={() => setFilters({...filters, subDepartment: sd.id})}
+                    data-testid={`subdept-subtab-${sd.id}`}
+                    className={`relative px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                      isActive
+                        ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
+                    }`}
+                  >
+                    {sd.label}
+                    {count > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center min-w-[16px] h-[16px] rounded-full bg-[#ef4444] text-white text-[9px] font-bold px-1">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           );
         })()}
@@ -2395,8 +2476,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         value={formData.department || 'none'}
                         onValueChange={(v) => {
                           const dept = v === 'none' ? '' : v;
-                          const defaultCategory = deptCategoriesForTask.find(d => d.dept_key === dept)?.categories?.[0] || '';
-                          setFormData(prev => ({ ...prev, department: dept, project_id: '', project_name: '', category: defaultCategory, website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' }));
+                          const deptEntry = deptCategoriesForTask.find(d => d.dept_key === dept);
+                          const defaultCategory = deptEntry?.categories?.[0] || '';
+                          const defaultSubDept = deptEntry?.sub_departments?.[0];
+                          setFormData(prev => ({
+                            ...prev, department: dept, project_id: '', project_name: '', category: defaultCategory,
+                            website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '',
+                            sub_department_id: defaultSubDept?.id || '', sub_department_name: defaultSubDept?.label || '',
+                          }));
                         }}
                       >
                         <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
@@ -2429,19 +2516,24 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                 const nextDept = (projDepts.includes(prev.department))
                                   ? prev.department
                                   : (projDepts[0] || prev.department);
-                                const defaultCategory = deptCategoriesForTask.find(d => d.dept_key === nextDept)?.categories?.[0] || '';
+                                const deptEntry = deptCategoriesForTask.find(d => d.dept_key === nextDept);
+                                const defaultCategory = deptEntry?.categories?.[0] || '';
+                                const defaultSubDept = deptEntry?.sub_departments?.[0];
+                                const deptUnchanged = nextDept === prev.department;
                                 return {
                                   ...prev,
                                   project_id: v,
                                   project_name: proj?.name || '',
                                   department: nextDept,
-                                  category: nextDept === prev.department ? (prev.category || defaultCategory) : defaultCategory,
+                                  category: deptUnchanged ? (prev.category || defaultCategory) : defaultCategory,
                                   website_page_id: '',
                                   website_page_name: '',
                                   erp_user_id: '',
                                   erp_user_name: '',
                                   erp_page_id: '',
                                   erp_page_name: '',
+                                  sub_department_id: deptUnchanged ? (prev.sub_department_id || defaultSubDept?.id || '') : (defaultSubDept?.id || ''),
+                                  sub_department_name: deptUnchanged ? (prev.sub_department_name || defaultSubDept?.label || '') : (defaultSubDept?.label || ''),
                                 };
                               });
                             }
@@ -2496,6 +2588,33 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         </Select>
                       </div>
                     </div>
+
+                    {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).length > 0 && (
+                      <div>
+                        <Label className={textPrimary}>Sub Department <span className="text-red-500">*</span></Label>
+                        <Select
+                          value={formData.sub_department_id || 'none'}
+                          onValueChange={(v) => {
+                            if (v === 'none') {
+                              setFormData(prev => ({ ...prev, sub_department_id: '', sub_department_name: '' }));
+                            } else {
+                              const sd = deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments?.find(x => x.id === v);
+                              setFormData(prev => ({ ...prev, sub_department_id: v, sub_department_name: sd?.label || '' }));
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-sub-department">
+                            <SelectValue placeholder="Select sub department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">— None —</SelectItem>
+                            {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).map(sd => (
+                              <SelectItem key={sd.id} value={sd.id}>{sd.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
 
                     {formData.department === 'website' && formData.project_id && (
                       <div>
