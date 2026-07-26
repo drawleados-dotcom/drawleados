@@ -1259,8 +1259,8 @@ async def get_users(user: User = Depends(get_current_user)):
 async def get_users_basic(user: User = Depends(get_current_user)):
     """Get basic user info for task assignment - available to all authenticated users"""
     users = await db.users.find(
-        {"is_active": True}, 
-        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
+        {"is_active": True},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "designation": 1}
     ).to_list(1000)
     return users
 

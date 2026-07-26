@@ -41,6 +41,26 @@ const priorityDotColors = {
   low: '#10b981'
 };
 
+// Distinct color per sub-department (Sales, Marketing, HR, ...) so rows are
+// visually scannable at a glance. Picked deterministically from a fixed
+// palette by name/id, so any custom sub-department someone adds later still
+// gets a stable, distinct color without needing to hardcode every label.
+const SUB_DEPT_PALETTE = [
+  { bg: 'bg-[#3b82f6]/20', text: 'text-[#3b82f6]' }, // blue
+  { bg: 'bg-[#10b981]/20', text: 'text-[#10b981]' }, // green
+  { bg: 'bg-[#f59e0b]/20', text: 'text-[#f59e0b]' }, // amber
+  { bg: 'bg-[#8b5cf6]/20', text: 'text-[#8b5cf6]' }, // purple
+  { bg: 'bg-[#ec4899]/20', text: 'text-[#ec4899]' }, // pink
+  { bg: 'bg-[#06b6d4]/20', text: 'text-[#06b6d4]' }, // cyan
+  { bg: 'bg-[#ef4444]/20', text: 'text-[#ef4444]' }, // red
+];
+const subDeptColor = (key) => {
+  const s = String(key || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return SUB_DEPT_PALETTE[hash % SUB_DEPT_PALETTE.length];
+};
+
 const statusColors = {
   'pending': 'bg-[#71717a]/20 text-[#71717a]',
   'in_progress': 'bg-[#3b82f6]/20 text-[#3b82f6]',
@@ -141,6 +161,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id, isHeadOfOperations]);
 
+  // Super Admin lands on the Management department by default (instead of
+  // the unfiltered "all" view spanning Management + Operation) so their most
+  // relevant task set is front and center right after a page load/refresh —
+  // fires once per login, doesn't fight a later manual switch to Operation.
+  useEffect(() => {
+    if (!user) return;
+    const role = (user.role || '').toLowerCase();
+    if (role === 'super_admin') {
+      setFilters(prev => (prev.department === 'all' ? { ...prev, department: 'management' } : prev));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.user_id]);
+
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -218,6 +251,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [meetingsCount, setMeetingsCount] = useState(0);
   // Current user's designation config (for Assign-to-Team monitoring scope)
   const [myDesignation, setMyDesignation] = useState(null);
+  const [allDesignations, setAllDesignations] = useState([]);
   // Today's break intervals (used to block task time edits that overlap a break)
   const [todayBreaks, setTodayBreaks] = useState([]);
   const [breakConflictModal, setBreakConflictModal] = useState(null);
@@ -293,6 +327,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           : pendingApprovals.length
       );
       setMeetingsCount((mRes.data || []).length);
+      setAllDesignations(desRes.data || []);
       // Find my designation
       const userDesg = (user?.designation || '').toLowerCase().trim();
       const found = (desRes.data || []).find(
@@ -350,6 +385,47 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     (users || []).forEach(u => { map[u.user_id] = u; });
     return map;
   }, [users]);
+
+  const designationByTitle = useMemo(() => {
+    const map = {};
+    (allDesignations || []).forEach(d => { map[(d.title || '').toLowerCase().trim()] = d; });
+    return map;
+  }, [allDesignations]);
+
+  // Sub-departments (under Management) the CURRENT user's own designation
+  // grants them — null means unrestricted (super_admin/admin, or a
+  // designation with no sub-dept allow-list configured yet).
+  const allowedManagementSubDepts = useMemo(() => {
+    const role = (user?.role || '').toLowerCase();
+    if (role === 'super_admin' || role === 'admin') return null;
+    const allowed = myDesignation?.operations_management_subdepts || [];
+    return allowed.length > 0 ? new Set(allowed) : null;
+  }, [user?.role, myDesignation]);
+
+  // Sub-departments actually selectable for a given department — filters
+  // Management's full sub-department list down to what this user is allowed.
+  const getSelectableSubDepts = useCallback((deptKey) => {
+    const all = deptCategoriesForTask.find(d => d.dept_key === deptKey)?.sub_departments || [];
+    if (deptKey !== 'management' || !allowedManagementSubDepts) return all;
+    return all.filter(sd => allowedManagementSubDepts.has(sd.id));
+  }, [deptCategoriesForTask, allowedManagementSubDepts]);
+
+  // Does the given user's OWN designation grant them this Management
+  // sub-department? Used to filter who a Management/sub-dept task can be
+  // assigned to — mirrors the same allow-list rule applied to the viewer above.
+  const userHasManagementSubDept = useCallback((userId, subDeptId) => {
+    if (!subDeptId) return true;
+    const u = usersById[userId];
+    if (!u) return true;
+    const role = (u.role || '').toLowerCase();
+    if (role === 'super_admin' || role === 'admin') return true;
+    const desg = designationByTitle[(u.designation || '').toLowerCase().trim()];
+    const mgmtDepts = (desg?.operations_departments || []).map(x => String(x).toLowerCase());
+    if (!mgmtDepts.includes('management')) return false;
+    const allowedSub = desg?.operations_management_subdepts || [];
+    if (allowedSub.length === 0) return true;
+    return allowedSub.includes(subDeptId);
+  }, [usersById, designationByTitle]);
 
   // Project-scoped tasks created by the Super Admin are routed to managers/
   // leads (Assign to Team access) rather than the assignee's own My Tasks —
@@ -477,7 +553,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     // Departments with Sub Departments configured (e.g. Management) must be
     // tagged to one — department-scoped, so this doesn't wait on a project.
-    if ((deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).length > 0 && !formData.sub_department_id) {
+    if (getSelectableSubDepts(formData.department).length > 0 && !formData.sub_department_id) {
       toast.error('Please select a Sub Department');
       return;
     }
@@ -538,7 +614,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       if (!formData.erp_user_id) { toast.error('Please select a User'); return; }
       if (!formData.erp_page_id) { toast.error('Please select a Page'); return; }
     }
-    if ((deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).length > 0 && !formData.sub_department_id) {
+    if (getSelectableSubDepts(formData.department).length > 0 && !formData.sub_department_id) {
       toast.error('Please select a Sub Department');
       return;
     }
@@ -2072,8 +2148,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             then a sub-department pill filters the list to just that one. */}
         {!meetingsSubActive && !opGroupActive && filters.department !== 'all' && (() => {
           const activeDept = visibleDeptCategoriesForBar.find(d => d.dept_key === filters.department);
-          const subDepts = activeDept?.sub_departments || [];
-          if (subDepts.length === 0) return null;
+          const subDepts = getSelectableSubDepts(filters.department);
+          if (!activeDept || subDepts.length === 0) return null;
 
           const sourceTasks = mainTab === 'assigned_to_me'
             ? [...assignedToMeTasks, ...myOwnTasks]
@@ -2201,11 +2277,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         )}
                         <div className={`text-xs ${textSecondary} mt-1 flex flex-wrap gap-1`}>
                           <Badge className="text-xs" variant="outline">{task.type || 'General'}</Badge>
-                          {task.sub_department_name && (
-                            <Badge className="text-xs bg-[#8b5cf6]/20 text-[#8b5cf6]" data-testid={`subdept-badge-${task.task_id}`}>
-                              <Tag className="h-3 w-3 mr-1" />{task.sub_department_name}
-                            </Badge>
-                          )}
+                          {task.sub_department_name && (() => {
+                            const c = subDeptColor(task.sub_department_id || task.sub_department_name);
+                            return (
+                              <Badge className={`text-xs ${c.bg} ${c.text}`} data-testid={`subdept-badge-${task.task_id}`}>
+                                <Tag className="h-3 w-3 mr-1" />{task.sub_department_name}
+                              </Badge>
+                            );
+                          })()}
                           {task.project_name && (
                             <Badge className="text-xs bg-[#6366f1]/20 text-[#6366f1]" data-testid={`project-badge-${task.task_id}`}>
                               <Briefcase className="h-3 w-3 mr-1" />{task.project_name}
@@ -2575,9 +2654,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             <SelectValue placeholder="Select user" />
                           </SelectTrigger>
                           <SelectContent className={bgCard}>
-                            {users.map(u => (
-                              <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
-                            ))}
+                            {users
+                              .filter(u => formData.department !== 'management' || !formData.sub_department_id || userHasManagementSubDept(u.user_id, formData.sub_department_id))
+                              .map(u => (
+                                <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>
+                              ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -2698,7 +2779,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           const dept = v === 'none' ? '' : v;
                           const deptEntry = deptCategoriesForTask.find(d => d.dept_key === dept);
                           const defaultCategory = deptEntry?.categories?.[0] || '';
-                          const defaultSubDept = deptEntry?.sub_departments?.[0];
+                          const defaultSubDept = getSelectableSubDepts(dept)[0];
                           setFormData(prev => ({
                             ...prev, department: dept, project_id: '', project_name: '', category: defaultCategory,
                             website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '',
@@ -2738,7 +2819,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                   : (projDepts[0] || prev.department);
                                 const deptEntry = deptCategoriesForTask.find(d => d.dept_key === nextDept);
                                 const defaultCategory = deptEntry?.categories?.[0] || '';
-                                const defaultSubDept = deptEntry?.sub_departments?.[0];
+                                const defaultSubDept = getSelectableSubDepts(nextDept)[0];
                                 const deptUnchanged = nextDept === prev.department;
                                 return {
                                   ...prev,
@@ -2809,7 +2890,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       </div>
                     </div>
 
-                    {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).length > 0 && (
+                    {getSelectableSubDepts(formData.department).length > 0 && (
                       <div>
                         <Label className={textPrimary}>Sub Department <span className="text-red-500">*</span></Label>
                         <Select
@@ -2818,7 +2899,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             if (v === 'none') {
                               setFormData(prev => ({ ...prev, sub_department_id: '', sub_department_name: '' }));
                             } else {
-                              const sd = deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments?.find(x => x.id === v);
+                              const sd = getSelectableSubDepts(formData.department).find(x => x.id === v);
                               setFormData(prev => ({ ...prev, sub_department_id: v, sub_department_name: sd?.label || '' }));
                             }
                           }}
@@ -2828,7 +2909,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">— None —</SelectItem>
-                            {(deptCategoriesForTask.find(d => d.dept_key === formData.department)?.sub_departments || []).map(sd => (
+                            {getSelectableSubDepts(formData.department).map(sd => (
                               <SelectItem key={sd.id} value={sd.id}>{sd.label}</SelectItem>
                             ))}
                           </SelectContent>

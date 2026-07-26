@@ -202,6 +202,7 @@ export default function HRAdminPage() {
     operations_my_tasks: true,
     operations_assign_to_team: false,
     operations_departments: [],
+    operations_management_subdepts: [],
     operations_approval_queue: null,
     operations_projects: 'none',
     operations_payment_schedule: 'visible',
@@ -1130,7 +1131,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_management_subdepts: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -6130,6 +6131,19 @@ function DesignationsDeptsTab({
   const [viewDesignation, setViewDesignation] = useState(null);
   const [showOpsConfigModal, setShowOpsConfigModal] = useState(false);
   const [opsCfgMode, setOpsCfgMode] = useState('create'); // 'create' | 'edit' — which designation state OpsConfig modal writes to
+  const [managementSubDepts, setManagementSubDepts] = useState([]);
+
+  // Fetch the Management department's sub-departments (Sales, Marketing, ...)
+  // once, so the Operations config modal can offer per-sub-department access.
+  useEffect(() => {
+    const token = localStorage.getItem('session_token');
+    axios.get(`${API}/api/department-categories`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => {
+        const mgmt = (res.data || []).find(d => d.dept_key === 'management');
+        setManagementSubDepts(mgmt?.sub_departments || []);
+      })
+      .catch(() => {});
+  }, []);
 
   const MODULES = [
     // Core Modules
@@ -6164,6 +6178,11 @@ function DesignationsDeptsTab({
     { value: 'business_dev', label: 'Business Dev' },
     { value: 'erp', label: 'ERP' },
   ];
+
+  // Departments available for the Operations "Allowed Departments" picker —
+  // same 8 as approvals, plus "Management" (its sub-departments are granted
+  // separately below, once "Management" itself is checked here).
+  const OPERATIONS_DEPARTMENTS = [...APPROVAL_DEPARTMENTS, { value: 'management', label: 'Management' }];
 
   // Website stages for approval granularity
   const WEBSITE_APPROVAL_STAGES = [
@@ -6772,7 +6791,7 @@ function DesignationsDeptsTab({
                         <span className={`ml-2 text-xs font-normal ${textSecondary}`}>(can assign tasks to anyone within these)</span>
                       </Label>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {APPROVAL_DEPARTMENTS.map(dept => {
+                        {OPERATIONS_DEPARTMENTS.map(dept => {
                           const selected = (opsState.operations_departments || []).includes(dept.value);
                           return (
                             <button
@@ -6801,6 +6820,46 @@ function DesignationsDeptsTab({
                           );
                         })}
                       </div>
+
+                      {/* Management Sub-Departments — shown once "Management" is checked above */}
+                      {(opsState.operations_departments || []).includes('management') && managementSubDepts.length > 0 && (
+                        <div className={`mt-3 pt-3 border-t ${borderColor}`}>
+                          <Label className={`${textPrimary} mb-1 block text-sm`}>Management Sub-Departments</Label>
+                          <p className={`text-xs ${textSecondary} mb-2`}>
+                            Restrict to specific teams (e.g. Sales, Marketing). Leave all unchecked for full Management access.
+                          </p>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                            {managementSubDepts.map(sd => {
+                              const selected = (opsState.operations_management_subdepts || []).includes(sd.id);
+                              return (
+                                <button
+                                  key={sd.id}
+                                  type="button"
+                                  onClick={() => setOpsState(prev => ({
+                                    ...prev,
+                                    operations_management_subdepts: selected
+                                      ? (prev.operations_management_subdepts || []).filter(x => x !== sd.id)
+                                      : [...(prev.operations_management_subdepts || []), sd.id]
+                                  }))}
+                                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border-2 transition-all ${
+                                    selected
+                                      ? 'bg-[#8b5cf6]/20 border-[#8b5cf6] text-[#8b5cf6]'
+                                      : `${bgCard} border-transparent ${textSecondary} hover:border-[#8b5cf6]/50`
+                                  }`}
+                                  data-testid={`ops-cfg-subdept-${sd.id}`}
+                                >
+                                  <div className={`w-4 h-4 rounded flex items-center justify-center border-2 ${
+                                    selected ? 'bg-[#8b5cf6] border-[#8b5cf6]' : (isDark ? 'border-gray-600' : 'border-gray-300')
+                                  }`}>
+                                    {selected && <Check className="h-3 w-3 text-white" />}
+                                  </div>
+                                  {sd.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -6849,6 +6908,7 @@ function DesignationsDeptsTab({
                         operations_my_tasks: true,
                         operations_assign_to_team: false,
                         operations_departments: [],
+                        operations_management_subdepts: [],
                         operations_approval_queue: null,
                         operations_projects: 'none',
                         operations_payment_schedule: 'visible',

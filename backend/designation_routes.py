@@ -23,6 +23,10 @@ class DesignationCreate(BaseModel):
     operations_my_tasks: Optional[bool] = True
     operations_assign_to_team: Optional[bool] = False
     operations_departments: Optional[List[str]] = []
+    # Sub-departments (under the "management" department) this designation is
+    # restricted to, e.g. ["subdept_abc123"]. Empty = unrestricted within
+    # Management once "management" is present in operations_departments.
+    operations_management_subdepts: Optional[List[str]] = []
     operations_approval_queue: Optional[str] = None  # 'pm' (Tech Lead) | 'marketing_head' | 'operations' | 'ceo'
     # NEW: Per-sub-tab access (Feb 2026)
     operations_projects: Optional[str] = "none"   # 'none' | 'view' | 'edit'
@@ -42,6 +46,7 @@ class DesignationUpdate(BaseModel):
     operations_my_tasks: Optional[bool] = None
     operations_assign_to_team: Optional[bool] = None
     operations_departments: Optional[List[str]] = None
+    operations_management_subdepts: Optional[List[str]] = None
     operations_approval_queue: Optional[str] = None
     # NEW: Per-sub-tab access (Feb 2026)
     operations_projects: Optional[str] = None
@@ -114,6 +119,7 @@ async def create_designation(data: DesignationCreate, db=Depends(get_db)):
             "operations_my_tasks": data.operations_my_tasks if data.operations_my_tasks is not None else True,
             "operations_assign_to_team": bool(data.operations_assign_to_team),
             "operations_departments": data.operations_departments or [],
+            "operations_management_subdepts": data.operations_management_subdepts or [],
             "operations_approval_queue": data.operations_approval_queue,
             # NEW per-sub-tab access (defaults — locked out unless admin explicitly grants)
             "operations_projects": (data.operations_projects or "none"),
@@ -163,6 +169,8 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
             update_data["operations_assign_to_team"] = data.operations_assign_to_team
         if data.operations_departments is not None:
             update_data["operations_departments"] = data.operations_departments
+        if data.operations_management_subdepts is not None:
+            update_data["operations_management_subdepts"] = data.operations_management_subdepts
         if data.operations_approval_queue is not None:
             update_data["operations_approval_queue"] = data.operations_approval_queue
         # NEW per-sub-tab access updates
