@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Building2, Plus, X, Check, Tag, Trash2, Pencil, Flag } from 'lucide-react';
+import { Building2, Plus, X, Check, Tag, Trash2, Pencil, Flag, Layers } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Card, CardContent } from './ui/card';
@@ -97,15 +97,74 @@ export default function DepartmentsPanel({
   };
 
   const openEdit = (dept) => {
-    setEditingDept({ ...dept, categories: [...(dept.categories || [])], statuses: [...(dept.statuses || [])] });
+    setEditingDept({
+      ...dept,
+      categories: [...(dept.categories || [])],
+      statuses: [...(dept.statuses || [])],
+      sub_departments: [...(dept.sub_departments || [])],
+    });
     setModalTab('categories');
     setCategoryDraft('');
     setStatusDraft('');
+    setSubDeptDraft('');
     setEditingCategory(null);
     setEditingStatus(null);
+    setEditingSubDept(null);
   };
   const [editingCategory, setEditingCategory] = useState(null); // { original, value }
   const [editingStatus, setEditingStatus] = useState(null); // { original, value }
+
+  // Sub departments — CRUD hits the server immediately per action (they
+  // have stable ids, unlike categories/statuses which are staged locally
+  // until the modal's own Save button), same pattern as the department
+  // add/rename/delete above.
+  const [subDeptDraft, setSubDeptDraft] = useState('');
+  const [editingSubDept, setEditingSubDept] = useState(null); // { id, value }
+  const [subDeptSaving, setSubDeptSaving] = useState(false);
+
+  const addSubDepartment = async () => {
+    const label = subDeptDraft.trim();
+    if (!label) return;
+    setSubDeptSaving(true);
+    try {
+      const res = await axios.post(`${API}/api/department-categories/${editingDept.dept_key}/sub-departments`, { label }, { headers });
+      setEditingDept(prev => ({ ...prev, sub_departments: [...(prev.sub_departments || []), res.data] }));
+      setSubDeptDraft('');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to add sub department');
+    } finally {
+      setSubDeptSaving(false);
+    }
+  };
+
+  const startEditSubDept = (sd) => setEditingSubDept({ id: sd.id, value: sd.label });
+  const commitEditSubDept = async () => {
+    if (!editingSubDept) return;
+    const label = (editingSubDept.value || '').trim();
+    if (!label) { toast.error('Sub department name cannot be empty'); return; }
+    setSubDeptSaving(true);
+    try {
+      await axios.put(`${API}/api/department-categories/${editingDept.dept_key}/sub-departments/${editingSubDept.id}`, { label }, { headers });
+      setEditingDept(prev => ({
+        ...prev,
+        sub_departments: (prev.sub_departments || []).map(sd => sd.id === editingSubDept.id ? { ...sd, label } : sd),
+      }));
+      setEditingSubDept(null);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to rename sub department');
+    } finally {
+      setSubDeptSaving(false);
+    }
+  };
+
+  const deleteSubDepartment = async (sd) => {
+    try {
+      await axios.delete(`${API}/api/department-categories/${editingDept.dept_key}/sub-departments/${sd.id}`, { headers });
+      setEditingDept(prev => ({ ...prev, sub_departments: (prev.sub_departments || []).filter(x => x.id !== sd.id) }));
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to delete sub department');
+    }
+  };
 
   const startEditCategory = (c) => setEditingCategory({ original: c, value: c });
   const commitEditCategory = () => {
@@ -311,9 +370,99 @@ export default function DepartmentsPanel({
                 >
                   Status
                 </button>
+                {editingDept.dept_key === 'management' && (
+                  <button
+                    onClick={() => setModalTab('subdepartments')}
+                    data-testid="dept-modal-tab-subdepartments"
+                    className={`px-3 py-1.5 text-xs rounded-md transition-all ${
+                      modalTab === 'subdepartments' ? 'bg-[#6366f1] text-white shadow' : `${textSecondary} hover:bg-[#6366f1]/10`
+                    }`}
+                  >
+                    Sub Departments
+                  </button>
+                )}
               </div>
 
-              {modalTab === 'categories' ? (
+              {modalTab === 'subdepartments' ? (
+                <>
+                  <p className={`text-xs ${textSecondary}`}>
+                    Add sub departments under Management — e.g. HR Management, Client Management, Operations Management.
+                  </p>
+
+                  {/* Existing sub departments */}
+                  <div className="space-y-2">
+                    {(editingDept.sub_departments || []).length === 0 ? (
+                      <p className={`text-sm ${textSecondary}`}>No sub departments yet.</p>
+                    ) : (
+                      (editingDept.sub_departments || []).map(sd => {
+                        const isEditing = editingSubDept?.id === sd.id;
+                        return (
+                          <div
+                            key={sd.id}
+                            className={`flex items-center justify-between p-2 rounded-lg ${bgSecondary} gap-2`}
+                            data-testid={`dept-subdept-row-${sd.id}`}
+                          >
+                            {isEditing ? (
+                              <>
+                                <Input
+                                  autoFocus
+                                  value={editingSubDept.value}
+                                  onChange={(e) => setEditingSubDept(prev => ({ ...prev, value: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); commitEditSubDept(); }
+                                    if (e.key === 'Escape') { e.preventDefault(); setEditingSubDept(null); }
+                                  }}
+                                  className="h-8 flex-1"
+                                  data-testid={`dept-subdept-edit-input-${sd.id}`}
+                                />
+                                <button onClick={commitEditSubDept} disabled={subDeptSaving} className="text-[#10b981] p-1" title="Save" data-testid="dept-subdept-edit-confirm">
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => setEditingSubDept(null)} className={`${textSecondary} p-1`} title="Cancel">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className={`text-sm ${textPrimary} flex items-center gap-2 flex-1 min-w-0`}>
+                                  <Layers className="h-3 w-3 text-[#6366f1]" />
+                                  <span className="truncate">{sd.label}</span>
+                                </span>
+                                <button
+                                  onClick={() => startEditSubDept(sd)}
+                                  className="text-[#6366f1] p-1"
+                                  title="Edit"
+                                  data-testid={`dept-subdept-edit-${sd.id}`}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button onClick={() => deleteSubDepartment(sd)} className="text-[#ef4444] p-1" title="Delete" data-testid={`dept-subdept-delete-${sd.id}`}>
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Add new sub department */}
+                  <div className="flex gap-2">
+                    <Input
+                      value={subDeptDraft}
+                      onChange={(e) => setSubDeptDraft(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubDepartment(); } }}
+                      placeholder="e.g. HR Management"
+                      className="flex-1"
+                      data-testid="dept-subdept-input"
+                    />
+                    <Button onClick={addSubDepartment} disabled={subDeptSaving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="dept-subdept-add">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </>
+              ) : modalTab === 'categories' ? (
                 <>
                   <p className={`text-xs ${textSecondary}`}>
                     Add categories like Wireframe, UI, Content, Development, Testing.

@@ -82,6 +82,7 @@ async def list_department_categories(request: Request):
             "dept_key": d["key"],
             "label": (doc.get("label") if doc else None) or d["label"],
             "categories": (doc.get("categories") if doc else []) or [],
+            "sub_departments": (doc.get("sub_departments") if doc else []) or [],
             "is_builtin": True,
         })
     for doc in await _custom_dept_docs(db):
@@ -89,6 +90,7 @@ async def list_department_categories(request: Request):
             "dept_key": doc["dept_key"],
             "label": doc.get("label") or doc["dept_key"],
             "categories": doc.get("categories") or [],
+            "sub_departments": doc.get("sub_departments") or [],
             "is_builtin": False,
         })
     return result
@@ -257,3 +259,65 @@ async def delete_department(dept_key: str, request: Request):
         }},
     )
     return {"message": "Department removed"}
+
+
+# ---------- Sub departments (nested under a department) ----------
+# Simple named entries with their own Add/Rename/Delete, distinct from
+# categories/statuses (which are plain string lists) — each has a stable
+# `id` so it can be individually renamed/removed regardless of label
+# collisions. Available generically here; the frontend currently only
+# surfaces this for the "Management" department.
+
+class SubDepartmentCreate(BaseModel):
+    label: str
+
+
+class SubDepartmentRename(BaseModel):
+    label: str
+
+
+@dept_categories_router.post("/{dept_key}/sub-departments")
+async def add_sub_department(dept_key: str, payload: SubDepartmentCreate, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    if not await _dept_key_exists(db, dept_key):
+        raise HTTPException(status_code=404, detail="Department not found")
+    label = (payload.label or "").strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="Sub department name is required")
+
+    sub_id = f"subdept_{uuid.uuid4().hex[:10]}"
+    await db.department_categories.update_one(
+        {"dept_key": dept_key},
+        {"$push": {"sub_departments": {"id": sub_id, "label": label}}},
+        upsert=True,
+    )
+    return {"id": sub_id, "label": label}
+
+
+@dept_categories_router.put("/{dept_key}/sub-departments/{sub_id}")
+async def rename_sub_department(dept_key: str, sub_id: str, payload: SubDepartmentRename, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    label = (payload.label or "").strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="Sub department name is required")
+
+    res = await db.department_categories.update_one(
+        {"dept_key": dept_key, "sub_departments.id": sub_id},
+        {"$set": {"sub_departments.$.label": label}},
+    )
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Sub department not found")
+    return {"id": sub_id, "label": label}
+
+
+@dept_categories_router.delete("/{dept_key}/sub-departments/{sub_id}")
+async def delete_sub_department(dept_key: str, sub_id: str, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    await db.department_categories.update_one(
+        {"dept_key": dept_key},
+        {"$pull": {"sub_departments": {"id": sub_id}}},
+    )
+    return {"message": "Sub department removed"}
