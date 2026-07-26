@@ -21,6 +21,12 @@ export default function DepartmentsPanel({
   const [statusDraft, setStatusDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Add / rename department
+  const [addingDept, setAddingDept] = useState(false);
+  const [newDeptLabel, setNewDeptLabel] = useState('');
+  const [renamingDept, setRenamingDept] = useState(null); // { dept_key, label }
+  const [deptActionSaving, setDeptActionSaving] = useState(false);
+
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -41,7 +47,54 @@ export default function DepartmentsPanel({
   useEffect(() => { load(); }, [load]);
 
   // Background polling + focus refresh — pauses while editing a department
-  useAutoRefresh(load, { enabled: !editingDept });
+  useAutoRefresh(load, { enabled: !editingDept && !addingDept && !renamingDept });
+
+  const openAddDept = () => { setAddingDept(true); setNewDeptLabel(''); };
+  const closeAddDept = () => { setAddingDept(false); setNewDeptLabel(''); };
+  const confirmAddDept = async () => {
+    const label = newDeptLabel.trim();
+    if (!label) { toast.error('Department name is required'); return; }
+    setDeptActionSaving(true);
+    try {
+      await axios.post(`${API}/api/department-categories`, { label }, { headers });
+      toast.success('Department added');
+      closeAddDept();
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to add department');
+    } finally {
+      setDeptActionSaving(false);
+    }
+  };
+
+  const openRenameDept = (dept) => setRenamingDept({ dept_key: dept.dept_key, label: dept.label });
+  const closeRenameDept = () => setRenamingDept(null);
+  const confirmRenameDept = async () => {
+    const label = (renamingDept?.label || '').trim();
+    if (!label) { toast.error('Department name is required'); return; }
+    setDeptActionSaving(true);
+    try {
+      await axios.put(`${API}/api/department-categories/${renamingDept.dept_key}/label`, { label }, { headers });
+      toast.success('Department renamed');
+      closeRenameDept();
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to rename department');
+    } finally {
+      setDeptActionSaving(false);
+    }
+  };
+
+  const deleteDept = async (dept) => {
+    if (!window.confirm(`Delete the "${dept.label}" department? Its categories and statuses will be removed.`)) return;
+    try {
+      await axios.delete(`${API}/api/department-categories/${dept.dept_key}`, { headers });
+      toast.success('Department removed');
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to delete department');
+    }
+  };
 
   const openEdit = (dept) => {
     setEditingDept({ ...dept, categories: [...(dept.categories || [])], statuses: [...(dept.statuses || [])] });
@@ -150,9 +203,14 @@ export default function DepartmentsPanel({
 
   return (
     <div className="space-y-4" data-testid="departments-panel">
-      <div>
-        <h2 className={`text-xl font-semibold ${textPrimary}`}>Departments &amp; Categories</h2>
-        <p className={textSecondary}>Define categories and project statuses per department. Categories appear when creating tasks; statuses appear on the project's Status dropdown.</p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className={`text-xl font-semibold ${textPrimary}`}>Departments &amp; Categories</h2>
+          <p className={textSecondary}>Define categories and project statuses per department. Categories appear when creating tasks; statuses appear on the project's Status dropdown.</p>
+        </div>
+        <Button onClick={openAddDept} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white gap-2 shrink-0" data-testid="dept-add-btn">
+          <Plus className="h-4 w-4" /> Add Department
+        </Button>
       </div>
 
       {loading ? (
@@ -168,15 +226,37 @@ export default function DepartmentsPanel({
             >
               <CardContent className="p-5">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-9 w-9 rounded-lg bg-[#6366f1]/20 flex items-center justify-center">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="h-9 w-9 rounded-lg bg-[#6366f1]/20 flex items-center justify-center shrink-0">
                       <Building2 className="h-5 w-5 text-[#6366f1]" />
                     </div>
-                    <h3 className={`font-semibold ${textPrimary}`}>{dept.label}</h3>
+                    <h3 className={`font-semibold ${textPrimary} truncate`}>{dept.label}</h3>
                   </div>
-                  <Badge className="bg-[#6366f1]/20 text-[#6366f1]">
-                    {(dept.categories || []).length}
-                  </Badge>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openRenameDept(dept); }}
+                      className="text-[#6366f1] p-1"
+                      title="Rename department"
+                      data-testid={`dept-rename-${dept.dept_key}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    {!dept.is_builtin && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); deleteDept(dept); }}
+                        className="text-[#ef4444] p-1"
+                        title="Delete department"
+                        data-testid={`dept-delete-${dept.dept_key}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-1">
+                      {(dept.categories || []).length}
+                    </Badge>
+                  </div>
                 </div>
                 {(dept.categories || []).length === 0 ? (
                   <p className={`text-xs ${textSecondary}`}>No categories yet — click to add.</p>
@@ -399,6 +479,71 @@ export default function DepartmentsPanel({
                 <Button variant="ghost" onClick={() => setEditingDept(null)} disabled={saving}>Cancel</Button>
                 <Button onClick={save} disabled={saving} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="dept-cat-save">
                   <Check className="h-3 w-3 mr-1" /> {saving ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Add Department popup */}
+      {addingDept && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !deptActionSaving && closeAddDept()}>
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-sm mx-4`} onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-[#6366f1]" />
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>Add Department</h3>
+                </div>
+                <button onClick={closeAddDept} className={textSecondary}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <Input
+                autoFocus
+                value={newDeptLabel}
+                onChange={(e) => setNewDeptLabel(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmAddDept(); } }}
+                placeholder="e.g. Management"
+                data-testid="dept-add-input"
+              />
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" onClick={closeAddDept} disabled={deptActionSaving}>Cancel</Button>
+                <Button onClick={confirmAddDept} disabled={deptActionSaving} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="dept-add-confirm">
+                  <Check className="h-3 w-3 mr-1" /> {deptActionSaving ? 'Adding…' : 'Add'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Rename Department popup */}
+      {renamingDept && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => !deptActionSaving && closeRenameDept()}>
+          <Card className={`${bgCard} border ${borderColor} w-full max-w-sm mx-4`} onClick={(e) => e.stopPropagation()}>
+            <CardContent className="p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-[#6366f1]" />
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>Rename Department</h3>
+                </div>
+                <button onClick={closeRenameDept} className={textSecondary}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <Input
+                autoFocus
+                value={renamingDept.label}
+                onChange={(e) => setRenamingDept(prev => ({ ...prev, label: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRenameDept(); } }}
+                data-testid="dept-rename-input"
+              />
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="ghost" onClick={closeRenameDept} disabled={deptActionSaving}>Cancel</Button>
+                <Button onClick={confirmRenameDept} disabled={deptActionSaving} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="dept-rename-confirm">
+                  <Check className="h-3 w-3 mr-1" /> {deptActionSaving ? 'Saving…' : 'Save'}
                 </Button>
               </div>
             </CardContent>
