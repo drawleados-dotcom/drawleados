@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, ListChecks, AlertCircle, ShieldCheck, Crown, Calendar } from 'lucide-react';
+import { Clock, ListChecks, AlertCircle, ShieldCheck, CheckCircle2, Crown, Calendar } from 'lucide-react';
 
 /**
  * OperationsSummaryCards
@@ -8,6 +8,7 @@ import { Clock, ListChecks, AlertCircle, ShieldCheck, Crown, Calendar } from 'lu
  */
 export default function OperationsSummaryCards({
   summary = {},
+  isSuperAdmin = false,
   summaryDate,
   onDateChange,
   activeFilter,
@@ -49,16 +50,27 @@ export default function OperationsSummaryCards({
       ring: 'from-amber-500/30 to-amber-500/0',
       text: 'text-amber-500',
     },
-    {
-      key: 'ops',
-      testid: 'summary-awaiting-ops',
-      label: 'Awaiting for Ops',
-      sub: 'Operations approval',
-      value: summary?.awaiting_ops ?? 0,
-      icon: ShieldCheck,
-      ring: 'from-blue-500/30 to-blue-500/0',
-      text: 'text-blue-500',
-    },
+    isSuperAdmin
+      ? {
+          key: 'completed',
+          testid: 'summary-completed',
+          label: 'Completed',
+          sub: 'marked done',
+          value: summary?.completed ?? 0,
+          icon: CheckCircle2,
+          ring: 'from-blue-500/30 to-blue-500/0',
+          text: 'text-blue-500',
+        }
+      : {
+          key: 'ops',
+          testid: 'summary-awaiting-ops',
+          label: 'Awaiting for Ops',
+          sub: 'Operations approval',
+          value: summary?.awaiting_ops ?? 0,
+          icon: ShieldCheck,
+          ring: 'from-blue-500/30 to-blue-500/0',
+          text: 'text-blue-500',
+        },
     {
       key: 'ceo',
       testid: 'summary-awaiting-ceo',

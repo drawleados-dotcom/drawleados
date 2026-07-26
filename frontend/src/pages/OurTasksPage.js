@@ -1505,6 +1505,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       pending: filteredTasks.filter(t => t.status === 'pending').length,
       awaiting_ops: filteredTasks.filter(t => t.approval_request?.status === 'pending_ops' || t.approval_request?.queue === 'operations').length,
       awaiting_ceo: filteredTasks.filter(t => t.approval_request?.status === 'pending_ceo' || t.approval_request?.queue === 'ceo').length,
+      completed: filteredTasks.filter(t => t.status === 'completed').length,
     };
   })();
 
@@ -1645,6 +1646,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         {(mainTab === 'assigned_to_me' || mainTab === 'assign_to_team') && (
         <OperationsSummaryCards
           summary={filterScopedSummary}
+          isSuperAdmin={(user?.role || '').toLowerCase() === 'super_admin'}
           summaryDate={summaryDate}
           onDateChange={(d) => {
             // Keep the legacy summary date in sync AND push the same date into
