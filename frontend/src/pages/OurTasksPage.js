@@ -30,7 +30,15 @@ const API = process.env.REACT_APP_BACKEND_URL;
 const priorityColors = {
   high: 'bg-[#ef4444]/20 text-[#ef4444] border-[#ef4444]',
   medium: 'bg-[#f59e0b]/20 text-[#f59e0b] border-[#f59e0b]',
-  low: 'bg-[#71717a]/20 text-[#71717a] border-[#71717a]'
+  low: 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]'
+};
+
+// Solid dot color per priority — red/yellow/green — shown next to the task
+// name in the list so priority is visible without opening the task.
+const priorityDotColors = {
+  high: '#ef4444',
+  medium: '#f59e0b',
+  low: '#10b981'
 };
 
 const statusColors = {
@@ -105,7 +113,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     department: 'all', // all or dept_key
     subDepartment: 'all', // all or sub_department id (only meaningful once a specific department is selected)
     project: 'all', // all or project_id
-    category: 'all' // all or category name (depends on selected department)
+    category: 'all', // all or category name (depends on selected department)
+    priority: 'all' // all, high, medium, low
   });
   
   const token = localStorage.getItem('session_token');
@@ -1299,6 +1308,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // Status filter (from advanced filters)
     if (filters.status !== 'all' && task.status !== filters.status) return false;
 
+    // Priority filter
+    if (filters.priority !== 'all' && (task.priority || 'medium') !== filters.priority) return false;
+
     return true;
   }, [mainTab, filter, filters, user, myDesignation, isHiddenProjectTaskForAssignee]);
 
@@ -1323,63 +1335,81 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // `_group_size` for the UI badge. Outside the assign_to_team tab we render
   // the raw list (My Tasks must still show only the user's own row).
   const MEETING_FAMILY_FE = new Set(['meeting', 'team_meeting', 'client_meeting']);
+  // Priority rank for sorting — urgent (high) first, then medium, then low.
+  const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
   const displayTasks = (() => {
-    if (mainTab !== 'assign_to_team') return filteredTasks;
-    const groups = new Map();
-    const out = [];
-    for (const t of filteredTasks) {
-      const type = (t.type || '').toLowerCase();
-      if (!MEETING_FAMILY_FE.has(type)) {
-        out.push(t);
-        continue;
-      }
-      // Group key: stored meeting_group_id if set, else heuristic.
-      const key = t.meeting_group_id
-        || `mtg::${t.task_name || ''}::${t.due_date || ''}::${t.due_time || ''}::${t.created_by || ''}`;
-      if (!groups.has(key)) {
-        const member = {
-          task_id: t.task_id,
-          assigned_to: t.assigned_to,
-          assigned_to_name: t.assigned_to_name || '—',
-          status: t.status || 'pending',
-        };
-        const lead = { ...t, _group_members: [member], _group_size: 1, _group_key: key };
-        groups.set(key, lead);
-        out.push(lead);
-      } else {
-        const lead = groups.get(key);
-        lead._group_members.push({
-          task_id: t.task_id,
-          assigned_to: t.assigned_to,
-          assigned_to_name: t.assigned_to_name || '—',
-          status: t.status || 'pending',
-        });
-        lead._group_size = lead._group_members.length;
+    let out;
+    if (mainTab !== 'assign_to_team') {
+      out = filteredTasks;
+    } else {
+      const groups = new Map();
+      out = [];
+      for (const t of filteredTasks) {
+        const type = (t.type || '').toLowerCase();
+        if (!MEETING_FAMILY_FE.has(type)) {
+          out.push(t);
+          continue;
+        }
+        // Group key: stored meeting_group_id if set, else heuristic.
+        const key = t.meeting_group_id
+          || `mtg::${t.task_name || ''}::${t.due_date || ''}::${t.due_time || ''}::${t.created_by || ''}`;
+        if (!groups.has(key)) {
+          const member = {
+            task_id: t.task_id,
+            assigned_to: t.assigned_to,
+            assigned_to_name: t.assigned_to_name || '—',
+            status: t.status || 'pending',
+          };
+          const lead = { ...t, _group_members: [member], _group_size: 1, _group_key: key };
+          groups.set(key, lead);
+          out.push(lead);
+        } else {
+          const lead = groups.get(key);
+          lead._group_members.push({
+            task_id: t.task_id,
+            assigned_to: t.assigned_to,
+            assigned_to_name: t.assigned_to_name || '—',
+            status: t.status || 'pending',
+          });
+          lead._group_size = lead._group_members.length;
+        }
       }
     }
-    // Sort by start_time if requested. Tasks without a start_time fall to the
-    // end of the list (kept in their original order via stable index tie-break).
-    if (sortMode !== 'none') {
-      const toMin = (t) => {
-        const s = (t.start_time || '').trim();
-        if (!s) return Number.POSITIVE_INFINITY;
-        const m = s.match(/^(\d{1,2}):(\d{2})/);
-        if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
-        // ISO fallback
-        const dt = new Date(s);
-        if (!isNaN(dt.getTime())) return dt.getHours() * 60 + dt.getMinutes();
-        return Number.POSITIVE_INFINITY;
-      };
-      const sorted = [...out].map((t, i) => ({ t, i }));
-      sorted.sort((a, b) => {
-        const am = toMin(a.t);
-        const bm = toMin(b.t);
-        if (am === bm) return a.i - b.i; // stable
-        return sortMode === 'asc' ? am - bm : bm - am;
-      });
-      return sorted.map((x) => x.t);
-    }
-    return out;
+    // Row order is always: due date (earliest first, no due date last) →
+    // priority (urgent → medium → low) → start time as a final tie-break
+    // (direction follows the Start ↑/↓ toggle; ties beyond that keep
+    // original order for stability).
+    const toMin = (t) => {
+      const s = (t.start_time || '').trim();
+      if (!s) return Number.POSITIVE_INFINITY;
+      const m = s.match(/^(\d{1,2}):(\d{2})/);
+      if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      // ISO fallback
+      const dt = new Date(s);
+      if (!isNaN(dt.getTime())) return dt.getHours() * 60 + dt.getMinutes();
+      return Number.POSITIVE_INFINITY;
+    };
+    const toDueTime = (t) => {
+      const d = (t.due_date || '').trim();
+      if (!d) return Number.POSITIVE_INFINITY;
+      const dt = new Date(d);
+      return isNaN(dt.getTime()) ? Number.POSITIVE_INFINITY : dt.getTime();
+    };
+    const sorted = [...out].map((t, i) => ({ t, i }));
+    sorted.sort((a, b) => {
+      const ad = toDueTime(a.t);
+      const bd = toDueTime(b.t);
+      if (ad !== bd) return ad - bd;
+      const ap = PRIORITY_RANK[a.t.priority] ?? 1;
+      const bp = PRIORITY_RANK[b.t.priority] ?? 1;
+      if (ap !== bp) return ap - bp;
+      if (sortMode === 'none') return a.i - b.i;
+      const am = toMin(a.t);
+      const bm = toMin(b.t);
+      if (am === bm) return a.i - b.i; // stable
+      return sortMode === 'asc' ? am - bm : bm - am;
+    });
+    return sorted.map((x) => x.t);
   })();
 
   // Summary cards derived from the SAME filtered pool that drives the table.
@@ -1413,7 +1443,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       department: 'all',
       subDepartment: 'all',
       project: 'all',
-      category: 'all'
+      category: 'all',
+      priority: 'all'
     });
   };
 
@@ -1820,6 +1851,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               </SelectContent>
             </Select>
 
+            {/* Priority */}
+            <Select value={filters.priority} onValueChange={(v) => setFilters({...filters, priority: v})}>
+              <SelectTrigger className={`h-9 w-[130px] ${bgSecondary} border ${borderColor}`} data-testid="filter-priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">All Priority</SelectItem>
+                <SelectItem value="high">🔴 Urgent</SelectItem>
+                <SelectItem value="medium">🟡 Medium</SelectItem>
+                <SelectItem value="low">🟢 Low</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Button variant="ghost" size="sm" onClick={resetFilters} className="text-xs" data-testid="reset-filters">
               Reset
             </Button>
@@ -2157,7 +2201,15 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       onClick={() => { setViewingTask(task); setShowTaskDetailModal(true); }}
                     >
                       <td className={`px-4 py-3`}>
-                        <div className={`font-medium ${textPrimary}`}>{task.task_name}</div>
+                        <div className={`font-medium ${textPrimary} flex items-center gap-1.5`}>
+                          <span
+                            className="inline-block h-2 w-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: priorityDotColors[task.priority] || priorityDotColors.medium }}
+                            title={`Priority: ${task.priority === 'high' ? 'Urgent' : task.priority === 'low' ? 'Low' : 'Medium'}`}
+                            data-testid={`priority-dot-${task.task_id}`}
+                          />
+                          {task.task_name}
+                        </div>
                         {task.description && (
                           <div className={`text-xs ${textSecondary} truncate max-w-xs`}>{task.description}</div>
                         )}
