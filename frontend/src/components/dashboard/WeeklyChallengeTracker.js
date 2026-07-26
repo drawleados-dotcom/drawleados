@@ -185,8 +185,8 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
               <th className={thCls} rowSpan={2}>Date</th>
               <th className={`${thCls} bg-emerald-500/10`} colSpan={3}>Finance</th>
               <th className={`${thCls} bg-rose-500/10`} colSpan={4}>Sales</th>
-              <th className={`${thCls} bg-sky-500/10`} colSpan={5}>Marketing – Vinoth</th>
-              <th className={`${thCls} bg-violet-500/10`} colSpan={5}>Marketing – Drawlead</th>
+              <th className={`${thCls} bg-sky-500/10`} colSpan={6}>Marketing – Vinoth</th>
+              <th className={`${thCls} bg-violet-500/10`} colSpan={6}>Marketing – Drawlead</th>
             </tr>
             <tr>
               <th className={thCls}>Income</th>
@@ -197,7 +197,9 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
               <th className={thCls}>Appointment</th>
               <th className={thCls}>Sales</th>
               {PLATFORMS.map((p) => <th key={`v-${p.id}`} className={thCls}>{p.label}</th>)}
+              <th className={thCls}>Total Posted</th>
               {PLATFORMS.map((p) => <th key={`d-${p.id}`} className={thCls}>{p.label}</th>)}
+              <th className={thCls}>Total Posted</th>
             </tr>
           </thead>
           <tbody>
@@ -213,7 +215,9 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
                 <td className={tdCls}>{day.sales.appointment}</td>
                 <td className={tdCls}>{day.sales.sales}</td>
                 {PLATFORMS.map((p) => <td key={`v-${p.id}`} className={tdCls}>{day.marketing_vinoth?.[p.id] ?? 0}</td>)}
+                <td className={`${tdCls} font-semibold`} data-testid={`weekly-tracker-vinoth-posted-${day.date}`}>{day.marketing_vinoth_posted_total ?? 0}</td>
                 {PLATFORMS.map((p) => <td key={`d-${p.id}`} className={tdCls}>{day.marketing_drawlead?.[p.id] ?? 0}</td>)}
+                <td className={`${tdCls} font-semibold`} data-testid={`weekly-tracker-drawlead-posted-${day.date}`}>{day.marketing_drawlead_posted_total ?? 0}</td>
               </tr>
             ))}
 
@@ -228,7 +232,9 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
               <td className={tdCls}>{summary.sales?.appointment}</td>
               <td className={tdCls}>{summary.sales?.sales}</td>
               {PLATFORMS.map((p) => <td key={`v-sum-${p.id}`} className={tdCls}>{summary.marketing_vinoth?.[p.id] ?? 0}</td>)}
+              <td className={tdCls}>{summary.marketing_vinoth_posted_total ?? 0}</td>
               {PLATFORMS.map((p) => <td key={`d-sum-${p.id}`} className={tdCls}>{summary.marketing_drawlead?.[p.id] ?? 0}</td>)}
+              <td className={tdCls}>{summary.marketing_drawlead_posted_total ?? 0}</td>
             </tr>
 
             {/* Target row (editable) */}
@@ -267,11 +273,13 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
                       <Input type="number" value={targetDraft.marketing_vinoth?.[p.id] ?? 0} onChange={(e) => setTargetDraft((prev) => ({ ...prev, marketing_vinoth: { ...prev.marketing_vinoth, [p.id]: Number(e.target.value) } }))} className="h-7 text-xs text-center" />
                     </td>
                   ))}
+                  <td className={tdCls}>—</td>
                   {PLATFORMS.map((p) => (
                     <td key={`d-t-${p.id}`} className={tdCls}>
                       <Input type="number" value={targetDraft.marketing_drawlead?.[p.id] ?? 0} onChange={(e) => setTargetDraft((prev) => ({ ...prev, marketing_drawlead: { ...prev.marketing_drawlead, [p.id]: Number(e.target.value) } }))} className="h-7 text-xs text-center" />
                     </td>
                   ))}
+                  <td className={tdCls}>—</td>
                 </>
               ) : (
                 <>
@@ -283,7 +291,9 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
                   <td className={tdCls}>{t.appointment ?? 0}</td>
                   <td className={tdCls}>{t.sales ?? 0}</td>
                   {PLATFORMS.map((p) => <td key={`v-t-${p.id}`} className={tdCls}>{t.marketing_vinoth?.[p.id] ?? 0}</td>)}
+                  <td className={tdCls}>—</td>
                   {PLATFORMS.map((p) => <td key={`d-t-${p.id}`} className={tdCls}>{t.marketing_drawlead?.[p.id] ?? 0}</td>)}
+                  <td className={tdCls}>—</td>
                 </>
               )}
             </tr>

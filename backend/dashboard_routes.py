@@ -134,22 +134,29 @@ async def get_weekly_dashboard(request: Request, date_str: Optional[str] = None,
             sales_by_day[d] = sales_by_day.get(d, 0) + 1
 
     # ---- Marketing: content_calendar on the named Social Media projects ----
+    # Two figures per project: `counts` (every entry for that day, any
+    # status — unchanged, existing per-platform columns) and `posted_totals`
+    # (entries with status == "posted" that day, summed across platforms —
+    # so a post published to 2 platforms the same day counts as 2).
     async def _platform_counts_for(name_pattern):
         proj = await db.projects.find_one(
             {"departments": "social_media", "name": {"$regex": name_pattern, "$options": "i"}},
             {"_id": 0, "content_calendar": 1},
         )
         counts = {}
+        posted_totals = {}
         for post in (proj or {}).get("content_calendar", []) or []:
             d = _day_key(post.get("post_date"))
             if d and start_iso <= d <= end_iso:
                 counts.setdefault(d, {})
                 platform = post.get("platform")
                 counts[d][platform] = counts[d].get(platform, 0) + 1
-        return counts
+                if (post.get("status") or "").lower() == "posted":
+                    posted_totals[d] = posted_totals.get(d, 0) + 1
+        return counts, posted_totals
 
-    vinoth_counts = await _platform_counts_for("vinoth")
-    drawlead_counts = await _platform_counts_for("drawlead")
+    vinoth_counts, vinoth_posted_totals = await _platform_counts_for("vinoth")
+    drawlead_counts, drawlead_posted_totals = await _platform_counts_for("drawlead")
 
     days = []
     cursor_balance = running_balance
@@ -175,7 +182,9 @@ async def get_weekly_dashboard(request: Request, date_str: Optional[str] = None,
                 "sales": sales_by_day.get(d_iso, 0),
             },
             "marketing_vinoth": {p: vinoth_counts.get(d_iso, {}).get(p, 0) for p in PLATFORMS},
+            "marketing_vinoth_posted_total": vinoth_posted_totals.get(d_iso, 0),
             "marketing_drawlead": {p: drawlead_counts.get(d_iso, {}).get(p, 0) for p in PLATFORMS},
+            "marketing_drawlead_posted_total": drawlead_posted_totals.get(d_iso, 0),
         })
 
     def _sum(section, key):
@@ -185,7 +194,9 @@ async def get_weekly_dashboard(request: Request, date_str: Optional[str] = None,
         "finance": {"income": _sum("finance", "income"), "expense": _sum("finance", "expense")},
         "sales": {k: _sum("sales", k) for k in ["inbound_lead", "outbound_prospect", "appointment", "sales"]},
         "marketing_vinoth": {p: _sum("marketing_vinoth", p) for p in PLATFORMS},
+        "marketing_vinoth_posted_total": sum(day["marketing_vinoth_posted_total"] for day in days),
         "marketing_drawlead": {p: _sum("marketing_drawlead", p) for p in PLATFORMS},
+        "marketing_drawlead_posted_total": sum(day["marketing_drawlead_posted_total"] for day in days),
     }
 
     return {
