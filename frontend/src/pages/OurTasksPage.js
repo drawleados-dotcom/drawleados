@@ -1375,10 +1375,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         }
       }
     }
-    // Row order is always: due date (earliest first, no due date last) →
-    // priority (urgent → medium → low) → start time as a final tie-break
-    // (direction follows the Start ↑/↓ toggle; ties beyond that keep
-    // original order for stability).
+    // Row order is always: incomplete tasks before completed ones → due date
+    // (earliest first, no due date last) → priority (urgent → medium → low)
+    // → start time as a final tie-break (direction follows the Start ↑/↓
+    // toggle; ties beyond that keep original order for stability).
+    const isDone = (t) => (t.status === 'completed' ? 1 : 0);
     const toMin = (t) => {
       const s = (t.start_time || '').trim();
       if (!s) return Number.POSITIVE_INFINITY;
@@ -1397,6 +1398,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     };
     const sorted = [...out].map((t, i) => ({ t, i }));
     sorted.sort((a, b) => {
+      const adone = isDone(a.t);
+      const bdone = isDone(b.t);
+      if (adone !== bdone) return adone - bdone;
       const ad = toDueTime(a.t);
       const bd = toDueTime(b.t);
       if (ad !== bd) return ad - bd;
@@ -1899,10 +1903,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             ? [...assignedToMeTasks, ...myOwnTasks]
             : assignedToTeamTasks;
           const pendingByDept = {};
-          let totalPending = 0;
           sourceTasks.forEach(t => {
             if ((t.status || 'pending') !== 'pending') return;
-            totalPending += 1;
             const d = t.department || '_unassigned';
             pendingByDept[d] = (pendingByDept[d] || 0) + 1;
           });
@@ -1920,22 +1922,6 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
           return (
             <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
-              <button
-                onClick={() => { setOpGroupActive(false); setMeetingsSubActive(false); setFilters({...filters, department: 'all', subDepartment: 'all', project: 'all', category: 'all'}); }}
-                data-testid="dept-subtab-all"
-                className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
-                  filters.department === 'all' && !meetingsSubActive && !opGroupActive
-                    ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
-                    : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
-                }`}
-              >
-                All Depts
-                {totalPending > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a] dark:ring-[#0a0a0a]">
-                    {totalPending}
-                  </span>
-                )}
-              </button>
               {useOpGrouping ? (
                 <>
                   <button
