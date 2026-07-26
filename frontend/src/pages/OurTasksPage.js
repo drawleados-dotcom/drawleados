@@ -293,10 +293,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   }, [user?.designation, isHeadOfOperations]);
 
   // Filter dept categories visible to the current user based on their designation's
-  // operations_departments. If the designation explicitly defines operations_departments,
-  // we always honor that list (even for Operation Head). Super Admin / Admin without
-  // a designation config see ALL departments.
+  // operations_departments. Super Admin / Admin always see ALL departments (including
+  // newly-added custom ones like "Management") — a designation-level allow-list only
+  // restricts non-admin staff, and never overrides the admin roles' full access even
+  // when that designation config predates a newly created department.
   const visibleDeptCategories = useMemo(() => {
+    const role = (user?.role || '').toLowerCase();
+    if (role === 'super_admin' || role === 'admin') return deptCategoriesForTask;
     // Normalize aliases between designation config and dept_key (e.g., meta_ads ↔ meta)
     const aliasMap = { meta_ads: 'meta', meta: 'meta_ads' };
     const normalize = (s) => String(s || '').toLowerCase().trim();
@@ -309,9 +312,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (allowed.size > 0) {
       return deptCategoriesForTask.filter(d => allowed.has(normalize(d.dept_key)));
     }
-    // No designation-level restriction → fall back to role check
-    const role = (user?.role || '').toLowerCase();
-    if (role === 'super_admin' || role === 'admin') return deptCategoriesForTask;
+    // No designation-level restriction → everyone sees all departments
     return deptCategoriesForTask;
   }, [deptCategoriesForTask, myDesignation, user?.role]);
 
@@ -403,10 +404,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Please pick a Type for this task');
       return;
     }
-    // Category is mandatory once a department is picked, so every task is
-    // traceable to a specific work category (it now auto-defaults, but a
-    // department with no categories configured could still leave it blank).
-    if (formData.department && formData.department !== 'all' && !formData.category) {
+    // Category is mandatory once a department is picked — but only when that
+    // department actually has categories configured (e.g. Management has
+    // none, so it shouldn't be blocked on an empty dropdown).
+    if (
+      formData.department && formData.department !== 'all' && !formData.category &&
+      (deptCategoriesForTask.find(d => d.dept_key === formData.department)?.categories || []).length > 0
+    ) {
       toast.error('Please select a Category');
       return;
     }
@@ -469,7 +473,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Please pick a Type for this task');
       return;
     }
-    if (formData.department && formData.department !== 'all' && !formData.category) {
+    if (
+      formData.department && formData.department !== 'all' && !formData.category &&
+      (deptCategoriesForTask.find(d => d.dept_key === formData.department)?.categories || []).length > 0
+    ) {
       toast.error('Please select a Category');
       return;
     }
@@ -2220,6 +2227,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               </>
                             );
                           })()}
+                          {mainTab === 'assigned_to_me' && task.status !== 'completed' && task.approval_request?.status !== 'approved' && (
+                            <Button
+                              size="sm"
+                              className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
+                              onClick={(e) => { e.stopPropagation(); handleStatusChange(task.task_id, 'completed'); }}
+                              data-testid={`complete-btn-${task.task_id}`}
+                              title="Mark this task complete yourself"
+                            >
+                              <Check className="h-3 w-3 mr-1" /> Complete
+                            </Button>
+                          )}
                           {mainTab === 'assigned_to_me' && (
                             <Button
                               size="sm"
