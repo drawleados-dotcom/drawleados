@@ -396,6 +396,9 @@ export default function BNIPage() {
             <span className={textSecondary}>—</span>
           )}
         </td>
+        <td className={`px-4 py-3 ${textSecondary}`}>{m.phone || '—'}</td>
+        <td className={`px-4 py-3 ${textSecondary}`}>{m.email || '—'}</td>
+        <td className={`px-4 py-3 ${textSecondary}`}>{m.city || '—'}</td>
         <td className="px-4 py-3">
           {m.role_player_name ? (
             <Badge className={`${roleColor.bg} ${roleColor.text} border ${roleColor.border} font-semibold`}>
@@ -405,9 +408,6 @@ export default function BNIPage() {
             <span className={textSecondary}>—</span>
           )}
         </td>
-        <td className={`px-4 py-3 ${textSecondary}`}>{m.phone || '—'}</td>
-        <td className={`px-4 py-3 ${textSecondary}`}>{m.email || '—'}</td>
-        <td className={`px-4 py-3 ${textSecondary}`}>{m.city || '—'}</td>
         <td className="px-4 py-3">
           <div className="flex gap-1">
             <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => setViewingMember(m)} data-testid={`bni-member-view-${m.member_id}`}>
@@ -533,10 +533,10 @@ export default function BNIPage() {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Business Name</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Role Player</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>City</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Role Player</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                       </tr>
                     </thead>
