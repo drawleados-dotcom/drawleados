@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
@@ -81,6 +81,16 @@ class LeadCreate(BaseModel):
     stage_id: str = ''
     custom_fields: Dict[str, Any] = {}
     pipeline: str = 'pre_sales'  # 'pre_sales' or 'sales'
+
+    # The Basic Details tab can be submitted before Lead Details is ever
+    # touched, leaving the Estimation input at its default empty string —
+    # coerce that (and None) to 0 instead of failing validation.
+    @field_validator('estimation', mode='before')
+    @classmethod
+    def _coerce_estimation(cls, v):
+        if v is None or v == '':
+            return 0
+        return v
 
 class LeadUpdate(BaseModel):
     # Basic Details

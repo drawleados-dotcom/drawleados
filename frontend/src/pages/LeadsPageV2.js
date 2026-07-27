@@ -308,7 +308,7 @@ const LeadsPageV2 = () => {
       return;
     }
     try {
-      const data = { ...leadForm, pipeline };
+      const data = { ...leadForm, pipeline, estimation: Number(leadForm.estimation) || 0 };
       if (!data.stage_id && stages.length > 0) {
         data.stage_id = stages[0].stage_id;
       }
@@ -319,7 +319,7 @@ const LeadsPageV2 = () => {
       loadLeads();
       loadStats();
     } catch (error) {
-      toast.error('Failed to create lead');
+      toast.error(error.response?.data?.detail || 'Failed to create lead');
     }
   };
 
