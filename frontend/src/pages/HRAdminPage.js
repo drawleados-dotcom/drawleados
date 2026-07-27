@@ -6165,6 +6165,7 @@ function DesignationsDeptsTab({
     { value: 'settings', label: 'Settings' },
     { value: 'documentations', label: 'Documentations' },
     { value: 'approvals', label: 'Approvals', hasSubOptions: true },
+    { value: 'bni', label: 'BNI' },
   ];
   
   // Departments available for Approvals module

@@ -485,16 +485,22 @@ const Sidebar = () => {
               <Package className="h-5 w-5" strokeWidth={2} />
               {!isCollapsed && 'Service and Packages'}
             </Link>
-            <Link
-              to="/bni"
-              data-testid="nav-bni"
-              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/bni' ? navItemActive : navItemInactive}`}
-              title={isCollapsed ? 'BNI' : ''}
-            >
-              <Handshake className="h-5 w-5" strokeWidth={2} />
-              {!isCollapsed && 'BNI'}
-            </Link>
           </>
+        )}
+
+        {/* BNI — Super Admin always sees it (mirrors ProtectedRoute/TopNav);
+            also grantable to any designation via Module Access, unlike
+            Client Master / Service and Packages which stay Super-Admin-only. */}
+        {(userRole === 'super_admin' || hasAccess('bni')) && (
+          <Link
+            to="/bni"
+            data-testid="nav-bni"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/bni' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'BNI' : ''}
+          >
+            <Handshake className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'BNI'}
+          </Link>
         )}
 
         {/* 6. Settings */}
