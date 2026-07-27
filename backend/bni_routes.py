@@ -10,6 +10,11 @@ category. Resources:
     to a member and highlighted the same way as Category.
   - Members: contact + business details, tagged to a Category and Role Player.
 
+  - Payment History: read-only view of Finance → Expense → Expense Split
+    spend recorded against a sub-category named "BNI" (e.g. Marketing >
+    BNI) — surfaces cashbook debit entries tagged with that sub-category's
+    id, so BNI dues paid via Finance show up here automatically.
+
 Storage: collections `bni_settings`, `bni_categories`, `bni_role_players`, `bni_members`.
 """
 import uuid
@@ -22,6 +27,7 @@ bni_settings_router = APIRouter(prefix="/bni/settings", tags=["bni"])
 bni_categories_router = APIRouter(prefix="/bni/categories", tags=["bni"])
 bni_role_players_router = APIRouter(prefix="/bni/role-players", tags=["bni"])
 bni_members_router = APIRouter(prefix="/bni/members", tags=["bni"])
+bni_payment_history_router = APIRouter(prefix="/bni/payment-history", tags=["bni"])
 
 SETTINGS_DOC_ID = "default"
 
@@ -282,3 +288,46 @@ async def delete_bni_member(member_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Member not found")
     return {"message": "Member deleted"}
+
+
+# ---------- Payment History (reads Finance → Expense Split spend) ----------
+
+@bni_payment_history_router.get("")
+async def get_bni_payment_history(request: Request, month: Optional[int] = None, year: Optional[int] = None):
+    """Cashbook debit entries tagged with a "BNI" Expense Split sub-category
+    (e.g. Marketing > BNI). No month/year → all-time."""
+    from server import get_current_user, db
+    await get_current_user(request)
+
+    bni_cats = await db.expense_split_categories.find(
+        {
+            "name": {"$regex": "^bni$", "$options": "i"},
+            "parent_id": {"$ne": None},
+            "is_deleted": {"$ne": True},
+        },
+        {"_id": 0, "category_id": 1},
+    ).to_list(50)
+    cat_ids = [c["category_id"] for c in bni_cats]
+
+    query = {"kind": "debit", "split_category_id": {"$in": cat_ids}}
+    if month and year:
+        start = f"{year:04d}-{month:02d}-01"
+        end = f"{year + 1:04d}-01-01" if month == 12 else f"{year:04d}-{month + 1:02d}-01"
+        query["date"] = {"$gte": start, "$lt": end}
+    elif year:
+        query["date"] = {"$gte": f"{year:04d}-01-01", "$lt": f"{year + 1:04d}-01-01"}
+
+    entries = await db.cashbook_entries.find(query, {"_id": 0}).sort("date", -1).to_list(2000)
+    for e in entries:
+        if isinstance(e.get("created_at"), datetime):
+            e["created_at"] = e["created_at"].isoformat()
+
+    total = sum(float(e.get("amount") or 0) for e in entries)
+    return {
+        "entries": entries,
+        "summary": {
+            "total_amount": round(total, 2),
+            "count": len(entries),
+        },
+        "has_bni_category": len(cat_ids) > 0,
+    }

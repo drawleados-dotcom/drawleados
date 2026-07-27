@@ -44,6 +44,13 @@ const ROLE_PLAYER_IMPORT_FIELDS = [
   { key: 'description', label: 'Description', synonyms: ['description', 'desc'] },
 ];
 
+const MONTHS = [
+  { v: 1, l: 'January' }, { v: 2, l: 'February' }, { v: 3, l: 'March' },
+  { v: 4, l: 'April' }, { v: 5, l: 'May' }, { v: 6, l: 'June' },
+  { v: 7, l: 'July' }, { v: 8, l: 'August' }, { v: 9, l: 'September' },
+  { v: 10, l: 'October' }, { v: 11, l: 'November' }, { v: 12, l: 'December' },
+];
+
 const TABS = [
   { key: 'members', label: 'Members', icon: Users },
   { key: 'weekly_meeting', label: 'Weekly Meeting', icon: Calendar },
@@ -127,6 +134,13 @@ export default function BNIPage() {
   const [memberSearch, setMemberSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
 
+  const today = new Date();
+  const [phMonth, setPhMonth] = useState(today.getMonth() + 1);
+  const [phYear, setPhYear] = useState(today.getFullYear());
+  const [phAllTime, setPhAllTime] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState({ entries: [], summary: { total_amount: 0, count: 0 }, has_bni_category: true });
+  const [phLoading, setPhLoading] = useState(false);
+
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
@@ -160,6 +174,25 @@ export default function BNIPage() {
   }, [user?.designation]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Payment History — reads Finance → Expense → Expense Split spend tagged
+  // to a "BNI" sub-category, so dues paid there show up here automatically.
+  const loadPaymentHistory = useCallback(async () => {
+    setPhLoading(true);
+    try {
+      const params = phAllTime ? {} : { month: phMonth, year: phYear };
+      const res = await api.get('/bni/payment-history', { params });
+      setPaymentHistory(res.data || { entries: [], summary: { total_amount: 0, count: 0 }, has_bni_category: true });
+    } catch (error) {
+      toast.error('Failed to load payment history');
+    } finally {
+      setPhLoading(false);
+    }
+  }, [phAllTime, phMonth, phYear]);
+
+  useEffect(() => {
+    if (activeTab === 'payment_history') loadPaymentHistory();
+  }, [activeTab, loadPaymentHistory]);
 
   // Access control: Super Admin / Admin always get full access to every
   // tab. Everyone else is scoped by their designation's bni_tabs (empty =
@@ -720,7 +753,104 @@ export default function BNIPage() {
               </div>
             )}
 
-            {!['members', 'category', 'role_players'].includes(activeTab) && (() => {
+            {activeTab === 'payment_history' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={phAllTime ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setPhAllTime(true)}
+                    className={phAllTime ? 'bg-[#6366f1] hover:bg-[#4f46e5] text-white' : ''}
+                    data-testid="bni-ph-all-time"
+                  >
+                    All Time
+                  </Button>
+                  <Select value={String(phMonth)} onValueChange={(v) => { setPhMonth(parseInt(v, 10)); setPhAllTime(false); }}>
+                    <SelectTrigger className={`w-[140px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-ph-month">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map((m) => (
+                        <SelectItem key={m.v} value={String(m.v)}>{m.l}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={String(phYear)} onValueChange={(v) => { setPhYear(parseInt(v, 10)); setPhAllTime(false); }}>
+                    <SelectTrigger className={`w-[100px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-ph-year">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[...Array(6)].map((_, i) => {
+                        const y = today.getFullYear() - 3 + i;
+                        return <SelectItem key={y} value={String(y)}>{y}</SelectItem>;
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
+                    <p className={`text-xs ${textSecondary}`}>
+                      Total Paid{phAllTime ? ' (All Time)' : ` — ${MONTHS[phMonth - 1].l} ${phYear}`}
+                    </p>
+                    <p className="text-2xl font-bold text-[#10b981]" data-testid="bni-ph-total">
+                      ₹{Number(paymentHistory.summary?.total_amount || 0).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
+                    <p className={`text-xs ${textSecondary}`}>Payments</p>
+                    <p className={`text-2xl font-bold ${textPrimary}`} data-testid="bni-ph-count">
+                      {paymentHistory.summary?.count || 0}
+                    </p>
+                  </div>
+                </div>
+
+                {!paymentHistory.has_bni_category && (
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-4 text-sm ${textSecondary}`}>
+                    No "BNI" sub-category found under Finance → Expense → Expense Split yet. Add one (e.g. under Marketing) and record an expense against it to see payments here.
+                  </div>
+                )}
+
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className={bgSecondary}>
+                        <tr>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Date</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Paid To</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Amount</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Payment Mode</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${borderColor}`}>
+                        {phLoading ? (
+                          <tr><td colSpan={5} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                        ) : paymentHistory.entries.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className={`px-4 py-8 text-center ${textSecondary}`}>
+                              No BNI payments recorded{phAllTime ? '' : ' for this period'}.
+                            </td>
+                          </tr>
+                        ) : (
+                          paymentHistory.entries.map((e) => (
+                            <tr key={e.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{e.date || '—'}</td>
+                              <td className={`px-4 py-3 ${textPrimary}`}>{e.to || '—'}</td>
+                              <td className={`px-4 py-3 ${textPrimary} font-medium`}>₹{Number(e.amount || 0).toLocaleString('en-IN')}</td>
+                              <td className={`px-4 py-3 ${textSecondary} capitalize`}>{e.bank_label || e.payment_mode || '—'}</td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{e.notes || '—'}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!['members', 'category', 'role_players', 'payment_history'].includes(activeTab) && (() => {
               const tab = TABS.find((t) => t.key === activeTab);
               const Icon = tab?.icon || Star;
               return (
