@@ -158,6 +158,38 @@ const ExpenseSplitTab = () => {
     }
   };
 
+  // Renders one sub-category row plus (recursively) its own children, so
+  // any sub-category — e.g. "BNI" under Marketing — can itself have subs
+  // like "Visitor Fee" / "Membership Fee". Each depth level indents further.
+  const renderSubCategory = (sub, depth) => (
+    <div key={sub.category_id}>
+      <div className="flex items-center gap-3 px-4 py-3" style={{ paddingLeft: `${16 + depth * 20}px` }} data-testid={`split-sub-${sub.category_id}`}>
+        <span className="w-2 h-2 rounded-full flex-shrink-0 opacity-70" style={{ backgroundColor: sub.color }} />
+        {editing === sub.category_id ? (
+          <div className="flex-1 flex items-center gap-2">
+            <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              className="h-7 bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-xs" />
+            <Button size="sm" onClick={() => saveEdit(sub)} className="bg-emerald-600 hover:bg-emerald-700 h-6 px-2"><Check className="h-3 w-3" /></Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-6 px-2 text-gray-600 dark:text-[#a1a1aa]"><X className="h-3 w-3" /></Button>
+          </div>
+        ) : (
+          <span className="flex-1 text-sm text-gray-900 dark:text-[#fafafa]">{sub.name}</span>
+        )}
+        <Stat l="Spent" v={fmt(sub.spent)} compact red={sub.over_budget} />
+        <div className="flex items-center gap-1 ml-2">
+          <Button size="sm" variant="ghost" onClick={() => openAdd(sub)} className="text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa] h-6 px-2" title="Add Sub Category" data-testid={`split-add-sub-${sub.category_id}`}>
+            <Plus className="h-3 w-3" />
+          </Button>
+          {editing !== sub.category_id && (
+            <Button size="sm" variant="ghost" onClick={() => startEdit(sub)} className="text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa] h-6 w-6 p-0"><Edit2 className="h-3 w-3" /></Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => remove(sub)} className="text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button>
+        </div>
+      </div>
+      {(sub.sub_categories || []).map((child) => renderSubCategory(child, depth + 1))}
+    </div>
+  );
+
   const overAllocated = totalPct > 100;
   const totalAllocatedAmount = categories.reduce((s, c) => s + (c.allocated || 0), 0);
   const totalSpent = categories.reduce((s, c) => s + (c.spent || 0), 0);
@@ -362,7 +394,7 @@ const ExpenseSplitTab = () => {
                     </div>
                   </div>
 
-                  {/* Sub-categories — flat list */}
+                  {/* Sub-categories — recursive, any depth (e.g. Marketing > BNI > Visitor Fee) */}
                   <div>
                     {(activeTop.sub_categories || []).length === 0 ? (
                       <div className="px-4 py-8 text-center text-xs text-gray-500 dark:text-[#71717a]">
@@ -370,28 +402,7 @@ const ExpenseSplitTab = () => {
                       </div>
                     ) : (
                       <div className="divide-y divide-gray-200 dark:divide-[#27272a]">
-                        {(activeTop.sub_categories || []).map((sub) => (
-                          <div key={sub.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`split-sub-${sub.category_id}`}>
-                            <span className="w-2 h-2 rounded-full flex-shrink-0 opacity-70" style={{ backgroundColor: sub.color }} />
-                            {editing === sub.category_id ? (
-                              <div className="flex-1 flex items-center gap-2">
-                                <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                                  className="h-7 bg-gray-50 dark:bg-[#0c0a09] border-gray-200 dark:border-[#27272a] text-gray-900 dark:text-[#fafafa] text-xs" />
-                                <Button size="sm" onClick={() => saveEdit(sub)} className="bg-emerald-600 hover:bg-emerald-700 h-6 px-2"><Check className="h-3 w-3" /></Button>
-                                <Button size="sm" variant="ghost" onClick={() => setEditing(null)} className="h-6 px-2 text-gray-600 dark:text-[#a1a1aa]"><X className="h-3 w-3" /></Button>
-                              </div>
-                            ) : (
-                              <span className="flex-1 text-sm text-gray-900 dark:text-[#fafafa]">{sub.name}</span>
-                            )}
-                            <Stat l="Spent" v={fmt(sub.spent)} compact red={sub.over_budget} />
-                            <div className="flex items-center gap-1 ml-2">
-                              {editing !== sub.category_id && (
-                                <Button size="sm" variant="ghost" onClick={() => startEdit(sub)} className="text-gray-600 dark:text-[#a1a1aa] hover:text-gray-900 dark:hover:text-[#fafafa] h-6 w-6 p-0"><Edit2 className="h-3 w-3" /></Button>
-                              )}
-                              <Button size="sm" variant="ghost" onClick={() => remove(sub)} className="text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"><Trash2 className="h-3 w-3" /></Button>
-                            </div>
-                          </div>
-                        ))}
+                        {(activeTop.sub_categories || []).map((sub) => renderSubCategory(sub, 1))}
                       </div>
                     )}
                   </div>

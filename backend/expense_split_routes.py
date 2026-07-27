@@ -97,10 +97,40 @@ async def _calc_spent_per_category(month: int, year: int) -> dict:
     return {r["_id"]: float(r["total"]) for r in rows if r.get("_id")}
 
 
+def _group_by_parent(docs: list) -> dict:
+    by_parent: dict = {}
+    for d in docs:
+        by_parent.setdefault(d.get("parent_id"), []).append(d)
+    return by_parent
+
+
+def _build_percent_tree(docs: list, spent_map: dict, income: float) -> list:
+    """Recursive Top → Sub → Sub-sub (→ ...) tree. Each node's `allocated` is
+    `percent`% of its PARENT's allocated amount (top's parent is total income),
+    and `spent` rolls up as its own direct spend plus every descendant's."""
+    by_parent = _group_by_parent(docs)
+
+    def build(node: dict, parent_allocated: float) -> dict:
+        allocated = round(parent_allocated * (float(node.get("percent", 0)) / 100.0), 2)
+        children = [build(c, allocated) for c in by_parent.get(node["category_id"], [])]
+        own_spent = round(spent_map.get(node["category_id"], 0.0), 2)
+        total_spent = round(own_spent + sum(c["spent"] for c in children), 2)
+        return {
+            **node,
+            "allocated": allocated,
+            "spent": total_spent,
+            "balance": round(allocated - total_spent, 2),
+            "over_budget": total_spent > allocated and allocated > 0,
+            "sub_categories": children,
+        }
+
+    return [build(t, income) for t in by_parent.get(None, [])]
+
+
 # -------- routes --------
 @expense_split_router.get("/categories")
 async def list_split_categories(request: Request, month: Optional[int] = None, year: Optional[int] = None):
-    """Return all top categories with nested sub-categories plus computed budget/spent for the period."""
+    """Return all top categories with nested sub-categories (any depth) plus computed budget/spent for the period."""
     await _get_user(request)
 
     today = datetime.now(timezone.utc)
@@ -115,43 +145,14 @@ async def list_split_categories(request: Request, month: Optional[int] = None, y
     income = await _calc_income_for_period(month, year)
     spent_map = await _calc_spent_per_category(month, year)
 
-    tops = [d for d in docs if not d.get("parent_id")]
-    subs_by_parent = {}
-    for d in docs:
-        if d.get("parent_id"):
-            subs_by_parent.setdefault(d["parent_id"], []).append(d)
-
-    result = []
-    for t in tops:
-        allocated = round(income * (float(t.get("percent", 0)) / 100.0), 2)
-        sub_list = []
-        for s in subs_by_parent.get(t["category_id"], []):
-            sub_alloc = round(allocated * (float(s.get("percent", 0)) / 100.0), 2)
-            sub_spent = round(spent_map.get(s["category_id"], 0.0), 2)
-            sub_list.append({
-                **s,
-                "allocated": sub_alloc,
-                "spent": sub_spent,
-                "balance": round(sub_alloc - sub_spent, 2),
-                "over_budget": sub_spent > sub_alloc and sub_alloc > 0,
-            })
-        top_spent = round(spent_map.get(t["category_id"], 0.0)
-                          + sum(s["spent"] for s in sub_list), 2)
-        result.append({
-            **t,
-            "allocated": allocated,
-            "spent": top_spent,
-            "balance": round(allocated - top_spent, 2),
-            "over_budget": top_spent > allocated and allocated > 0,
-            "sub_categories": sub_list,
-        })
+    result = _build_percent_tree(docs, spent_map, income)
 
     return {
         "month": month,
         "year": year,
         "income": round(income, 2),
         "categories": result,
-        "total_allocated_percent": round(sum(float(t.get("percent", 0)) for t in tops), 2),
+        "total_allocated_percent": round(sum(float(t.get("percent", 0)) for t in docs if not t.get("parent_id")), 2),
     }
 
 
@@ -159,15 +160,15 @@ async def list_split_categories(request: Request, month: Optional[int] = None, y
 async def create_split_category(payload: SplitCategoryCreate, request: Request):
     await _get_user(request)
 
-    # If parent_id passed, validate it exists and is itself a top category.
+    # If parent_id passed, validate it exists. Any category (top or already
+    # nested) can be a parent — nesting depth is unlimited, so "Marketing >
+    # BNI > Visitor Fee" and deeper are both fine.
     if payload.parent_id:
         parent = await db.expense_split_categories.find_one(
             {"category_id": payload.parent_id, "is_deleted": {"$ne": True}}, {"_id": 0}
         )
         if not parent:
             raise HTTPException(status_code=404, detail="Parent category not found")
-        if parent.get("parent_id"):
-            raise HTTPException(status_code=400, detail="Only one level of nesting is supported")
 
     # Compute order = max existing within same level + 1
     level_filter = {"parent_id": payload.parent_id} if payload.parent_id else {"parent_id": None}
@@ -215,9 +216,23 @@ async def delete_split_category(category_id: str, request: Request):
     if not cat:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    # Cascade soft-delete to sub-categories
+    # Cascade soft-delete to descendants at every depth (nesting is unlimited).
+    all_docs = await db.expense_split_categories.find(
+        {"is_deleted": {"$ne": True}}, {"_id": 0, "category_id": 1, "parent_id": 1},
+    ).to_list(500)
+    by_parent = _group_by_parent(all_docs)
+    to_delete = [category_id]
+    frontier = [category_id]
+    while frontier:
+        next_frontier = []
+        for pid in frontier:
+            for child in by_parent.get(pid, []):
+                to_delete.append(child["category_id"])
+                next_frontier.append(child["category_id"])
+        frontier = next_frontier
+
     await db.expense_split_categories.update_many(
-        {"$or": [{"category_id": category_id}, {"parent_id": category_id}]},
+        {"category_id": {"$in": to_delete}},
         {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
     )
     return {"message": "Category deleted"}
@@ -262,39 +277,27 @@ async def list_budgets(request: Request, month: Optional[int] = None, year: Opti
         net = float(p.get("net_salary") or 0)
         payroll_auto_total += gross if gross > 0 else net
 
-    tops = [d for d in docs if not d.get("parent_id")]
-    subs_by_parent = {}
-    for d in docs:
-        if d.get("parent_id"):
-            subs_by_parent.setdefault(d["parent_id"], []).append(d)
+    by_parent = _group_by_parent(docs)
 
-    result = []
-    for t in tops:
-        sub_list = []
-        for s in subs_by_parent.get(t["category_id"], []):
-            manual = budget_map.get(s["category_id"], 0.0)
-            is_payroll = (s.get("name") or "").strip().lower() == "payroll"
-            budget = manual if manual > 0 else (payroll_auto_total if is_payroll else 0.0)
-            spent = round(spent_map.get(s["category_id"], 0.0), 2)
-            sub_list.append({
-                **s,
-                "budget": round(budget, 2),
-                "spent": spent,
-                "balance": round(budget - spent, 2),
-                "over_budget": spent > budget and budget > 0,
-                "is_auto_budget": is_payroll and manual <= 0 and budget > 0,
-            })
-        top_budget = round(sum(s["budget"] for s in sub_list) + budget_map.get(t["category_id"], 0.0), 2)
-        top_spent = round(spent_map.get(t["category_id"], 0.0)
-                          + sum(s["spent"] for s in sub_list), 2)
-        result.append({
-            **t,
-            "budget": top_budget,
-            "spent": top_spent,
-            "balance": round(top_budget - top_spent, 2),
-            "over_budget": top_spent > top_budget and top_budget > 0,
-            "sub_categories": sub_list,
-        })
+    def build(node: dict) -> dict:
+        children = [build(c) for c in by_parent.get(node["category_id"], [])]
+        manual = budget_map.get(node["category_id"], 0.0)
+        is_payroll = (node.get("name") or "").strip().lower() == "payroll"
+        own_budget = manual if manual > 0 else (payroll_auto_total if is_payroll else 0.0)
+        total_budget = round(own_budget + sum(c["budget"] for c in children), 2)
+        own_spent = round(spent_map.get(node["category_id"], 0.0), 2)
+        total_spent = round(own_spent + sum(c["spent"] for c in children), 2)
+        return {
+            **node,
+            "budget": total_budget,
+            "spent": total_spent,
+            "balance": round(total_budget - total_spent, 2),
+            "over_budget": total_spent > total_budget and total_budget > 0,
+            "is_auto_budget": is_payroll and manual <= 0 and own_budget > 0,
+            "sub_categories": children,
+        }
+
+    result = [build(t) for t in by_parent.get(None, [])]
 
     return {"month": month, "year": year, "categories": result}
 

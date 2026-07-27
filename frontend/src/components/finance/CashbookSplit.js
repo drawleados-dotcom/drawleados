@@ -61,6 +61,9 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   const [splitCategories, setSplitCategories] = useState([]); // top categories with .sub_categories
   const [splitTopId, setSplitTopId] = useState('');
   const [splitSubId, setSplitSubId] = useState('');
+  // Third tier — e.g. Marketing > BNI > Visitor Fee. Only shown/used when
+  // the picked sub-category itself has sub_categories.
+  const [splitSubSubId, setSplitSubSubId] = useState('');
   // Payroll linkage — when sub-category resolves to "Payroll" we let the user
   // pick a generated (CEO-approved) payslip, auto-fill the amount, and on save
   // mark that payslip as `paid`.
@@ -229,6 +232,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
       }
       setSplitTopId(preset?.topId || '');
       setSplitSubId(preset?.subId || '');
+      setSplitSubSubId('');
       setSelectedPayslipId('');
       setPayablePayslips([]);
     }
@@ -299,7 +303,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
       if (!aiSelectedProjectId) { toast.error('Pick a project'); return; }
       if (aiSelectedCreditIds.length === 0) { toast.error('Select at least one credit row'); return; }
       try {
-        const splitCategoryId = splitSubId || null;
+        const splitCategoryId = splitSubSubId || splitSubId || null;
         const r = await axios.post(`${API}/api/finance/banks/ai-credits/record`, {
           project_id: aiSelectedProjectId,
           credit_ids: aiSelectedCreditIds,
@@ -332,9 +336,10 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
       // Derive a friendly category label from the selected split categories if user didn't type one.
       const topCat = splitCategories.find((c) => c.category_id === splitTopId);
       const subCat = topCat?.sub_categories?.find((s) => s.category_id === splitSubId);
+      const subSubCat = subCat?.sub_categories?.find((s) => s.category_id === splitSubSubId);
       const derivedCategory = (form.category || '').trim()
-        || (subCat ? `${topCat.name} › ${subCat.name}` : (topCat?.name || ''));
-      const splitCategoryId = splitSubId || splitTopId || null;
+        || [topCat?.name, subCat?.name, subSubCat?.name].filter(Boolean).join(' › ');
+      const splitCategoryId = splitSubSubId || splitSubId || splitTopId || null;
       // If this expense is tied to a payroll payslip, require an explicit selection.
       if (isPayrollMode && !selectedPayslipId) {
         toast.error('Pick the employee/payslip being paid');
@@ -996,7 +1001,8 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                 </div>
               )}
 
-              {/* Expense Split — Top Category + optional Sub Category */}
+              {/* Expense Split — Top Category + optional Sub Category + optional
+                  Sub-sub Category (e.g. Marketing > BNI > Visitor Fee) */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <Label className={textPrimary}>Expense Category (Budget)</Label>
@@ -1004,10 +1010,10 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                     <span className={`text-[10px] ${textSecondary}`}>No categories yet — add some in Expense → Expense Split</span>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className={`grid ${(splitCategories.find((c) => c.category_id === splitTopId)?.sub_categories || []).find((s) => s.category_id === splitSubId)?.sub_categories?.length ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
                   <select
                     value={splitTopId}
-                    onChange={(e) => { setSplitTopId(e.target.value); setSplitSubId(''); }}
+                    onChange={(e) => { setSplitTopId(e.target.value); setSplitSubId(''); setSplitSubSubId(''); }}
                     className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
                     data-testid="expense-split-top-select"
                   >
@@ -1020,7 +1026,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                   </select>
                   <select
                     value={splitSubId}
-                    onChange={(e) => setSplitSubId(e.target.value)}
+                    onChange={(e) => { setSplitSubId(e.target.value); setSplitSubSubId(''); }}
                     disabled={!splitTopId}
                     className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
                     data-testid="expense-split-sub-select"
@@ -1034,6 +1040,25 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                       </option>
                     ))}
                   </select>
+                  {(() => {
+                    const subCat = (splitCategories.find((c) => c.category_id === splitTopId)?.sub_categories || [])
+                      .find((s) => s.category_id === splitSubId);
+                    const subSubs = subCat?.sub_categories || [];
+                    if (subSubs.length === 0) return null;
+                    return (
+                      <select
+                        value={splitSubSubId}
+                        onChange={(e) => setSplitSubSubId(e.target.value)}
+                        className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                        data-testid="expense-split-subsub-select"
+                      >
+                        <option value="">— {subCat.name} Type (optional) —</option>
+                        {subSubs.map((ss) => (
+                          <option key={ss.category_id} value={ss.category_id}>{ss.name}</option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1043,9 +1068,11 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
               {(() => {
                 const topCat = splitCategories.find((c) => c.category_id === splitTopId);
                 const subCat = topCat?.sub_categories?.find((s) => s.category_id === splitSubId);
-                if (!subCat) return null;
-                const budget = Number(subCat.budget || 0);
-                const spent = Number(subCat.spent || 0);
+                const subSubCat = subCat?.sub_categories?.find((s) => s.category_id === splitSubSubId);
+                const deepestCat = subSubCat || subCat;
+                if (!deepestCat) return null;
+                const budget = Number(deepestCat.budget || 0);
+                const spent = Number(deepestCat.spent || 0);
                 const remaining = budget - spent;
                 if (budget <= 0) return null;
                 const entered = parseFloat(expenseTotal) || 0;
@@ -1054,7 +1081,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                   <div className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="cashbook-budget-hint">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div>
-                        <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>Budget for {subCat.name}</p>
+                        <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>Budget for {deepestCat.name}</p>
                         <p className={`text-[10px] ${textSecondary}`}>This month · enter any amount (variable allowed)</p>
                       </div>
                       <div className="flex items-center gap-4 text-right">
