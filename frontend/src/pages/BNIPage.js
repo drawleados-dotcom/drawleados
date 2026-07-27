@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import CSVImportModal from '../components/bni/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award,
-  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload,
+  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -121,6 +121,9 @@ export default function BNIPage() {
   const [showCategoryImport, setShowCategoryImport] = useState(false);
   const [showRolePlayerImport, setShowRolePlayerImport] = useState(false);
 
+  const [memberSearch, setMemberSearch] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
+
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
@@ -158,8 +161,21 @@ export default function BNIPage() {
     [rolePlayers]
   );
 
-  const pinnedMembers = useMemo(() => members.filter((m) => m.pinned), [members]);
-  const unpinnedMembers = useMemo(() => members.filter((m) => !m.pinned), [members]);
+  const filteredMembers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((m) => [
+      m.name, m.business_name, m.category_name, m.role_player_name, m.phone, m.email, m.city,
+    ].some((v) => (v || '').toLowerCase().includes(q)));
+  }, [members, memberSearch]);
+  const pinnedMembers = useMemo(() => filteredMembers.filter((m) => m.pinned), [filteredMembers]);
+  const unpinnedMembers = useMemo(() => filteredMembers.filter((m) => !m.pinned), [filteredMembers]);
+
+  const filteredCategories = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase();
+    if (!q) return categories;
+    return categories.filter((c) => [c.name, c.description].some((v) => (v || '').toLowerCase().includes(q)));
+  }, [categories, categorySearch]);
 
   // ---------- Members ----------
 
@@ -497,7 +513,18 @@ export default function BNIPage() {
         ) : (
           <>
             {activeTab === 'members' && (
-              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+              <div className="space-y-3">
+                <div className="relative max-w-sm">
+                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
+                  <Input
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    placeholder="Search members…"
+                    className={`pl-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-search"
+                  />
+                </div>
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className={bgSecondary}>
@@ -514,10 +541,12 @@ export default function BNIPage() {
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
-                      {members.length === 0 ? (
+                      {filteredMembers.length === 0 ? (
                         <tr>
                           <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>
-                            No members yet — click "Add Member" to add the first one.
+                            {members.length === 0
+                              ? 'No members yet — click "Add Member" to add the first one.'
+                              : 'No members match your search.'}
                           </td>
                         </tr>
                       ) : (
@@ -543,11 +572,23 @@ export default function BNIPage() {
                     </tbody>
                   </table>
                 </div>
+                </div>
               </div>
             )}
 
             {activeTab === 'category' && (
-              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+              <div className="space-y-3">
+                <div className="relative max-w-sm">
+                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
+                  <Input
+                    value={categorySearch}
+                    onChange={(e) => setCategorySearch(e.target.value)}
+                    placeholder="Search categories…"
+                    className={`pl-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-category-search"
+                  />
+                </div>
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className={bgSecondary}>
@@ -558,14 +599,16 @@ export default function BNIPage() {
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
-                      {categories.length === 0 ? (
+                      {filteredCategories.length === 0 ? (
                         <tr>
                           <td colSpan={3} className={`px-4 py-8 text-center ${textSecondary}`}>
-                            No categories yet — click "Add Category" to add the first one.
+                            {categories.length === 0
+                              ? 'No categories yet — click "Add Category" to add the first one.'
+                              : 'No categories match your search.'}
                           </td>
                         </tr>
                       ) : (
-                        categories.map((c) => {
+                        filteredCategories.map((c) => {
                           const color = tagColor(c.category_id);
                           return (
                             <tr key={c.category_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
@@ -584,6 +627,7 @@ export default function BNIPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
                 </div>
               </div>
             )}
