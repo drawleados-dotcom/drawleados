@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -94,11 +95,13 @@ const emptyNameDescForm = () => ({ name: '', description: '' });
 
 export default function BNIPage() {
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('members');
   const [members, setMembers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [rolePlayers, setRolePlayers] = useState([]);
   const [chapterSettings, setChapterSettings] = useState({ chapter_name: '', region: '' });
+  const [myDesignation, setMyDesignation] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [showMemberModal, setShowMemberModal] = useState(false);
@@ -133,24 +136,53 @@ export default function BNIPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [membersRes, categoriesRes, rolePlayersRes, settingsRes] = await Promise.all([
+      const [membersRes, categoriesRes, rolePlayersRes, settingsRes, designationsRes] = await Promise.all([
         api.get('/bni/members'),
         api.get('/bni/categories'),
         api.get('/bni/role-players'),
         api.get('/bni/settings'),
+        api.get('/designations/').catch(() => ({ data: [] })),
       ]);
       setMembers(membersRes.data || []);
       setCategories(categoriesRes.data || []);
       setRolePlayers(rolePlayersRes.data || []);
       setChapterSettings(settingsRes.data || { chapter_name: '', region: '' });
+      const userDesg = (user?.designation || '').toLowerCase().trim();
+      const found = (designationsRes.data || []).find(
+        (d) => (d.title || '').toLowerCase().trim() === userDesg
+      );
+      setMyDesignation(found || null);
     } catch (error) {
       toast.error('Failed to load BNI data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.designation]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Access control: Super Admin / Admin always get full access to every
+  // tab. Everyone else is scoped by their designation's bni_tabs (empty =
+  // all tabs) and bni_access ('view' hides Add/Edit/Delete/Import/Pin).
+  const isPrivilegedRole = ['super_admin', 'admin'].includes((user?.role || '').toLowerCase());
+  const allowedTabKeys = useMemo(() => {
+    if (isPrivilegedRole) return null; // null = unrestricted
+    const configured = myDesignation?.bni_tabs || [];
+    return configured.length > 0 ? new Set(configured) : new Set(TABS.map((t) => t.key));
+  }, [isPrivilegedRole, myDesignation]);
+  const visibleTabs = useMemo(
+    () => (allowedTabKeys ? TABS.filter((t) => allowedTabKeys.has(t.key)) : TABS),
+    [allowedTabKeys]
+  );
+  const isViewOnly = !isPrivilegedRole && myDesignation?.bni_access === 'view';
+
+  // If the active tab isn't visible to this user (e.g. their designation's
+  // access changed), fall back to the first tab they can actually see.
+  useEffect(() => {
+    if (visibleTabs.length > 0 && !visibleTabs.find((t) => t.key === activeTab)) {
+      setActiveTab(visibleTabs[0].key);
+    }
+  }, [visibleTabs, activeTab]);
 
   const categoryOptions = useMemo(
     () => categories.map((c) => ({ value: c.category_id, label: c.name })),
@@ -373,15 +405,19 @@ export default function BNIPage() {
     return (
       <tr key={m.member_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
         <td className="px-3 py-3">
-          <button
-            type="button"
-            onClick={() => togglePin(m)}
-            className={m.pinned ? 'text-amber-500' : textSecondary}
-            title={m.pinned ? 'Unpin' : 'Pin'}
-            data-testid={`bni-member-pin-${m.member_id}`}
-          >
-            {m.pinned ? <Pin className="h-4 w-4 fill-current" /> : <PinOff className="h-4 w-4" />}
-          </button>
+          {isViewOnly ? (
+            m.pinned ? <Pin className="h-4 w-4 text-amber-500 fill-current" /> : null
+          ) : (
+            <button
+              type="button"
+              onClick={() => togglePin(m)}
+              className={m.pinned ? 'text-amber-500' : textSecondary}
+              title={m.pinned ? 'Unpin' : 'Pin'}
+              data-testid={`bni-member-pin-${m.member_id}`}
+            >
+              {m.pinned ? <Pin className="h-4 w-4 fill-current" /> : <PinOff className="h-4 w-4" />}
+            </button>
+          )}
         </td>
         <td className={`px-4 py-3 ${textPrimary} font-medium`}>
           {m.title ? `${m.title}. ` : ''}{m.name}
@@ -413,12 +449,16 @@ export default function BNIPage() {
             <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => setViewingMember(m)} data-testid={`bni-member-view-${m.member_id}`}>
               <Eye className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => openEditMember(m)} data-testid={`bni-member-edit-${m.member_id}`}>
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMember(m.member_id)} data-testid={`bni-member-delete-${m.member_id}`}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {!isViewOnly && (
+              <>
+                <Button variant="ghost" size="sm" onClick={() => openEditMember(m)} data-testid={`bni-member-edit-${m.member_id}`}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMember(m.member_id)} data-testid={`bni-member-delete-${m.member_id}`}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </>
+            )}
           </div>
         </td>
       </tr>
@@ -434,15 +474,17 @@ export default function BNIPage() {
               <h1 className={`text-3xl font-bold ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
                 {chapterSettings.chapter_name || 'BNI'}
               </h1>
-              <button
-                type="button"
-                onClick={openEditSettings}
-                className={textSecondary}
-                title="Edit chapter name & region"
-                data-testid="bni-edit-chapter-btn"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
+              {!isViewOnly && (
+                <button
+                  type="button"
+                  onClick={openEditSettings}
+                  className={textSecondary}
+                  title="Edit chapter name & region"
+                  data-testid="bni-edit-chapter-btn"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
             </div>
             <div className={`text-sm ${textSecondary} flex items-center gap-2 flex-wrap mt-1`}>
               {chapterSettings.region && <span>{chapterSettings.region}</span>}
@@ -454,7 +496,7 @@ export default function BNIPage() {
               </span>
             </div>
           </div>
-          {activeTab === 'members' && (
+          {activeTab === 'members' && !isViewOnly && (
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowMemberImport(true)} data-testid="bni-import-member-btn">
                 <Upload className="h-4 w-4 mr-2" /> Import CSV
@@ -464,7 +506,7 @@ export default function BNIPage() {
               </Button>
             </div>
           )}
-          {activeTab === 'category' && (
+          {activeTab === 'category' && !isViewOnly && (
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowCategoryImport(true)} data-testid="bni-import-category-btn">
                 <Upload className="h-4 w-4 mr-2" /> Import CSV
@@ -474,7 +516,7 @@ export default function BNIPage() {
               </Button>
             </div>
           )}
-          {activeTab === 'role_players' && (
+          {activeTab === 'role_players' && !isViewOnly && (
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowRolePlayerImport(true)} data-testid="bni-import-role-player-btn">
                 <Upload className="h-4 w-4 mr-2" /> Import CSV
@@ -488,7 +530,7 @@ export default function BNIPage() {
 
         {/* Tab bar */}
         <div className="flex flex-wrap gap-2">
-          {TABS.map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
             return (
@@ -617,9 +659,11 @@ export default function BNIPage() {
                               </td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{c.description || '—'}</td>
                               <td className="px-4 py-3">
-                                <Button variant="ghost" size="sm" onClick={() => openEditCategory(c)} data-testid={`bni-category-edit-${c.category_id}`}>
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
+                                {!isViewOnly && (
+                                  <Button variant="ghost" size="sm" onClick={() => openEditCategory(c)} data-testid={`bni-category-edit-${c.category_id}`}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -660,9 +704,11 @@ export default function BNIPage() {
                               </td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{r.description || '—'}</td>
                               <td className="px-4 py-3">
-                                <Button variant="ghost" size="sm" onClick={() => openEditRolePlayer(r)} data-testid={`bni-role-player-edit-${r.role_player_id}`}>
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
+                                {!isViewOnly && (
+                                  <Button variant="ghost" size="sm" onClick={() => openEditRolePlayer(r)} data-testid={`bni-role-player-edit-${r.role_player_id}`}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                )}
                               </td>
                             </tr>
                           );

@@ -34,6 +34,9 @@ class DesignationCreate(BaseModel):
     operations_departments_tab: Optional[bool] = False
     operations_approvals_tab: Optional[bool] = False
     operations_meetings_tab: Optional[bool] = False
+    # BNI module sub-options
+    bni_tabs: Optional[List[str]] = []  # which BNI sub-tabs are visible — empty = all
+    bni_access: Optional[str] = "edit"  # 'view' | 'edit'
 
 class DesignationUpdate(BaseModel):
     title: Optional[str] = None
@@ -54,6 +57,8 @@ class DesignationUpdate(BaseModel):
     operations_departments_tab: Optional[bool] = None
     operations_approvals_tab: Optional[bool] = None
     operations_meetings_tab: Optional[bool] = None
+    bni_tabs: Optional[List[str]] = None
+    bni_access: Optional[str] = None
 
 # Dependency to get DB
 async def get_db():
@@ -127,6 +132,8 @@ async def create_designation(data: DesignationCreate, db=Depends(get_db)):
             "operations_departments_tab": bool(data.operations_departments_tab),
             "operations_approvals_tab": bool(data.operations_approvals_tab),
             "operations_meetings_tab": bool(data.operations_meetings_tab),
+            "bni_tabs": data.bni_tabs or [],
+            "bni_access": data.bni_access or "edit",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
@@ -184,7 +191,11 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
             update_data["operations_approvals_tab"] = data.operations_approvals_tab
         if data.operations_meetings_tab is not None:
             update_data["operations_meetings_tab"] = data.operations_meetings_tab
-        
+        if data.bni_tabs is not None:
+            update_data["bni_tabs"] = data.bni_tabs
+        if data.bni_access is not None:
+            update_data["bni_access"] = data.bni_access
+
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         
         await db.designations.update_one(

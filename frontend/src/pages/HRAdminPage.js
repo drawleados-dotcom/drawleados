@@ -17,7 +17,7 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check, Network, Coffee, Wallet
+  ChevronDown, Check, Network, Coffee, Wallet, Handshake
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -209,6 +209,9 @@ export default function HRAdminPage() {
     operations_departments_tab: false,
     operations_approvals_tab: false,
     operations_meetings_tab: false,
+    // BNI module sub-options
+    bni_tabs: [],       // which BNI sub-tabs are visible — empty means "all"
+    bni_access: 'edit', // 'view' | 'edit'
   });
   const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
   const [editingDesignation, setEditingDesignation] = useState(null);
@@ -1131,7 +1134,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_management_subdepts: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_management_subdepts: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false, bni_tabs: [], bni_access: 'edit' });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -6131,6 +6134,8 @@ function DesignationsDeptsTab({
   const [viewDesignation, setViewDesignation] = useState(null);
   const [showOpsConfigModal, setShowOpsConfigModal] = useState(false);
   const [opsCfgMode, setOpsCfgMode] = useState('create'); // 'create' | 'edit' — which designation state OpsConfig modal writes to
+  const [showBniConfigModal, setShowBniConfigModal] = useState(false);
+  const [bniCfgMode, setBniCfgMode] = useState('create'); // 'create' | 'edit' — which designation state BniConfig modal writes to
   const [managementSubDepts, setManagementSubDepts] = useState([]);
 
   // Fetch the Management department's sub-departments (Sales, Marketing, ...)
@@ -6165,7 +6170,7 @@ function DesignationsDeptsTab({
     { value: 'settings', label: 'Settings' },
     { value: 'documentations', label: 'Documentations' },
     { value: 'approvals', label: 'Approvals', hasSubOptions: true },
-    { value: 'bni', label: 'BNI' },
+    { value: 'bni', label: 'BNI', hasSubOptions: true },
   ];
   
   // Departments available for Approvals module
@@ -6184,6 +6189,19 @@ function DesignationsDeptsTab({
   // same 8 as approvals, plus "Management" (its sub-departments are granted
   // separately below, once "Management" itself is checked here).
   const OPERATIONS_DEPARTMENTS = [...APPROVAL_DEPARTMENTS, { value: 'management', label: 'Management' }];
+
+  // BNI sub-tabs — must mirror the TABS list in frontend/src/pages/BNIPage.js
+  const BNI_TABS = [
+    { value: 'members', label: 'Members' },
+    { value: 'weekly_meeting', label: 'Weekly Meeting' },
+    { value: 'one_to_one', label: 'One-to-One' },
+    { value: 'payment_history', label: 'Payment History' },
+    { value: 'referrals', label: 'Referrals' },
+    { value: 'thank_you_note', label: 'Thank You Note' },
+    { value: 'testimonials', label: 'Testimonials' },
+    { value: 'role_players', label: 'Role Players' },
+    { value: 'category', label: 'Category' },
+  ];
 
   // Website stages for approval granularity
   const WEBSITE_APPROVAL_STAGES = [
@@ -6398,6 +6416,22 @@ function DesignationsDeptsTab({
                                 setShowOpsConfigModal(true);
                                 return;
                               }
+                              // BNI module → open config popup (edit mode). Seed bni_tabs
+                              // with everything checked the first time so it visually
+                              // matches today's "grant sees all tabs" default.
+                              if (m.value === 'bni') {
+                                setEditingDesignation(prev => ({
+                                  ...prev,
+                                  module_access: (prev.module_access || []).includes(m.value)
+                                    ? (prev.module_access || [])
+                                    : [...(prev.module_access || []), m.value],
+                                  bni_tabs: (prev.bni_tabs && prev.bni_tabs.length > 0) ? prev.bni_tabs : BNI_TABS.map(t => t.value),
+                                  bni_access: prev.bni_access || 'edit',
+                                }));
+                                setBniCfgMode('edit');
+                                setShowBniConfigModal(true);
+                                return;
+                              }
                               const access = editingDesignation.module_access || [];
                               setEditingDesignation(prev => ({
                                 ...prev,
@@ -6487,6 +6521,20 @@ function DesignationsDeptsTab({
                                 }));
                                 setOpsCfgMode('create');
                                 setShowOpsConfigModal(true);
+                                return;
+                              }
+                              // Special handling for BNI - open config popup
+                              if (m.value === 'bni') {
+                                setNewDesignation(prev => ({
+                                  ...prev,
+                                  module_access: prev.module_access.includes(m.value)
+                                    ? prev.module_access
+                                    : [...prev.module_access, m.value],
+                                  bni_tabs: (prev.bni_tabs && prev.bni_tabs.length > 0) ? prev.bni_tabs : BNI_TABS.map(t => t.value),
+                                  bni_access: prev.bni_access || 'edit',
+                                }));
+                                setBniCfgMode('create');
+                                setShowBniConfigModal(true);
                                 return;
                               }
                               setNewDesignation(prev => ({
@@ -6944,6 +6992,131 @@ function DesignationsDeptsTab({
                       }}
                       className="bg-[#10b981] hover:bg-[#059669] text-white"
                       data-testid="ops-cfg-save"
+                    >
+                      <Check className="h-4 w-4 mr-2" /> Save
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </div>
+            );
+          })()}
+
+          {/* BNI Module Configuration Popup */}
+          {showBniConfigModal && (() => {
+            const bniState = bniCfgMode === 'edit' ? (editingDesignation || {}) : newDesignation;
+            const setBniState = bniCfgMode === 'edit' ? setEditingDesignation : setNewDesignation;
+            return (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]" onClick={() => setShowBniConfigModal(false)}>
+              <Card className={`${bgCard} border ${borderColor} w-full max-w-xl mx-4`} onClick={(e) => e.stopPropagation()}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className={`flex items-center gap-2 ${textPrimary}`}>
+                      <Handshake className="h-5 w-5 text-[#6366f1]" />
+                      BNI Module — Configuration
+                    </CardTitle>
+                    <button onClick={() => setShowBniConfigModal(false)} className={textSecondary}>
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div>
+                    <Label className={`${textPrimary} mb-2 block`}>Access Level</Label>
+                    <div className="flex gap-2">
+                      {[
+                        { value: 'view', label: 'View only' },
+                        { value: 'edit', label: 'Edit' },
+                      ].map(opt => {
+                        const selected = (bniState.bni_access || 'edit') === opt.value;
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => setBniState(prev => ({ ...prev, bni_access: opt.value }))}
+                            className={`px-3 py-1.5 rounded-md text-sm font-medium border-2 transition-all ${
+                              selected
+                                ? 'bg-[#10b981] border-[#10b981] text-white'
+                                : `${bgCard} border-transparent ${textSecondary} hover:border-[#10b981]/50`
+                            }`}
+                            data-testid={`bni-cfg-access-${opt.value}`}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className={`${textPrimary} mb-2 block`}>
+                      Visible Tabs
+                      <span className={`ml-2 text-xs font-normal ${textSecondary}`}>(which BNI sections this designation can see)</span>
+                    </Label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {BNI_TABS.map(tab => {
+                        const selected = (bniState.bni_tabs || []).includes(tab.value);
+                        return (
+                          <button
+                            key={tab.value}
+                            type="button"
+                            onClick={() => setBniState(prev => ({
+                              ...prev,
+                              bni_tabs: selected
+                                ? (prev.bni_tabs || []).filter(x => x !== tab.value)
+                                : [...(prev.bni_tabs || []), tab.value]
+                            }))}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border-2 transition-all ${
+                              selected
+                                ? 'bg-[#6366f1]/20 border-[#6366f1] text-[#6366f1]'
+                                : `${bgCard} border-transparent ${textSecondary} hover:border-[#6366f1]/50`
+                            }`}
+                            data-testid={`bni-cfg-tab-${tab.value}`}
+                          >
+                            <div className={`w-4 h-4 rounded flex items-center justify-center border-2 ${
+                              selected ? 'bg-[#6366f1] border-[#6366f1]' : (isDark ? 'border-gray-600' : 'border-gray-300')
+                            }`}>
+                              {selected && <Check className="h-3 w-3 text-white" />}
+                            </div>
+                            {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </CardContent>
+                <div className="flex justify-between items-center px-6 pb-6">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setBniState(prev => ({
+                        ...prev,
+                        module_access: (prev.module_access || []).filter(x => x !== 'bni'),
+                        bni_tabs: [],
+                        bni_access: 'edit',
+                      }));
+                      setShowBniConfigModal(false);
+                    }}
+                    className="text-[#ef4444]"
+                    data-testid="bni-cfg-remove"
+                  >
+                    Remove BNI Access
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => setShowBniConfigModal(false)}>Cancel</Button>
+                    <Button
+                      onClick={async () => {
+                        if (bniCfgMode === 'edit' && editingDesignation?.designation_id && typeof onUpdateDesignation === 'function') {
+                          try {
+                            await onUpdateDesignation();
+                          } catch (_) {
+                            return;
+                          }
+                        }
+                        setShowBniConfigModal(false);
+                      }}
+                      className="bg-[#10b981] hover:bg-[#059669] text-white"
+                      data-testid="bni-cfg-save"
                     >
                       <Check className="h-4 w-4 mr-2" /> Save
                     </Button>
