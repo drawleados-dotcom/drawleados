@@ -20,22 +20,27 @@ import { toast } from 'sonner';
 const TITLE_OPTIONS = ['Mr', 'Miss', 'Mrs'];
 
 const MEMBER_IMPORT_FIELDS = [
-  { key: 'title', label: 'Title (Mr/Miss/Mrs)' },
-  { key: 'name', label: 'Name', required: true },
-  { key: 'business_name', label: 'Business Name' },
-  { key: 'email', label: 'Email' },
-  { key: 'phone', label: 'Phone Number' },
-  { key: 'website', label: 'Website' },
-  { key: 'category_name', label: 'Category' },
-  { key: 'role_player_name', label: 'Role Player' },
-  { key: 'address', label: 'Address' },
-  { key: 'location_link', label: 'Location Link' },
-  { key: 'city', label: 'City' },
+  { key: 'title', label: 'Title (Mr/Miss/Mrs)', synonyms: ['title', 'salutation'] },
+  { key: 'name', label: 'Name', required: true, synonyms: ['name', 'full name', 'member name'] },
+  { key: 'business_name', label: 'Business Name', synonyms: ['business name', 'company', 'company name'] },
+  { key: 'email', label: 'Email', synonyms: ['email', 'email address'] },
+  { key: 'phone', label: 'Phone Number', synonyms: ['phone number', 'phone', 'mobile', 'contact number'] },
+  { key: 'website', label: 'Website', synonyms: ['website', 'site'] },
+  { key: 'category_name', label: 'Category', synonyms: ['category', 'category name', 'business category'] },
+  { key: 'role_player_name', label: 'Role Player', synonyms: ['role player', 'role player name', 'role'] },
+  { key: 'address', label: 'Address', synonyms: ['address'] },
+  { key: 'location_link', label: 'Location Link', synonyms: ['location link', 'map link', 'google maps link'] },
+  { key: 'city', label: 'City', synonyms: ['city'] },
 ];
 
-const NAME_DESC_IMPORT_FIELDS = [
-  { key: 'name', label: 'Name', required: true },
-  { key: 'description', label: 'Description' },
+const CATEGORY_IMPORT_FIELDS = [
+  { key: 'name', label: 'Category Name', required: true, synonyms: ['category name', 'category', 'name'] },
+  { key: 'description', label: 'Description', synonyms: ['description', 'desc'] },
+];
+
+const ROLE_PLAYER_IMPORT_FIELDS = [
+  { key: 'name', label: 'Role Player Name', required: true, synonyms: ['role player name', 'role player', 'role', 'name'] },
+  { key: 'description', label: 'Description', synonyms: ['description', 'desc'] },
 ];
 
 const TABS = [
@@ -966,7 +971,7 @@ export default function BNIPage() {
           open={showCategoryImport}
           onClose={() => setShowCategoryImport(false)}
           title="Import Categories from CSV"
-          fields={NAME_DESC_IMPORT_FIELDS}
+          fields={CATEGORY_IMPORT_FIELDS}
           onImport={importCategories}
           bgCard={bgCard}
           bgSecondary={bgSecondary}
@@ -978,7 +983,7 @@ export default function BNIPage() {
           open={showRolePlayerImport}
           onClose={() => setShowRolePlayerImport(false)}
           title="Import Role Players from CSV"
-          fields={NAME_DESC_IMPORT_FIELDS}
+          fields={ROLE_PLAYER_IMPORT_FIELDS}
           onImport={importRolePlayers}
           bgCard={bgCard}
           bgSecondary={bgSecondary}

@@ -70,11 +70,16 @@ export default function CSVImportModal({ open, onClose, title, fields, onImport,
       const parsedHeaders = parseCSVLine(lines[0]);
       const parsedRows = lines.slice(1).map(parseCSVLine);
 
-      // Auto-suggest a mapping by matching header text to field labels/keys.
+      // Auto-suggest a mapping by matching header text to a field's label,
+      // key, or declared synonyms (e.g. "Category Name" / "Category" both
+      // resolve to the Category import field).
       const autoMapping = {};
       parsedHeaders.forEach((h) => {
         const nh = normalize(h);
-        const match = fields.find((f) => normalize(f.label) === nh || normalize(f.key) === nh);
+        const match = fields.find((f) => {
+          const candidates = [f.label, f.key, ...(f.synonyms || [])];
+          return candidates.some((c) => normalize(c) === nh);
+        });
         if (match) autoMapping[h] = match.key;
       });
 
