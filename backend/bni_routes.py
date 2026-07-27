@@ -2,12 +2,15 @@
 BNI (Business Network International) chapter management routes.
 
 Super-Admin-only module for tracking chapter members and their business
-category. Two resources today:
+category. Resources:
+  - Settings: chapter name + region — a single document for this org's chapter.
   - Categories: name + description, one member per category in a real BNI
     chapter (hence Members highlights this column).
-  - Members: contact + business details, tagged to a Category.
+  - Role Players: name + description (e.g. President, Visitor Host) — tagged
+    to a member and highlighted the same way as Category.
+  - Members: contact + business details, tagged to a Category and Role Player.
 
-Storage: collections `bni_categories`, `bni_members`.
+Storage: collections `bni_settings`, `bni_categories`, `bni_role_players`, `bni_members`.
 """
 import uuid
 from fastapi import APIRouter, HTTPException, Request
@@ -15,8 +18,43 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, timezone
 
+bni_settings_router = APIRouter(prefix="/bni/settings", tags=["bni"])
 bni_categories_router = APIRouter(prefix="/bni/categories", tags=["bni"])
+bni_role_players_router = APIRouter(prefix="/bni/role-players", tags=["bni"])
 bni_members_router = APIRouter(prefix="/bni/members", tags=["bni"])
+
+SETTINGS_DOC_ID = "default"
+
+
+# ---------- Settings (Chapter Name / Region) ----------
+
+class BNISettingsUpdate(BaseModel):
+    chapter_name: Optional[str] = None
+    region: Optional[str] = None
+
+
+@bni_settings_router.get("")
+async def get_bni_settings(request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    doc = await db.bni_settings.find_one({"settings_id": SETTINGS_DOC_ID}, {"_id": 0})
+    return doc or {"settings_id": SETTINGS_DOC_ID, "chapter_name": "", "region": ""}
+
+
+@bni_settings_router.put("")
+async def update_bni_settings(payload: BNISettingsUpdate, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    update_data = {"settings_id": SETTINGS_DOC_ID, "updated_at": datetime.now(timezone.utc).isoformat()}
+    if payload.chapter_name is not None:
+        update_data["chapter_name"] = payload.chapter_name.strip()
+    if payload.region is not None:
+        update_data["region"] = payload.region.strip()
+
+    await db.bni_settings.update_one(
+        {"settings_id": SETTINGS_DOC_ID}, {"$set": update_data}, upsert=True
+    )
+    return await db.bni_settings.find_one({"settings_id": SETTINGS_DOC_ID}, {"_id": 0})
 
 
 # ---------- Categories ----------
@@ -81,6 +119,68 @@ async def update_bni_category(category_id: str, payload: BNICategoryUpdate, requ
     return await db.bni_categories.find_one({"category_id": category_id}, {"_id": 0})
 
 
+# ---------- Role Players ----------
+
+class BNIRolePlayerCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+
+class BNIRolePlayerUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+@bni_role_players_router.get("")
+async def list_bni_role_players(request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    return await db.bni_role_players.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+
+
+@bni_role_players_router.post("")
+async def create_bni_role_player(payload: BNIRolePlayerCreate, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Role player name is required")
+
+    now = datetime.now(timezone.utc).isoformat()
+    role_player = {
+        "role_player_id": f"bnirole_{uuid.uuid4().hex[:10]}",
+        "name": name,
+        "description": (payload.description or "").strip(),
+        "created_by": user.user_id,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.bni_role_players.insert_one(role_player)
+    del role_player["_id"]
+    return role_player
+
+
+@bni_role_players_router.put("/{role_player_id}")
+async def update_bni_role_player(role_player_id: str, payload: BNIRolePlayerUpdate, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    existing = await db.bni_role_players.find_one({"role_player_id": role_player_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Role player not found")
+
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Role player name is required")
+        update_data["name"] = name
+    if payload.description is not None:
+        update_data["description"] = payload.description.strip()
+
+    await db.bni_role_players.update_one({"role_player_id": role_player_id}, {"$set": update_data})
+    return await db.bni_role_players.find_one({"role_player_id": role_player_id}, {"_id": 0})
+
+
 # ---------- Members ----------
 
 class BNIMemberCreate(BaseModel):
@@ -89,8 +189,11 @@ class BNIMemberCreate(BaseModel):
     business_name: Optional[str] = ""
     email: Optional[str] = ""
     phone: Optional[str] = ""
+    website: Optional[str] = ""
     category_id: Optional[str] = ""
     category_name: Optional[str] = ""
+    role_player_id: Optional[str] = ""
+    role_player_name: Optional[str] = ""
     address: Optional[str] = ""
     location_link: Optional[str] = ""
     city: Optional[str] = ""
@@ -102,11 +205,15 @@ class BNIMemberUpdate(BaseModel):
     business_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    website: Optional[str] = None
     category_id: Optional[str] = None
     category_name: Optional[str] = None
+    role_player_id: Optional[str] = None
+    role_player_name: Optional[str] = None
     address: Optional[str] = None
     location_link: Optional[str] = None
     city: Optional[str] = None
+    pinned: Optional[bool] = None
 
 
 @bni_members_router.get("")
@@ -132,11 +239,15 @@ async def create_bni_member(payload: BNIMemberCreate, request: Request):
         "business_name": payload.business_name or "",
         "email": payload.email or "",
         "phone": payload.phone or "",
+        "website": payload.website or "",
         "category_id": payload.category_id or "",
         "category_name": payload.category_name or "",
+        "role_player_id": payload.role_player_id or "",
+        "role_player_name": payload.role_player_name or "",
         "address": payload.address or "",
         "location_link": payload.location_link or "",
         "city": payload.city or "",
+        "pinned": False,
         "created_by": user.user_id,
         "created_at": now,
         "updated_at": now,

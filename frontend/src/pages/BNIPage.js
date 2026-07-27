@@ -11,8 +11,8 @@ import { Combobox } from '../components/ui/combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import {
-  Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag,
-  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone,
+  Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award,
+  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,12 +26,14 @@ const TABS = [
   { key: 'referrals', label: 'Referrals', icon: Share2 },
   { key: 'thank_you_note', label: 'Thank You Note', icon: Heart },
   { key: 'testimonials', label: 'Testimonials', icon: Star },
+  { key: 'role_players', label: 'Role Players', icon: Award },
   { key: 'category', label: 'Category', icon: Tag },
 ];
 
-// Deterministic distinct color per category so the highlighted column reads
-// at a glance — same approach used for sub-department badges in Operations.
-const CATEGORY_PALETTE = [
+// Deterministic distinct color per category/role-player so the highlighted
+// columns read at a glance — same approach used for sub-department badges
+// in Operations.
+const TAG_PALETTE = [
   { bg: 'bg-[#3b82f6]/15', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]/40' },
   { bg: 'bg-[#10b981]/15', text: 'text-[#10b981]', border: 'border-[#10b981]/40' },
   { bg: 'bg-[#f59e0b]/15', text: 'text-[#f59e0b]', border: 'border-[#f59e0b]/40' },
@@ -40,11 +42,11 @@ const CATEGORY_PALETTE = [
   { bg: 'bg-[#06b6d4]/15', text: 'text-[#06b6d4]', border: 'border-[#06b6d4]/40' },
   { bg: 'bg-[#ef4444]/15', text: 'text-[#ef4444]', border: 'border-[#ef4444]/40' },
 ];
-const categoryColor = (key) => {
+const tagColor = (key) => {
   const s = String(key || '');
   let hash = 0;
   for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
-  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
+  return TAG_PALETTE[hash % TAG_PALETTE.length];
 };
 
 const emptyMemberForm = () => ({
@@ -53,20 +55,25 @@ const emptyMemberForm = () => ({
   business_name: '',
   email: '',
   phone: '',
+  website: '',
   category_id: '',
   category_name: '',
+  role_player_id: '',
+  role_player_name: '',
   address: '',
   location_link: '',
   city: '',
 });
 
-const emptyCategoryForm = () => ({ name: '', description: '' });
+const emptyNameDescForm = () => ({ name: '', description: '' });
 
 export default function BNIPage() {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState('members');
   const [members, setMembers] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [rolePlayers, setRolePlayers] = useState([]);
+  const [chapterSettings, setChapterSettings] = useState({ chapter_name: '', region: '' });
   const [loading, setLoading] = useState(true);
 
   const [showMemberModal, setShowMemberModal] = useState(false);
@@ -76,7 +83,14 @@ export default function BNIPage() {
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState(null);
-  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm());
+  const [categoryForm, setCategoryForm] = useState(emptyNameDescForm());
+
+  const [showRolePlayerModal, setShowRolePlayerModal] = useState(false);
+  const [editingRolePlayerId, setEditingRolePlayerId] = useState(null);
+  const [rolePlayerForm, setRolePlayerForm] = useState(emptyNameDescForm());
+
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({ chapter_name: '', region: '' });
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -87,12 +101,16 @@ export default function BNIPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [membersRes, categoriesRes] = await Promise.all([
+      const [membersRes, categoriesRes, rolePlayersRes, settingsRes] = await Promise.all([
         api.get('/bni/members'),
         api.get('/bni/categories'),
+        api.get('/bni/role-players'),
+        api.get('/bni/settings'),
       ]);
       setMembers(membersRes.data || []);
       setCategories(categoriesRes.data || []);
+      setRolePlayers(rolePlayersRes.data || []);
+      setChapterSettings(settingsRes.data || { chapter_name: '', region: '' });
     } catch (error) {
       toast.error('Failed to load BNI data');
     } finally {
@@ -106,6 +124,13 @@ export default function BNIPage() {
     () => categories.map((c) => ({ value: c.category_id, label: c.name })),
     [categories]
   );
+  const rolePlayerOptions = useMemo(
+    () => rolePlayers.map((r) => ({ value: r.role_player_id, label: r.name })),
+    [rolePlayers]
+  );
+
+  const pinnedMembers = useMemo(() => members.filter((m) => m.pinned), [members]);
+  const unpinnedMembers = useMemo(() => members.filter((m) => !m.pinned), [members]);
 
   // ---------- Members ----------
 
@@ -123,8 +148,11 @@ export default function BNIPage() {
       business_name: m.business_name || '',
       email: m.email || '',
       phone: m.phone || '',
+      website: m.website || '',
       category_id: m.category_id || '',
       category_name: m.category_name || '',
+      role_player_id: m.role_player_id || '',
+      role_player_name: m.role_player_name || '',
       address: m.address || '',
       location_link: m.location_link || '',
       city: m.city || '',
@@ -163,11 +191,20 @@ export default function BNIPage() {
     }
   };
 
+  const togglePin = async (m) => {
+    try {
+      await api.put(`/bni/members/${m.member_id}`, { pinned: !m.pinned });
+      loadAll();
+    } catch (error) {
+      toast.error('Failed to update pin');
+    }
+  };
+
   // ---------- Categories ----------
 
   const openAddCategory = () => {
     setEditingCategoryId(null);
-    setCategoryForm(emptyCategoryForm());
+    setCategoryForm(emptyNameDescForm());
     setShowCategoryModal(true);
   };
 
@@ -197,15 +234,144 @@ export default function BNIPage() {
     }
   };
 
+  // ---------- Role Players ----------
+
+  const openAddRolePlayer = () => {
+    setEditingRolePlayerId(null);
+    setRolePlayerForm(emptyNameDescForm());
+    setShowRolePlayerModal(true);
+  };
+
+  const openEditRolePlayer = (r) => {
+    setEditingRolePlayerId(r.role_player_id);
+    setRolePlayerForm({ name: r.name || '', description: r.description || '' });
+    setShowRolePlayerModal(true);
+  };
+
+  const saveRolePlayer = async () => {
+    if (!rolePlayerForm.name.trim()) {
+      toast.error('Role player name is required');
+      return;
+    }
+    try {
+      if (editingRolePlayerId) {
+        await api.put(`/bni/role-players/${editingRolePlayerId}`, rolePlayerForm);
+        toast.success('Role player updated');
+      } else {
+        await api.post('/bni/role-players', rolePlayerForm);
+        toast.success('Role player added');
+      }
+      setShowRolePlayerModal(false);
+      loadAll();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save role player');
+    }
+  };
+
+  // ---------- Chapter Settings ----------
+
+  const openEditSettings = () => {
+    setSettingsForm({ chapter_name: chapterSettings.chapter_name || '', region: chapterSettings.region || '' });
+    setShowSettingsModal(true);
+  };
+
+  const saveSettings = async () => {
+    try {
+      const res = await api.put('/bni/settings', settingsForm);
+      setChapterSettings(res.data);
+      setShowSettingsModal(false);
+      toast.success('Chapter details updated');
+    } catch (error) {
+      toast.error('Failed to update chapter details');
+    }
+  };
+
+  const renderMemberRow = (m) => {
+    const catColor = tagColor(m.category_id || m.category_name);
+    const roleColor = tagColor(m.role_player_id || m.role_player_name);
+    return (
+      <tr key={m.member_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+        <td className="px-3 py-3">
+          <button
+            type="button"
+            onClick={() => togglePin(m)}
+            className={m.pinned ? 'text-amber-500' : textSecondary}
+            title={m.pinned ? 'Unpin' : 'Pin'}
+            data-testid={`bni-member-pin-${m.member_id}`}
+          >
+            {m.pinned ? <Pin className="h-4 w-4 fill-current" /> : <PinOff className="h-4 w-4" />}
+          </button>
+        </td>
+        <td className={`px-4 py-3 ${textPrimary} font-medium`}>
+          {m.title ? `${m.title}. ` : ''}{m.name}
+        </td>
+        <td className={`px-4 py-3 ${textSecondary}`}>{m.business_name || '—'}</td>
+        <td className="px-4 py-3">
+          {m.category_name ? (
+            <Badge className={`${catColor.bg} ${catColor.text} border ${catColor.border} font-semibold`}>
+              {m.category_name}
+            </Badge>
+          ) : (
+            <span className={textSecondary}>—</span>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          {m.role_player_name ? (
+            <Badge className={`${roleColor.bg} ${roleColor.text} border ${roleColor.border} font-semibold`}>
+              {m.role_player_name}
+            </Badge>
+          ) : (
+            <span className={textSecondary}>—</span>
+          )}
+        </td>
+        <td className={`px-4 py-3 ${textSecondary}`}>{m.phone || '—'}</td>
+        <td className={`px-4 py-3 ${textSecondary}`}>{m.email || '—'}</td>
+        <td className={`px-4 py-3 ${textSecondary}`}>{m.city || '—'}</td>
+        <td className="px-4 py-3">
+          <div className="flex gap-1">
+            <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => setViewingMember(m)} data-testid={`bni-member-view-${m.member_id}`}>
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => openEditMember(m)} data-testid={`bni-member-edit-${m.member_id}`}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMember(m.member_id)} data-testid={`bni-member-delete-${m.member_id}`}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <Layout>
       <div className="space-y-6" data-testid="bni-page">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className={`text-3xl font-bold ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
-              BNI
-            </h1>
-            <p className={`text-sm ${textSecondary}`}>Chapter members, meetings, and referral tracking.</p>
+            <div className="flex items-center gap-2">
+              <h1 className={`text-3xl font-bold ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
+                {chapterSettings.chapter_name || 'BNI'}
+              </h1>
+              <button
+                type="button"
+                onClick={openEditSettings}
+                className={textSecondary}
+                title="Edit chapter name & region"
+                data-testid="bni-edit-chapter-btn"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+            </div>
+            <div className={`text-sm ${textSecondary} flex items-center gap-2 flex-wrap mt-1`}>
+              {chapterSettings.region && <span>{chapterSettings.region}</span>}
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${bgSecondary} ${textPrimary} text-xs font-semibold`}
+                data-testid="bni-member-count"
+              >
+                <Users className="h-3 w-3" /> {members.length} Members
+              </span>
+            </div>
           </div>
           {activeTab === 'members' && (
             <Button onClick={openAddMember} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-member-btn">
@@ -215,6 +381,11 @@ export default function BNIPage() {
           {activeTab === 'category' && (
             <Button onClick={openAddCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-category-btn">
               <Plus className="h-4 w-4 mr-2" /> Add Category
+            </Button>
+          )}
+          {activeTab === 'role_players' && (
+            <Button onClick={openAddRolePlayer} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-role-player-btn">
+              <Plus className="h-4 w-4 mr-2" /> Add Role Player
             </Button>
           )}
         </div>
@@ -251,9 +422,11 @@ export default function BNIPage() {
                   <table className="w-full text-sm">
                     <thead className={bgSecondary}>
                       <tr>
+                        <th className={`px-3 py-3 text-left font-medium ${textSecondary}`}></th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Business Name</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Role Player</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>City</th>
@@ -263,47 +436,29 @@ export default function BNIPage() {
                     <tbody className={`divide-y ${borderColor}`}>
                       {members.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>
                             No members yet — click "Add Member" to add the first one.
                           </td>
                         </tr>
                       ) : (
-                        members.map((m) => {
-                          const c = categoryColor(m.category_id || m.category_name);
-                          return (
-                            <tr key={m.member_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
-                              <td className={`px-4 py-3 ${textPrimary} font-medium`}>
-                                {m.title ? `${m.title}. ` : ''}{m.name}
-                              </td>
-                              <td className={`px-4 py-3 ${textSecondary}`}>{m.business_name || '—'}</td>
-                              <td className="px-4 py-3">
-                                {m.category_name ? (
-                                  <Badge className={`${c.bg} ${c.text} border ${c.border} font-semibold`}>
-                                    {m.category_name}
-                                  </Badge>
-                                ) : (
-                                  <span className={textSecondary}>—</span>
-                                )}
-                              </td>
-                              <td className={`px-4 py-3 ${textSecondary}`}>{m.phone || '—'}</td>
-                              <td className={`px-4 py-3 ${textSecondary}`}>{m.email || '—'}</td>
-                              <td className={`px-4 py-3 ${textSecondary}`}>{m.city || '—'}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex gap-1">
-                                  <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => setViewingMember(m)} data-testid={`bni-member-view-${m.member_id}`}>
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="sm" onClick={() => openEditMember(m)} data-testid={`bni-member-edit-${m.member_id}`}>
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                  <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMember(m.member_id)} data-testid={`bni-member-delete-${m.member_id}`}>
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
+                        <>
+                          {pinnedMembers.length > 0 && (
+                            <tr className={bgSecondary}>
+                              <td colSpan={9} className={`px-4 py-1.5 text-xs font-semibold tracking-wide ${textSecondary}`}>
+                                📌 PINNED
                               </td>
                             </tr>
-                          );
-                        })
+                          )}
+                          {pinnedMembers.map(renderMemberRow)}
+                          {pinnedMembers.length > 0 && unpinnedMembers.length > 0 && (
+                            <tr className={bgSecondary}>
+                              <td colSpan={9} className={`px-4 py-1.5 text-xs font-semibold tracking-wide ${textSecondary}`}>
+                                MEMBERS
+                              </td>
+                            </tr>
+                          )}
+                          {unpinnedMembers.map(renderMemberRow)}
+                        </>
                       )}
                     </tbody>
                   </table>
@@ -331,7 +486,7 @@ export default function BNIPage() {
                         </tr>
                       ) : (
                         categories.map((c) => {
-                          const color = categoryColor(c.category_id);
+                          const color = tagColor(c.category_id);
                           return (
                             <tr key={c.category_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
                               <td className="px-4 py-3">
@@ -353,7 +508,49 @@ export default function BNIPage() {
               </div>
             )}
 
-            {!['members', 'category'].includes(activeTab) && (() => {
+            {activeTab === 'role_players' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Role Player Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Description</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {rolePlayers.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No role players yet — click "Add Role Player" to add the first one.
+                          </td>
+                        </tr>
+                      ) : (
+                        rolePlayers.map((r) => {
+                          const color = tagColor(r.role_player_id);
+                          return (
+                            <tr key={r.role_player_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                              <td className="px-4 py-3">
+                                <Badge className={`${color.bg} ${color.text} border ${color.border} font-semibold`}>{r.name}</Badge>
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{r.description || '—'}</td>
+                              <td className="px-4 py-3">
+                                <Button variant="ghost" size="sm" onClick={() => openEditRolePlayer(r)} data-testid={`bni-role-player-edit-${r.role_player_id}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {!['members', 'category', 'role_players'].includes(activeTab) && (() => {
               const tab = TABS.find((t) => t.key === activeTab);
               const Icon = tab?.icon || Star;
               return (
@@ -429,18 +626,44 @@ export default function BNIPage() {
                 </div>
               </div>
               <div>
-                <Label className={textPrimary}>Category</Label>
-                <Combobox
-                  value={memberForm.category_name}
-                  onChange={(v) => {
-                    const match = categories.find((c) => c.name === v);
-                    setMemberForm((p) => ({ ...p, category_name: v, category_id: match?.category_id || '' }));
-                  }}
-                  options={categoryOptions}
-                  placeholder="Search or select a category"
+                <Label className={textPrimary}>Website</Label>
+                <Input
+                  value={memberForm.website}
+                  onChange={(e) => setMemberForm((p) => ({ ...p, website: e.target.value }))}
+                  placeholder="https://…"
                   className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  data-testid="bni-member-category"
+                  data-testid="bni-member-website"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Category</Label>
+                  <Combobox
+                    value={memberForm.category_name}
+                    onChange={(v) => {
+                      const match = categories.find((c) => c.name === v);
+                      setMemberForm((p) => ({ ...p, category_name: v, category_id: match?.category_id || '' }));
+                    }}
+                    options={categoryOptions}
+                    placeholder="Search category"
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-category"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Role Player</Label>
+                  <Combobox
+                    value={memberForm.role_player_name}
+                    onChange={(v) => {
+                      const match = rolePlayers.find((r) => r.name === v);
+                      setMemberForm((p) => ({ ...p, role_player_name: v, role_player_id: match?.role_player_id || '' }));
+                    }}
+                    options={rolePlayerOptions}
+                    placeholder="Search role player"
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-role-player"
+                  />
+                </div>
               </div>
               <div>
                 <Label className={textPrimary}>Address</Label>
@@ -493,11 +716,18 @@ export default function BNIPage() {
             </DialogHeader>
             {viewingMember && (
               <div className="space-y-3 text-sm">
-                {viewingMember.category_name && (
-                  <Badge className={`${categoryColor(viewingMember.category_id || viewingMember.category_name).bg} ${categoryColor(viewingMember.category_id || viewingMember.category_name).text} border ${categoryColor(viewingMember.category_id || viewingMember.category_name).border} font-semibold`}>
-                    {viewingMember.category_name}
-                  </Badge>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  {viewingMember.category_name && (
+                    <Badge className={`${tagColor(viewingMember.category_id || viewingMember.category_name).bg} ${tagColor(viewingMember.category_id || viewingMember.category_name).text} border ${tagColor(viewingMember.category_id || viewingMember.category_name).border} font-semibold`}>
+                      {viewingMember.category_name}
+                    </Badge>
+                  )}
+                  {viewingMember.role_player_name && (
+                    <Badge className={`${tagColor(viewingMember.role_player_id || viewingMember.role_player_name).bg} ${tagColor(viewingMember.role_player_id || viewingMember.role_player_name).text} border ${tagColor(viewingMember.role_player_id || viewingMember.role_player_name).border} font-semibold`}>
+                      {viewingMember.role_player_name}
+                    </Badge>
+                  )}
+                </div>
                 {viewingMember.business_name && (
                   <p className={textPrimary}>{viewingMember.business_name}</p>
                 )}
@@ -506,6 +736,16 @@ export default function BNIPage() {
                 )}
                 {viewingMember.phone && (
                   <p className={`flex items-center gap-2 ${textSecondary}`}><Phone className="h-4 w-4" /> {viewingMember.phone}</p>
+                )}
+                {viewingMember.website && (
+                  <a
+                    href={viewingMember.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-[#6366f1] hover:underline"
+                  >
+                    <Globe className="h-4 w-4" /> {viewingMember.website}
+                  </a>
                 )}
                 {viewingMember.address && (
                   <p className={`flex items-start gap-2 ${textSecondary}`}><MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" /> {viewingMember.address}{viewingMember.city ? `, ${viewingMember.city}` : ''}</p>
@@ -556,6 +796,80 @@ export default function BNIPage() {
               <Button variant="ghost" onClick={() => setShowCategoryModal(false)}>Cancel</Button>
               <Button onClick={saveCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-category-save">
                 {editingCategoryId ? 'Save Changes' : 'Add Category'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add/Edit Role Player Modal */}
+        <Dialog open={showRolePlayerModal} onOpenChange={setShowRolePlayerModal}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>{editingRolePlayerId ? 'Edit Role Player' : 'Add Role Player'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Role Player Name <span className="text-red-500">*</span></Label>
+                <Input
+                  value={rolePlayerForm.name}
+                  onChange={(e) => setRolePlayerForm((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. President, Visitor Host"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-role-player-name"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Description</Label>
+                <Textarea
+                  value={rolePlayerForm.description}
+                  onChange={(e) => setRolePlayerForm((p) => ({ ...p, description: e.target.value }))}
+                  rows={3}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-role-player-description"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowRolePlayerModal(false)}>Cancel</Button>
+              <Button onClick={saveRolePlayer} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-role-player-save">
+                {editingRolePlayerId ? 'Save Changes' : 'Add Role Player'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Chapter Modal */}
+        <Dialog open={showSettingsModal} onOpenChange={setShowSettingsModal}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Edit Chapter Details</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Chapter Name</Label>
+                <Input
+                  value={settingsForm.chapter_name}
+                  onChange={(e) => setSettingsForm((p) => ({ ...p, chapter_name: e.target.value }))}
+                  placeholder="e.g. BNI Titans"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-settings-chapter-name"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Region</Label>
+                <Input
+                  value={settingsForm.region}
+                  onChange={(e) => setSettingsForm((p) => ({ ...p, region: e.target.value }))}
+                  placeholder="e.g. Chennai"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-settings-region"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowSettingsModal(false)}>Cancel</Button>
+              <Button onClick={saveSettings} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-settings-save">
+                Save Changes
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -49,7 +49,7 @@ from additional_tasks_routes import additional_tasks_router, init_additional_tas
 from projects_routes import projects_router
 from dept_categories_routes import dept_categories_router, dept_statuses_router
 from meetings_routes import meetings_router, init_meetings_db
-from bni_routes import bni_categories_router, bni_members_router
+from bni_routes import bni_settings_router, bni_categories_router, bni_role_players_router, bni_members_router
 from sheets_routes import sheets_router
 from org_tree_routes import org_tree_router, init_org_tree_db
 from db_admin_routes import db_admin_router, init_db_admin
@@ -2963,7 +2963,9 @@ api_router.include_router(meetings_router)
 api_router.include_router(projects_router)
 api_router.include_router(dept_categories_router)
 api_router.include_router(dept_statuses_router)
+api_router.include_router(bni_settings_router)
 api_router.include_router(bni_categories_router)
+api_router.include_router(bni_role_players_router)
 api_router.include_router(bni_members_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
