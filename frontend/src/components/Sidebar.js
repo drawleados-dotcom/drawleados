@@ -29,6 +29,7 @@ import {
   Calendar,
   Briefcase,
   Building2,
+  Handshake,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -483,6 +484,15 @@ const Sidebar = () => {
             >
               <Package className="h-5 w-5" strokeWidth={2} />
               {!isCollapsed && 'Service and Packages'}
+            </Link>
+            <Link
+              to="/bni"
+              data-testid="nav-bni"
+              className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/bni' ? navItemActive : navItemInactive}`}
+              title={isCollapsed ? 'BNI' : ''}
+            >
+              <Handshake className="h-5 w-5" strokeWidth={2} />
+              {!isCollapsed && 'BNI'}
             </Link>
           </>
         )}

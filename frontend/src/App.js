@@ -35,6 +35,7 @@ import ClientPortalLoginPage from './pages/ClientPortalLoginPage';
 import ClientPortalViewPage from './pages/ClientPortalViewPage';
 import ClientMasterPage from './pages/ClientMasterPage';
 import ServicePackagesPage from './pages/ServicePackagesPage';
+import BNIPage from './pages/BNIPage';
 import './App.css';
 
 function AppRouter() {
@@ -114,6 +115,14 @@ function AppRouter() {
         element={
           <ProtectedRoute module="service_packages">
             <ServicePackagesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bni"
+        element={
+          <ProtectedRoute module="bni">
+            <BNIPage />
           </ProtectedRoute>
         }
       />

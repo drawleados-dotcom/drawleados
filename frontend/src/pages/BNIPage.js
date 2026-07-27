@@ -1,0 +1,566 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import Layout from '../components/Layout';
+import { useTheme } from '../contexts/ThemeContext';
+import api from '../utils/api';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
+import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
+import { Combobox } from '../components/ui/combobox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import {
+  Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag,
+  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone,
+} from 'lucide-react';
+import { toast } from 'sonner';
+
+const TITLE_OPTIONS = ['Mr', 'Miss', 'Mrs'];
+
+const TABS = [
+  { key: 'members', label: 'Members', icon: Users },
+  { key: 'weekly_meeting', label: 'Weekly Meeting', icon: Calendar },
+  { key: 'one_to_one', label: 'One-to-One', icon: Handshake },
+  { key: 'payment_history', label: 'Payment History', icon: Wallet },
+  { key: 'referrals', label: 'Referrals', icon: Share2 },
+  { key: 'thank_you_note', label: 'Thank You Note', icon: Heart },
+  { key: 'testimonials', label: 'Testimonials', icon: Star },
+  { key: 'category', label: 'Category', icon: Tag },
+];
+
+// Deterministic distinct color per category so the highlighted column reads
+// at a glance — same approach used for sub-department badges in Operations.
+const CATEGORY_PALETTE = [
+  { bg: 'bg-[#3b82f6]/15', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]/40' },
+  { bg: 'bg-[#10b981]/15', text: 'text-[#10b981]', border: 'border-[#10b981]/40' },
+  { bg: 'bg-[#f59e0b]/15', text: 'text-[#f59e0b]', border: 'border-[#f59e0b]/40' },
+  { bg: 'bg-[#8b5cf6]/15', text: 'text-[#8b5cf6]', border: 'border-[#8b5cf6]/40' },
+  { bg: 'bg-[#ec4899]/15', text: 'text-[#ec4899]', border: 'border-[#ec4899]/40' },
+  { bg: 'bg-[#06b6d4]/15', text: 'text-[#06b6d4]', border: 'border-[#06b6d4]/40' },
+  { bg: 'bg-[#ef4444]/15', text: 'text-[#ef4444]', border: 'border-[#ef4444]/40' },
+];
+const categoryColor = (key) => {
+  const s = String(key || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return CATEGORY_PALETTE[hash % CATEGORY_PALETTE.length];
+};
+
+const emptyMemberForm = () => ({
+  title: 'Mr',
+  name: '',
+  business_name: '',
+  email: '',
+  phone: '',
+  category_id: '',
+  category_name: '',
+  address: '',
+  location_link: '',
+  city: '',
+});
+
+const emptyCategoryForm = () => ({ name: '', description: '' });
+
+export default function BNIPage() {
+  const { isDark } = useTheme();
+  const [activeTab, setActiveTab] = useState('members');
+  const [members, setMembers] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [showMemberModal, setShowMemberModal] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState(null);
+  const [memberForm, setMemberForm] = useState(emptyMemberForm());
+  const [viewingMember, setViewingMember] = useState(null);
+
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm());
+
+  const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
+  const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
+  const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
+  const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [membersRes, categoriesRes] = await Promise.all([
+        api.get('/bni/members'),
+        api.get('/bni/categories'),
+      ]);
+      setMembers(membersRes.data || []);
+      setCategories(categoriesRes.data || []);
+    } catch (error) {
+      toast.error('Failed to load BNI data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  const categoryOptions = useMemo(
+    () => categories.map((c) => ({ value: c.category_id, label: c.name })),
+    [categories]
+  );
+
+  // ---------- Members ----------
+
+  const openAddMember = () => {
+    setEditingMemberId(null);
+    setMemberForm(emptyMemberForm());
+    setShowMemberModal(true);
+  };
+
+  const openEditMember = (m) => {
+    setEditingMemberId(m.member_id);
+    setMemberForm({
+      title: m.title || 'Mr',
+      name: m.name || '',
+      business_name: m.business_name || '',
+      email: m.email || '',
+      phone: m.phone || '',
+      category_id: m.category_id || '',
+      category_name: m.category_name || '',
+      address: m.address || '',
+      location_link: m.location_link || '',
+      city: m.city || '',
+    });
+    setShowMemberModal(true);
+  };
+
+  const saveMember = async () => {
+    if (!memberForm.name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+    try {
+      if (editingMemberId) {
+        await api.put(`/bni/members/${editingMemberId}`, memberForm);
+        toast.success('Member updated');
+      } else {
+        await api.post('/bni/members', memberForm);
+        toast.success('Member added');
+      }
+      setShowMemberModal(false);
+      loadAll();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save member');
+    }
+  };
+
+  const deleteMember = async (memberId) => {
+    if (!window.confirm('Are you sure you want to delete this member?')) return;
+    try {
+      await api.delete(`/bni/members/${memberId}`);
+      toast.success('Member deleted');
+      loadAll();
+    } catch (error) {
+      toast.error('Failed to delete member');
+    }
+  };
+
+  // ---------- Categories ----------
+
+  const openAddCategory = () => {
+    setEditingCategoryId(null);
+    setCategoryForm(emptyCategoryForm());
+    setShowCategoryModal(true);
+  };
+
+  const openEditCategory = (c) => {
+    setEditingCategoryId(c.category_id);
+    setCategoryForm({ name: c.name || '', description: c.description || '' });
+    setShowCategoryModal(true);
+  };
+
+  const saveCategory = async () => {
+    if (!categoryForm.name.trim()) {
+      toast.error('Category name is required');
+      return;
+    }
+    try {
+      if (editingCategoryId) {
+        await api.put(`/bni/categories/${editingCategoryId}`, categoryForm);
+        toast.success('Category updated');
+      } else {
+        await api.post('/bni/categories', categoryForm);
+        toast.success('Category added');
+      }
+      setShowCategoryModal(false);
+      loadAll();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save category');
+    }
+  };
+
+  return (
+    <Layout>
+      <div className="space-y-6" data-testid="bni-page">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className={`text-3xl font-bold ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
+              BNI
+            </h1>
+            <p className={`text-sm ${textSecondary}`}>Chapter members, meetings, and referral tracking.</p>
+          </div>
+          {activeTab === 'members' && (
+            <Button onClick={openAddMember} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-member-btn">
+              <Plus className="h-4 w-4 mr-2" /> Add Member
+            </Button>
+          )}
+          {activeTab === 'category' && (
+            <Button onClick={openAddCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-category-btn">
+              <Plus className="h-4 w-4 mr-2" /> Add Category
+            </Button>
+          )}
+        </div>
+
+        {/* Tab bar */}
+        <div className="flex flex-wrap gap-2">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                data-testid={`bni-tab-${tab.key.replace(/_/g, '-')}`}
+                className={`px-4 py-2 text-sm font-medium rounded-lg flex items-center gap-2 transition-all whitespace-nowrap border ${
+                  isActive
+                    ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                    : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                }`}
+              >
+                <Icon className="h-4 w-4" /> {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {loading ? (
+          <div className={`text-center py-12 ${textSecondary}`}>Loading…</div>
+        ) : (
+          <>
+            {activeTab === 'members' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Business Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>City</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {members.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No members yet — click "Add Member" to add the first one.
+                          </td>
+                        </tr>
+                      ) : (
+                        members.map((m) => {
+                          const c = categoryColor(m.category_id || m.category_name);
+                          return (
+                            <tr key={m.member_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                              <td className={`px-4 py-3 ${textPrimary} font-medium`}>
+                                {m.title ? `${m.title}. ` : ''}{m.name}
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{m.business_name || '—'}</td>
+                              <td className="px-4 py-3">
+                                {m.category_name ? (
+                                  <Badge className={`${c.bg} ${c.text} border ${c.border} font-semibold`}>
+                                    {m.category_name}
+                                  </Badge>
+                                ) : (
+                                  <span className={textSecondary}>—</span>
+                                )}
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{m.phone || '—'}</td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{m.email || '—'}</td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{m.city || '—'}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex gap-1">
+                                  <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => setViewingMember(m)} data-testid={`bni-member-view-${m.member_id}`}>
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" onClick={() => openEditMember(m)} data-testid={`bni-member-edit-${m.member_id}`}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMember(m.member_id)} data-testid={`bni-member-delete-${m.member_id}`}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'category' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Description</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {categories.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No categories yet — click "Add Category" to add the first one.
+                          </td>
+                        </tr>
+                      ) : (
+                        categories.map((c) => {
+                          const color = categoryColor(c.category_id);
+                          return (
+                            <tr key={c.category_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                              <td className="px-4 py-3">
+                                <Badge className={`${color.bg} ${color.text} border ${color.border} font-semibold`}>{c.name}</Badge>
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{c.description || '—'}</td>
+                              <td className="px-4 py-3">
+                                <Button variant="ghost" size="sm" onClick={() => openEditCategory(c)} data-testid={`bni-category-edit-${c.category_id}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {!['members', 'category'].includes(activeTab) && (() => {
+              const tab = TABS.find((t) => t.key === activeTab);
+              const Icon = tab?.icon || Star;
+              return (
+                <div className={`${bgCard} border ${borderColor} rounded-xl p-12 text-center`}>
+                  <Icon className={`h-10 w-10 mx-auto mb-3 ${textSecondary}`} />
+                  <p className={`font-medium ${textPrimary}`}>{tab?.label} — coming soon</p>
+                  <p className={`text-sm ${textSecondary} mt-1`}>Let us know what fields/workflow you need here and we'll build it out.</p>
+                </div>
+              );
+            })()}
+          </>
+        )}
+
+        {/* Add/Edit Member Modal */}
+        <Dialog open={showMemberModal} onOpenChange={setShowMemberModal}>
+          <DialogContent className={`${bgCard} max-w-lg max-h-[90vh] overflow-y-auto`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>{editingMemberId ? 'Edit Member' : 'Add Member'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className={textPrimary}>Title</Label>
+                  <Select value={memberForm.title} onValueChange={(v) => setMemberForm((p) => ({ ...p, title: v }))}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-member-title">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TITLE_OPTIONS.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2">
+                  <Label className={textPrimary}>Name <span className="text-red-500">*</span></Label>
+                  <Input
+                    value={memberForm.name}
+                    onChange={(e) => setMemberForm((p) => ({ ...p, name: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-name"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className={textPrimary}>Business Name</Label>
+                <Input
+                  value={memberForm.business_name}
+                  onChange={(e) => setMemberForm((p) => ({ ...p, business_name: e.target.value }))}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-member-business-name"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Email</Label>
+                  <Input
+                    type="email"
+                    value={memberForm.email}
+                    onChange={(e) => setMemberForm((p) => ({ ...p, email: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-email"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Phone Number</Label>
+                  <Input
+                    value={memberForm.phone}
+                    onChange={(e) => setMemberForm((p) => ({ ...p, phone: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-phone"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className={textPrimary}>Category</Label>
+                <Combobox
+                  value={memberForm.category_name}
+                  onChange={(v) => {
+                    const match = categories.find((c) => c.name === v);
+                    setMemberForm((p) => ({ ...p, category_name: v, category_id: match?.category_id || '' }));
+                  }}
+                  options={categoryOptions}
+                  placeholder="Search or select a category"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-member-category"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Address</Label>
+                <Textarea
+                  value={memberForm.address}
+                  onChange={(e) => setMemberForm((p) => ({ ...p, address: e.target.value }))}
+                  rows={2}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-member-address"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Location Link</Label>
+                  <Input
+                    value={memberForm.location_link}
+                    onChange={(e) => setMemberForm((p) => ({ ...p, location_link: e.target.value }))}
+                    placeholder="Google Maps link"
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-location-link"
+                  />
+                </div>
+                <div>
+                  <Label className={textPrimary}>City</Label>
+                  <Input
+                    value={memberForm.city}
+                    onChange={(e) => setMemberForm((p) => ({ ...p, city: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="bni-member-city"
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowMemberModal(false)}>Cancel</Button>
+              <Button onClick={saveMember} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-member-save">
+                {editingMemberId ? 'Save Changes' : 'Add Member'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Member Modal */}
+        <Dialog open={!!viewingMember} onOpenChange={(open) => !open && setViewingMember(null)}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>
+                {viewingMember?.title ? `${viewingMember.title}. ` : ''}{viewingMember?.name}
+              </DialogTitle>
+            </DialogHeader>
+            {viewingMember && (
+              <div className="space-y-3 text-sm">
+                {viewingMember.category_name && (
+                  <Badge className={`${categoryColor(viewingMember.category_id || viewingMember.category_name).bg} ${categoryColor(viewingMember.category_id || viewingMember.category_name).text} border ${categoryColor(viewingMember.category_id || viewingMember.category_name).border} font-semibold`}>
+                    {viewingMember.category_name}
+                  </Badge>
+                )}
+                {viewingMember.business_name && (
+                  <p className={textPrimary}>{viewingMember.business_name}</p>
+                )}
+                {viewingMember.email && (
+                  <p className={`flex items-center gap-2 ${textSecondary}`}><Mail className="h-4 w-4" /> {viewingMember.email}</p>
+                )}
+                {viewingMember.phone && (
+                  <p className={`flex items-center gap-2 ${textSecondary}`}><Phone className="h-4 w-4" /> {viewingMember.phone}</p>
+                )}
+                {viewingMember.address && (
+                  <p className={`flex items-start gap-2 ${textSecondary}`}><MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" /> {viewingMember.address}{viewingMember.city ? `, ${viewingMember.city}` : ''}</p>
+                )}
+                {viewingMember.location_link && (
+                  <a
+                    href={viewingMember.location_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-[#6366f1] hover:underline"
+                  >
+                    <LinkIcon className="h-4 w-4" /> Open location
+                  </a>
+                )}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Add/Edit Category Modal */}
+        <Dialog open={showCategoryModal} onOpenChange={setShowCategoryModal}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>{editingCategoryId ? 'Edit Category' : 'Add Category'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Category Name <span className="text-red-500">*</span></Label>
+                <Input
+                  value={categoryForm.name}
+                  onChange={(e) => setCategoryForm((p) => ({ ...p, name: e.target.value }))}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-category-name"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Description</Label>
+                <Textarea
+                  value={categoryForm.description}
+                  onChange={(e) => setCategoryForm((p) => ({ ...p, description: e.target.value }))}
+                  rows={3}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-category-description"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowCategoryModal(false)}>Cancel</Button>
+              <Button onClick={saveCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-category-save">
+                {editingCategoryId ? 'Save Changes' : 'Add Category'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </Layout>
+  );
+}

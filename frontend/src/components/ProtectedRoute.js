@@ -25,7 +25,7 @@ function userHasModule(user, isAdmin, module) {
   // Client Master / Service & Packages are Super Admin-only additions —
   // always visible to super_admin regardless of a curated module_access
   // list (which predates these modules and never mentions them).
-  if (module === 'client_master' || module === 'service_packages') {
+  if (module === 'client_master' || module === 'service_packages' || module === 'bni') {
     const role = String(user?.role || '').toLowerCase();
     if (role === 'super_admin') return true;
   }
