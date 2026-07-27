@@ -10,13 +10,33 @@ import { Badge } from '../components/ui/badge';
 import { Combobox } from '../components/ui/combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import CSVImportModal from '../components/bni/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award,
-  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff,
+  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TITLE_OPTIONS = ['Mr', 'Miss', 'Mrs'];
+
+const MEMBER_IMPORT_FIELDS = [
+  { key: 'title', label: 'Title (Mr/Miss/Mrs)' },
+  { key: 'name', label: 'Name', required: true },
+  { key: 'business_name', label: 'Business Name' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone Number' },
+  { key: 'website', label: 'Website' },
+  { key: 'category_name', label: 'Category' },
+  { key: 'role_player_name', label: 'Role Player' },
+  { key: 'address', label: 'Address' },
+  { key: 'location_link', label: 'Location Link' },
+  { key: 'city', label: 'City' },
+];
+
+const NAME_DESC_IMPORT_FIELDS = [
+  { key: 'name', label: 'Name', required: true },
+  { key: 'description', label: 'Description' },
+];
 
 const TABS = [
   { key: 'members', label: 'Members', icon: Users },
@@ -91,6 +111,10 @@ export default function BNIPage() {
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsForm, setSettingsForm] = useState({ chapter_name: '', region: '' });
+
+  const [showMemberImport, setShowMemberImport] = useState(false);
+  const [showCategoryImport, setShowCategoryImport] = useState(false);
+  const [showRolePlayerImport, setShowRolePlayerImport] = useState(false);
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -286,6 +310,42 @@ export default function BNIPage() {
     }
   };
 
+  // ---------- CSV Import ----------
+
+  const importMembers = async (rows) => {
+    const results = await Promise.allSettled(rows.map((r) => {
+      const catMatch = categories.find((c) => c.name.toLowerCase() === (r.category_name || '').trim().toLowerCase());
+      const roleMatch = rolePlayers.find((rp) => rp.name.toLowerCase() === (r.role_player_name || '').trim().toLowerCase());
+      return api.post('/bni/members', {
+        ...emptyMemberForm(),
+        ...r,
+        category_id: catMatch?.category_id || '',
+        role_player_id: roleMatch?.role_player_id || '',
+      });
+    }));
+    const success = results.filter((r) => r.status === 'fulfilled').length;
+    toast.success(`Imported ${success} of ${rows.length} members`);
+    loadAll();
+  };
+
+  const importCategories = async (rows) => {
+    const results = await Promise.allSettled(
+      rows.map((r) => api.post('/bni/categories', { name: r.name, description: r.description || '' }))
+    );
+    const success = results.filter((r) => r.status === 'fulfilled').length;
+    toast.success(`Imported ${success} of ${rows.length} categories`);
+    loadAll();
+  };
+
+  const importRolePlayers = async (rows) => {
+    const results = await Promise.allSettled(
+      rows.map((r) => api.post('/bni/role-players', { name: r.name, description: r.description || '' }))
+    );
+    const success = results.filter((r) => r.status === 'fulfilled').length;
+    toast.success(`Imported ${success} of ${rows.length} role players`);
+    loadAll();
+  };
+
   const renderMemberRow = (m) => {
     const catColor = tagColor(m.category_id || m.category_name);
     const roleColor = tagColor(m.role_player_id || m.role_player_name);
@@ -374,19 +434,34 @@ export default function BNIPage() {
             </div>
           </div>
           {activeTab === 'members' && (
-            <Button onClick={openAddMember} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-member-btn">
-              <Plus className="h-4 w-4 mr-2" /> Add Member
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowMemberImport(true)} data-testid="bni-import-member-btn">
+                <Upload className="h-4 w-4 mr-2" /> Import CSV
+              </Button>
+              <Button onClick={openAddMember} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-member-btn">
+                <Plus className="h-4 w-4 mr-2" /> Add Member
+              </Button>
+            </div>
           )}
           {activeTab === 'category' && (
-            <Button onClick={openAddCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-category-btn">
-              <Plus className="h-4 w-4 mr-2" /> Add Category
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowCategoryImport(true)} data-testid="bni-import-category-btn">
+                <Upload className="h-4 w-4 mr-2" /> Import CSV
+              </Button>
+              <Button onClick={openAddCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-category-btn">
+                <Plus className="h-4 w-4 mr-2" /> Add Category
+              </Button>
+            </div>
           )}
           {activeTab === 'role_players' && (
-            <Button onClick={openAddRolePlayer} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-role-player-btn">
-              <Plus className="h-4 w-4 mr-2" /> Add Role Player
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowRolePlayerImport(true)} data-testid="bni-import-role-player-btn">
+                <Upload className="h-4 w-4 mr-2" /> Import CSV
+              </Button>
+              <Button onClick={openAddRolePlayer} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-role-player-btn">
+                <Plus className="h-4 w-4 mr-2" /> Add Role Player
+              </Button>
+            </div>
           )}
         </div>
 
@@ -874,6 +949,43 @@ export default function BNIPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <CSVImportModal
+          open={showMemberImport}
+          onClose={() => setShowMemberImport(false)}
+          title="Import Members from CSV"
+          fields={MEMBER_IMPORT_FIELDS}
+          onImport={importMembers}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
+        <CSVImportModal
+          open={showCategoryImport}
+          onClose={() => setShowCategoryImport(false)}
+          title="Import Categories from CSV"
+          fields={NAME_DESC_IMPORT_FIELDS}
+          onImport={importCategories}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
+        <CSVImportModal
+          open={showRolePlayerImport}
+          onClose={() => setShowRolePlayerImport(false)}
+          title="Import Role Players from CSV"
+          fields={NAME_DESC_IMPORT_FIELDS}
+          onImport={importRolePlayers}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
       </div>
     </Layout>
   );
