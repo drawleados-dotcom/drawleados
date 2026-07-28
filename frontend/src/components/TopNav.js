@@ -7,10 +7,14 @@ import {
   LayoutDashboard, Users, User, Settings as SettingsIcon, Package, DollarSign,
   UserCircle, Shield, MessageSquare, Megaphone, ClipboardList, ClipboardCheck,
   Globe, FolderOpen, Calendar, Briefcase, FileSpreadsheet, Search, Building2,
-  Handshake,
+  Handshake, Bot,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
+
+// Hardcoded Automation access — bypasses module_access/designation entirely
+// for this account, regardless of role. Mirrors Sidebar.js/ProtectedRoute.js.
+const AUTOMATION_HARDCODED_EMAILS = ['vinoth@drawlead.com'];
 
 /**
  * TopNav — horizontal navigation alternative to the left Sidebar.
@@ -27,9 +31,15 @@ export default function TopNav() {
     // Dashboard is Super Admin/Admin's landing tab — always visible to
     // them, regardless of a designation's configured module_access list.
     if (module === 'dashboard' && (userRole === 'super_admin' || userRole === 'admin')) return true;
-    // Client Master / Service & Packages — Super Admin-only additions, always
-    // visible regardless of a curated module_access list.
+    // Client Master / Service & Packages / BNI — Super Admin-only additions,
+    // always visible regardless of a curated module_access list.
     if ((module === 'client_master' || module === 'service_packages' || module === 'bni') && userRole === 'super_admin') return true;
+    // Automation — open to Admin too (not just Super Admin), plus a
+    // hardcoded bypass for AUTOMATION_HARDCODED_EMAILS regardless of role.
+    if (module === 'automation') {
+      if (userRole === 'super_admin' || userRole === 'admin') return true;
+      if (AUTOMATION_HARDCODED_EMAILS.includes(String(user?.email || '').toLowerCase())) return true;
+    }
     if (Array.isArray(moduleAccess) && moduleAccess.length > 0) {
       const aliasMap = {
         operations: ['operations', 'our_tasks'],
@@ -61,6 +71,7 @@ export default function TopNav() {
     { key: 'client_master', path: '/client-master',   label: 'Clients Master View', icon: Building2 },
     { key: 'service_packages', path: '/service-packages', label: 'Service and Packages', icon: Package },
     { key: 'bni',           path: '/bni',             label: 'BNI',             icon: Handshake },
+    { key: 'automation',    path: '/automation',      label: 'Automation',      icon: Bot },
     { key: 'settings',      path: '/settings',        label: 'Settings',        icon: SettingsIcon },
     { key: 'my_profile',    path: '/hr',              label: 'My Profile',      icon: UserCircle },
   ];
