@@ -36,6 +36,8 @@ import ClientPortalViewPage from './pages/ClientPortalViewPage';
 import ClientMasterPage from './pages/ClientMasterPage';
 import ServicePackagesPage from './pages/ServicePackagesPage';
 import BNIPage from './pages/BNIPage';
+import AutomationPage from './pages/AutomationPage';
+import LinkedInPartnershipPage from './pages/LinkedInPartnershipPage';
 import './App.css';
 
 function AppRouter() {
@@ -123,6 +125,22 @@ function AppRouter() {
         element={
           <ProtectedRoute module="bni">
             <BNIPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/automation"
+        element={
+          <ProtectedRoute module="automation">
+            <AutomationPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/automation/linkedin-partnership"
+        element={
+          <ProtectedRoute module="automation">
+            <LinkedInPartnershipPage />
           </ProtectedRoute>
         }
       />

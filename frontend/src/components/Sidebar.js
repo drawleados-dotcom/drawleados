@@ -30,6 +30,7 @@ import {
   Briefcase,
   Building2,
   Handshake,
+  Bot,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -500,6 +501,20 @@ const Sidebar = () => {
           >
             <Handshake className="h-5 w-5" strokeWidth={2} />
             {!isCollapsed && 'BNI'}
+          </Link>
+        )}
+
+        {/* Automation — Super Admin always sees it (mirrors BNI); also
+            grantable to any designation via Module Access. */}
+        {(userRole === 'super_admin' || hasAccess('automation')) && (
+          <Link
+            to="/automation"
+            data-testid="nav-automation"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname.startsWith('/automation') ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'Automation' : ''}
+          >
+            <Bot className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'Automation'}
           </Link>
         )}
 

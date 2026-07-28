@@ -86,6 +86,9 @@ const SettingsPage = () => {
     
     // Reports
     { value: 'reports', label: 'Reports' },
+
+    // Automation
+    { value: 'automation', label: 'Automation' },
   ];
 
   useEffect(() => {

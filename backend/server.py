@@ -41,6 +41,7 @@ from bde_routes import bde_router
 from our_tasks_routes import our_tasks_router
 from google_calendar_routes import calendar_router, init_calendar_db
 from linkedin_routes import linkedin_router, init_linkedin_db
+from automation_routes import automation_router, init_automation_db
 from client_portal_routes import client_portal_router, init_client_portal_db
 from payroll_routes import payroll_router
 from department_routes import department_router
@@ -79,6 +80,7 @@ init_hr_db(db)
 init_notion_db(db)
 init_chat_db(db)
 init_ai_db(db)
+init_automation_db(db)
 init_sop_db(db)
 init_website_projects_db(db)
 set_expense_db(db)
@@ -2954,6 +2956,7 @@ api_router.include_router(bde_router)
 api_router.include_router(our_tasks_router)
 api_router.include_router(calendar_router)
 api_router.include_router(linkedin_router)
+api_router.include_router(automation_router)
 api_router.include_router(client_portal_router)
 api_router.include_router(payroll_router)
 api_router.include_router(department_router)
