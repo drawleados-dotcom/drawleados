@@ -27,7 +27,7 @@ const TABS = [
   { key: 'conversation', label: 'Conversation Assistant', icon: MessagesSquare, live: false },
   { key: 'workflow', label: 'Workflow', icon: Workflow, live: false },
   { key: 'queue', label: 'Automation Queue', icon: ListTodo, live: false },
-  { key: 'integrations', label: 'Integrations', icon: Plug, live: false },
+  { key: 'integrations', label: 'Integrations', icon: Plug, live: true },
   { key: 'ai_settings', label: 'AI Settings', icon: Settings, live: false },
   { key: 'logs', label: 'Logs', icon: ScrollText, live: false },
 ];
@@ -48,6 +48,19 @@ const MESSAGE_BUTTONS = [
 const EMPTY_FORM = {
   name: '', company: '', country: '', industry: '', linkedin_url: '',
   agency_type: '', status: 'New', assigned_to: '', next_action: '', notes: '', deal_value: '',
+};
+
+// Builds the "javascript:" bookmarklet URI. Runs entirely in the user's own
+// logged-in LinkedIn tab — reads the profile text already on screen and
+// posts it to our capture endpoint. No bot, no LinkedIn login on our side.
+// `mode: 'no-cors'` avoids needing any CORS/server config change; the
+// tradeoff is the bookmarklet can't read the response, so it just shows an
+// optimistic "sending" message rather than a confirmed success/failure.
+const buildBookmarkletHref = (token) => {
+  const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+  const apiUrl = `${backendUrl}/api/automation/linkedin-partnership/capture`;
+  const code = `(function(){try{var m=document.querySelector('main')||document.body;var t=(m.innerText||'').slice(0,8000);var n=((document.title||'').split('|')[0]||'LinkedIn Contact').trim();var u=window.location.href.split('?')[0];fetch('${apiUrl}',{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({capture_token:'${token}',name:n,linkedin_url:u,profile_text:t})});alert('Sending "'+n+'" to Drawlead OS...');}catch(e){alert('Capture failed: '+e.message);}})();`;
+  return `javascript:${code}`;
 };
 
 // ============== KANBAN ==============
@@ -118,21 +131,24 @@ const LinkedInPartnershipPage = () => {
   const [stages, setStages] = useState([]);
   const [agencyTypes, setAgencyTypes] = useState([]);
   const [dashboardStats, setDashboardStats] = useState(null);
+  const [captureToken, setCaptureToken] = useState('');
 
   const stageColor = (stage) => STAGE_COLORS[stages.indexOf(stage) % STAGE_COLORS.length] || '#71717a';
 
   const loadAll = useCallback(async () => {
     try {
-      const [pRes, sRes, aRes, dRes] = await Promise.all([
+      const [pRes, sRes, aRes, dRes, tRes] = await Promise.all([
         api.get('/automation/linkedin-partnership/partners'),
         api.get('/automation/linkedin-partnership/stages'),
         api.get('/automation/linkedin-partnership/agency-types'),
         api.get('/automation/linkedin-partnership/dashboard'),
+        api.get('/automation/linkedin-partnership/capture-token'),
       ]);
       setPartners(pRes.data || []);
       setStages(sRes.data || []);
       setAgencyTypes(aRes.data || []);
       setDashboardStats(dRes.data || null);
+      setCaptureToken(tRes.data?.token || '');
     } catch (e) {
       toast.error('Failed to load LinkedIn Partnership data');
     } finally {
@@ -547,8 +563,50 @@ const LinkedInPartnershipPage = () => {
           </div>
         )}
 
+        {/* ============== INTEGRATIONS (LinkedIn Bookmarklet) ============== */}
+        {activeTab === 'integrations' && (
+          <div className={`max-w-2xl space-y-4 p-4 rounded-lg border ${borderColor} ${bgCard}`} data-testid="linkedin-integrations-tab">
+            <div>
+              <h3 className={`text-sm font-semibold ${textPrimary} flex items-center gap-2`}>
+                <Linkedin className="h-4 w-4 text-[#0a66c2]" /> LinkedIn Capture Bookmarklet
+              </h3>
+              <p className={`text-xs ${textSecondary} mt-1`}>
+                No bot, no LinkedIn login on our side. While you're browsing LinkedIn normally and logged in as yourself,
+                click this button — it reads the profile text already on your screen and sends it straight into your
+                Partners list, where it's automatically analyzed by AI.
+              </p>
+            </div>
+
+            {captureToken ? (
+              <>
+                <div className="flex items-center justify-center p-6 rounded-lg border border-dashed border-[#0a66c2]/40 bg-[#0a66c2]/5">
+                  <a
+                    href={buildBookmarkletHref(captureToken)}
+                    onClick={(e) => { e.preventDefault(); toast('Drag this button to your bookmarks bar — clicking it here won\'t work.'); }}
+                    className="px-4 py-2 rounded-lg bg-[#0a66c2] text-white text-sm font-medium cursor-grab select-none"
+                    data-testid="linkedin-bookmarklet-link"
+                  >
+                    📎 Capture to Drawlead OS
+                  </a>
+                </div>
+                <ol className={`text-xs ${textSecondary} list-decimal list-inside space-y-1`}>
+                  <li>Make sure your browser's bookmarks bar is visible (Ctrl/Cmd+Shift+B).</li>
+                  <li>Drag the "Capture to Drawlead OS" button above onto your bookmarks bar.</li>
+                  <li>Go to any LinkedIn profile you're viewing while logged in.</li>
+                  <li>Click the bookmark — the profile is sent here and analyzed automatically.</li>
+                </ol>
+                <p className={`text-[11px] ${textSecondary}`}>
+                  This bookmarklet is tied to your personal capture link. Don't share it publicly.
+                </p>
+              </>
+            ) : (
+              <p className={`text-xs ${textSecondary}`}>Loading your capture link…</p>
+            )}
+          </div>
+        )}
+
         {/* ============== COMING SOON TABS ============== */}
-        {['conversation', 'workflow', 'queue', 'integrations', 'ai_settings', 'logs'].includes(activeTab) && (
+        {['conversation', 'workflow', 'queue', 'ai_settings', 'logs'].includes(activeTab) && (
           <div className={`p-10 rounded-lg border ${borderColor} ${bgCard} text-center`} data-testid={`linkedin-${activeTab}-tab`}>
             <p className={`text-sm font-medium ${textPrimary}`}>{TABS.find(t => t.key === activeTab)?.label} — Coming Soon</p>
             <p className={`text-xs ${textSecondary} mt-1`}>This is part of the Automation roadmap and builds on the same framework as LinkedIn Partnership.</p>

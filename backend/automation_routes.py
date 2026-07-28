@@ -88,6 +88,16 @@ class AnalyzeProfileRequest(BaseModel):
 
 class GenerateMessageRequest(BaseModel):
     message_type: str  # one of MESSAGE_TYPES keys
+    extra_context: str = ""
+
+class CaptureRequest(BaseModel):
+    """From the LinkedIn bookmarklet — the user is already viewing a profile
+    in their own logged-in browser; this just relays what's already
+    rendered on their screen. No LinkedIn automation involved."""
+    capture_token: str
+    name: str = ""
+    linkedin_url: str
+    profile_text: str
     extra_context: str = ""  # e.g. pasted conversation history for follow-ups
 
 # ============== AUTH HELPER (mirrors ai_routes.py's local pattern) ==============
@@ -259,18 +269,14 @@ def _parse_json_response(text: str) -> Dict[str, Any]:
     except json.JSONDecodeError:
         raise HTTPException(status_code=502, detail="AI returned an unexpected format — please try again")
 
-@automation_router.post("/linkedin-partnership/partners/{partner_id}/analyze")
-async def analyze_partner_profile(partner_id: str, payload: AnalyzeProfileRequest, request: Request):
-    user = await get_current_user(request)
-    partner = await db.automation_partners.find_one({"partner_id": partner_id}, {"_id": 0})
-    if not partner:
-        raise HTTPException(status_code=404, detail="Partner not found")
-    if not payload.profile_text.strip():
-        raise HTTPException(status_code=400, detail="profile_text is required")
-
+async def _run_profile_analysis(partner: Dict[str, Any], profile_text: str, actor_name: str) -> Dict[str, Any]:
+    """Shared by the manual-paste Analyzer endpoint and the bookmarklet
+    capture endpoint. Calls the LLM, maps fields onto the partner, and
+    persists. Returns the updated partner doc."""
+    partner_id = partner["partner_id"]
     chat = _llm_chat(f"automation_analyze_{partner_id}_{uuid.uuid4().hex[:8]}", ANALYZER_SYSTEM_PROMPT)
     try:
-        response = await chat.send_message(UserMessage(text=payload.profile_text))
+        response = await chat.send_message(UserMessage(text=profile_text))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI analysis failed: {str(e)}")
 
@@ -305,10 +311,20 @@ async def analyze_partner_profile(partner_id: str, payload: AnalyzeProfileReques
         {"partner_id": partner_id},
         {
             "$set": update_dict,
-            "$push": {"activity_log": {"action": "AI profile analyzed", "at": now.isoformat(), "by": user.get("name", "")}},
+            "$push": {"activity_log": {"action": "AI profile analyzed", "at": now.isoformat(), "by": actor_name}},
         },
     )
     return await db.automation_partners.find_one({"partner_id": partner_id}, {"_id": 0})
+
+@automation_router.post("/linkedin-partnership/partners/{partner_id}/analyze")
+async def analyze_partner_profile(partner_id: str, payload: AnalyzeProfileRequest, request: Request):
+    user = await get_current_user(request)
+    partner = await db.automation_partners.find_one({"partner_id": partner_id}, {"_id": 0})
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    if not payload.profile_text.strip():
+        raise HTTPException(status_code=400, detail="profile_text is required")
+    return await _run_profile_analysis(partner, payload.profile_text, user.get("name", ""))
 
 # ============== AI MESSAGE GENERATOR ==============
 
@@ -376,3 +392,68 @@ ADDITIONAL CONTEXT (e.g. their reply, conversation so far):
         },
     )
     return entry
+
+# ============== LINKEDIN BOOKMARKLET CAPTURE ==============
+# A one-click bookmarklet reads the profile text already rendered in the
+# user's own logged-in LinkedIn tab and posts it here — no bot ever visits
+# LinkedIn or logs in on the app's behalf. Auth is a per-user long-lived
+# token (not the session cookie), since the request originates from
+# linkedin.com and can't carry Drawlead OS's session.
+
+def _normalize_linkedin_url(url: str) -> str:
+    return (url or "").strip().lower().split("?")[0].rstrip("/")
+
+@automation_router.get("/linkedin-partnership/capture-token")
+async def get_capture_token(request: Request):
+    """Get (or lazily create) this user's personal bookmarklet token."""
+    user = await get_current_user(request)
+    existing = await db.automation_capture_tokens.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if existing:
+        return {"token": existing["token"]}
+    import secrets
+    token = secrets.token_urlsafe(24)
+    await db.automation_capture_tokens.insert_one({
+        "user_id": user["user_id"],
+        "token": token,
+        "created_at": datetime.now(timezone.utc),
+    })
+    return {"token": token}
+
+@automation_router.post("/linkedin-partnership/capture")
+async def capture_from_bookmarklet(payload: CaptureRequest):
+    """Token-authenticated (not session) so it works cross-origin from a
+    linkedin.com bookmarklet without needing CORS/session cookie changes."""
+    token_doc = await db.automation_capture_tokens.find_one({"token": payload.capture_token}, {"_id": 0})
+    if not token_doc:
+        raise HTTPException(status_code=401, detail="Invalid capture token")
+    if not payload.linkedin_url.strip():
+        raise HTTPException(status_code=400, detail="linkedin_url is required")
+    if not payload.profile_text.strip():
+        raise HTTPException(status_code=400, detail="profile_text is required")
+
+    normalized = _normalize_linkedin_url(payload.linkedin_url)
+    partner = None
+    async for p in db.automation_partners.find({"is_deleted": {"$ne": True}}, {"_id": 0}):
+        if _normalize_linkedin_url(p.get("linkedin_url", "")) == normalized:
+            partner = p
+            break
+
+    now = datetime.now(timezone.utc)
+    if not partner:
+        partner_id = f"ptnr_{uuid.uuid4().hex[:12]}"
+        partner = {
+            "partner_id": partner_id,
+            "name": payload.name.strip() or "LinkedIn Contact",
+            "company": "", "country": "", "industry": "",
+            "linkedin_url": payload.linkedin_url.strip(),
+            "agency_type": "", "status": "New", "assigned_to": "", "next_action": "", "notes": "", "deal_value": 0,
+            "generated_messages": [],
+            "activity_log": [{"action": "Captured from LinkedIn bookmarklet", "at": now.isoformat(), "by": "LinkedIn Bookmarklet"}],
+            "last_activity": now.isoformat(),
+            "created_by": token_doc["user_id"],
+            "created_at": now, "updated_at": now, "is_deleted": False,
+        }
+        await db.automation_partners.insert_one(dict(partner))
+
+    updated = await _run_profile_analysis(partner, payload.profile_text, "LinkedIn Bookmarklet")
+    return {"partner_id": updated["partner_id"], "name": updated["name"], "status": updated["status"]}
