@@ -22,13 +22,17 @@ function userHasModule(user, isAdmin, module) {
     const role = String(user?.role || '').toLowerCase();
     if (role === 'super_admin' || isAdmin) return true;
   }
-  // Client Master / Service & Packages are Super Admin-only additions —
+  // Client Master / Service & Packages / BNI are Super Admin-only additions —
   // always visible to super_admin regardless of a curated module_access
   // list (which predates these modules and never mentions them).
-  if (module === 'client_master' || module === 'service_packages' || module === 'bni' || module === 'automation') {
+  if (module === 'client_master' || module === 'service_packages' || module === 'bni') {
     const role = String(user?.role || '').toLowerCase();
     if (role === 'super_admin') return true;
   }
+  // Automation is open to Admin too (not just Super Admin) — same reasoning
+  // as Dashboard: a curated designation predating this module shouldn't
+  // hide it from the people who'd actually manage it.
+  if (module === 'automation' && isAdmin) return true;
   const moduleAccess = Array.isArray(user?.module_access) ? user.module_access : [];
 
   // Designation-driven module_access has HIGHEST priority for ALL roles

@@ -504,9 +504,10 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* Automation — Super Admin always sees it (mirrors BNI); also
-            grantable to any designation via Module Access. */}
-        {(userRole === 'super_admin' || hasAccess('automation')) && (
+        {/* Automation — Admin / Super Admin always see it, even behind a
+            curated designation that predates this module; also grantable
+            to any other designation via Module Access. */}
+        {(isAdmin || hasAccess('automation')) && (
           <Link
             to="/automation"
             data-testid="nav-automation"
