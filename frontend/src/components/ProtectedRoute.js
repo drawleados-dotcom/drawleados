@@ -13,6 +13,10 @@ const MODULE_ALIASES = {
   my_profile: ['my_profile', 'hr'],
 };
 
+// Mirrors Sidebar.js's AUTOMATION_HARDCODED_EMAILS — bypasses
+// module_access/designation entirely for this account.
+const AUTOMATION_HARDCODED_EMAILS = ['vinoth@drawlead.com'];
+
 function userHasModule(user, isAdmin, module) {
   if (!module) return true;
   // Dashboard is Super Admin/Admin's landing tab — always accessible to
@@ -31,8 +35,12 @@ function userHasModule(user, isAdmin, module) {
   }
   // Automation is open to Admin too (not just Super Admin) — same reasoning
   // as Dashboard: a curated designation predating this module shouldn't
-  // hide it from the people who'd actually manage it.
-  if (module === 'automation' && isAdmin) return true;
+  // hide it from the people who'd actually manage it. Also hardcoded for
+  // AUTOMATION_HARDCODED_EMAILS regardless of role/designation.
+  if (module === 'automation') {
+    if (isAdmin) return true;
+    if (AUTOMATION_HARDCODED_EMAILS.includes(String(user?.email || '').toLowerCase())) return true;
+  }
   const moduleAccess = Array.isArray(user?.module_access) ? user.module_access : [];
 
   // Designation-driven module_access has HIGHEST priority for ALL roles

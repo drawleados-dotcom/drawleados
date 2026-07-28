@@ -39,6 +39,10 @@ import ChatPanel from './ChatPanel';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+// Hardcoded Automation access — bypasses module_access/designation entirely
+// for this account, regardless of role or curated designation.
+const AUTOMATION_HARDCODED_EMAILS = ['vinoth@drawlead.com'];
+
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -505,9 +509,10 @@ const Sidebar = () => {
         )}
 
         {/* Automation — Admin / Super Admin always see it, even behind a
-            curated designation that predates this module; also grantable
-            to any other designation via Module Access. */}
-        {(isAdmin || hasAccess('automation')) && (
+            curated designation that predates this module; hardcoded for
+            AUTOMATION_HARDCODED_EMAILS regardless of role/designation;
+            also grantable to any other designation via Module Access. */}
+        {(isAdmin || hasAccess('automation') || AUTOMATION_HARDCODED_EMAILS.includes((user?.email || '').toLowerCase())) && (
           <Link
             to="/automation"
             data-testid="nav-automation"
