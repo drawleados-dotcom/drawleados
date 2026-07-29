@@ -591,11 +591,15 @@ async def sync_sheet(sheet_type: str, request: Request):
             )
             updated += 1
         else:
+            # Every row inserted in this sync shares the same `now` — offset
+            # by row_index so leads keep the sheet's row order (later rows =
+            # more recently added) instead of tying and falling back to
+            # undefined Mongo insertion order when sorted newest-first.
             await db.leads_v2.insert_one({
                 "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
                 "stage_id": stage_id,
                 "created_by": user.user_id,
-                "created_at": now,
+                "created_at": now + timedelta(microseconds=row_index),
                 **common_fields,
             })
             inserted += 1

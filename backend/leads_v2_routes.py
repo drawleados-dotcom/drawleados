@@ -473,7 +473,13 @@ async def get_leads(
 
     query["$and"] = and_clauses
 
-    leads = await db.leads_v2.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    # Newest first. Secondary key handles sheet-sync batches that share one
+    # `created_at` (every row synced in the same run) — falls back to the
+    # sheet's own row order (bottom of sheet = added more recently) instead
+    # of an undefined tie order.
+    leads = await db.leads_v2.find(query, {"_id": 0}).sort(
+        [("created_at", -1), ("sheet_row_index", -1)]
+    ).to_list(10000)
     
     # Enrich leads with lead_owner_name
     user_ids = list(set([lead.get("lead_owner") for lead in leads if lead.get("lead_owner")]))
