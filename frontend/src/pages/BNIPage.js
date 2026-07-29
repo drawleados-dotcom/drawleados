@@ -11,7 +11,7 @@ import { Badge } from '../components/ui/badge';
 import { Combobox } from '../components/ui/combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import CSVImportModal from '../components/bni/CSVImportModal';
+import CSVImportModal from '../components/shared/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award,
   Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search,

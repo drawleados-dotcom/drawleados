@@ -11,12 +11,23 @@ import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import CSVImportModal from '../components/shared/CSVImportModal';
 import { toast } from 'sonner';
 import {
   ArrowLeft, LayoutDashboard, Users, Kanban, Sparkles, MessageSquareText, MessagesSquare,
   Workflow, ListTodo, Plug, Settings, ScrollText, Plus, ExternalLink, Copy, Trash2, Pencil,
-  Wand2, Linkedin, Loader2,
+  Wand2, Linkedin, Loader2, Upload,
 } from 'lucide-react';
+
+const PARTNER_IMPORT_FIELDS = [
+  { key: 'name', label: 'Name', required: true, synonyms: ['name', 'full name', 'contact name'] },
+  { key: 'company', label: 'Company', synonyms: ['company', 'company name', 'organization'] },
+  { key: 'linkedin_url', label: 'Profile URL', synonyms: ['profile url', 'linkedin url', 'linkedin', 'url'] },
+  { key: 'country', label: 'Country', synonyms: ['country'] },
+  { key: 'industry', label: 'Industry', synonyms: ['industry'] },
+  { key: 'agency_type', label: 'Agency Type', synonyms: ['agency type', 'type'] },
+  { key: 'notes', label: 'Notes', synonyms: ['notes', 'remarks'] },
+];
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, live: true },
@@ -163,6 +174,16 @@ const LinkedInPartnershipPage = () => {
   const [editingPartnerId, setEditingPartnerId] = useState(null);
   const [partnerForm, setPartnerForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [showPartnerImport, setShowPartnerImport] = useState(false);
+
+  const importPartners = async (rows) => {
+    const results = await Promise.allSettled(
+      rows.map((r) => api.post('/automation/linkedin-partnership/partners', { ...r }))
+    );
+    const success = results.filter((r) => r.status === 'fulfilled').length;
+    toast.success(`Imported ${success} of ${rows.length} connections`);
+    loadAll();
+  };
 
   const openNewPartner = () => { setEditingPartnerId(null); setPartnerForm(EMPTY_FORM); setShowPartnerModal(true); };
   const openEditPartner = (p) => {
@@ -370,7 +391,10 @@ const LinkedInPartnershipPage = () => {
         {/* ============== PARTNERS ============== */}
         {activeTab === 'partners' && (
           <div data-testid="linkedin-partners-tab">
-            <div className="flex justify-end mb-3">
+            <div className="flex justify-end gap-2 mb-3">
+              <Button variant="outline" onClick={() => setShowPartnerImport(true)} data-testid="import-partners-btn">
+                <Upload className="h-4 w-4 mr-2" /> Import CSV
+              </Button>
               <Button onClick={openNewPartner} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="new-partner-btn">
                 <Plus className="h-4 w-4 mr-2" /> New Partner
               </Button>
@@ -690,6 +714,19 @@ const LinkedInPartnershipPage = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <CSVImportModal
+          open={showPartnerImport}
+          onClose={() => setShowPartnerImport(false)}
+          title="Import Connections from CSV"
+          fields={PARTNER_IMPORT_FIELDS}
+          onImport={importPartners}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
       </div>
     </Layout>
   );

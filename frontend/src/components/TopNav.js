@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, User, Settings as SettingsIcon, Package, DollarSign,
   UserCircle, Shield, MessageSquare, Megaphone, ClipboardList, ClipboardCheck,
   Globe, FolderOpen, Calendar, Briefcase, FileSpreadsheet, Search, Building2,
-  Handshake, Bot,
+  Handshake, Bot, Linkedin,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -36,7 +36,9 @@ export default function TopNav() {
     if ((module === 'client_master' || module === 'service_packages' || module === 'bni') && userRole === 'super_admin') return true;
     // Automation — open to Admin too (not just Super Admin), plus a
     // hardcoded bypass for AUTOMATION_HARDCODED_EMAILS regardless of role.
-    if (module === 'automation') {
+    // LinkedIn is a direct shortcut into Automation's LinkedIn Partnership
+    // page, so it shares the exact same gate.
+    if (module === 'automation' || module === 'linkedin') {
       if (userRole === 'super_admin' || userRole === 'admin') return true;
       if (AUTOMATION_HARDCODED_EMAILS.includes(String(user?.email || '').toLowerCase())) return true;
     }
@@ -72,6 +74,7 @@ export default function TopNav() {
     { key: 'service_packages', path: '/service-packages', label: 'Service and Packages', icon: Package },
     { key: 'bni',           path: '/bni',             label: 'BNI',             icon: Handshake },
     { key: 'automation',    path: '/automation',      label: 'Automation',      icon: Bot },
+    { key: 'linkedin',      path: '/automation/linkedin-partnership', label: 'LinkedIn', icon: Linkedin },
     { key: 'settings',      path: '/settings',        label: 'Settings',        icon: SettingsIcon },
     { key: 'my_profile',    path: '/hr',              label: 'My Profile',      icon: UserCircle },
   ];

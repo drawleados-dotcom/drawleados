@@ -26,6 +26,8 @@ const DEFAULT_MODULES = [
   { key: 'client_master',  label: 'Clients Master View' },
   { key: 'service_packages', label: 'Service and Packages' },
   { key: 'bni',            label: 'BNI' },
+  { key: 'automation',     label: 'Automation' },
+  { key: 'linkedin',       label: 'LinkedIn' },
   { key: 'settings',       label: 'Settings' },
 ];
 

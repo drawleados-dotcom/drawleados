@@ -30,10 +30,11 @@ const normalize = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
 /**
  * CSVImportModal — generic "upload CSV → map columns to fields → import"
- * flow, reused across BNI's Members / Category / Role Players tabs (and
- * anywhere else that needs the same pattern).
+ * flow, shared across any page that needs the same pattern (BNI Members /
+ * Category / Role Players, LinkedIn Partnership Partners, ...).
  *
- * `fields`: [{ key, label, required }] — the target fields to map columns to.
+ * `fields`: [{ key, label, required, synonyms }] — the target fields to map
+ * columns to; `synonyms` are extra header strings that auto-match the field.
  * `onImport(rows)`: called with the mapped rows once confirmed; each row is
  * an object keyed by field `key` with the raw string cell value.
  */
