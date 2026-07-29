@@ -525,13 +525,14 @@ const Sidebar = () => {
           </Link>
         )}
 
-        {/* LinkedIn — direct shortcut into Automation's LinkedIn Partnership
-            page (same gating as Automation itself, it's the same feature). */}
-        {(isAdmin || hasAccess('automation') || AUTOMATION_HARDCODED_EMAILS.includes((user?.email || '').toLowerCase())) && (
+        {/* LinkedIn — standalone connections database (separate from
+            Automation's LinkedIn Partnership CRM). Super Admin always sees
+            it; also grantable to any designation via Module Access. */}
+        {(userRole === 'super_admin' || hasAccess('linkedin')) && (
           <Link
-            to="/automation/linkedin-partnership"
+            to="/linkedin"
             data-testid="nav-linkedin"
-            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/automation/linkedin-partnership' ? navItemActive : navItemInactive}`}
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/linkedin' ? navItemActive : navItemInactive}`}
             title={isCollapsed ? 'LinkedIn' : ''}
           >
             <Linkedin className="h-5 w-5" strokeWidth={2} />
