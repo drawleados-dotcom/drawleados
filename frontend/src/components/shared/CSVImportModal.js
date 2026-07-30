@@ -68,8 +68,16 @@ export default function CSVImportModal({ open, onClose, title, fields, onImport,
         toast.error('CSV file is empty or has only a header row');
         return;
       }
-      const parsedHeaders = parseCSVLine(lines[0]);
-      const parsedRows = lines.slice(1).map(parseCSVLine);
+
+      // Some exports (e.g. LinkedIn's Connections.csv) prepend a "Notes:"
+      // preamble before the real header row. Skip any leading lines that
+      // parse to a single column — the actual header row has one column
+      // per field, so it's the first line with more than one column.
+      let headerIndex = lines.findIndex((l) => parseCSVLine(l).length > 1);
+      if (headerIndex === -1) headerIndex = 0;
+
+      const parsedHeaders = parseCSVLine(lines[headerIndex]);
+      const parsedRows = lines.slice(headerIndex + 1).map(parseCSVLine);
 
       // Auto-suggest a mapping by matching header text to a field's label,
       // key, or declared synonyms (e.g. "Category Name" / "Category" both

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import CSVImportModal from '../components/shared/CSVImportModal';
 import { Plus, Upload, Search, Pencil, Trash2, ExternalLink, Linkedin, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { Checkbox } from '../components/ui/checkbox';
 
 // Matches LinkedIn's own "Connections.csv" export schema, so a raw export
 // auto-maps column-for-column without the user needing to rename anything.
@@ -26,7 +27,7 @@ const CONNECTION_IMPORT_FIELDS = [
 const IMPORT_CHUNK_SIZE = 500;
 
 const emptyForm = () => ({
-  name: '', company: '', position: '', url: '', email: '', connected_on: '', notes: '',
+  first_name: '', last_name: '', company: '', position: '', url: '', email: '', connected_on: '', notes: '',
 });
 
 const LinkedInConnectionsPage = () => {
@@ -46,6 +47,8 @@ const LinkedInConnectionsPage = () => {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -71,22 +74,25 @@ const LinkedInConnectionsPage = () => {
   const openAdd = () => { setEditingId(null); setForm(emptyForm()); setShowForm(true); };
   const openEdit = (c) => {
     setEditingId(c.connection_id);
+    const [first, ...rest] = (c.name || '').split(' ');
     setForm({
-      name: c.name || '', company: c.company || '', position: c.position || '',
+      first_name: first || '', last_name: rest.join(' '), company: c.company || '', position: c.position || '',
       url: c.url || '', email: c.email || '', connected_on: c.connected_on || '', notes: c.notes || '',
     });
     setShowForm(true);
   };
 
   const saveConnection = async () => {
-    if (!form.name.trim()) { toast.error('Name is required'); return; }
+    const name = [form.first_name.trim(), form.last_name.trim()].filter(Boolean).join(' ');
+    if (!name) { toast.error('First name is required'); return; }
+    const payload = { ...form, name };
     setSaving(true);
     try {
       if (editingId) {
-        await api.put(`/linkedin-connections/${editingId}`, form);
+        await api.put(`/linkedin-connections/${editingId}`, payload);
         toast.success('Connection updated');
       } else {
-        await api.post('/linkedin-connections', form);
+        await api.post('/linkedin-connections', payload);
         toast.success('Connection added');
       }
       setShowForm(false);
@@ -106,6 +112,34 @@ const LinkedInConnectionsPage = () => {
       load();
     } catch (e) {
       toast.error('Failed to delete connection');
+    }
+  };
+
+  const toggleSelectAll = (checked) => {
+    setSelectedIds(checked ? new Set(filtered.map((c) => c.connection_id)) : new Set());
+  };
+
+  const toggleSelectOne = (id, checked) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} selected connection${selectedIds.size === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await api.post('/linkedin-connections/bulk-delete', { ids: Array.from(selectedIds) });
+      toast.success(`Deleted ${res.data?.deleted ?? selectedIds.size} connection${selectedIds.size === 1 ? '' : 's'}`);
+      setSelectedIds(new Set());
+      load();
+    } catch (e) {
+      toast.error('Failed to delete selected connections');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -137,6 +171,17 @@ const LinkedInConnectionsPage = () => {
             </div>
           </div>
           <div className="flex gap-2">
+            {selectedIds.size > 0 && (
+              <Button
+                variant="outline"
+                onClick={deleteSelected}
+                disabled={deleting}
+                className="text-[#ef4444] border-[#ef4444]/40 hover:bg-[#ef4444]/10"
+                data-testid="linkedin-delete-selected-btn"
+              >
+                <Trash2 className="h-4 w-4 mr-2" /> {deleting ? 'Deleting…' : `Delete Selected (${selectedIds.size})`}
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setShowImport(true)} data-testid="linkedin-import-btn">
               <Upload className="h-4 w-4 mr-2" /> Import CSV
             </Button>
@@ -165,6 +210,13 @@ const LinkedInConnectionsPage = () => {
               <table className="w-full text-sm">
                 <thead className={bgSecondary}>
                   <tr>
+                    <th className="px-4 py-3 w-10">
+                      <Checkbox
+                        checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                        onCheckedChange={toggleSelectAll}
+                        data-testid="linkedin-select-all"
+                      />
+                    </th>
                     <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
                     <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Company</th>
                     <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Position</th>
@@ -177,7 +229,7 @@ const LinkedInConnectionsPage = () => {
                 <tbody className={`divide-y ${borderColor}`}>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>
+                      <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
                         {connections.length === 0
                           ? 'No connections yet — click "Add Connection" or "Import CSV" to add some.'
                           : 'No connections match your search.'}
@@ -186,6 +238,13 @@ const LinkedInConnectionsPage = () => {
                   ) : (
                     filtered.map((c) => (
                       <tr key={c.connection_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                        <td className="px-4 py-3">
+                          <Checkbox
+                            checked={selectedIds.has(c.connection_id)}
+                            onCheckedChange={(checked) => toggleSelectOne(c.connection_id, checked)}
+                            data-testid={`linkedin-connection-select-${c.connection_id}`}
+                          />
+                        </td>
                         <td className={`px-4 py-3 font-medium ${textPrimary}`}>{c.name}</td>
                         <td className={`px-4 py-3 ${textSecondary}`}>{c.company || '—'}</td>
                         <td className={`px-4 py-3 ${textSecondary}`}>{c.position || '—'}</td>
@@ -226,9 +285,15 @@ const LinkedInConnectionsPage = () => {
               <DialogTitle className={textPrimary}>{editingId ? 'Edit Connection' : 'Add Connection'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <div>
-                <Label className={textPrimary}>Name *</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="linkedin-connection-name-input" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>First Name *</Label>
+                  <Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="linkedin-connection-first-name-input" />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Last Name</Label>
+                  <Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="linkedin-connection-last-name-input" />
+                </div>
               </div>
               <div>
                 <Label className={textPrimary}>Company</Label>

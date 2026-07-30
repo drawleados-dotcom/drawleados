@@ -53,6 +53,11 @@ class BulkImportRequest(BaseModel):
     rows: List[ImportRow]
 
 
+class BulkDeleteRequest(BaseModel):
+    ids: List[str] = []
+    all: bool = False
+
+
 @linkedin_connections_router.get("")
 async def list_connections(request: Request, search: str = ""):
     from server import get_current_user, db
@@ -115,6 +120,19 @@ async def delete_connection(connection_id: str, request: Request):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Connection not found")
     return {"message": "Connection deleted"}
+
+
+@linkedin_connections_router.post("/bulk-delete")
+async def bulk_delete_connections(payload: BulkDeleteRequest, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    if payload.all:
+        result = await db.linkedin_connections.delete_many({})
+    elif payload.ids:
+        result = await db.linkedin_connections.delete_many({"connection_id": {"$in": payload.ids}})
+    else:
+        return {"deleted": 0}
+    return {"deleted": result.deleted_count}
 
 
 @linkedin_connections_router.post("/bulk-import")
