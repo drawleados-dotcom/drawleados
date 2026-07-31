@@ -999,7 +999,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         size="sm"
         variant="outline"
         onClick={() => openEditTimeModal(task)}
-        className="h-8 px-2 border-[#27272a] text-[#a1a1aa] hover:text-[#fafafa]"
+        className={`h-8 px-2 ${borderColor} ${textSecondary} hover:${textPrimary}`}
         data-testid={`time-edit-btn-${task.task_id}`}
         title="Manually enter Start & End time"
       >
