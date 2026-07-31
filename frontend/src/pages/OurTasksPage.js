@@ -105,6 +105,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
+  // Tasks whose status changed via an action taken in THIS view (e.g. Start
+  // Timer flips pending → in_progress). Without this, a task acted on while
+  // a status filter (like "Pending") is active would vanish from the list
+  // mid-interaction, making the button look broken. Cleared whenever the
+  // status filter itself changes.
+  const [statusFilterBypassIds, setStatusFilterBypassIds] = useState(() => new Set());
   const [editingTimeRow, setEditingTimeRow] = useState(null); // task_id currently in row-edit mode (legacy, no longer used for inline)
   const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}} (legacy)
   const [editTimeModal, setEditTimeModal] = useState(null); // { task, sH, sM, sP, eH, eM, eP }
@@ -729,6 +735,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     try {
       await axios.patch(`${API}/api/our-tasks/tasks/${taskId}/status`, { status: newStatus }, { headers });
       toast.success('Status updated');
+      setStatusFilterBypassIds(prev => new Set(prev).add(taskId));
       loadTasks();
     } catch (error) {
       toast.error('Failed to update status');
@@ -738,10 +745,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Time tracking actions
   const handleTimeTracking = async (taskId, action) => {
     try {
-      const res = await axios.post(`${API}/api/our-tasks/tasks/${taskId}/time`, { action }, { headers });
-      toast.success(res.data.message);
+      await axios.post(`${API}/api/our-tasks/tasks/${taskId}/time`, { action }, { headers });
+      toast.success(`Timer ${action === 'start' ? 'started' : action === 'pause' ? 'paused' : action === 'resume' ? 'resumed' : 'finished'}`);
+      setStatusFilterBypassIds(prev => new Set(prev).add(taskId));
       loadTasks();
-      
+
       // Update running timers
       if (action === 'start' || action === 'resume') {
         setRunningTimers(prev => ({ ...prev, [taskId]: Date.now() }));
@@ -1381,14 +1389,16 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // Type filter
     if (filters.taskType !== 'all' && task.type !== filters.taskType) return false;
 
-    // Status filter (from advanced filters)
-    if (filters.status !== 'all' && task.status !== filters.status) return false;
+    // Status filter (from advanced filters) — a task acted on in this session
+    // (e.g. Start Timer) stays visible even if its new status no longer
+    // matches the filter, so the row doesn't vanish mid-interaction.
+    if (filters.status !== 'all' && task.status !== filters.status && !statusFilterBypassIds.has(task.task_id)) return false;
 
     // Priority filter
     if (filters.priority !== 'all' && (task.priority || 'medium') !== filters.priority) return false;
 
     return true;
-  }, [mainTab, filter, filters, user, myDesignation, isHiddenProjectTaskForAssignee]);
+  }, [mainTab, filter, filters, user, myDesignation, isHiddenProjectTaskForAssignee, statusFilterBypassIds]);
 
   const filteredTasks = tasks.filter(t => taskPasses(t));
 
@@ -1920,7 +1930,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             })()}
 
             {/* Status */}
-            <Select value={filters.status} onValueChange={(v) => setFilters({...filters, status: v})}>
+            <Select value={filters.status} onValueChange={(v) => { setFilters({...filters, status: v}); setStatusFilterBypassIds(new Set()); }}>
               <SelectTrigger className={`h-9 w-[130px] ${bgSecondary} border ${borderColor}`} data-testid="filter-status">
                 <SelectValue />
               </SelectTrigger>
