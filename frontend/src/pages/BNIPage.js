@@ -166,6 +166,10 @@ export default function BNIPage() {
   const [otoForm, setOtoForm] = useState({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
   const [otoSaving, setOtoSaving] = useState(false);
 
+  const [showEditOto, setShowEditOto] = useState(false);
+  const [editOtoForm, setEditOtoForm] = useState({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
+  const [editOtoSaving, setEditOtoSaving] = useState(false);
+
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleForm, setRescheduleForm] = useState({ meeting_date: '', meeting_time: '', location: '' });
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
@@ -336,6 +340,34 @@ export default function BNIPage() {
       toast.error(error.response?.data?.detail || 'Failed to schedule One-to-One');
     } finally {
       setOtoSaving(false);
+    }
+  };
+
+  const openEditOto = (entry) => {
+    setActiveOto(entry);
+    setEditOtoForm({
+      member_id: entry.member_id || '',
+      meeting_date: entry.meeting_date || '',
+      meeting_time: entry.meeting_time || '',
+      location: entry.location || '',
+      invited_by: entry.invited_by || 'me',
+    });
+    setShowEditOto(true);
+  };
+
+  const saveEditOto = async () => {
+    if (!editOtoForm.member_id) { toast.error('Select a member'); return; }
+    if (!editOtoForm.meeting_date) { toast.error('Meeting date is required'); return; }
+    setEditOtoSaving(true);
+    try {
+      await api.put(`/bni/one-to-ones/${activeOto.entry_id}`, editOtoForm);
+      toast.success('One-to-One updated');
+      setShowEditOto(false);
+      loadOneToOnes();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update One-to-One');
+    } finally {
+      setEditOtoSaving(false);
     }
   };
 
@@ -1212,11 +1244,16 @@ export default function BNIPage() {
                                   {o.status}
                                 </Badge>
                               ) : (
-                                <span className={textSecondary}>—</span>
+                                <Badge className="bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40">
+                                  Scheduled
+                                </Badge>
                               )}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => openEditOto(o)} title="Edit" data-testid={`bni-oto-edit-${o.entry_id}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
                                 <Button variant="ghost" size="sm" onClick={() => openReschedule(o)} title="Reschedule" data-testid={`bni-oto-reschedule-${o.entry_id}`}>
                                   <RotateCcw className="h-4 w-4" />
                                 </Button>
@@ -1710,6 +1747,67 @@ export default function BNIPage() {
                   {otoSaving ? 'Scheduling…' : 'Schedule'}
                 </Button>
               )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit One-to-One */}
+        <Dialog open={showEditOto} onOpenChange={setShowEditOto}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Edit One-to-One</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Chapter Member *</Label>
+                <Select value={editOtoForm.member_id} onValueChange={(v) => setEditOtoForm({ ...editOtoForm, member_id: v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-oto-edit-member-select">
+                    <SelectValue placeholder="Select a member" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {members.map((m) => (
+                      <SelectItem key={m.member_id} value={m.member_id}>{m.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {editOtoForm.member_id && (
+                  <p className={`text-xs ${textSecondary} mt-1`}>
+                    Category: {members.find((m) => m.member_id === editOtoForm.member_id)?.category_name || '—'}
+                  </p>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Meeting Date *</Label>
+                  <Input type="date" value={editOtoForm.meeting_date} onChange={(e) => setEditOtoForm({ ...editOtoForm, meeting_date: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Time</Label>
+                  <Input type="time" value={editOtoForm.meeting_time} onChange={(e) => setEditOtoForm({ ...editOtoForm, meeting_time: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                </div>
+              </div>
+              <div>
+                <Label className={textPrimary}>Location</Label>
+                <Input value={editOtoForm.location} onChange={(e) => setEditOtoForm({ ...editOtoForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+              </div>
+              <div>
+                <Label className={textPrimary}>Invited By</Label>
+                <Select value={editOtoForm.invited_by} onValueChange={(v) => setEditOtoForm({ ...editOtoForm, invited_by: v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="me">Me</SelectItem>
+                    <SelectItem value="member">{members.find((m) => m.member_id === editOtoForm.member_id)?.name || 'Selected member'}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowEditOto(false)}>Cancel</Button>
+              <Button onClick={saveEditOto} disabled={editOtoSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-oto-edit-save-btn">
+                {editOtoSaving ? 'Saving…' : 'Save'}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

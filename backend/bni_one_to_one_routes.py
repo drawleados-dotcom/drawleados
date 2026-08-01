@@ -29,6 +29,14 @@ class OneToOneCreate(BaseModel):
     invited_by: str = "me"  # me | member
 
 
+class OneToOneEdit(BaseModel):
+    member_id: Optional[str] = None
+    meeting_date: Optional[str] = None
+    meeting_time: Optional[str] = None
+    location: Optional[str] = None
+    invited_by: Optional[str] = None
+
+
 class OneToOneReschedule(BaseModel):
     meeting_date: Optional[str] = None
     meeting_time: Optional[str] = None
@@ -83,6 +91,35 @@ async def create_one_to_one(payload: OneToOneCreate, request: Request):
     await db.bni_one_to_ones.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+@bni_one_to_one_router.put("/{entry_id}")
+async def edit_one_to_one(entry_id: str, payload: OneToOneEdit, request: Request):
+    """Full edit of the scheduling fields (member, date, time, location,
+    invited by) — distinct from Reschedule (date/time/location only) and
+    Remarks (outcome fields)."""
+    from server import get_current_user, db
+    await get_current_user(request)
+    entry = await db.bni_one_to_ones.find_one({"entry_id": entry_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="One-to-One not found")
+
+    update_data = {k: v for k, v in payload.dict().items() if v is not None and k != "member_id"}
+    if payload.member_id and payload.member_id != entry.get("member_id"):
+        member = await db.bni_members.find_one({"member_id": payload.member_id}, {"_id": 0})
+        if not member:
+            raise HTTPException(status_code=404, detail="Member not found")
+        update_data.update({
+            "member_id": payload.member_id,
+            "member_name": member.get("name", ""),
+            "member_phone": member.get("phone", ""),
+            "member_email": member.get("email", ""),
+            "member_company": member.get("business_name", ""),
+        })
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.bni_one_to_ones.update_one({"entry_id": entry_id}, {"$set": update_data})
+    return await db.bni_one_to_ones.find_one({"entry_id": entry_id}, {"_id": 0})
 
 
 @bni_one_to_one_router.put("/{entry_id}/reschedule")
