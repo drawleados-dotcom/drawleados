@@ -16,6 +16,7 @@ import CSVImportModal from '../components/shared/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award, Gift,
   Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search, ChevronRight,
+  RotateCcw, MessageSquare,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -53,6 +54,7 @@ const MONTHS = [
 ];
 
 const GIVE_ASK_STATUSES = ['Contacted', 'Not Related', 'Asked the give'];
+const ONE_TO_ONE_STATUSES = ['Lead', 'One to One', 'Relationship'];
 
 const TABS = [
   { key: 'members', label: 'Members', icon: Users },
@@ -156,6 +158,23 @@ export default function BNIPage() {
   const [giveAsks, setGiveAsks] = useState([]);
   const [gaLoading, setGaLoading] = useState(false);
   const [gaView, setGaView] = useState('gives');
+
+  const [oneToOnes, setOneToOnes] = useState([]);
+  const [ooLoading, setOoLoading] = useState(false);
+  const [showNewOto, setShowNewOto] = useState(false);
+  const [otoCreateTab, setOtoCreateTab] = useState('chapter');
+  const [otoForm, setOtoForm] = useState({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
+  const [otoSaving, setOtoSaving] = useState(false);
+
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleForm, setRescheduleForm] = useState({ meeting_date: '', meeting_time: '', location: '' });
+  const [rescheduleSaving, setRescheduleSaving] = useState(false);
+
+  const [showOtoRemarks, setShowOtoRemarks] = useState(false);
+  const [remarksForm, setRemarksForm] = useState({ remark: '', give: '', ask: '', status: '' });
+  const [remarksSaving, setRemarksSaving] = useState(false);
+
+  const [activeOto, setActiveOto] = useState(null);
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -277,6 +296,86 @@ export default function BNIPage() {
       setGiveAsks((prev) => prev.map((g) => (g.entry_id === entryId ? { ...g, [field]: value } : g)));
     } catch (error) {
       toast.error('Failed to update status');
+    }
+  };
+
+  // ---------- One-to-One ----------
+
+  const loadOneToOnes = useCallback(async () => {
+    setOoLoading(true);
+    try {
+      const res = await api.get('/bni/one-to-ones');
+      setOneToOnes(res.data || []);
+    } catch (error) {
+      toast.error('Failed to load One-to-Ones');
+    } finally {
+      setOoLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'one_to_one') loadOneToOnes();
+  }, [activeTab, loadOneToOnes]);
+
+  const openNewOto = () => {
+    setOtoCreateTab('chapter');
+    setOtoForm({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
+    setShowNewOto(true);
+  };
+
+  const saveNewOto = async () => {
+    if (!otoForm.member_id) { toast.error('Select a member'); return; }
+    if (!otoForm.meeting_date) { toast.error('Meeting date is required'); return; }
+    setOtoSaving(true);
+    try {
+      await api.post('/bni/one-to-ones', { entry_type: 'chapter', ...otoForm });
+      toast.success('One-to-One scheduled');
+      setShowNewOto(false);
+      loadOneToOnes();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to schedule One-to-One');
+    } finally {
+      setOtoSaving(false);
+    }
+  };
+
+  const openReschedule = (entry) => {
+    setActiveOto(entry);
+    setRescheduleForm({ meeting_date: entry.meeting_date || '', meeting_time: entry.meeting_time || '', location: entry.location || '' });
+    setShowReschedule(true);
+  };
+
+  const saveReschedule = async () => {
+    setRescheduleSaving(true);
+    try {
+      await api.put(`/bni/one-to-ones/${activeOto.entry_id}/reschedule`, rescheduleForm);
+      toast.success('Rescheduled');
+      setShowReschedule(false);
+      loadOneToOnes();
+    } catch (error) {
+      toast.error('Failed to reschedule');
+    } finally {
+      setRescheduleSaving(false);
+    }
+  };
+
+  const openOtoRemarks = (entry) => {
+    setActiveOto(entry);
+    setRemarksForm({ remark: entry.remark || '', give: entry.give || '', ask: entry.ask || '', status: entry.status || '' });
+    setShowOtoRemarks(true);
+  };
+
+  const saveOtoRemarks = async () => {
+    setRemarksSaving(true);
+    try {
+      await api.put(`/bni/one-to-ones/${activeOto.entry_id}/remarks`, remarksForm);
+      toast.success(remarksForm.status === 'Lead' ? 'Saved — added to Leads (source: BNI)' : 'Saved');
+      setShowOtoRemarks(false);
+      loadOneToOnes();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save remarks');
+    } finally {
+      setRemarksSaving(false);
     }
   };
 
@@ -648,6 +747,11 @@ export default function BNIPage() {
           {activeTab === 'weekly_meeting' && !isViewOnly && (
             <Button onClick={() => setShowAddWeek(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-week-btn">
               <Plus className="h-4 w-4 mr-2" /> Add Week
+            </Button>
+          )}
+          {activeTab === 'one_to_one' && !isViewOnly && (
+            <Button onClick={openNewOto} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-oto-btn">
+              <Plus className="h-4 w-4 mr-2" /> New One-to-One
             </Button>
           )}
         </div>
@@ -1060,7 +1164,77 @@ export default function BNIPage() {
               </div>
             )}
 
-            {!['members', 'category', 'role_players', 'payment_history', 'weekly_meeting', 'give_ask'].includes(activeTab) && (() => {
+            {activeTab === 'one_to_one' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Member</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Date</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Time</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Invited By</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {ooLoading ? (
+                        <tr><td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                      ) : oneToOnes.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No One-to-Ones yet — click "New One-to-One" to schedule the first one.
+                          </td>
+                        </tr>
+                      ) : (
+                        oneToOnes.map((o) => (
+                          <tr key={o.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.member_name}</td>
+                            <td className="px-4 py-3">
+                              <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 font-semibold">
+                                {o.meeting_date ? new Date(o.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                              </Badge>
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.meeting_time || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.invited_by === 'me' ? 'Me' : o.member_name}</td>
+                            <td className="px-4 py-3">
+                              {o.status ? (
+                                <Badge className={
+                                  o.status === 'Lead'
+                                    ? 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40'
+                                    : o.status === 'Relationship'
+                                    ? 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40'
+                                    : 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/40'
+                                }>
+                                  {o.status}
+                                </Badge>
+                              ) : (
+                                <span className={textSecondary}>—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => openReschedule(o)} title="Reschedule" data-testid={`bni-oto-reschedule-${o.entry_id}`}>
+                                  <RotateCcw className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => openOtoRemarks(o)} title="Remarks" data-testid={`bni-oto-remarks-${o.entry_id}`}>
+                                  <MessageSquare className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {!['members', 'category', 'role_players', 'payment_history', 'weekly_meeting', 'give_ask', 'one_to_one'].includes(activeTab) && (() => {
               const tab = TABS.find((t) => t.key === activeTab);
               const Icon = tab?.icon || Star;
               return (
@@ -1446,6 +1620,167 @@ export default function BNIPage() {
               <Button variant="ghost" onClick={() => setShowAddWeek(false)}>Cancel</Button>
               <Button onClick={addWeek} disabled={addWeekSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-add-week-save-btn">
                 {addWeekSaving ? 'Adding…' : 'Add Week'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* New One-to-One */}
+        <Dialog open={showNewOto} onOpenChange={setShowNewOto}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>New One-to-One</DialogTitle>
+            </DialogHeader>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setOtoCreateTab('chapter')}
+                className={`px-4 py-2 text-sm font-medium rounded-lg border ${otoCreateTab === 'chapter' ? 'bg-[#6366f1] text-white border-transparent' : `${bgSecondary} ${textSecondary} ${borderColor}`}`}
+                data-testid="bni-oto-tab-chapter"
+              >
+                Chapter
+              </button>
+              <button
+                onClick={() => setOtoCreateTab('cross_chapter')}
+                className={`px-4 py-2 text-sm font-medium rounded-lg border ${otoCreateTab === 'cross_chapter' ? 'bg-[#6366f1] text-white border-transparent' : `${bgSecondary} ${textSecondary} ${borderColor}`}`}
+                data-testid="bni-oto-tab-cross-chapter"
+              >
+                Cross Chapter
+              </button>
+            </div>
+
+            {otoCreateTab === 'chapter' ? (
+              <div className="space-y-3">
+                <div>
+                  <Label className={textPrimary}>Chapter Member *</Label>
+                  <Select value={otoForm.member_id} onValueChange={(v) => setOtoForm({ ...otoForm, member_id: v })}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-oto-member-select">
+                      <SelectValue placeholder="Select a member" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {members.map((m) => (
+                        <SelectItem key={m.member_id} value={m.member_id}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className={textPrimary}>Meeting Date *</Label>
+                    <Input type="date" value={otoForm.meeting_date} onChange={(e) => setOtoForm({ ...otoForm, meeting_date: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-oto-date-input" />
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Time</Label>
+                    <Input type="time" value={otoForm.meeting_time} onChange={(e) => setOtoForm({ ...otoForm, meeting_time: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                  </div>
+                </div>
+                <div>
+                  <Label className={textPrimary}>Location</Label>
+                  <Input value={otoForm.location} onChange={(e) => setOtoForm({ ...otoForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Invited By</Label>
+                  <Select value={otoForm.invited_by} onValueChange={(v) => setOtoForm({ ...otoForm, invited_by: v })}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="me">Me</SelectItem>
+                      <SelectItem value="member">{members.find((m) => m.member_id === otoForm.member_id)?.name || 'Selected member'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
+              <div className={`${bgSecondary} rounded-xl p-8 text-center`}>
+                <p className={`font-medium ${textPrimary}`}>Cross Chapter — coming soon</p>
+                <p className={`text-sm ${textSecondary} mt-1`}>Let us know what fields you need here and we'll build it out.</p>
+              </div>
+            )}
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowNewOto(false)}>Cancel</Button>
+              {otoCreateTab === 'chapter' && (
+                <Button onClick={saveNewOto} disabled={otoSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-oto-save-btn">
+                  {otoSaving ? 'Scheduling…' : 'Schedule'}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reschedule */}
+        <Dialog open={showReschedule} onOpenChange={setShowReschedule}>
+          <DialogContent className={`${bgCard} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Reschedule — {activeOto?.member_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Meeting Date</Label>
+                  <Input type="date" value={rescheduleForm.meeting_date} onChange={(e) => setRescheduleForm({ ...rescheduleForm, meeting_date: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Time</Label>
+                  <Input type="time" value={rescheduleForm.meeting_time} onChange={(e) => setRescheduleForm({ ...rescheduleForm, meeting_time: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                </div>
+              </div>
+              <div>
+                <Label className={textPrimary}>Location</Label>
+                <Input value={rescheduleForm.location} onChange={(e) => setRescheduleForm({ ...rescheduleForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowReschedule(false)}>Cancel</Button>
+              <Button onClick={saveReschedule} disabled={rescheduleSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-oto-reschedule-save-btn">
+                {rescheduleSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* One-to-One Remarks */}
+        <Dialog open={showOtoRemarks} onOpenChange={setShowOtoRemarks}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Remarks — {activeOto?.member_name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Remark</Label>
+                <Textarea value={remarksForm.remark} onChange={(e) => setRemarksForm({ ...remarksForm, remark: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={2} data-testid="bni-oto-remark-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Give</Label>
+                <Textarea value={remarksForm.give} onChange={(e) => setRemarksForm({ ...remarksForm, give: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={2} />
+              </div>
+              <div>
+                <Label className={textPrimary}>Ask</Label>
+                <Textarea value={remarksForm.ask} onChange={(e) => setRemarksForm({ ...remarksForm, ask: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={2} />
+              </div>
+              <div>
+                <Label className={textPrimary}>One to One Status</Label>
+                <Select value={remarksForm.status || 'none'} onValueChange={(v) => setRemarksForm({ ...remarksForm, status: v === 'none' ? '' : v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-oto-status-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— Set status —</SelectItem>
+                    {ONE_TO_ONE_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {remarksForm.status === 'Lead' && (
+                  <p className="text-xs text-[#10b981] mt-1">Saving will add {activeOto?.member_name} as a new Lead (source: BNI).</p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowOtoRemarks(false)}>Cancel</Button>
+              <Button onClick={saveOtoRemarks} disabled={remarksSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-oto-remarks-save-btn">
+                {remarksSaving ? 'Saving…' : 'Save'}
               </Button>
             </DialogFooter>
           </DialogContent>

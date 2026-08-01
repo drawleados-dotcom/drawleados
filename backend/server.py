@@ -52,6 +52,7 @@ from dept_categories_routes import dept_categories_router, dept_statuses_router
 from meetings_routes import meetings_router, init_meetings_db
 from bni_routes import bni_settings_router, bni_categories_router, bni_role_players_router, bni_members_router, bni_payment_history_router
 from bni_weekly_routes import bni_weekly_router, bni_give_ask_router
+from bni_one_to_one_routes import bni_one_to_one_router
 from linkedin_connections_routes import linkedin_connections_router
 from sheets_routes import sheets_router
 from org_tree_routes import org_tree_router, init_org_tree_db
@@ -2975,6 +2976,7 @@ api_router.include_router(bni_members_router)
 api_router.include_router(bni_payment_history_router)
 api_router.include_router(bni_weekly_router)
 api_router.include_router(bni_give_ask_router)
+api_router.include_router(bni_one_to_one_router)
 api_router.include_router(linkedin_connections_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
