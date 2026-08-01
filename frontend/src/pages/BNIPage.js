@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,8 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import CSVImportModal from '../components/shared/CSVImportModal';
 import {
-  Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award,
-  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search,
+  Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award, Gift,
+  Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search, ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -51,9 +52,12 @@ const MONTHS = [
   { v: 10, l: 'October' }, { v: 11, l: 'November' }, { v: 12, l: 'December' },
 ];
 
+const GIVE_ASK_STATUSES = ['Contacted', 'Not Related', 'Asked the give'];
+
 const TABS = [
   { key: 'members', label: 'Members', icon: Users },
   { key: 'weekly_meeting', label: 'Weekly Meeting', icon: Calendar },
+  { key: 'give_ask', label: 'Give and Ask', icon: Gift },
   { key: 'one_to_one', label: 'One-to-One', icon: Handshake },
   { key: 'payment_history', label: 'Payment History', icon: Wallet },
   { key: 'referrals', label: 'Referrals', icon: Share2 },
@@ -103,7 +107,9 @@ const emptyNameDescForm = () => ({ name: '', description: '' });
 export default function BNIPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState('members');
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'members');
   const [members, setMembers] = useState([]);
   const [categories, setCategories] = useState([]);
   const [rolePlayers, setRolePlayers] = useState([]);
@@ -140,6 +146,16 @@ export default function BNIPage() {
   const [phAllTime, setPhAllTime] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState({ entries: [], summary: { total_amount: 0, count: 0 }, has_bni_category: true });
   const [phLoading, setPhLoading] = useState(false);
+
+  const [weeklyMeetings, setWeeklyMeetings] = useState([]);
+  const [wmLoading, setWmLoading] = useState(false);
+  const [showAddWeek, setShowAddWeek] = useState(false);
+  const [addWeekLocation, setAddWeekLocation] = useState('');
+  const [addWeekSaving, setAddWeekSaving] = useState(false);
+
+  const [giveAsks, setGiveAsks] = useState([]);
+  const [gaLoading, setGaLoading] = useState(false);
+  const [gaView, setGaView] = useState('gives');
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -193,6 +209,76 @@ export default function BNIPage() {
   useEffect(() => {
     if (activeTab === 'payment_history') loadPaymentHistory();
   }, [activeTab, loadPaymentHistory]);
+
+  // Weekly Meeting — every Friday, Week 1 = 31 Jul 2026. Only weeks that
+  // have actually been added (via "Add Week") show up here.
+  const loadWeeklyMeetings = useCallback(async () => {
+    setWmLoading(true);
+    try {
+      const res = await api.get('/bni/weekly-meetings');
+      setWeeklyMeetings(res.data || []);
+    } catch (error) {
+      toast.error('Failed to load weekly meetings');
+    } finally {
+      setWmLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'weekly_meeting') loadWeeklyMeetings();
+  }, [activeTab, loadWeeklyMeetings]);
+
+  const nextWeekPreview = useMemo(() => {
+    const nextNumber = weeklyMeetings.length > 0 ? Math.max(...weeklyMeetings.map((w) => w.week_number)) + 1 : 1;
+    const base = new Date(2026, 6, 31); // Week 1 anchor — 31 Jul 2026 (Friday)
+    const date = new Date(base);
+    date.setDate(date.getDate() + (nextNumber - 1) * 7);
+    return { number: nextNumber, dateLabel: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) };
+  }, [weeklyMeetings]);
+
+  const addWeek = async () => {
+    setAddWeekSaving(true);
+    try {
+      const res = await api.post('/bni/weekly-meetings', { location: addWeekLocation });
+      toast.success(`Week ${res.data.week_number} added`);
+      setShowAddWeek(false);
+      setAddWeekLocation('');
+      navigate(`/bni/weekly-meeting/${res.data.meeting_id}`);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add week');
+    } finally {
+      setAddWeekSaving(false);
+    }
+  };
+
+  // Give & Ask — aggregate across all weeks, for the main "Give and Ask" tab.
+  const loadGiveAsks = useCallback(async () => {
+    setGaLoading(true);
+    try {
+      const res = await api.get('/bni/give-ask');
+      setGiveAsks(res.data || []);
+    } catch (error) {
+      toast.error('Failed to load Give & Ask entries');
+    } finally {
+      setGaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'give_ask') loadGiveAsks();
+  }, [activeTab, loadGiveAsks]);
+
+  const gives = useMemo(() => giveAsks.filter((g) => (g.give || '').trim()), [giveAsks]);
+  const asks = useMemo(() => giveAsks.filter((g) => (g.ask || '').trim()), [giveAsks]);
+
+  const updateGiveAskStatus = async (entryId, field, value) => {
+    try {
+      await api.put(`/bni/give-ask/${entryId}`, { [field]: value });
+      setGiveAsks((prev) => prev.map((g) => (g.entry_id === entryId ? { ...g, [field]: value } : g)));
+    } catch (error) {
+      toast.error('Failed to update status');
+    }
+  };
 
   // Access control: Super Admin / Admin always get full access to every
   // tab. Everyone else is scoped by their designation's bni_tabs (empty =
@@ -559,6 +645,11 @@ export default function BNIPage() {
               </Button>
             </div>
           )}
+          {activeTab === 'weekly_meeting' && !isViewOnly && (
+            <Button onClick={() => setShowAddWeek(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-week-btn">
+              <Plus className="h-4 w-4 mr-2" /> Add Week
+            </Button>
+          )}
         </div>
 
         {/* Tab bar */}
@@ -850,7 +941,126 @@ export default function BNIPage() {
               </div>
             )}
 
-            {!['members', 'category', 'role_players', 'payment_history'].includes(activeTab) && (() => {
+            {activeTab === 'weekly_meeting' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Week</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Date</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}></th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {wmLoading ? (
+                        <tr><td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                      ) : weeklyMeetings.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No weeks yet — click "Add Week" to start with Week 1 (31 Jul 2026).
+                          </td>
+                        </tr>
+                      ) : (
+                        weeklyMeetings.map((w) => (
+                          <tr
+                            key={w.meeting_id}
+                            className={`${bgCard} hover:${bgSecondary} transition-colors cursor-pointer`}
+                            onClick={() => navigate(`/bni/weekly-meeting/${w.meeting_id}`)}
+                            data-testid={`bni-week-row-${w.week_number}`}
+                          >
+                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>Week {w.week_number}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>
+                              {new Date(w.meeting_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{w.location || '—'}</td>
+                            <td className="px-4 py-3 text-right">
+                              <ChevronRight className={`h-4 w-4 inline ${textSecondary}`} />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'give_ask' && (
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setGaView('gives')}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg border ${gaView === 'gives' ? 'bg-[#6366f1] text-white border-transparent' : `${bgCard} ${textSecondary} ${borderColor}`}`}
+                    data-testid="bni-ga-view-gives"
+                  >
+                    Gives ({gives.length})
+                  </button>
+                  <button
+                    onClick={() => setGaView('asks')}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg border ${gaView === 'asks' ? 'bg-[#6366f1] text-white border-transparent' : `${bgCard} ${textSecondary} ${borderColor}`}`}
+                    data-testid="bni-ga-view-asks"
+                  >
+                    Asks ({asks.length})
+                  </button>
+                </div>
+
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className={bgSecondary}>
+                        <tr>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>{gaView === 'gives' ? 'Give' : 'Ask'}</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Member Name</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Date</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${borderColor}`}>
+                        {gaLoading ? (
+                          <tr><td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                        ) : (gaView === 'gives' ? gives : asks).length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>
+                              No {gaView === 'gives' ? 'gives' : 'asks'} recorded yet — add them from a week's Give and Ask tab.
+                            </td>
+                          </tr>
+                        ) : (
+                          (gaView === 'gives' ? gives : asks).map((g) => {
+                            const statusField = gaView === 'gives' ? 'give_status' : 'ask_status';
+                            return (
+                              <tr key={g.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                                <td className={`px-4 py-3 ${textPrimary}`}>{gaView === 'gives' ? g.give : g.ask}</td>
+                                <td className={`px-4 py-3 ${textSecondary}`}>{g.member_name}</td>
+                                <td className={`px-4 py-3 ${textSecondary}`}>
+                                  {g.meeting_date ? new Date(g.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Select value={g[statusField] || 'none'} onValueChange={(v) => updateGiveAskStatus(g.entry_id, statusField, v === 'none' ? '' : v)}>
+                                    <SelectTrigger className={`w-[160px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-ga-status-${g.entry_id}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">— Set status —</SelectItem>
+                                      {GIVE_ASK_STATUSES.map((s) => (
+                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!['members', 'category', 'role_players', 'payment_history', 'weekly_meeting', 'give_ask'].includes(activeTab) && (() => {
               const tab = TABS.find((t) => t.key === activeTab);
               const Icon = tab?.icon || Star;
               return (
@@ -1211,6 +1421,35 @@ export default function BNIPage() {
           textSecondary={textSecondary}
           borderColor={borderColor}
         />
+
+        {/* Add Week */}
+        <Dialog open={showAddWeek} onOpenChange={setShowAddWeek}>
+          <DialogContent className={`${bgCard} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Add Week {nextWeekPreview.number}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className={`text-sm ${textSecondary}`}>{nextWeekPreview.dateLabel} (Friday)</p>
+              <div>
+                <Label className={textPrimary}>Location</Label>
+                <Input
+                  value={addWeekLocation}
+                  onChange={(e) => setAddWeekLocation(e.target.value)}
+                  placeholder="Meeting location"
+                  className={`${bgSecondary} border ${borderColor}`}
+                  data-testid="bni-add-week-location-input"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowAddWeek(false)}>Cancel</Button>
+              <Button onClick={addWeek} disabled={addWeekSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-add-week-save-btn">
+                {addWeekSaving ? 'Adding…' : 'Add Week'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );
