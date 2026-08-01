@@ -1663,6 +1663,11 @@ export default function BNIPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {otoForm.member_id && (
+                    <p className={`text-xs ${textSecondary} mt-1`}>
+                      Category: {members.find((m) => m.member_id === otoForm.member_id)?.category_name || '—'}
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
