@@ -37,6 +37,7 @@ import ClientMasterPage from './pages/ClientMasterPage';
 import ServicePackagesPage from './pages/ServicePackagesPage';
 import BNIPage from './pages/BNIPage';
 import BNIWeeklyMeetingDetailPage from './pages/BNIWeeklyMeetingDetailPage';
+import BNIFuturePresentationFormPage from './pages/BNIFuturePresentationFormPage';
 import AutomationPage from './pages/AutomationPage';
 import LinkedInPartnershipPage from './pages/LinkedInPartnershipPage';
 import LinkedInConnectionsPage from './pages/LinkedInConnectionsPage';
@@ -135,6 +136,14 @@ function AppRouter() {
         element={
           <ProtectedRoute module="bni">
             <BNIWeeklyMeetingDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bni/weekly-meeting/:meetingId/future-presentation/:presentationId"
+        element={
+          <ProtectedRoute module="bni">
+            <BNIFuturePresentationFormPage />
           </ProtectedRoute>
         }
       />

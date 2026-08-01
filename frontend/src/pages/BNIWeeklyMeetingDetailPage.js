@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../utils/api';
@@ -9,7 +9,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Gift, GraduationCap, Presentation, Mic, Plus, Pencil, Clock, MapPin, UserCheck } from 'lucide-react';
+import { ArrowLeft, Gift, GraduationCap, Presentation, Mic, Plus, Pencil, Clock, MapPin, UserCheck, Trash2, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SUB_TABS = [
@@ -22,6 +22,7 @@ const SUB_TABS = [
 const BNIWeeklyMeetingDetailPage = () => {
   const { meetingId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isDark } = useTheme();
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -30,10 +31,11 @@ const BNIWeeklyMeetingDetailPage = () => {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
 
-  const [subTab, setSubTab] = useState('give_ask');
+  const [subTab, setSubTab] = useState(searchParams.get('subtab') || 'give_ask');
   const [meeting, setMeeting] = useState(null);
   const [members, setMembers] = useState([]);
   const [giveAsks, setGiveAsks] = useState([]);
+  const [futurePresentations, setFuturePresentations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -53,14 +55,16 @@ const BNIWeeklyMeetingDetailPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [meetingRes, membersRes, gaRes] = await Promise.all([
+      const [meetingRes, membersRes, gaRes, fpRes] = await Promise.all([
         api.get(`/bni/weekly-meetings/${meetingId}`),
         api.get('/bni/members'),
         api.get('/bni/give-ask', { params: { meeting_id: meetingId } }),
+        api.get('/bni/future-presentations', { params: { meeting_id: meetingId } }),
       ]);
       setMeeting(meetingRes.data);
       setMembers(membersRes.data || []);
       setGiveAsks(gaRes.data || []);
+      setFuturePresentations(fpRes.data || []);
     } catch (error) {
       toast.error('Failed to load weekly meeting');
     } finally {
@@ -127,6 +131,17 @@ const BNIWeeklyMeetingDetailPage = () => {
       toast.error('Failed to save attendance');
     } finally {
       setAttendanceSaving(false);
+    }
+  };
+
+  const deleteFuturePresentation = async (id) => {
+    if (!window.confirm('Delete this Future Presentation?')) return;
+    try {
+      await api.delete(`/bni/future-presentations/${id}`);
+      toast.success('Deleted');
+      load();
+    } catch (error) {
+      toast.error('Failed to delete');
     }
   };
 
@@ -220,24 +235,35 @@ const BNIWeeklyMeetingDetailPage = () => {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {SUB_TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = subTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setSubTab(tab.key)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg flex items-center gap-2 transition-all whitespace-nowrap border ${
-                  isActive
-                    ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
-                    : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
-                }`}
-              >
-                <Icon className="h-4 w-4" /> {tab.label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-2">
+            {SUB_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = subTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setSubTab(tab.key)}
+                  className={`px-4 py-2 text-sm font-medium rounded-lg flex items-center gap-2 transition-all whitespace-nowrap border ${
+                    isActive
+                      ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                      : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                  }`}
+                >
+                  <Icon className="h-4 w-4" /> {tab.label}
+                </button>
+              );
+            })}
+          </div>
+          {subTab === 'future_presentation' && (
+            <Button
+              onClick={() => navigate(`/bni/weekly-meeting/${meetingId}/future-presentation/new`)}
+              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              data-testid="bni-fp-add-btn"
+            >
+              <Plus className="h-4 w-4 mr-2" /> Add Future Presentation
+            </Button>
+          )}
         </div>
 
         {subTab === 'give_ask' && (
@@ -282,7 +308,65 @@ const BNIWeeklyMeetingDetailPage = () => {
           </div>
         )}
 
-        {['education_slot', 'future_presentation', 'weekly_presentation'].includes(subTab) && (() => {
+        {subTab === 'future_presentation' && (
+          <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className={bgSecondary}>
+                  <tr>
+                    <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Member</th>
+                    <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
+                    <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Business</th>
+                    <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Link</th>
+                    <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Asks</th>
+                    <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Clients</th>
+                    <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className={`divide-y ${borderColor}`}>
+                  {futurePresentations.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>
+                        No Future Presentations yet — click "Add Future Presentation" to log the first one.
+                      </td>
+                    </tr>
+                  ) : (
+                    futurePresentations.map((fp) => (
+                      <tr key={fp.presentation_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                        <td className={`px-4 py-3 font-medium ${textPrimary}`}>{fp.member_name}</td>
+                        <td className={`px-4 py-3 ${textSecondary}`}>{fp.category_name || '—'}</td>
+                        <td className={`px-4 py-3 ${textSecondary}`}>{fp.business_name || '—'}</td>
+                        <td className="px-4 py-3">
+                          {fp.presentation_link ? (
+                            <a href={fp.presentation_link} target="_blank" rel="noreferrer" className="text-[#6366f1] inline-flex items-center gap-1 hover:underline">
+                              View <ExternalLink className="h-3 w-3" />
+                            </a>
+                          ) : (
+                            <span className={textSecondary}>—</span>
+                          )}
+                        </td>
+                        <td className={`px-4 py-3 ${textSecondary}`}>{fp.asks?.length || 0}</td>
+                        <td className={`px-4 py-3 ${textSecondary}`}>{fp.clients?.length || 0}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => navigate(`/bni/weekly-meeting/${meetingId}/future-presentation/${fp.presentation_id}`)} data-testid={`bni-fp-edit-${fp.presentation_id}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteFuturePresentation(fp.presentation_id)} data-testid={`bni-fp-delete-${fp.presentation_id}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {['education_slot', 'weekly_presentation'].includes(subTab) && (() => {
           const tab = SUB_TABS.find((t) => t.key === subTab);
           const Icon = tab?.icon || GraduationCap;
           return (
