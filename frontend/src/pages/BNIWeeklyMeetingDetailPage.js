@@ -8,13 +8,15 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import { ArrowLeft, Gift, GraduationCap, Presentation, Plus, Pencil } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { ArrowLeft, Gift, GraduationCap, Presentation, Mic, Plus, Pencil, Clock, MapPin, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SUB_TABS = [
   { key: 'give_ask', label: 'Give and Ask', icon: Gift },
   { key: 'education_slot', label: 'Education Slot', icon: GraduationCap },
   { key: 'future_presentation', label: 'Future Presentation', icon: Presentation },
+  { key: 'weekly_presentation', label: 'Weekly Presentation', icon: Mic },
 ];
 
 const BNIWeeklyMeetingDetailPage = () => {
@@ -39,6 +41,14 @@ const BNIWeeklyMeetingDetailPage = () => {
   const [giveText, setGiveText] = useState('');
   const [askText, setAskText] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [showAttendance, setShowAttendance] = useState(false);
+  const [attendanceForm, setAttendanceForm] = useState({ time: '', attended_by: 'vinoth', substitute_name: '' });
+  const [attendanceSaving, setAttendanceSaving] = useState(false);
+
+  const [showLocation, setShowLocation] = useState(false);
+  const [locationValue, setLocationValue] = useState('');
+  const [locationSaving, setLocationSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,6 +103,52 @@ const BNIWeeklyMeetingDetailPage = () => {
     }
   };
 
+  const openAttendance = () => {
+    setAttendanceForm({
+      time: meeting?.attendance?.time || '',
+      attended_by: meeting?.attendance?.attended_by || 'vinoth',
+      substitute_name: meeting?.attendance?.substitute_name || '',
+    });
+    setShowAttendance(true);
+  };
+
+  const saveAttendance = async () => {
+    if (attendanceForm.attended_by === 'substitute' && !attendanceForm.substitute_name.trim()) {
+      toast.error('Enter the substitute\'s name');
+      return;
+    }
+    setAttendanceSaving(true);
+    try {
+      const res = await api.put(`/bni/weekly-meetings/${meetingId}/attendance`, attendanceForm);
+      setMeeting(res.data);
+      toast.success('Attendance saved');
+      setShowAttendance(false);
+    } catch (error) {
+      toast.error('Failed to save attendance');
+    } finally {
+      setAttendanceSaving(false);
+    }
+  };
+
+  const openLocation = () => {
+    setLocationValue(meeting?.location || '');
+    setShowLocation(true);
+  };
+
+  const saveLocation = async () => {
+    setLocationSaving(true);
+    try {
+      const res = await api.put(`/bni/weekly-meetings/${meetingId}`, { location: locationValue });
+      setMeeting(res.data);
+      toast.success('Location saved');
+      setShowLocation(false);
+    } catch (error) {
+      toast.error('Failed to save location');
+    } finally {
+      setLocationSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -128,9 +184,40 @@ const BNIWeeklyMeetingDetailPage = () => {
           <h1 className={`text-3xl font-bold ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
             Week {meeting.week_number}
           </h1>
-          <p className={`text-sm ${textSecondary} mt-1`}>
-            {dateLabel}{meeting.location ? ` — ${meeting.location}` : ''}
-          </p>
+          <p className={`text-sm ${textSecondary} mt-1`}>{dateLabel}</p>
+
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            <button
+              onClick={openLocation}
+              className={`flex items-center gap-1.5 text-sm ${bgSecondary} border ${borderColor} rounded-full px-3 py-1.5 ${textPrimary} hover:border-[#6366f1]/40`}
+              data-testid="bni-week-location-btn"
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              {meeting.location || 'Add Location'}
+              <Pencil className="h-3 w-3 opacity-60" />
+            </button>
+
+            <button
+              onClick={openAttendance}
+              className={`flex items-center gap-1.5 text-sm ${bgSecondary} border ${borderColor} rounded-full px-3 py-1.5 ${textPrimary} hover:border-[#6366f1]/40`}
+              data-testid="bni-week-attendance-btn"
+            >
+              <UserCheck className="h-3.5 w-3.5" />
+              {meeting.attendance?.attended_by ? (
+                <>
+                  {meeting.attendance.attended_by === 'substitute'
+                    ? `${meeting.attendance.substitute_name} (Substitute)`
+                    : 'Vinoth'}
+                  {meeting.attendance.time && (
+                    <span className={textSecondary}><Clock className="h-3 w-3 inline mx-1" />{meeting.attendance.time}</span>
+                  )}
+                </>
+              ) : (
+                'Add Attendance'
+              )}
+              <Pencil className="h-3 w-3 opacity-60" />
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -195,19 +282,17 @@ const BNIWeeklyMeetingDetailPage = () => {
           </div>
         )}
 
-        {(subTab === 'education_slot' || subTab === 'future_presentation') && (
-          <div className={`${bgCard} border ${borderColor} rounded-xl p-12 text-center`}>
-            {subTab === 'education_slot' ? (
-              <GraduationCap className={`h-10 w-10 mx-auto mb-3 ${textSecondary}`} />
-            ) : (
-              <Presentation className={`h-10 w-10 mx-auto mb-3 ${textSecondary}`} />
-            )}
-            <p className={`font-medium ${textPrimary}`}>
-              {SUB_TABS.find((t) => t.key === subTab)?.label} — coming soon
-            </p>
-            <p className={`text-sm ${textSecondary} mt-1`}>Let us know what fields/workflow you need here and we'll build it out.</p>
-          </div>
-        )}
+        {['education_slot', 'future_presentation', 'weekly_presentation'].includes(subTab) && (() => {
+          const tab = SUB_TABS.find((t) => t.key === subTab);
+          const Icon = tab?.icon || GraduationCap;
+          return (
+            <div className={`${bgCard} border ${borderColor} rounded-xl p-12 text-center`}>
+              <Icon className={`h-10 w-10 mx-auto mb-3 ${textSecondary}`} />
+              <p className={`font-medium ${textPrimary}`}>{tab?.label} — coming soon</p>
+              <p className={`text-sm ${textSecondary} mt-1`}>Let us know what fields/workflow you need here and we'll build it out.</p>
+            </div>
+          );
+        })()}
 
         <Dialog open={showForm} onOpenChange={setShowForm}>
           <DialogContent className={`${bgCard} max-w-md`}>
@@ -228,6 +313,59 @@ const BNIWeeklyMeetingDetailPage = () => {
               <Button variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
               <Button onClick={saveGiveAsk} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-ga-save-btn">
                 {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showLocation} onOpenChange={setShowLocation}>
+          <DialogContent className={`${bgCard} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Meeting Location</DialogTitle>
+            </DialogHeader>
+            <Input value={locationValue} onChange={(e) => setLocationValue(e.target.value)} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-week-location-input" autoFocus />
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowLocation(false)}>Cancel</Button>
+              <Button onClick={saveLocation} disabled={locationSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-week-location-save-btn">
+                {locationSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showAttendance} onOpenChange={setShowAttendance}>
+          <DialogContent className={`${bgCard} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Attendance — Week {meeting.week_number}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Time</Label>
+                <Input type="time" value={attendanceForm.time} onChange={(e) => setAttendanceForm({ ...attendanceForm, time: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-attendance-time-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Attended By</Label>
+                <Select value={attendanceForm.attended_by} onValueChange={(v) => setAttendanceForm({ ...attendanceForm, attended_by: v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-attendance-by-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="vinoth">Vinoth</SelectItem>
+                    <SelectItem value="substitute">Substitute</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {attendanceForm.attended_by === 'substitute' && (
+                <div>
+                  <Label className={textPrimary}>Substitute Name</Label>
+                  <Input value={attendanceForm.substitute_name} onChange={(e) => setAttendanceForm({ ...attendanceForm, substitute_name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-attendance-substitute-input" />
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowAttendance(false)}>Cancel</Button>
+              <Button onClick={saveAttendance} disabled={attendanceSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-attendance-save-btn">
+                {attendanceSaving ? 'Saving…' : 'Save'}
               </Button>
             </DialogFooter>
           </DialogContent>

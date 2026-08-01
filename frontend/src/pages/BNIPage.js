@@ -151,9 +151,6 @@ export default function BNIPage() {
 
   const [weeklyMeetings, setWeeklyMeetings] = useState([]);
   const [wmLoading, setWmLoading] = useState(false);
-  const [showAddWeek, setShowAddWeek] = useState(false);
-  const [addWeekLocation, setAddWeekLocation] = useState('');
-  const [addWeekSaving, setAddWeekSaving] = useState(false);
 
   const [giveAsks, setGiveAsks] = useState([]);
   const [gaLoading, setGaLoading] = useState(false);
@@ -250,29 +247,6 @@ export default function BNIPage() {
   useEffect(() => {
     if (activeTab === 'weekly_meeting') loadWeeklyMeetings();
   }, [activeTab, loadWeeklyMeetings]);
-
-  const nextWeekPreview = useMemo(() => {
-    const nextNumber = weeklyMeetings.length > 0 ? Math.max(...weeklyMeetings.map((w) => w.week_number)) + 1 : 1;
-    const base = new Date(2026, 6, 31); // Week 1 anchor — 31 Jul 2026 (Friday)
-    const date = new Date(base);
-    date.setDate(date.getDate() + (nextNumber - 1) * 7);
-    return { number: nextNumber, dateLabel: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) };
-  }, [weeklyMeetings]);
-
-  const addWeek = async () => {
-    setAddWeekSaving(true);
-    try {
-      const res = await api.post('/bni/weekly-meetings', { location: addWeekLocation });
-      toast.success(`Week ${res.data.week_number} added`);
-      setShowAddWeek(false);
-      setAddWeekLocation('');
-      navigate(`/bni/weekly-meeting/${res.data.meeting_id}`);
-    } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to add week');
-    } finally {
-      setAddWeekSaving(false);
-    }
-  };
 
   // Give & Ask — aggregate across all weeks, for the main "Give and Ask" tab.
   const loadGiveAsks = useCallback(async () => {
@@ -776,11 +750,6 @@ export default function BNIPage() {
               </Button>
             </div>
           )}
-          {activeTab === 'weekly_meeting' && !isViewOnly && (
-            <Button onClick={() => setShowAddWeek(true)} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-week-btn">
-              <Plus className="h-4 w-4 mr-2" /> Add Week
-            </Button>
-          )}
           {activeTab === 'one_to_one' && !isViewOnly && (
             <Button onClick={openNewOto} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-oto-btn">
               <Plus className="h-4 w-4 mr-2" /> New One-to-One
@@ -1094,28 +1063,31 @@ export default function BNIPage() {
                         <tr><td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
                       ) : weeklyMeetings.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>
-                            No weeks yet — click "Add Week" to start with Week 1 (31 Jul 2026).
-                          </td>
+                          <td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>No weeks yet.</td>
                         </tr>
                       ) : (
-                        weeklyMeetings.map((w) => (
-                          <tr
-                            key={w.meeting_id}
-                            className={`${bgCard} hover:${bgSecondary} transition-colors cursor-pointer`}
-                            onClick={() => navigate(`/bni/weekly-meeting/${w.meeting_id}`)}
-                            data-testid={`bni-week-row-${w.week_number}`}
-                          >
-                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>Week {w.week_number}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>
-                              {new Date(w.meeting_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
-                            </td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{w.location || '—'}</td>
-                            <td className="px-4 py-3 text-right">
-                              <ChevronRight className={`h-4 w-4 inline ${textSecondary}`} />
-                            </td>
-                          </tr>
-                        ))
+                        weeklyMeetings.map((w, idx) => {
+                          const isUpcoming = idx === 0; // sorted newest-first — the top row is the current/next Friday
+                          return (
+                            <tr
+                              key={w.meeting_id}
+                              className={`transition-colors cursor-pointer ${isUpcoming ? 'bg-[#6366f1]/10 hover:bg-[#6366f1]/15' : `${bgCard} hover:${bgSecondary} opacity-60`}`}
+                              onClick={() => navigate(`/bni/weekly-meeting/${w.meeting_id}`)}
+                              data-testid={`bni-week-row-${w.week_number}`}
+                            >
+                              <td className={`px-4 py-3 font-medium ${isUpcoming ? 'text-[#6366f1]' : textPrimary}`}>
+                                Week {w.week_number}{isUpcoming && <span className="ml-2 text-xs font-normal">Upcoming</span>}
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>
+                                {new Date(w.meeting_date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{w.location || '—'}</td>
+                              <td className="px-4 py-3 text-right">
+                                <ChevronRight className={`h-4 w-4 inline ${textSecondary}`} />
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -1632,35 +1604,6 @@ export default function BNIPage() {
           textSecondary={textSecondary}
           borderColor={borderColor}
         />
-
-        {/* Add Week */}
-        <Dialog open={showAddWeek} onOpenChange={setShowAddWeek}>
-          <DialogContent className={`${bgCard} max-w-sm`}>
-            <DialogHeader>
-              <DialogTitle className={textPrimary}>Add Week {nextWeekPreview.number}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3">
-              <p className={`text-sm ${textSecondary}`}>{nextWeekPreview.dateLabel} (Friday)</p>
-              <div>
-                <Label className={textPrimary}>Location</Label>
-                <Input
-                  value={addWeekLocation}
-                  onChange={(e) => setAddWeekLocation(e.target.value)}
-                  placeholder="Meeting location"
-                  className={`${bgSecondary} border ${borderColor}`}
-                  data-testid="bni-add-week-location-input"
-                  autoFocus
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setShowAddWeek(false)}>Cancel</Button>
-              <Button onClick={addWeek} disabled={addWeekSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-add-week-save-btn">
-                {addWeekSaving ? 'Adding…' : 'Add Week'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* New One-to-One */}
         <Dialog open={showNewOto} onOpenChange={setShowNewOto}>

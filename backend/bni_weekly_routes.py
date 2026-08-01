@@ -2,7 +2,10 @@
 BNI Weekly Meetings — Drawlead OS
 
 Tracks the chapter's weekly meetings (every Friday, starting Week 1 on
-31 Jul 2026) and, per meeting, each member's Give & Ask exchange.
+31 Jul 2026) and, per meeting, each member's Give & Ask exchange. Weeks are
+never added manually — every list fetch auto-creates any week up through
+the current/next upcoming Friday, so the list always stays current on its
+own as time passes.
 
 Storage: collections `bni_weekly_meetings`, `bni_give_asks`.
 """
@@ -19,14 +22,49 @@ bni_give_ask_router = APIRouter(prefix="/bni/give-ask", tags=["bni"])
 BASE_WEEK_DATE = date(2026, 7, 31)
 
 GIVE_ASK_STATUSES = ["Contacted", "Not Related", "Asked the give"]
+ATTENDED_BY_OPTIONS = ["vinoth", "substitute"]
 
 
-class WeeklyMeetingCreate(BaseModel):
-    location: str = ""
+def _target_week_number(today: date) -> int:
+    """The current/next-upcoming week number — the smallest week whose
+    Friday hasn't passed yet (today included)."""
+    diff_days = (today - BASE_WEEK_DATE).days
+    if diff_days <= 0:
+        return 1
+    return ((diff_days + 6) // 7) + 1
+
+
+async def _ensure_weeks_up_to(db, target_week: int, user_id: str):
+    existing = await db.bni_weekly_meetings.find({}, {"_id": 0, "week_number": 1}).to_list(2000)
+    existing_numbers = {e["week_number"] for e in existing}
+    missing = [n for n in range(1, target_week + 1) if n not in existing_numbers]
+    if not missing:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    docs = []
+    for n in missing:
+        meeting_date = BASE_WEEK_DATE + timedelta(weeks=n - 1)
+        docs.append({
+            "meeting_id": f"bniwk_{uuid.uuid4().hex[:10]}",
+            "week_number": n,
+            "meeting_date": meeting_date.isoformat(),
+            "location": "",
+            "attendance": {"time": "", "attended_by": "", "substitute_name": ""},
+            "created_by": user_id,
+            "created_at": now,
+            "updated_at": now,
+        })
+    await db.bni_weekly_meetings.insert_many(docs)
 
 
 class WeeklyMeetingUpdate(BaseModel):
     location: Optional[str] = None
+
+
+class AttendanceUpdate(BaseModel):
+    time: str = ""
+    attended_by: str = ""  # vinoth | substitute
+    substitute_name: str = ""
 
 
 class GiveAskUpsert(BaseModel):
@@ -48,7 +86,9 @@ class GiveAskUpdate(BaseModel):
 @bni_weekly_router.get("")
 async def list_weekly_meetings(request: Request):
     from server import get_current_user, db
-    await get_current_user(request)
+    user = await get_current_user(request)
+    target_week = _target_week_number(datetime.now(timezone.utc).date())
+    await _ensure_weeks_up_to(db, target_week, user.user_id)
     return await db.bni_weekly_meetings.find({}, {"_id": 0}).sort("week_number", -1).to_list(500)
 
 
@@ -62,30 +102,6 @@ async def get_weekly_meeting(meeting_id: str, request: Request):
     return meeting
 
 
-@bni_weekly_router.post("")
-async def create_weekly_meeting(payload: WeeklyMeetingCreate, request: Request):
-    from server import get_current_user, db
-    user = await get_current_user(request)
-
-    last = await db.bni_weekly_meetings.find_one({}, {"_id": 0}, sort=[("week_number", -1)])
-    week_number = (last["week_number"] + 1) if last else 1
-    meeting_date = BASE_WEEK_DATE + timedelta(weeks=week_number - 1)
-
-    now = datetime.now(timezone.utc).isoformat()
-    doc = {
-        "meeting_id": f"bniwk_{uuid.uuid4().hex[:10]}",
-        "week_number": week_number,
-        "meeting_date": meeting_date.isoformat(),
-        "location": (payload.location or "").strip(),
-        "created_by": user.user_id,
-        "created_at": now,
-        "updated_at": now,
-    }
-    await db.bni_weekly_meetings.insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-
 @bni_weekly_router.put("/{meeting_id}")
 async def update_weekly_meeting(meeting_id: str, payload: WeeklyMeetingUpdate, request: Request):
     from server import get_current_user, db
@@ -97,6 +113,28 @@ async def update_weekly_meeting(meeting_id: str, payload: WeeklyMeetingUpdate, r
     update_data = {k: v for k, v in payload.dict().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.bni_weekly_meetings.update_one({"meeting_id": meeting_id}, {"$set": update_data})
+    return await db.bni_weekly_meetings.find_one({"meeting_id": meeting_id}, {"_id": 0})
+
+
+@bni_weekly_router.put("/{meeting_id}/attendance")
+async def update_attendance(meeting_id: str, payload: AttendanceUpdate, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    meeting = await db.bni_weekly_meetings.find_one({"meeting_id": meeting_id}, {"_id": 0})
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Weekly meeting not found")
+    if payload.attended_by and payload.attended_by not in ATTENDED_BY_OPTIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid attended_by: {payload.attended_by}")
+
+    attendance = {
+        "time": payload.time.strip(),
+        "attended_by": payload.attended_by,
+        "substitute_name": payload.substitute_name.strip() if payload.attended_by == "substitute" else "",
+    }
+    await db.bni_weekly_meetings.update_one(
+        {"meeting_id": meeting_id},
+        {"$set": {"attendance": attendance, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
     return await db.bni_weekly_meetings.find_one({"meeting_id": meeting_id}, {"_id": 0})
 
 
