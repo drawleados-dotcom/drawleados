@@ -36,6 +36,7 @@ const BNIWeeklyMeetingDetailPage = () => {
   const [members, setMembers] = useState([]);
   const [giveAsks, setGiveAsks] = useState([]);
   const [futurePresentations, setFuturePresentations] = useState([]);
+  const [giveOfWeek, setGiveOfWeek] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -55,16 +56,18 @@ const BNIWeeklyMeetingDetailPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [meetingRes, membersRes, gaRes, fpRes] = await Promise.all([
+      const [meetingRes, membersRes, gaRes, fpRes, giveRes] = await Promise.all([
         api.get(`/bni/weekly-meetings/${meetingId}`),
         api.get('/bni/members'),
         api.get('/bni/give-ask', { params: { meeting_id: meetingId } }),
         api.get('/bni/future-presentations', { params: { meeting_id: meetingId } }),
+        api.get('/bni/my-gives', { params: { meeting_id: meetingId } }),
       ]);
       setMeeting(meetingRes.data);
       setMembers(membersRes.data || []);
       setGiveAsks(gaRes.data || []);
       setFuturePresentations(fpRes.data || []);
+      setGiveOfWeek((giveRes.data || [])[0] || null);
     } catch (error) {
       toast.error('Failed to load weekly meeting');
     } finally {
@@ -366,7 +369,24 @@ const BNIWeeklyMeetingDetailPage = () => {
           </div>
         )}
 
-        {['education_slot', 'weekly_presentation'].includes(subTab) && (() => {
+        {subTab === 'weekly_presentation' && (
+          <div className="space-y-4">
+            {giveOfWeek ? (
+              <div className={`${bgCard} border ${borderColor} rounded-xl p-5`}>
+                <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Give of the Week</p>
+                <p className={`text-lg font-semibold ${textPrimary}`}>{giveOfWeek.business_person_name}</p>
+                <p className={`text-sm ${textSecondary} mt-1`}>{giveOfWeek.company_name || '—'} · {giveOfWeek.industry || '—'}</p>
+              </div>
+            ) : (
+              <div className={`${bgCard} border ${borderColor} rounded-xl p-8 text-center`}>
+                <Mic className={`h-8 w-8 mx-auto mb-2 ${textSecondary}`} />
+                <p className={`text-sm ${textSecondary}`}>No Give of the Week assigned yet — assign one from the My Gives tab.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {subTab === 'education_slot' && (() => {
           const tab = SUB_TABS.find((t) => t.key === subTab);
           const Icon = tab?.icon || GraduationCap;
           return (

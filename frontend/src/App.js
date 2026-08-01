@@ -38,6 +38,7 @@ import ServicePackagesPage from './pages/ServicePackagesPage';
 import BNIPage from './pages/BNIPage';
 import BNIWeeklyMeetingDetailPage from './pages/BNIWeeklyMeetingDetailPage';
 import BNIFuturePresentationFormPage from './pages/BNIFuturePresentationFormPage';
+import BNIMyGiveDetailPage from './pages/BNIMyGiveDetailPage';
 import AutomationPage from './pages/AutomationPage';
 import LinkedInPartnershipPage from './pages/LinkedInPartnershipPage';
 import LinkedInConnectionsPage from './pages/LinkedInConnectionsPage';
@@ -144,6 +145,14 @@ function AppRouter() {
         element={
           <ProtectedRoute module="bni">
             <BNIFuturePresentationFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/bni/my-gives/:giveId"
+        element={
+          <ProtectedRoute module="bni">
+            <BNIMyGiveDetailPage />
           </ProtectedRoute>
         }
       />

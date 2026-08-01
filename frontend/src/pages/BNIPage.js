@@ -16,7 +16,7 @@ import CSVImportModal from '../components/shared/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award, Gift,
   Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search, ChevronRight,
-  RotateCcw, MessageSquare,
+  RotateCcw, MessageSquare, Package,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -60,6 +60,7 @@ const TABS = [
   { key: 'members', label: 'Members', icon: Users },
   { key: 'weekly_meeting', label: 'Weekly Meeting', icon: Calendar },
   { key: 'give_ask', label: 'Give and Ask', icon: Gift },
+  { key: 'my_gives', label: 'My Gives', icon: Package },
   { key: 'one_to_one', label: 'One-to-One', icon: Handshake },
   { key: 'payment_history', label: 'Payment History', icon: Wallet },
   { key: 'referrals', label: 'Referrals', icon: Share2 },
@@ -155,6 +156,13 @@ export default function BNIPage() {
   const [giveAsks, setGiveAsks] = useState([]);
   const [gaLoading, setGaLoading] = useState(false);
   const [gaView, setGaView] = useState('gives');
+
+  const [myGives, setMyGives] = useState([]);
+  const [mgLoading, setMgLoading] = useState(false);
+  const [showNewGive, setShowNewGive] = useState(false);
+  const [newGiveForm, setNewGiveForm] = useState({ business_person_name: '', company_name: '', industry: '' });
+  const [newGiveSaving, setNewGiveSaving] = useState(false);
+  const [assigningGiveId, setAssigningGiveId] = useState(null);
 
   const [oneToOnes, setOneToOnes] = useState([]);
   const [ooLoading, setOoLoading] = useState(false);
@@ -274,6 +282,71 @@ export default function BNIPage() {
       setGiveAsks((prev) => prev.map((g) => (g.entry_id === entryId ? { ...g, [field]: value } : g)));
     } catch (error) {
       toast.error('Failed to update status');
+    }
+  };
+
+  // ---------- My Gives ----------
+
+  const loadMyGives = useCallback(async () => {
+    setMgLoading(true);
+    try {
+      const [givesRes, weeksRes] = await Promise.all([
+        api.get('/bni/my-gives'),
+        api.get('/bni/weekly-meetings'),
+      ]);
+      setMyGives(givesRes.data || []);
+      setWeeklyMeetings(weeksRes.data || []);
+    } catch (error) {
+      toast.error('Failed to load My Gives');
+    } finally {
+      setMgLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'my_gives') loadMyGives();
+  }, [activeTab, loadMyGives]);
+
+  const openNewGive = () => {
+    setNewGiveForm({ business_person_name: '', company_name: '', industry: '' });
+    setShowNewGive(true);
+  };
+
+  const saveNewGive = async () => {
+    if (!newGiveForm.business_person_name.trim()) { toast.error('Business Person Name is required'); return; }
+    setNewGiveSaving(true);
+    try {
+      await api.post('/bni/my-gives', newGiveForm);
+      toast.success('Give added');
+      setShowNewGive(false);
+      loadMyGives();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add give');
+    } finally {
+      setNewGiveSaving(false);
+    }
+  };
+
+  const assignGiveWeek = async (giveId, meetingId) => {
+    try {
+      await api.put(`/bni/my-gives/${giveId}/assign-week`, { meeting_id: meetingId });
+      toast.success('Assigned to weekly presentation');
+      loadMyGives();
+    } catch (error) {
+      toast.error('Failed to assign week');
+    } finally {
+      setAssigningGiveId(null);
+    }
+  };
+
+  const deleteMyGive = async (giveId) => {
+    if (!window.confirm('Delete this give?')) return;
+    try {
+      await api.delete(`/bni/my-gives/${giveId}`);
+      toast.success('Give deleted');
+      loadMyGives();
+    } catch (error) {
+      toast.error('Failed to delete give');
     }
   };
 
@@ -755,6 +828,11 @@ export default function BNIPage() {
               <Plus className="h-4 w-4 mr-2" /> New One-to-One
             </Button>
           )}
+          {activeTab === 'my_gives' && !isViewOnly && (
+            <Button onClick={openNewGive} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-give-btn">
+              <Plus className="h-4 w-4 mr-2" /> Add Give
+            </Button>
+          )}
         </div>
 
         {/* Tab bar */}
@@ -1168,6 +1246,84 @@ export default function BNIPage() {
               </div>
             )}
 
+            {activeTab === 'my_gives' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Business Person</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Company</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Industry</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Assigned Week</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Given To</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {mgLoading ? (
+                        <tr><td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                      ) : myGives.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No gives yet — click "Add Give" to log the first business opportunity.
+                          </td>
+                        </tr>
+                      ) : (
+                        myGives.map((g) => (
+                          <tr key={g.give_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                            <td className={`px-4 py-3 font-medium ${textPrimary} cursor-pointer`} onClick={() => navigate(`/bni/my-gives/${g.give_id}`)}>
+                              {g.business_person_name}
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{g.company_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{g.industry || '—'}</td>
+                            <td className="px-4 py-3">
+                              {assigningGiveId === g.give_id ? (
+                                <Select value="" onValueChange={(v) => assignGiveWeek(g.give_id, v)}>
+                                  <SelectTrigger className={`w-[180px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-give-week-select-${g.give_id}`}>
+                                    <SelectValue placeholder="Select week" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {weeklyMeetings.map((w) => (
+                                      <SelectItem key={w.meeting_id} value={w.meeting_id}>
+                                        Week {w.week_number} — {new Date(w.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : g.assigned_week_number ? (
+                                <Badge
+                                  className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 cursor-pointer"
+                                  onClick={() => setAssigningGiveId(g.give_id)}
+                                >
+                                  Week {g.assigned_week_number}
+                                </Badge>
+                              ) : (
+                                <Button variant="outline" size="sm" onClick={() => setAssigningGiveId(g.give_id)} data-testid={`bni-give-assign-week-btn-${g.give_id}`}>
+                                  Add to Weekly Presentation
+                                </Button>
+                              )}
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{g.recipient_count || 0} member{g.recipient_count === 1 ? '' : 's'}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => navigate(`/bni/my-gives/${g.give_id}`)} data-testid={`bni-give-open-${g.give_id}`}>
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMyGive(g.give_id)} data-testid={`bni-give-delete-${g.give_id}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'one_to_one' && (
               <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
@@ -1243,7 +1399,7 @@ export default function BNIPage() {
               </div>
             )}
 
-            {!['members', 'category', 'role_players', 'payment_history', 'weekly_meeting', 'give_ask', 'one_to_one'].includes(activeTab) && (() => {
+            {!['members', 'category', 'role_players', 'payment_history', 'weekly_meeting', 'give_ask', 'my_gives', 'one_to_one'].includes(activeTab) && (() => {
               const tab = TABS.find((t) => t.key === activeTab);
               const Icon = tab?.icon || Star;
               return (
@@ -1604,6 +1760,35 @@ export default function BNIPage() {
           textSecondary={textSecondary}
           borderColor={borderColor}
         />
+
+        {/* Add Give */}
+        <Dialog open={showNewGive} onOpenChange={setShowNewGive}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Add Give</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Business Person Name *</Label>
+                <Input value={newGiveForm.business_person_name} onChange={(e) => setNewGiveForm({ ...newGiveForm, business_person_name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-give-person-input" autoFocus />
+              </div>
+              <div>
+                <Label className={textPrimary}>Company Name</Label>
+                <Input value={newGiveForm.company_name} onChange={(e) => setNewGiveForm({ ...newGiveForm, company_name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-give-company-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Industry</Label>
+                <Input value={newGiveForm.industry} onChange={(e) => setNewGiveForm({ ...newGiveForm, industry: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-give-industry-input" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowNewGive(false)}>Cancel</Button>
+              <Button onClick={saveNewGive} disabled={newGiveSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-give-save-btn">
+                {newGiveSaving ? 'Saving…' : 'Add Give'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* New One-to-One */}
         <Dialog open={showNewOto} onOpenChange={setShowNewOto}>
