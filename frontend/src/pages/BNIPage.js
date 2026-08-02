@@ -16,7 +16,7 @@ import CSVImportModal from '../components/shared/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award, Gift,
   Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search, ChevronRight,
-  RotateCcw, MessageSquare, Package,
+  RotateCcw, MessageSquare, Package, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -180,7 +180,7 @@ export default function BNIPage() {
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
 
   const [showOtoRemarks, setShowOtoRemarks] = useState(false);
-  const [remarksForm, setRemarksForm] = useState({ remark: '', give: '', ask: '', status: '' });
+  const [remarksForm, setRemarksForm] = useState({ remark: '', gives: [''], referrals: [''], status: '' });
   const [remarksSaving, setRemarksSaving] = useState(false);
 
   const [activeOto, setActiveOto] = useState(null);
@@ -440,8 +440,32 @@ export default function BNIPage() {
 
   const openOtoRemarks = (entry) => {
     setActiveOto(entry);
-    setRemarksForm({ remark: entry.remark || '', give: entry.give || '', ask: entry.ask || '', status: entry.status || '' });
+    setRemarksForm({
+      remark: entry.remark || '',
+      gives: entry.gives?.length ? entry.gives : [''],
+      referrals: entry.referrals?.length ? entry.referrals : [''],
+      status: entry.status || '',
+    });
     setShowOtoRemarks(true);
+  };
+
+  const updateRemarksListItem = (field, idx, value) => {
+    setRemarksForm((prev) => {
+      const next = [...prev[field]];
+      next[idx] = value;
+      return { ...prev, [field]: next };
+    });
+  };
+
+  const addRemarksListItem = (field) => {
+    setRemarksForm((prev) => ({ ...prev, [field]: [...prev[field], ''] }));
+  };
+
+  const removeRemarksListItem = (field, idx) => {
+    setRemarksForm((prev) => {
+      const next = prev[field].filter((_, i) => i !== idx);
+      return { ...prev, [field]: next.length ? next : [''] };
+    });
   };
 
   const saveOtoRemarks = async () => {
@@ -1973,39 +1997,87 @@ export default function BNIPage() {
 
         {/* One-to-One Remarks */}
         <Dialog open={showOtoRemarks} onOpenChange={setShowOtoRemarks}>
-          <DialogContent className={`${bgCard} max-w-md`}>
+          <DialogContent className={`${bgCard} max-w-4xl`}>
             <DialogHeader>
               <DialogTitle className={textPrimary}>Remarks — {activeOto?.member_name}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-3">
-              <div>
-                <Label className={textPrimary}>Remark</Label>
-                <Textarea value={remarksForm.remark} onChange={(e) => setRemarksForm({ ...remarksForm, remark: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={2} data-testid="bni-oto-remark-input" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Column 1: Summary */}
+              <div className="space-y-3">
+                <h3 className={`text-sm font-semibold ${textPrimary}`}>Summary</h3>
+                <div>
+                  <Label className={textPrimary}>Remark</Label>
+                  <Textarea value={remarksForm.remark} onChange={(e) => setRemarksForm({ ...remarksForm, remark: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={4} data-testid="bni-oto-remark-input" />
+                </div>
+                <div>
+                  <Label className={textPrimary}>One to One Status</Label>
+                  <Select value={remarksForm.status || 'none'} onValueChange={(v) => setRemarksForm({ ...remarksForm, status: v === 'none' ? '' : v })}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-oto-status-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Set status —</SelectItem>
+                      {ONE_TO_ONE_STATUSES.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {remarksForm.status === 'Lead' && (
+                    <p className="text-xs text-[#10b981] mt-1">Saving will add {activeOto?.member_name} as a new Lead (source: BNI).</p>
+                  )}
+                </div>
               </div>
-              <div>
-                <Label className={textPrimary}>Give</Label>
-                <Textarea value={remarksForm.give} onChange={(e) => setRemarksForm({ ...remarksForm, give: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={2} />
+
+              {/* Column 2: Givers — gives from me to this member */}
+              <div className="space-y-2">
+                <h3 className={`text-sm font-semibold ${textPrimary}`}>Givers</h3>
+                <p className={`text-xs ${textSecondary}`}>What I've given to {activeOto?.member_name || 'this member'}</p>
+                <div className="space-y-2">
+                  {remarksForm.gives.map((g, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Textarea
+                        value={g}
+                        onChange={(e) => updateRemarksListItem('gives', idx, e.target.value)}
+                        className={`${bgSecondary} border ${borderColor}`}
+                        rows={2}
+                        placeholder="What did you give?"
+                        data-testid={`bni-oto-give-input-${idx}`}
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => removeRemarksListItem('gives', idx)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={() => addRemarksListItem('gives')} data-testid="bni-oto-add-give-btn">
+                    <Plus className="h-4 w-4 mr-1" /> Add Give
+                  </Button>
+                </div>
               </div>
-              <div>
-                <Label className={textPrimary}>Ask</Label>
-                <Textarea value={remarksForm.ask} onChange={(e) => setRemarksForm({ ...remarksForm, ask: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={2} />
-              </div>
-              <div>
-                <Label className={textPrimary}>One to One Status</Label>
-                <Select value={remarksForm.status || 'none'} onValueChange={(v) => setRemarksForm({ ...remarksForm, status: v === 'none' ? '' : v })}>
-                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-oto-status-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— Set status —</SelectItem>
-                    {ONE_TO_ONE_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {remarksForm.status === 'Lead' && (
-                  <p className="text-xs text-[#10b981] mt-1">Saving will add {activeOto?.member_name} as a new Lead (source: BNI).</p>
-                )}
+
+              {/* Column 3: Referrals — referrals from this member */}
+              <div className="space-y-2">
+                <h3 className={`text-sm font-semibold ${textPrimary}`}>Referrals</h3>
+                <p className={`text-xs ${textSecondary}`}>Referrals from {activeOto?.member_name || 'this member'}</p>
+                <div className="space-y-2">
+                  {remarksForm.referrals.map((r, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <Textarea
+                        value={r}
+                        onChange={(e) => updateRemarksListItem('referrals', idx, e.target.value)}
+                        className={`${bgSecondary} border ${borderColor}`}
+                        rows={2}
+                        placeholder="Referral details"
+                        data-testid={`bni-oto-referral-input-${idx}`}
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => removeRemarksListItem('referrals', idx)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={() => addRemarksListItem('referrals')} data-testid="bni-oto-add-referral-btn">
+                    <Plus className="h-4 w-4 mr-1" /> Add Referral
+                  </Button>
+                </div>
               </div>
             </div>
             <DialogFooter>

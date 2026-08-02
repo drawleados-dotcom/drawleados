@@ -3,7 +3,7 @@ BNI One-to-One — Drawlead OS
 
 Tracks scheduled one-to-one meetings with chapter members: schedule first
 (member, date, time, location, invited by), then log the outcome afterwards
-via Reschedule / Remarks actions on the row (remark, give, ask, status).
+via Reschedule / Remarks actions on the row (remark, gives, referrals, status).
 Setting the status to "Lead" auto-creates a lead in the main Leads pipeline
 (source "BNI") so it reaches the sales team — once per entry.
 
@@ -12,7 +12,7 @@ Storage: collection `bni_one_to_ones`.
 import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime, timezone
 
 bni_one_to_one_router = APIRouter(prefix="/bni/one-to-ones", tags=["bni"])
@@ -45,8 +45,8 @@ class OneToOneReschedule(BaseModel):
 
 class OneToOneRemarksUpdate(BaseModel):
     remark: Optional[str] = None
-    give: Optional[str] = None
-    ask: Optional[str] = None
+    gives: Optional[List[str]] = None
+    referrals: Optional[List[str]] = None
     status: Optional[str] = None
 
 
@@ -80,8 +80,8 @@ async def create_one_to_one(payload: OneToOneCreate, request: Request):
         "location": (payload.location or "").strip(),
         "invited_by": payload.invited_by,
         "remark": "",
-        "give": "",
-        "ask": "",
+        "gives": [],
+        "referrals": [],
         "status": "",
         "lead_created": False,
         "created_by": user.user_id,
@@ -145,6 +145,10 @@ async def update_remarks(entry_id: str, payload: OneToOneRemarksUpdate, request:
         raise HTTPException(status_code=404, detail="One-to-One not found")
 
     update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    if "gives" in update_data:
+        update_data["gives"] = [g.strip() for g in update_data["gives"] if g.strip()]
+    if "referrals" in update_data:
+        update_data["referrals"] = [r.strip() for r in update_data["referrals"] if r.strip()]
     if update_data.get("status") and update_data["status"] not in ONE_TO_ONE_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {update_data['status']}")
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
