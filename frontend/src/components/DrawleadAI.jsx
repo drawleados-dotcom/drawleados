@@ -157,7 +157,7 @@ const DrawleadAI = ({ currentModule = 'general', contextData = null }) => {
 
       {/* AI Chat Panel */}
       <div
-        className={`fixed bottom-24 right-6 z-50 w-[420px] h-[550px] bg-[#0c0a09] border border-[#27272a] rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
+        className={`fixed bottom-24 right-3 sm:right-6 z-50 w-[420px] max-w-[calc(100vw-1.5rem)] h-[550px] max-h-[70vh] bg-[#0c0a09] border border-[#27272a] rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${
           isOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'
         }`}
         data-testid="ai-chat-panel"

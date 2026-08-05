@@ -181,7 +181,7 @@ export default function ChatPanel({ isOpen, onClose }) {
   const totalUnread = channels.reduce((sum, ch) => sum + (ch.unread_count || 0), 0);
 
   return (
-    <div className="fixed right-0 top-0 h-full w-[400px] bg-[#18181b] border-l border-[#27272a] shadow-2xl z-50 flex flex-col">
+    <div className="fixed right-0 top-0 h-full w-full max-w-[400px] bg-[#18181b] border-l border-[#27272a] shadow-2xl z-50 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-[#27272a]">
         <div className="flex items-center gap-3">

@@ -84,7 +84,15 @@
   * {
     @apply border-border;
   }
-  
+
+  /* Mobile safety net: clamp the page to the device width so wide/legacy
+     desktop layouts scroll their own content (e.g. tables with their own
+     overflow-x-auto wrapper) instead of dragging the whole page sideways. */
+  html, body, #root {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Manrope', sans-serif;

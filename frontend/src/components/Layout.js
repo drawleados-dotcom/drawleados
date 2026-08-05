@@ -528,20 +528,20 @@ const Layout = ({ children }) => {
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
       {!isOperationsOnlyUser && menuLayout === 'sidebar' && <Sidebar />}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header with Attendance & Theme Toggle */}
-        <header className={`h-14 flex items-center justify-between px-6 border-b ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}>
+        <header className={`min-h-14 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 border-b ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}>
           {/* Left: Attendance Info */}
-          <div className="flex items-center gap-4">
-            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+            <div className={`hidden sm:flex items-center gap-2 text-sm ${isDark ? 'text-[#a1a1aa]' : 'text-gray-600'}`}>
               <Clock className="h-4 w-4" />
               <span>In: <strong className={isDark ? 'text-[#fafafa]' : 'text-gray-900'}>{formatTime(todayAttendance?.clock_in)}</strong></span>
               <span className="mx-1">|</span>
               <span>Out: <strong className={isDark ? 'text-[#fafafa]' : 'text-gray-900'}>{formatTime(todayAttendance?.clock_out)}</strong></span>
             </div>
-            
+
             {/* Action Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Clock In Button - Only show if not clocked in */}
               {!todayAttendance?.clock_in && (
                 <Button
@@ -614,7 +614,7 @@ const Layout = ({ children }) => {
           </div>
           
           {/* Right: Task Manager & Theme Toggle */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
             {/* Operations-only user gets a header nav (Operations / My Profile) instead of sidebar */}
             {isOperationsOnlyUser && (
               <nav className="flex items-center gap-1 mr-2">
@@ -653,8 +653,8 @@ const Layout = ({ children }) => {
         {!isOperationsOnlyUser && menuLayout === 'top' && <TopNav />}
 
         {/* Main Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-8">{children}</div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
+          <div className="p-4 sm:p-6 lg:p-8 min-w-0">{children}</div>
         </div>
       </div>
       <DrawleadAI currentModule={currentModule} />
