@@ -17,6 +17,7 @@ import ProjectScopesTab from './projects/ProjectScopesTab';
 import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
 import ProjectDailyNotesTab from './projects/ProjectDailyNotesTab';
+import ProjectsNotesHistoryPanel from './projects/ProjectsNotesHistoryPanel';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -96,6 +97,9 @@ export default function ProjectsPanel({
   const [deptsDraft, setDeptsDraft] = useState([]);
   const [deptsSaving, setDeptsSaving] = useState(false);
   const [projectInnerTab, setProjectInnerTab] = useState('tasks'); // 'tasks' | 'payment'
+  // Notes History — the date-wise feed of every project's Daily Notes for the
+  // department tab currently selected. Replaces the project table while open.
+  const [showNotesHistory, setShowNotesHistory] = useState(false);
   const [docsTab, setDocsTab] = useState('sheets'); // 'sheets' | 'docs' | 'drive'
   const [editingDocId, setEditingDocId] = useState(null);
   const [docDraft, setDocDraft] = useState({ name: '', link: '' });
@@ -685,12 +689,25 @@ export default function ProjectsPanel({
             </button>
           );
         })}
+
+        {/* Notes History — sits at the end of the department row and opens the
+            date-wise feed of Daily Notes for whichever department is selected. */}
+        <button
+          onClick={() => { setSelectedProject(null); setShowNotesHistory(v => !v); }}
+          className={`px-3 py-1.5 rounded-full text-sm transition-all inline-flex items-center gap-1.5 ${
+            showNotesHistory ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
+          }`}
+          data-testid="notes-history-btn"
+        >
+          <History className="h-3.5 w-3.5" />
+          Notes History
+        </button>
       </div>
 
       {/* Status sub-tabs — only meaningful once a specific department is
           selected, since status vocabularies are defined per department
           (Operations → Departments → {Dept} → Status tab). */}
-      {deptFilter !== 'all' && (() => {
+      {deptFilter !== 'all' && !showNotesHistory && (() => {
         const deptProjects = projects.filter(p => (p.departments || []).includes(deptFilter));
         const statuses = deptStatuses.find(d => d.dept_key === deptFilter)?.statuses || [];
         if (statuses.length === 0) return null;
@@ -2380,6 +2397,19 @@ export default function ProjectsPanel({
         <>
           {navTabsBar}
 
+          {showNotesHistory ? (
+            <ProjectsNotesHistoryPanel
+              department={deptFilter === 'all' ? '' : deptFilter}
+              departmentLabel={deptFilter === 'all' ? 'all' : (DEPARTMENTS.find(d => d.value === deptFilter)?.label || deptFilter)}
+              onClose={() => setShowNotesHistory(false)}
+              headers={headers}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          ) : (
           <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`} data-testid="projects-list">
             <table className="w-full text-sm">
               <thead className={`${bgSecondary} ${textSecondary} text-xs uppercase`}>
@@ -2559,6 +2589,7 @@ export default function ProjectsPanel({
               <div className={`p-8 text-center text-sm ${textSecondary}`}>No projects found</div>
             )}
           </div>
+          )}
         </>
       )}
 

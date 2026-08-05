@@ -129,3 +129,64 @@ class TestProjectDailyNotes:
     def test_unknown_project_404s(self):
         response = self.session.get(f"{BASE_URL}/api/projects/prj_does_not_exist/daily-notes")
         assert response.status_code == 404
+
+    # ---- Notes History (cross-project feed behind the department tabs) ----
+
+    def test_history_returns_notes_and_project_options(self):
+        note = self._add_note(note="TEST_ shows up in history")
+
+        response = self.session.get(f"{BASE_URL}/api/projects/daily-notes/history")
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert "notes" in body and "projects" in body
+
+        entry = next((n for n in body["notes"] if n["note_id"] == note["note_id"]), None)
+        assert entry is not None, "note missing from history feed"
+        assert entry["project_id"] == self.project_id
+        assert entry["project_name"], "history must carry the project name for grouping"
+        assert self.project_id in [p["project_id"] for p in body["projects"]]
+
+    def test_history_is_sorted_newest_day_first(self):
+        self._add_note(note="TEST_ old day", note_date="2020-02-02")
+        self._add_note(note="TEST_ new day", note_date="2020-11-11")
+
+        body = self.session.get(f"{BASE_URL}/api/projects/daily-notes/history").json()
+        dates = [n["note_date"] for n in body["notes"]]
+        assert dates == sorted(dates, reverse=True)
+
+    def test_history_department_scope(self):
+        """?department= must only return notes from projects in that department."""
+        projects = self.session.get(f"{BASE_URL}/api/projects").json()
+        erp_ids = {p["project_id"] for p in projects if "erp" in (p.get("departments") or [])}
+
+        response = self.session.get(
+            f"{BASE_URL}/api/projects/daily-notes/history",
+            params={"department": "erp"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert {p["project_id"] for p in body["projects"]} <= erp_ids
+        assert all(n["project_id"] in erp_ids for n in body["notes"])
+
+    def test_history_date_range_filter(self):
+        self._add_note(note="TEST_ inside window", note_date="2020-05-10")
+        self._add_note(note="TEST_ outside window", note_date="2021-05-10")
+
+        body = self.session.get(
+            f"{BASE_URL}/api/projects/daily-notes/history",
+            params={"from_date": "2020-01-01", "to_date": "2020-12-31"},
+        ).json()
+        assert all("2020-01-01" <= n["note_date"] <= "2020-12-31" for n in body["notes"])
+
+    def test_history_bad_date_rejected(self):
+        response = self.session.get(
+            f"{BASE_URL}/api/projects/daily-notes/history",
+            params={"from_date": "10-05-2020"},
+        )
+        assert response.status_code == 400
+
+    def test_history_path_not_shadowed_by_project_id_route(self):
+        """`daily-notes` must not be swallowed as a {project_id} — a 404 here
+        would mean the literal route lost to the parameterised one."""
+        response = self.session.get(f"{BASE_URL}/api/projects/daily-notes/history")
+        assert response.status_code == 200

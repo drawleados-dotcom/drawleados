@@ -686,6 +686,73 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
 # operation on one note.
 
 
+@projects_router.get("/daily-notes/history")
+async def daily_notes_history(
+    request: Request,
+    department: Optional[str] = None,
+    project_id: Optional[str] = None,
+    created_by: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+):
+    """Every project's daily notes in one date-wise feed — what the "Notes
+    History" button next to the department tabs opens.
+
+    Scoped to one `department` (erp, website, seo, …) so the feed matches the
+    department tab the user is standing on. Same visibility rule as the project
+    list: admins/ops see every project, everyone else only theirs.
+
+    NOTE: declared ahead of `/{project_id}/daily-notes` on purpose — routes are
+    matched in declaration order, and a literal path must never sit behind a
+    parameterised one that could swallow it.
+    """
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    project_query: dict = {} if await _is_operation_head_or_admin(user, db) else {
+        "$or": [
+            {"members": user.user_id},
+            {"created_by": user.user_id},
+        ]
+    }
+    if department:
+        project_query["departments"] = department
+    if project_id:
+        project_query["project_id"] = project_id
+
+    projects = await db.projects.find(project_query, {"_id": 0, "project_id": 1, "name": 1}).to_list(500)
+    if not projects:
+        return {"notes": [], "projects": []}
+    name_by_id = {p["project_id"]: p.get("name") for p in projects}
+
+    note_query: dict = {"project_id": {"$in": list(name_by_id.keys())}}
+    date_range: dict = {}
+    if from_date:
+        date_range["$gte"] = _validate_note_date(from_date)
+    if to_date:
+        date_range["$lte"] = _validate_note_date(to_date)
+    if date_range:
+        note_query["note_date"] = date_range
+    if created_by:
+        note_query["created_by"] = created_by
+
+    notes = await db.project_daily_notes.find(note_query, {"_id": 0}).sort(
+        [("note_date", -1), ("created_at", -1)]
+    ).to_list(5000)
+    # Re-resolve the project name rather than trusting the copy stamped on the
+    # note at write time — projects get renamed.
+    for n in notes:
+        n["project_name"] = name_by_id.get(n.get("project_id")) or n.get("project_name")
+
+    return {
+        "notes": notes,
+        "projects": sorted(
+            [{"project_id": pid, "name": name} for pid, name in name_by_id.items()],
+            key=lambda p: (p["name"] or "").lower(),
+        ),
+    }
+
+
 @projects_router.get("/{project_id}/daily-notes")
 async def list_daily_notes(
     project_id: str,
