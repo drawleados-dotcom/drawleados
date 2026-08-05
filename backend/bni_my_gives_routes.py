@@ -27,6 +27,7 @@ class MyGiveCreate(BaseModel):
     business_person_name: str
     company_name: str = ""
     industry: str = ""
+    week_number: Optional[int] = None
 
 
 class MyGiveUpdate(BaseModel):
@@ -36,7 +37,7 @@ class MyGiveUpdate(BaseModel):
 
 
 class AssignWeek(BaseModel):
-    meeting_id: str
+    week_number: int
 
 
 class GiveRecipientCreate(BaseModel):
@@ -69,10 +70,18 @@ async def _with_recipient_counts(db, gives):
 # ---------- My Gives ----------
 
 @bni_my_gives_router.get("")
-async def list_my_gives(request: Request, meeting_id: str = ""):
+async def list_my_gives(request: Request, meeting_id: str = "", week_number: int = 0):
     from server import get_current_user, db
     await get_current_user(request)
-    query = {"assigned_meeting_id": meeting_id} if meeting_id else {}
+    # week_number is the reliable filter — a give can be assigned to a future
+    # week before that week's meeting document even exists, so
+    # assigned_meeting_id may still be empty at that point.
+    if week_number:
+        query = {"assigned_week_number": week_number}
+    elif meeting_id:
+        query = {"assigned_meeting_id": meeting_id}
+    else:
+        query = {}
     gives = await db.bni_my_gives.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return await _with_recipient_counts(db, gives)
 
@@ -94,14 +103,19 @@ async def create_my_give(payload: MyGiveCreate, request: Request):
     if not payload.business_person_name.strip():
         raise HTTPException(status_code=400, detail="Business Person Name is required")
 
+    assigned_meeting_id = ""
+    if payload.week_number:
+        meeting = await db.bni_weekly_meetings.find_one({"week_number": payload.week_number}, {"_id": 0, "meeting_id": 1})
+        assigned_meeting_id = meeting.get("meeting_id", "") if meeting else ""
+
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "give_id": f"bnimg_{uuid.uuid4().hex[:10]}",
         "business_person_name": payload.business_person_name.strip(),
         "company_name": payload.company_name.strip(),
         "industry": payload.industry.strip(),
-        "assigned_week_number": None,
-        "assigned_meeting_id": "",
+        "assigned_week_number": payload.week_number,
+        "assigned_meeting_id": assigned_meeting_id,
         "created_by": user.user_id,
         "created_at": now,
         "updated_at": now,
@@ -129,16 +143,20 @@ async def update_my_give(give_id: str, payload: MyGiveUpdate, request: Request):
 async def assign_my_give_week(give_id: str, payload: AssignWeek, request: Request):
     from server import get_current_user, db
     await get_current_user(request)
+    if payload.week_number < 1:
+        raise HTTPException(status_code=400, detail="Invalid week number")
     give = await db.bni_my_gives.find_one({"give_id": give_id}, {"_id": 0})
     if not give:
         raise HTTPException(status_code=404, detail="Give not found")
-    meeting = await db.bni_weekly_meetings.find_one({"meeting_id": payload.meeting_id}, {"_id": 0})
-    if not meeting:
-        raise HTTPException(status_code=404, detail="Weekly meeting not found")
+    # The target week's meeting document may not exist yet (gives can be
+    # planned for future weeks ahead of the auto-creation schedule) — store
+    # the meeting_id opportunistically, but assigned_week_number is the
+    # reliable field readers should filter on.
+    meeting = await db.bni_weekly_meetings.find_one({"week_number": payload.week_number}, {"_id": 0, "meeting_id": 1})
 
     update_data = {
-        "assigned_meeting_id": payload.meeting_id,
-        "assigned_week_number": meeting["week_number"],
+        "assigned_meeting_id": meeting.get("meeting_id", "") if meeting else "",
+        "assigned_week_number": payload.week_number,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.bni_my_gives.update_one({"give_id": give_id}, {"$set": update_data})

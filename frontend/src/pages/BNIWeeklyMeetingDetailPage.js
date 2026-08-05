@@ -40,6 +40,7 @@ const BNIWeeklyMeetingDetailPage = () => {
   const [giveOfWeek, setGiveOfWeek] = useState(null);
   const [oneToOnes, setOneToOnes] = useState([]);
   const [showOtoContribution, setShowOtoContribution] = useState(false);
+  const [chapterSettings, setChapterSettings] = useState({ chapter_name: '' });
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -59,13 +60,17 @@ const BNIWeeklyMeetingDetailPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [meetingRes, membersRes, gaRes, fpRes, giveRes, otoRes] = await Promise.all([
-        api.get(`/bni/weekly-meetings/${meetingId}`),
+      const meetingRes = await api.get(`/bni/weekly-meetings/${meetingId}`);
+      const weekNumber = meetingRes.data.week_number;
+      const [membersRes, gaRes, fpRes, giveRes, otoRes, settingsRes] = await Promise.all([
         api.get('/bni/members'),
         api.get('/bni/give-ask', { params: { meeting_id: meetingId } }),
         api.get('/bni/future-presentations', { params: { meeting_id: meetingId } }),
-        api.get('/bni/my-gives', { params: { meeting_id: meetingId } }),
+        // Filtered by week_number, not meeting_id — a give can be assigned to
+        // this week before this meeting document even existed.
+        api.get('/bni/my-gives', { params: { week_number: weekNumber } }),
         api.get('/bni/one-to-ones'),
+        api.get('/bni/settings'),
       ]);
       setMeeting(meetingRes.data);
       setMembers(membersRes.data || []);
@@ -73,6 +78,7 @@ const BNIWeeklyMeetingDetailPage = () => {
       setFuturePresentations(fpRes.data || []);
       setGiveOfWeek((giveRes.data || [])[0] || null);
       setOneToOnes(otoRes.data || []);
+      setChapterSettings(settingsRes.data || { chapter_name: '' });
     } catch (error) {
       toast.error('Failed to load weekly meeting');
     } finally {
@@ -392,18 +398,23 @@ const BNIWeeklyMeetingDetailPage = () => {
 
         {subTab === 'weekly_presentation' && (
           <div className="space-y-4">
-            {giveOfWeek ? (
-              <div className={`${bgCard} border ${borderColor} rounded-xl p-5`}>
-                <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Give of the Week</p>
-                <p className={`text-lg font-semibold ${textPrimary}`}>{giveOfWeek.business_person_name}</p>
-                <p className={`text-sm ${textSecondary} mt-1`}>{giveOfWeek.company_name || '—'} · {giveOfWeek.industry || '—'}</p>
-              </div>
-            ) : (
-              <div className={`${bgCard} border ${borderColor} rounded-xl p-8 text-center`}>
-                <Mic className={`h-8 w-8 mx-auto mb-2 ${textSecondary}`} />
-                <p className={`text-sm ${textSecondary}`}>No Give of the Week assigned yet — assign one from the My Gives tab.</p>
-              </div>
-            )}
+            <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+              <p className={`text-xl font-semibold ${textPrimary}`}>
+                Good Morning, {(chapterSettings.chapter_name || 'Chapter').toUpperCase()}!
+              </p>
+              {giveOfWeek ? (
+                <p className={`text-lg ${textSecondary} mt-3`}>
+                  My Give of the Week is <span className={`font-semibold ${textPrimary}`}>{giveOfWeek.business_person_name}</span>
+                  {giveOfWeek.company_name && <> (<span className={textPrimary}>{giveOfWeek.company_name}</span>)</>}
+                  {giveOfWeek.industry && <> (<span className={textPrimary}>{giveOfWeek.industry}</span>)</>}
+                </p>
+              ) : (
+                <div className="flex items-center gap-2 mt-3">
+                  <Mic className={`h-5 w-5 ${textSecondary}`} />
+                  <p className={`text-sm ${textSecondary}`}>No Give of the Week assigned yet — assign one from the My Gives tab.</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

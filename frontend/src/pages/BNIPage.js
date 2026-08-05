@@ -125,6 +125,18 @@ const emptyNameDescForm = () => ({ name: '', description: '' });
 
 const emptyOutreachForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '', category_id: '' });
 
+// Mirrors backend's BASE_WEEK_DATE (bni_weekly_routes.py) — Week 1 = Fri 31
+// Jul 2026, weekly cadence — so the My Gives planner can show all 52 weeks
+// of the BNI year even for weeks whose meeting document hasn't been
+// auto-created yet.
+const BNI_BASE_WEEK_DATE = new Date(Date.UTC(2026, 6, 31));
+const BNI_TOTAL_WEEKS = 52;
+const bniWeekDate = (weekNumber) => {
+  const d = new Date(BNI_BASE_WEEK_DATE);
+  d.setUTCDate(d.getUTCDate() + (weekNumber - 1) * 7);
+  return d;
+};
+
 export default function BNIPage() {
   const { isDark } = useTheme();
   const { user } = useAuth();
@@ -178,9 +190,8 @@ export default function BNIPage() {
   const [myGives, setMyGives] = useState([]);
   const [mgLoading, setMgLoading] = useState(false);
   const [showNewGive, setShowNewGive] = useState(false);
-  const [newGiveForm, setNewGiveForm] = useState({ business_person_name: '', company_name: '', industry: '' });
+  const [newGiveForm, setNewGiveForm] = useState({ business_person_name: '', company_name: '', industry: '', week_number: null });
   const [newGiveSaving, setNewGiveSaving] = useState(false);
-  const [assigningGiveId, setAssigningGiveId] = useState(null);
 
   const [oneToOnes, setOneToOnes] = useState([]);
   const [ooLoading, setOoLoading] = useState(false);
@@ -338,8 +349,8 @@ export default function BNIPage() {
     if (activeTab === 'my_gives') loadMyGives();
   }, [activeTab, loadMyGives]);
 
-  const openNewGive = () => {
-    setNewGiveForm({ business_person_name: '', company_name: '', industry: '' });
+  const openNewGive = (weekNumber) => {
+    setNewGiveForm({ business_person_name: '', company_name: '', industry: '', week_number: weekNumber || null });
     setShowNewGive(true);
   };
 
@@ -358,17 +369,16 @@ export default function BNIPage() {
     }
   };
 
-  const assignGiveWeek = async (giveId, meetingId) => {
-    try {
-      await api.put(`/bni/my-gives/${giveId}/assign-week`, { meeting_id: meetingId });
-      toast.success('Assigned to weekly presentation');
-      loadMyGives();
-    } catch (error) {
-      toast.error('Failed to assign week');
-    } finally {
-      setAssigningGiveId(null);
-    }
-  };
+  const myGivesByWeek = useMemo(() => {
+    const map = {};
+    myGives.forEach((g) => {
+      if (!g.assigned_week_number) return;
+      (map[g.assigned_week_number] = map[g.assigned_week_number] || []).push(g);
+    });
+    return map;
+  }, [myGives]);
+
+  const unassignedGives = useMemo(() => myGives.filter((g) => !g.assigned_week_number), [myGives]);
 
   const deleteMyGive = async (giveId) => {
     if (!window.confirm('Delete this give?')) return;
@@ -1023,7 +1033,7 @@ export default function BNIPage() {
             </Button>
           )}
           {activeTab === 'my_gives' && !isViewOnly && (
-            <Button onClick={openNewGive} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-give-btn">
+            <Button onClick={() => openNewGive()} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-give-btn">
               <Plus className="h-4 w-4 mr-2" /> Add Give
             </Button>
           )}
@@ -1452,80 +1462,128 @@ export default function BNIPage() {
             )}
 
             {activeTab === 'my_gives' && (
-              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className={bgSecondary}>
-                      <tr>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Business Person</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Company</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Industry</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Assigned Week</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Given To</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${borderColor}`}>
-                      {mgLoading ? (
-                        <tr><td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
-                      ) : myGives.length === 0 ? (
+              <div className="space-y-4">
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                  <div className="overflow-x-auto max-h-[70vh] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className={`${bgSecondary} sticky top-0`}>
                         <tr>
-                          <td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>
-                            No gives yet — click "Add Give" to log the first business opportunity.
-                          </td>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Week</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Date</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Give of the Week</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Given To</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                         </tr>
-                      ) : (
-                        myGives.map((g) => (
-                          <tr key={g.give_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
-                            <td className={`px-4 py-3 font-medium ${textPrimary} cursor-pointer`} onClick={() => navigate(`/bni/my-gives/${g.give_id}`)}>
-                              {g.business_person_name}
-                            </td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{g.company_name || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{g.industry || '—'}</td>
-                            <td className="px-4 py-3">
-                              {assigningGiveId === g.give_id ? (
-                                <Select value="" onValueChange={(v) => assignGiveWeek(g.give_id, v)}>
-                                  <SelectTrigger className={`w-[180px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-give-week-select-${g.give_id}`}>
-                                    <SelectValue placeholder="Select week" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {weeklyMeetings.map((w) => (
-                                      <SelectItem key={w.meeting_id} value={w.meeting_id}>
-                                        Week {w.week_number} — {new Date(w.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                                      </SelectItem>
+                      </thead>
+                      <tbody className={`divide-y ${borderColor}`}>
+                        {mgLoading ? (
+                          <tr><td colSpan={5} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                        ) : (
+                          Array.from({ length: BNI_TOTAL_WEEKS }, (_, i) => i + 1).map((wn) => {
+                            const gives = myGivesByWeek[wn] || [];
+                            return (
+                              <tr key={wn} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                                <td className={`px-4 py-3 font-medium ${textPrimary}`}>Week {wn}</td>
+                                <td className="px-4 py-3">
+                                  <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 font-semibold">
+                                    {bniWeekDate(wn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {gives.length === 0 ? (
+                                    <span className={textSecondary}>—</span>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {gives.map((g) => (
+                                        <div key={g.give_id}>
+                                          <span
+                                            className={`font-medium ${textPrimary} cursor-pointer hover:underline`}
+                                            onClick={() => navigate(`/bni/my-gives/${g.give_id}`)}
+                                          >
+                                            {g.business_person_name}
+                                          </span>
+                                          <span className={`text-xs ${textSecondary} ml-1`}>
+                                            {g.company_name || '—'} · {g.industry || '—'}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className={`px-4 py-3 ${textSecondary}`}>
+                                  {gives.length === 0 ? '—' : gives.map((g) => `${g.recipient_count || 0} member${g.recipient_count === 1 ? '' : 's'}`).join(', ')}
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-1">
+                                    {gives.map((g) => (
+                                      <Button
+                                        key={g.give_id}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-[#ef4444]"
+                                        onClick={() => deleteMyGive(g.give_id)}
+                                        title={`Delete ${g.business_person_name}`}
+                                        data-testid={`bni-give-delete-${g.give_id}`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
                                     ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : g.assigned_week_number ? (
-                                <Badge
-                                  className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 cursor-pointer"
-                                  onClick={() => setAssigningGiveId(g.give_id)}
-                                >
-                                  Week {g.assigned_week_number}
-                                </Badge>
-                              ) : (
-                                <Button variant="outline" size="sm" onClick={() => setAssigningGiveId(g.give_id)} data-testid={`bni-give-assign-week-btn-${g.give_id}`}>
-                                  Add to Weekly Presentation
-                                </Button>
-                              )}
-                            </td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{g.recipient_count || 0} member{g.recipient_count === 1 ? '' : 's'}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="sm" onClick={() => navigate(`/bni/my-gives/${g.give_id}`)} data-testid={`bni-give-open-${g.give_id}`}>
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMyGive(g.give_id)} data-testid={`bni-give-delete-${g.give_id}`}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                                    <Button variant="ghost" size="sm" onClick={() => openNewGive(wn)} title="Add Give" data-testid={`bni-give-add-week-${wn}`}>
+                                      <Plus className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+
+                {unassignedGives.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className={`text-sm font-semibold ${textPrimary}`}>Unassigned Gives</h3>
+                    <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className={bgSecondary}>
+                            <tr>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Business Person</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Company</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Industry</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Given To</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className={`divide-y ${borderColor}`}>
+                            {unassignedGives.map((g) => (
+                              <tr key={g.give_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                                <td className={`px-4 py-3 font-medium ${textPrimary} cursor-pointer`} onClick={() => navigate(`/bni/my-gives/${g.give_id}`)}>
+                                  {g.business_person_name}
+                                </td>
+                                <td className={`px-4 py-3 ${textSecondary}`}>{g.company_name || '—'}</td>
+                                <td className={`px-4 py-3 ${textSecondary}`}>{g.industry || '—'}</td>
+                                <td className={`px-4 py-3 ${textSecondary}`}>{g.recipient_count || 0} member{g.recipient_count === 1 ? '' : 's'}</td>
+                                <td className="px-4 py-3">
+                                  <div className="flex gap-1">
+                                    <Button variant="ghost" size="sm" onClick={() => navigate(`/bni/my-gives/${g.give_id}`)} data-testid={`bni-give-open-${g.give_id}`}>
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMyGive(g.give_id)} data-testid={`bni-give-delete-${g.give_id}`}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2160,6 +2218,25 @@ export default function BNIPage() {
               <div>
                 <Label className={textPrimary}>Industry</Label>
                 <Input value={newGiveForm.industry} onChange={(e) => setNewGiveForm({ ...newGiveForm, industry: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-give-industry-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Week</Label>
+                <Select
+                  value={newGiveForm.week_number ? String(newGiveForm.week_number) : 'none'}
+                  onValueChange={(v) => setNewGiveForm({ ...newGiveForm, week_number: v === 'none' ? null : Number(v) })}
+                >
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-give-week-select">
+                    <SelectValue placeholder="Select a week" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="none">— Unassigned —</SelectItem>
+                    {Array.from({ length: BNI_TOTAL_WEEKS }, (_, i) => i + 1).map((wn) => (
+                      <SelectItem key={wn} value={String(wn)}>
+                        Week {wn} — {bniWeekDate(wn).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <DialogFooter>
