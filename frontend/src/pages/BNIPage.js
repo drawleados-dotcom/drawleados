@@ -16,7 +16,7 @@ import CSVImportModal from '../components/shared/CSVImportModal';
 import {
   Plus, Users, Calendar, Handshake, Wallet, Share2, Heart, Star, Tag, Award, Gift,
   Eye, Pencil, Trash2, MapPin, Link as LinkIcon, Mail, Phone, Globe, Pin, PinOff, Upload, Search, ChevronRight,
-  RotateCcw, MessageSquare, Package, X,
+  RotateCcw, MessageSquare, Package, X, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -46,6 +46,18 @@ const ROLE_PLAYER_IMPORT_FIELDS = [
   { key: 'description', label: 'Description', synonyms: ['description', 'desc'] },
 ];
 
+const OUTREACH_IMPORT_FIELDS = [
+  { key: 'name', label: 'Name', required: true, synonyms: ['name'] },
+  { key: 'brand_name', label: 'Brand Name', synonyms: ['brand name', 'brand'] },
+  { key: 'chapter_name', label: 'Chapter Name', synonyms: ['chapter name', 'chapter'] },
+  { key: 'email', label: 'Email', synonyms: ['email', 'email address'] },
+  { key: 'profile_link', label: 'Profile Link', synonyms: ['profile link', 'profile'] },
+  { key: 'phone', label: 'Phone', synonyms: ['phone', 'phone number', 'mobile', 'contact number'] },
+  { key: 'website', label: 'Website', synonyms: ['website', 'site'] },
+  { key: 'status', label: 'Status', synonyms: ['status'] },
+  { key: 'location', label: 'Location', synonyms: ['location'] },
+];
+
 const MONTHS = [
   { v: 1, l: 'January' }, { v: 2, l: 'February' }, { v: 3, l: 'March' },
   { v: 4, l: 'April' }, { v: 5, l: 'May' }, { v: 6, l: 'June' },
@@ -55,6 +67,7 @@ const MONTHS = [
 
 const GIVE_ASK_STATUSES = ['Contacted', 'Not Related', 'Asked the give'];
 const ONE_TO_ONE_STATUSES = ['Lead', 'One to One', 'Relationship'];
+const OUTREACH_STATUSES = ['To do', 'Contacted', 'Interested', 'Not Interested', 'Converted'];
 
 const TABS = [
   { key: 'members', label: 'Members', icon: Users },
@@ -62,6 +75,7 @@ const TABS = [
   { key: 'give_ask', label: 'Give and Ask', icon: Gift },
   { key: 'my_gives', label: 'My Gives', icon: Package },
   { key: 'one_to_one', label: 'One-to-One', icon: Handshake },
+  { key: 'outreach', label: 'BNI Outreach', icon: Send },
   { key: 'payment_history', label: 'Payment History', icon: Wallet },
   { key: 'referrals', label: 'Referrals', icon: Share2 },
   { key: 'thank_you_note', label: 'Thank You Note', icon: Heart },
@@ -106,6 +120,8 @@ const emptyMemberForm = () => ({
 });
 
 const emptyNameDescForm = () => ({ name: '', description: '' });
+
+const emptyOutreachForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '' });
 
 export default function BNIPage() {
   const { isDark } = useTheme();
@@ -184,6 +200,14 @@ export default function BNIPage() {
   const [remarksSaving, setRemarksSaving] = useState(false);
 
   const [activeOto, setActiveOto] = useState(null);
+
+  const [outreach, setOutreach] = useState([]);
+  const [ouLoading, setOuLoading] = useState(false);
+  const [showOutreachModal, setShowOutreachModal] = useState(false);
+  const [editingOutreachId, setEditingOutreachId] = useState(null);
+  const [outreachForm, setOutreachForm] = useState(emptyOutreachForm());
+  const [outreachSaving, setOutreachSaving] = useState(false);
+  const [showOutreachImport, setShowOutreachImport] = useState(false);
 
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
   const bgSecondary = isDark ? 'bg-[#27272a]' : 'bg-gray-100';
@@ -480,6 +504,89 @@ export default function BNIPage() {
     } finally {
       setRemarksSaving(false);
     }
+  };
+
+  // ---------- BNI Outreach ----------
+
+  const loadOutreach = useCallback(async () => {
+    setOuLoading(true);
+    try {
+      const res = await api.get('/bni/outreach');
+      setOutreach(res.data || []);
+    } catch (error) {
+      toast.error('Failed to load BNI Outreach');
+    } finally {
+      setOuLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'outreach') loadOutreach();
+  }, [activeTab, loadOutreach]);
+
+  const openAddOutreach = () => {
+    setEditingOutreachId(null);
+    setOutreachForm(emptyOutreachForm());
+    setShowOutreachModal(true);
+  };
+
+  const openEditOutreach = (o) => {
+    setEditingOutreachId(o.outreach_id);
+    setOutreachForm({
+      name: o.name || '', brand_name: o.brand_name || '', chapter_name: o.chapter_name || '',
+      email: o.email || '', profile_link: o.profile_link || '', phone: o.phone || '',
+      website: o.website || '', status: o.status || 'To do', location: o.location || '',
+    });
+    setShowOutreachModal(true);
+  };
+
+  const saveOutreach = async () => {
+    if (!outreachForm.name.trim()) { toast.error('Name is required'); return; }
+    setOutreachSaving(true);
+    try {
+      if (editingOutreachId) {
+        await api.put(`/bni/outreach/${editingOutreachId}`, outreachForm);
+        toast.success('Outreach entry updated');
+      } else {
+        await api.post('/bni/outreach', outreachForm);
+        toast.success('Outreach entry added');
+      }
+      setShowOutreachModal(false);
+      loadOutreach();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save outreach entry');
+    } finally {
+      setOutreachSaving(false);
+    }
+  };
+
+  const updateOutreachStatus = async (outreachId, status) => {
+    try {
+      await api.put(`/bni/outreach/${outreachId}`, { status });
+      setOutreach((prev) => prev.map((o) => (o.outreach_id === outreachId ? { ...o, status } : o)));
+    } catch (error) {
+      toast.error('Failed to update status');
+    }
+  };
+
+  const deleteOutreach = async (outreachId) => {
+    if (!window.confirm('Delete this outreach entry?')) return;
+    try {
+      await api.delete(`/bni/outreach/${outreachId}`);
+      toast.success('Outreach entry deleted');
+      loadOutreach();
+    } catch (error) {
+      toast.error('Failed to delete outreach entry');
+    }
+  };
+
+  const importOutreach = async (rows) => {
+    const results = await Promise.allSettled(
+      rows.map((r) => api.post('/bni/outreach', { ...emptyOutreachForm(), ...r }))
+    );
+    const success = results.filter((r) => r.status === 'fulfilled').length;
+    toast.success(`Imported ${success} of ${rows.length} outreach entries`);
+    loadOutreach();
   };
 
   // Access control: Super Admin / Admin always get full access to every
@@ -856,6 +963,16 @@ export default function BNIPage() {
             <Button onClick={openNewGive} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-give-btn">
               <Plus className="h-4 w-4 mr-2" /> Add Give
             </Button>
+          )}
+          {activeTab === 'outreach' && !isViewOnly && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowOutreachImport(true)} data-testid="bni-import-outreach-btn">
+                <Upload className="h-4 w-4 mr-2" /> Import CSV
+              </Button>
+              <Button onClick={openAddOutreach} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-outreach-btn">
+                <Plus className="h-4 w-4 mr-2" /> Add New
+              </Button>
+            </div>
           )}
         </div>
 
@@ -1348,6 +1465,81 @@ export default function BNIPage() {
               </div>
             )}
 
+            {activeTab === 'outreach' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Brand Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Chapter Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Profile Link</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Website</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {ouLoading ? (
+                        <tr><td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                      ) : outreach.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No outreach entries yet — click "Add New" or "Import CSV" to get started.
+                          </td>
+                        </tr>
+                      ) : (
+                        outreach.map((o) => (
+                          <tr key={o.outreach_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.name}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.brand_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.chapter_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.email || '—'}</td>
+                            <td className="px-4 py-3">
+                              {o.profile_link ? (
+                                <a href={o.profile_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1">
+                                  <LinkIcon className="h-3.5 w-3.5" /> View
+                                </a>
+                              ) : '—'}
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
+                            <td className="px-4 py-3">
+                              <Select value={o.status || 'To do'} onValueChange={(v) => updateOutreachStatus(o.outreach_id, v)}>
+                                <SelectTrigger className={`w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {OUTREACH_STATUSES.map((s) => (
+                                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => openEditOutreach(o)} data-testid={`bni-outreach-edit-${o.outreach_id}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteOutreach(o.outreach_id)} data-testid={`bni-outreach-delete-${o.outreach_id}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'one_to_one' && (
               <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
@@ -1423,7 +1615,7 @@ export default function BNIPage() {
               </div>
             )}
 
-            {!['members', 'category', 'role_players', 'payment_history', 'weekly_meeting', 'give_ask', 'my_gives', 'one_to_one'].includes(activeTab) && (() => {
+            {!['members', 'category', 'role_players', 'payment_history', 'weekly_meeting', 'give_ask', 'my_gives', 'one_to_one', 'outreach'].includes(activeTab) && (() => {
               const tab = TABS.find((t) => t.key === activeTab);
               const Icon = tab?.icon || Star;
               return (
@@ -1784,6 +1976,80 @@ export default function BNIPage() {
           textSecondary={textSecondary}
           borderColor={borderColor}
         />
+        <CSVImportModal
+          open={showOutreachImport}
+          onClose={() => setShowOutreachImport(false)}
+          title="Import BNI Outreach from CSV"
+          fields={OUTREACH_IMPORT_FIELDS}
+          onImport={importOutreach}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
+
+        {/* Add/Edit Outreach */}
+        <Dialog open={showOutreachModal} onOpenChange={setShowOutreachModal}>
+          <DialogContent className={`${bgCard} max-w-lg`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>{editingOutreachId ? 'Edit Outreach' : 'Add Outreach'}</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <Label className={textPrimary}>Name *</Label>
+                <Input value={outreachForm.name} onChange={(e) => setOutreachForm({ ...outreachForm, name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-name-input" autoFocus />
+              </div>
+              <div>
+                <Label className={textPrimary}>Brand Name</Label>
+                <Input value={outreachForm.brand_name} onChange={(e) => setOutreachForm({ ...outreachForm, brand_name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-brand-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Chapter Name</Label>
+                <Input value={outreachForm.chapter_name} onChange={(e) => setOutreachForm({ ...outreachForm, chapter_name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-chapter-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Email</Label>
+                <Input type="email" value={outreachForm.email} onChange={(e) => setOutreachForm({ ...outreachForm, email: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-email-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Phone</Label>
+                <Input value={outreachForm.phone} onChange={(e) => setOutreachForm({ ...outreachForm, phone: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-phone-input" />
+              </div>
+              <div className="col-span-2">
+                <Label className={textPrimary}>Profile Link</Label>
+                <Input value={outreachForm.profile_link} onChange={(e) => setOutreachForm({ ...outreachForm, profile_link: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-profile-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Website</Label>
+                <Input value={outreachForm.website} onChange={(e) => setOutreachForm({ ...outreachForm, website: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-website-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Location</Label>
+                <Input value={outreachForm.location} onChange={(e) => setOutreachForm({ ...outreachForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-location-input" />
+              </div>
+              <div className="col-span-2">
+                <Label className={textPrimary}>Status</Label>
+                <Select value={outreachForm.status || 'To do'} onValueChange={(v) => setOutreachForm({ ...outreachForm, status: v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-outreach-status-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OUTREACH_STATUSES.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowOutreachModal(false)}>Cancel</Button>
+              <Button onClick={saveOutreach} disabled={outreachSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-outreach-save-btn">
+                {outreachSaving ? 'Saving…' : editingOutreachId ? 'Save Changes' : 'Add Outreach'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Add Give */}
         <Dialog open={showNewGive} onOpenChange={setShowNewGive}>

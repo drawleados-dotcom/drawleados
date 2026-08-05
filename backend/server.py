@@ -55,6 +55,7 @@ from bni_weekly_routes import bni_weekly_router, bni_give_ask_router
 from bni_one_to_one_routes import bni_one_to_one_router
 from bni_future_presentation_routes import bni_future_presentation_router
 from bni_my_gives_routes import bni_my_gives_router, bni_give_recipients_router
+from bni_outreach_routes import bni_outreach_router
 from linkedin_connections_routes import linkedin_connections_router
 from sheets_routes import sheets_router
 from org_tree_routes import org_tree_router, init_org_tree_db
@@ -2982,6 +2983,7 @@ api_router.include_router(bni_one_to_one_router)
 api_router.include_router(bni_future_presentation_router)
 api_router.include_router(bni_my_gives_router)
 api_router.include_router(bni_give_recipients_router)
+api_router.include_router(bni_outreach_router)
 api_router.include_router(linkedin_connections_router)
 api_router.include_router(sheets_router)
 api_router.include_router(org_tree_router)
