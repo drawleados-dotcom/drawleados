@@ -192,6 +192,7 @@ export default function BNIPage() {
   const [showNewGive, setShowNewGive] = useState(false);
   const [newGiveForm, setNewGiveForm] = useState({ business_person_name: '', company_name: '', industry: '', week_number: null });
   const [newGiveSaving, setNewGiveSaving] = useState(false);
+  const [editingGiveId, setEditingGiveId] = useState(null);
 
   const [oneToOnes, setOneToOnes] = useState([]);
   const [ooLoading, setOoLoading] = useState(false);
@@ -350,7 +351,19 @@ export default function BNIPage() {
   }, [activeTab, loadMyGives]);
 
   const openNewGive = (weekNumber) => {
+    setEditingGiveId(null);
     setNewGiveForm({ business_person_name: '', company_name: '', industry: '', week_number: weekNumber || null });
+    setShowNewGive(true);
+  };
+
+  const openEditGive = (give) => {
+    setEditingGiveId(give.give_id);
+    setNewGiveForm({
+      business_person_name: give.business_person_name || '',
+      company_name: give.company_name || '',
+      industry: give.industry || '',
+      week_number: give.assigned_week_number || null,
+    });
     setShowNewGive(true);
   };
 
@@ -358,12 +371,17 @@ export default function BNIPage() {
     if (!newGiveForm.business_person_name.trim()) { toast.error('Business Person Name is required'); return; }
     setNewGiveSaving(true);
     try {
-      await api.post('/bni/my-gives', newGiveForm);
-      toast.success('Give added');
+      if (editingGiveId) {
+        await api.put(`/bni/my-gives/${editingGiveId}`, newGiveForm);
+        toast.success('Give updated');
+      } else {
+        await api.post('/bni/my-gives', newGiveForm);
+        toast.success('Give added');
+      }
       setShowNewGive(false);
       loadMyGives();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to add give');
+      toast.error(error.response?.data?.detail || 'Failed to save give');
     } finally {
       setNewGiveSaving(false);
     }
@@ -1515,22 +1533,35 @@ export default function BNIPage() {
                                 </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-1">
-                                    {gives.map((g) => (
-                                      <Button
-                                        key={g.give_id}
-                                        variant="ghost"
-                                        size="sm"
-                                        className="text-[#ef4444]"
-                                        onClick={() => deleteMyGive(g.give_id)}
-                                        title={`Delete ${g.business_person_name}`}
-                                        data-testid={`bni-give-delete-${g.give_id}`}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
+                                    {gives.length === 0 ? (
+                                      <Button variant="ghost" size="sm" onClick={() => openNewGive(wn)} title="Add Give" data-testid={`bni-give-add-week-${wn}`}>
+                                        <Plus className="h-4 w-4" />
                                       </Button>
-                                    ))}
-                                    <Button variant="ghost" size="sm" onClick={() => openNewGive(wn)} title="Add Give" data-testid={`bni-give-add-week-${wn}`}>
-                                      <Plus className="h-4 w-4" />
-                                    </Button>
+                                    ) : (
+                                      gives.map((g) => (
+                                        <React.Fragment key={g.give_id}>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => openEditGive(g)}
+                                            title={`Edit ${g.business_person_name}`}
+                                            data-testid={`bni-give-edit-${g.give_id}`}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-[#ef4444]"
+                                            onClick={() => deleteMyGive(g.give_id)}
+                                            title={`Delete ${g.business_person_name}`}
+                                            data-testid={`bni-give-delete-${g.give_id}`}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </React.Fragment>
+                                      ))
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -1570,6 +1601,9 @@ export default function BNIPage() {
                                   <div className="flex gap-1">
                                     <Button variant="ghost" size="sm" onClick={() => navigate(`/bni/my-gives/${g.give_id}`)} data-testid={`bni-give-open-${g.give_id}`}>
                                       <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => openEditGive(g)} data-testid={`bni-give-edit-${g.give_id}`}>
+                                      <Pencil className="h-4 w-4" />
                                     </Button>
                                     <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteMyGive(g.give_id)} data-testid={`bni-give-delete-${g.give_id}`}>
                                       <Trash2 className="h-4 w-4" />
@@ -2200,11 +2234,11 @@ export default function BNIPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Add Give */}
+        {/* Add/Edit Give */}
         <Dialog open={showNewGive} onOpenChange={setShowNewGive}>
           <DialogContent className={`${bgCard} max-w-md`}>
             <DialogHeader>
-              <DialogTitle className={textPrimary}>Add Give</DialogTitle>
+              <DialogTitle className={textPrimary}>{editingGiveId ? 'Edit Give' : 'Add Give'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
               <div>
@@ -2242,7 +2276,7 @@ export default function BNIPage() {
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowNewGive(false)}>Cancel</Button>
               <Button onClick={saveNewGive} disabled={newGiveSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-give-save-btn">
-                {newGiveSaving ? 'Saving…' : 'Add Give'}
+                {newGiveSaving ? 'Saving…' : editingGiveId ? 'Save Changes' : 'Add Give'}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -34,6 +34,7 @@ class MyGiveUpdate(BaseModel):
     business_person_name: Optional[str] = None
     company_name: Optional[str] = None
     industry: Optional[str] = None
+    week_number: Optional[int] = None
 
 
 class AssignWeek(BaseModel):
@@ -53,6 +54,20 @@ class GiveRecipientUpdate(BaseModel):
     give_date: Optional[str] = None
     shared_via: Optional[str] = None
     status: Optional[str] = None
+
+
+async def _ensure_week_available(db, week_number, exclude_give_id=None):
+    """Only one Give of the Week per week — reject if another give already
+    holds that week."""
+    query = {"assigned_week_number": week_number}
+    if exclude_give_id:
+        query["give_id"] = {"$ne": exclude_give_id}
+    existing = await db.bni_my_gives.find_one(query, {"_id": 0, "business_person_name": 1})
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Week {week_number} already has a Give of the Week ({existing.get('business_person_name', '')}) — edit that one instead.",
+        )
 
 
 async def _with_recipient_counts(db, gives):
@@ -105,6 +120,7 @@ async def create_my_give(payload: MyGiveCreate, request: Request):
 
     assigned_meeting_id = ""
     if payload.week_number:
+        await _ensure_week_available(db, payload.week_number)
         meeting = await db.bni_weekly_meetings.find_one({"week_number": payload.week_number}, {"_id": 0, "meeting_id": 1})
         assigned_meeting_id = meeting.get("meeting_id", "") if meeting else ""
 
@@ -133,7 +149,22 @@ async def update_my_give(give_id: str, payload: MyGiveUpdate, request: Request):
     if not give:
         raise HTTPException(status_code=404, detail="Give not found")
 
-    update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    # exclude_unset distinguishes "week_number not sent" from "sent as null"
+    # (explicit unassign) — a plain `is not None` filter can't tell those apart.
+    raw = payload.dict(exclude_unset=True)
+    update_data = {k: v for k, v in raw.items() if k != "week_number" and v is not None}
+
+    if "week_number" in raw:
+        week_number = raw["week_number"]
+        if not week_number:
+            update_data["assigned_week_number"] = None
+            update_data["assigned_meeting_id"] = ""
+        else:
+            await _ensure_week_available(db, week_number, exclude_give_id=give_id)
+            meeting = await db.bni_weekly_meetings.find_one({"week_number": week_number}, {"_id": 0, "meeting_id": 1})
+            update_data["assigned_week_number"] = week_number
+            update_data["assigned_meeting_id"] = meeting.get("meeting_id", "") if meeting else ""
+
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.bni_my_gives.update_one({"give_id": give_id}, {"$set": update_data})
     return await db.bni_my_gives.find_one({"give_id": give_id}, {"_id": 0})
@@ -148,6 +179,7 @@ async def assign_my_give_week(give_id: str, payload: AssignWeek, request: Reques
     give = await db.bni_my_gives.find_one({"give_id": give_id}, {"_id": 0})
     if not give:
         raise HTTPException(status_code=404, detail="Give not found")
+    await _ensure_week_available(db, payload.week_number, exclude_give_id=give_id)
     # The target week's meeting document may not exist yet (gives can be
     # planned for future weeks ahead of the auto-creation schedule) — store
     # the meeting_id opportunistically, but assigned_week_number is the
