@@ -131,6 +131,7 @@ async def startup_tasks():
             ("finance_clients", [("display_name_lower", 1)], {}),
             ("leads", [("lead_id", 1)], {}),
             ("projects", [("project_id", 1)], {}),
+            ("project_daily_notes", [("project_id", 1), ("note_date", -1)], {}),
             ("designations", [("designation_id", 1)], {}),
             ("departments", [("department_id", 1)], {}),
             ("leave_requests", [("user_id", 1), ("status", 1)], {}),

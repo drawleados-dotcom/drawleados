@@ -60,6 +60,18 @@ class RecordSplitAgainstInvoiceRequest(BaseModel):
     invoice_id: str
 
 
+class DailyNoteCreate(BaseModel):
+    note: str
+    note_date: Optional[str] = None   # YYYY-MM-DD — defaults to today (IST)
+    department: Optional[str] = None  # optional tag for multi-department projects
+
+
+class DailyNoteUpdate(BaseModel):
+    note: Optional[str] = None
+    note_date: Optional[str] = None
+    department: Optional[str] = None
+
+
 class ProjectTaskCreate(BaseModel):
     task_name: str
     description: Optional[str] = ""
@@ -106,6 +118,31 @@ async def _is_operation_head_or_admin(user, db) -> bool:
     if not desg_doc:
         return False
     return (desg_doc.get("operations_projects") or "none") == "edit"
+
+
+async def _can_view_project(user, db, project: dict) -> bool:
+    """Same visibility rule as the project list: admins/ops see every project,
+    everyone else only the ones they're a member of (or created)."""
+    if await _is_operation_head_or_admin(user, db):
+        return True
+    return user.user_id in (project.get("members") or []) or project.get("created_by") == user.user_id
+
+
+# IST — the office timezone. "Today's update" must mean today in Chennai, not
+# today in UTC, otherwise every note filed after 5:30 AM IST … 12:00 AM UTC
+# would land on the wrong day.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _today_ist() -> str:
+    return datetime.now(IST).date().isoformat()
+
+
+def _validate_note_date(value: str) -> str:
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").date().isoformat()
+    except Exception:
+        raise HTTPException(status_code=400, detail="note_date must be in YYYY-MM-DD format")
 
 
 @projects_router.get("")
@@ -634,6 +671,138 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         )
 
     return task
+
+
+# ============== DAILY NOTES ==============
+# One short "what happened on this project today" entry per person per day,
+# available on EVERY project regardless of department (Website / Social Media /
+# Meta Ads / SEO / ERP). Kept in its own collection rather than an array on the
+# project doc: this log grows by a row per member per working day forever, and
+# the project doc is fetched whole on every list call.
+#
+# Deliberately NOT exposed through the generic PATCH /projects/{id} either —
+# concurrent whole-array writes from two people filing their update at the same
+# time would silently drop one of them. Every write below is a single-document
+# operation on one note.
+
+
+@projects_router.get("/{project_id}/daily-notes")
+async def list_daily_notes(
+    project_id: str,
+    request: Request,
+    note_date: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    created_by: Optional[str] = None,
+):
+    """All days' notes for a project, newest day first. Optional filters:
+    a single `note_date`, a `from_date`/`to_date` range, or one author."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "members": 1, "created_by": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not await _can_view_project(user, db, project):
+        raise HTTPException(status_code=403, detail="You don't have access to this project")
+
+    query: dict = {"project_id": project_id}
+    if note_date:
+        query["note_date"] = _validate_note_date(note_date)
+    else:
+        date_range: dict = {}
+        if from_date:
+            date_range["$gte"] = _validate_note_date(from_date)
+        if to_date:
+            date_range["$lte"] = _validate_note_date(to_date)
+        if date_range:
+            query["note_date"] = date_range
+    if created_by:
+        query["created_by"] = created_by
+
+    return await db.project_daily_notes.find(query, {"_id": 0}).sort(
+        [("note_date", -1), ("created_at", -1)]
+    ).to_list(2000)
+
+
+@projects_router.post("/{project_id}/daily-notes")
+async def add_daily_note(project_id: str, payload: DailyNoteCreate, request: Request):
+    """File a daily update. Any member of the project can log their own —
+    that's the point of the tab; it isn't an admin-only edit."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0, "name": 1, "members": 1, "created_by": 1})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not await _can_view_project(user, db, project):
+        raise HTTPException(status_code=403, detail="You don't have access to this project")
+
+    text = (payload.note or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Note is required")
+
+    now = datetime.now(timezone.utc).isoformat()
+    note = {
+        "note_id": f"dn_{uuid.uuid4().hex[:12]}",
+        "project_id": project_id,
+        "project_name": project.get("name"),
+        "note_date": _validate_note_date(payload.note_date) if payload.note_date else _today_ist(),
+        "note": text,
+        "department": (payload.department or "").strip() or None,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.project_daily_notes.insert_one(note)
+    note.pop("_id", None)
+    return note
+
+
+@projects_router.patch("/{project_id}/daily-notes/{note_id}")
+async def update_daily_note(project_id: str, note_id: str, payload: DailyNoteUpdate, request: Request):
+    """Edit a note. Authors can correct their own; admins/ops can fix anyone's."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    note = await db.project_daily_notes.find_one({"note_id": note_id, "project_id": project_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Daily note not found")
+    if note.get("created_by") != user.user_id and not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="You can only edit your own daily note")
+
+    update_data: dict = {}
+    if payload.note is not None:
+        text = payload.note.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="Note cannot be empty")
+        update_data["note"] = text
+    if payload.note_date is not None:
+        update_data["note_date"] = _validate_note_date(payload.note_date)
+    if payload.department is not None:
+        update_data["department"] = payload.department.strip() or None
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.project_daily_notes.update_one({"note_id": note_id}, {"$set": update_data})
+    return await db.project_daily_notes.find_one({"note_id": note_id}, {"_id": 0})
+
+
+@projects_router.delete("/{project_id}/daily-notes/{note_id}")
+async def delete_daily_note(project_id: str, note_id: str, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+
+    note = await db.project_daily_notes.find_one({"note_id": note_id, "project_id": project_id}, {"_id": 0})
+    if not note:
+        raise HTTPException(status_code=404, detail="Daily note not found")
+    if note.get("created_by") != user.user_id and not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="You can only delete your own daily note")
+
+    await db.project_daily_notes.delete_one({"note_id": note_id})
+    return {"message": "Daily note deleted", "note_id": note_id}
 
 
 @projects_router.post("/{project_id}/content-calendar/{entry_id}/publish-linkedin")

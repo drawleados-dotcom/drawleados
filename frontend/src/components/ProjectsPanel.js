@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound, Link2, History } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound, Link2, History, NotebookPen } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
@@ -16,6 +16,7 @@ import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
 import ProjectScopesTab from './projects/ProjectScopesTab';
 import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
+import ProjectDailyNotesTab from './projects/ProjectDailyNotesTab';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -1142,6 +1143,8 @@ export default function ProjectsPanel({
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
+            // Daily Notes — universal, every project regardless of department.
+            { id: 'daily_notes', label: 'Daily Notes', icon: NotebookPen },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
             ...(showPaymentSchedule ? [{ id: 'expense', label: 'Expense', icon: TrendingDown }] : []),
             ...(isSocialMediaProject ? [{ id: 'content_calendar', label: 'Content Calendar', icon: Calendar }] : []),
@@ -1380,6 +1383,22 @@ export default function ProjectsPanel({
           <div className={`${bgCard} border ${borderColor} rounded-2xl p-12 text-center`} data-testid="additional-tab">
             <p className={textSecondary}>Nothing here yet.</p>
           </div>
+        )}
+
+        {projectInnerTab === 'daily_notes' && (
+          <ProjectDailyNotesTab
+            project={selectedProject}
+            users={users}
+            currentUser={currentUser}
+            canEdit={canManageProjects}
+            departmentOptions={DEPARTMENTS.filter(d => (selectedProject.departments || []).includes(d.value))}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
         )}
 
         {projectInnerTab === 'delivery_history' && (
