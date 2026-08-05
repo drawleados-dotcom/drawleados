@@ -309,6 +309,27 @@ async def get_bni_payment_history(request: Request, month: Optional[int] = None,
     ).to_list(50)
     cat_ids = [c["category_id"] for c in bni_cats]
 
+    # Expenses are tagged to the most specific (leaf) category the user
+    # picked — e.g. "Marketing > BNI > Membership Fee" — not necessarily the
+    # "BNI" node itself. Walk every descendant (nesting is unlimited) so
+    # those still count as BNI spend.
+    if cat_ids:
+        all_docs = await db.expense_split_categories.find(
+            {"is_deleted": {"$ne": True}}, {"_id": 0, "category_id": 1, "parent_id": 1},
+        ).to_list(1000)
+        by_parent: dict = {}
+        for d in all_docs:
+            by_parent.setdefault(d.get("parent_id"), []).append(d["category_id"])
+        frontier = list(cat_ids)
+        while frontier:
+            next_frontier = []
+            for pid in frontier:
+                for child_id in by_parent.get(pid, []):
+                    if child_id not in cat_ids:
+                        cat_ids.append(child_id)
+                        next_frontier.append(child_id)
+            frontier = next_frontier
+
     query = {"kind": "debit", "split_category_id": {"$in": cat_ids}}
     if month and year:
         start = f"{year:04d}-{month:02d}-01"

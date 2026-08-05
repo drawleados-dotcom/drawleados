@@ -426,11 +426,33 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   // that came from an invoice or payslip (those flows own the canonical
   // amount; editing here would silently desync the linked record).
   const [editEntry, setEditEntry] = useState(null); // { ...entry } | null
-  const [editForm, setEditForm] = useState({ date: '', party: '', amount: '', payment_mode: 'cash', bank_id: '', notes: '' });
+  const [editForm, setEditForm] = useState({ date: '', party: '', amount: '', payment_mode: 'cash', bank_id: '', notes: '', label: '' });
   const [editBanks, setEditBanks] = useState([]);
   const [editSaving, setEditSaving] = useState(false);
+  const [editSplitTopId, setEditSplitTopId] = useState('');
+  const [editSplitSubId, setEditSplitSubId] = useState('');
+  const [editSplitSubSubId, setEditSplitSubSubId] = useState('');
 
-  const openEdit = (entry) => {
+  // Find which top/sub/sub-sub slot a given category id sits in, so the Edit
+  // dialog's cascading selects can be pre-filled from the entry's stored
+  // (leaf-most) split_category_id. Takes the category tree explicitly since
+  // it may need to run right after a fresh fetch, before `splitCategories`
+  // state has re-rendered.
+  const resolveCategoryPath = (cats, categoryId) => {
+    if (!categoryId) return { topId: '', subId: '', subSubId: '' };
+    for (const top of cats) {
+      if (top.category_id === categoryId) return { topId: top.category_id, subId: '', subSubId: '' };
+      for (const sub of top.sub_categories || []) {
+        if (sub.category_id === categoryId) return { topId: top.category_id, subId: sub.category_id, subSubId: '' };
+        for (const subSub of sub.sub_categories || []) {
+          if (subSub.category_id === categoryId) return { topId: top.category_id, subId: sub.category_id, subSubId: subSub.category_id };
+        }
+      }
+    }
+    return { topId: '', subId: '', subSubId: '' };
+  };
+
+  const openEdit = async (entry) => {
     setEditEntry(entry);
     setEditForm({
       date: fmtDate(entry.date),
@@ -439,7 +461,30 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
       payment_mode: entry.payment_mode || 'cash',
       bank_id: entry.bank_id || '',
       notes: entry.notes || '',
+      label: entry.category || entry.category_label || '',
     });
+
+    // Expense Split categories may not have been fetched yet if the Add
+    // Expense dialog was never opened this session — load them here too.
+    let cats = splitCategories;
+    if (entry.kind !== 'credit' && cats.length === 0) {
+      try {
+        const now = new Date();
+        const r = await axios.get(
+          `${API}/api/finance/expense-split/budgets?month=${now.getMonth() + 1}&year=${now.getFullYear()}`,
+          { headers },
+        );
+        cats = r.data?.categories || [];
+        setSplitCategories(cats);
+      } catch (e) {
+        cats = [];
+      }
+    }
+    const path = resolveCategoryPath(cats, entry.split_category_id || entry.split_top_category_id || '');
+    setEditSplitTopId(path.topId);
+    setEditSplitSubId(path.subId);
+    setEditSplitSubSubId(path.subSubId);
+
     // Lazily load banks for the same gst bucket
     axios.get(`${API}/api/finance/banks?gst_type=${gstType}`, { headers })
       .then(r => setEditBanks(r.data || []))
@@ -456,6 +501,11 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
       payment_mode: editForm.payment_mode,
       bank_id: editForm.payment_mode === 'bank' ? (editForm.bank_id || null) : null,
     };
+    if (editEntry.kind !== 'credit') {
+      body.category = editForm.label;
+      body.split_category_id = editSplitSubSubId || editSplitSubId || editSplitTopId || '';
+      body.split_top_category_id = editSplitTopId || '';
+    }
     // Amount only sent when not invoice/payslip-linked AND user actually changed it
     const isLinked = !!(editEntry.invoice_id || editEntry.payslip_id);
     if (!isLinked) {
@@ -1345,6 +1395,69 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                   </div>
                 )}
               </div>
+
+              {editEntry.kind !== 'credit' && (
+                <>
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Expense Category (Budget)</Label>
+                    <div className={`grid ${(splitCategories.find((c) => c.category_id === editSplitTopId)?.sub_categories || []).find((s) => s.category_id === editSplitSubId)?.sub_categories?.length ? 'grid-cols-3' : 'grid-cols-2'} gap-2 mt-1`}>
+                      <select
+                        value={editSplitTopId}
+                        onChange={(e) => { setEditSplitTopId(e.target.value); setEditSplitSubId(''); setEditSplitSubSubId(''); }}
+                        className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                        data-testid="cb-edit-split-top-select"
+                      >
+                        <option value="">— Top Category —</option>
+                        {splitCategories.map((c) => (
+                          <option key={c.category_id} value={c.category_id}>{c.name} ({c.percent}%)</option>
+                        ))}
+                      </select>
+                      <select
+                        value={editSplitSubId}
+                        onChange={(e) => { setEditSplitSubId(e.target.value); setEditSplitSubSubId(''); }}
+                        disabled={!editSplitTopId}
+                        className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
+                        data-testid="cb-edit-split-sub-select"
+                      >
+                        <option value="">{editSplitTopId ? '— Sub Category (optional) —' : 'Pick top first'}</option>
+                        {(splitCategories.find((c) => c.category_id === editSplitTopId)?.sub_categories || []).map((s) => (
+                          <option key={s.category_id} value={s.category_id}>{s.name} ({s.percent}%)</option>
+                        ))}
+                      </select>
+                      {(() => {
+                        const subCat = (splitCategories.find((c) => c.category_id === editSplitTopId)?.sub_categories || [])
+                          .find((s) => s.category_id === editSplitSubId);
+                        const subSubs = subCat?.sub_categories || [];
+                        if (subSubs.length === 0) return null;
+                        return (
+                          <select
+                            value={editSplitSubSubId}
+                            onChange={(e) => setEditSplitSubSubId(e.target.value)}
+                            className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                            data-testid="cb-edit-split-subsub-select"
+                          >
+                            <option value="">— {subCat.name} Type (optional) —</option>
+                            {subSubs.map((ss) => (
+                              <option key={ss.category_id} value={ss.category_id}>{ss.name}</option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className={`text-xs ${textSecondary}`}>Label / Description</Label>
+                    <Input
+                      value={editForm.label}
+                      onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
+                      placeholder="Optional"
+                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      data-testid="cb-edit-label"
+                    />
+                  </div>
+                </>
+              )}
 
               <div>
                 <Label className={`text-xs ${textSecondary}`}>Notes</Label>

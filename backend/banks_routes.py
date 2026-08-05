@@ -569,6 +569,9 @@ class CashbookEntryUpdate(BaseModel):
     notes: Optional[str] = None
     payment_mode: Optional[str] = None  # cash | cheque | bank | upi
     bank_id: Optional[str] = None
+    category: Optional[str] = None               # Label / Description
+    split_category_id: Optional[str] = None       # leaf (most specific) Expense Split category
+    split_top_category_id: Optional[str] = None   # top Expense Split category, for rollup display
 
 
 @banks_router.patch("/cashbook/entries/{entry_id}")
@@ -588,6 +591,13 @@ async def update_cashbook_entry(entry_id: str, payload: CashbookEntryUpdate, req
         update["date"] = payload.date.strip()
     if payload.notes is not None:
         update["notes"] = payload.notes.strip()
+    if payload.category is not None:
+        update["category"] = payload.category.strip()
+        update["category_label"] = payload.category.strip()
+    if payload.split_category_id is not None:
+        update["split_category_id"] = payload.split_category_id or None
+    if payload.split_top_category_id is not None:
+        update["split_top_category_id"] = payload.split_top_category_id or None
     if payload.party is not None and payload.party.strip():
         # credits store the counterparty in `from`, debits in `to`
         if entry.get("kind") == "credit":
