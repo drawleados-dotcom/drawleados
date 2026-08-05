@@ -59,6 +59,7 @@ async def _ensure_weeks_up_to(db, target_week: int, user_id: str):
 
 class WeeklyMeetingUpdate(BaseModel):
     location: Optional[str] = None
+    presentation_intro: Optional[str] = None
 
 
 class AttendanceUpdate(BaseModel):

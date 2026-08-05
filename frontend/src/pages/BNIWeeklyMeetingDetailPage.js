@@ -57,6 +57,9 @@ const BNIWeeklyMeetingDetailPage = () => {
   const [locationValue, setLocationValue] = useState('');
   const [locationSaving, setLocationSaving] = useState(false);
 
+  const [introValue, setIntroValue] = useState('');
+  const [introSaving, setIntroSaving] = useState(false);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -73,6 +76,7 @@ const BNIWeeklyMeetingDetailPage = () => {
         api.get('/bni/settings'),
       ]);
       setMeeting(meetingRes.data);
+      setIntroValue(meetingRes.data.presentation_intro || '');
       setMembers(membersRes.data || []);
       setGiveAsks(gaRes.data || []);
       setFuturePresentations(fpRes.data || []);
@@ -172,6 +176,19 @@ const BNIWeeklyMeetingDetailPage = () => {
       load();
     } catch (error) {
       toast.error('Failed to delete');
+    }
+  };
+
+  const saveIntro = async () => {
+    setIntroSaving(true);
+    try {
+      const res = await api.put(`/bni/weekly-meetings/${meetingId}`, { presentation_intro: introValue });
+      setMeeting(res.data);
+      toast.success('Introduction saved');
+    } catch (error) {
+      toast.error('Failed to save introduction');
+    } finally {
+      setIntroSaving(false);
     }
   };
 
@@ -414,6 +431,23 @@ const BNIWeeklyMeetingDetailPage = () => {
                   <p className={`text-sm ${textSecondary}`}>No Give of the Week assigned yet — assign one from the My Gives tab.</p>
                 </div>
               )}
+            </div>
+
+            <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+              <Label className={textPrimary}>Introduction</Label>
+              <Textarea
+                value={introValue}
+                onChange={(e) => setIntroValue(e.target.value)}
+                placeholder="Add any custom introduction text to read out for this week's presentation…"
+                className={`${bgSecondary} border ${borderColor} mt-2`}
+                rows={4}
+                data-testid="bni-week-intro-input"
+              />
+              <div className="flex justify-end mt-2">
+                <Button onClick={saveIntro} disabled={introSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-week-intro-save-btn">
+                  {introSaving ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
             </div>
           </div>
         )}
