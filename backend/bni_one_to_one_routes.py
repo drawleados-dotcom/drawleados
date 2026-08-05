@@ -18,6 +18,10 @@ from datetime import datetime, timezone
 bni_one_to_one_router = APIRouter(prefix="/bni/one-to-ones", tags=["bni"])
 
 ONE_TO_ONE_STATUSES = ["Lead", "One to One", "Relationship"]
+# Meeting lifecycle status — separate from the relationship-outcome status
+# above (which is only set from the Remarks popup once a One-to-One has
+# actually happened).
+MEETING_STATUSES = ["To do", "Scheduled", "Completed"]
 
 
 class OneToOneCreate(BaseModel):
@@ -48,6 +52,10 @@ class OneToOneRemarksUpdate(BaseModel):
     gives: Optional[List[str]] = None
     referrals: Optional[List[str]] = None
     status: Optional[str] = None
+
+
+class MeetingStatusUpdate(BaseModel):
+    meeting_status: str
 
 
 @bni_one_to_one_router.get("")
@@ -83,6 +91,7 @@ async def create_one_to_one(payload: OneToOneCreate, request: Request):
         "gives": [],
         "referrals": [],
         "status": "",
+        "meeting_status": "Scheduled",
         "lead_created": False,
         "created_by": user.user_id,
         "created_at": now,
@@ -133,6 +142,23 @@ async def reschedule_one_to_one(entry_id: str, payload: OneToOneReschedule, requ
     update_data = {k: v for k, v in payload.dict().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.bni_one_to_ones.update_one({"entry_id": entry_id}, {"$set": update_data})
+    return await db.bni_one_to_ones.find_one({"entry_id": entry_id}, {"_id": 0})
+
+
+@bni_one_to_one_router.put("/{entry_id}/meeting-status")
+async def update_meeting_status(entry_id: str, payload: MeetingStatusUpdate, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    if payload.meeting_status not in MEETING_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid meeting status: {payload.meeting_status}")
+    entry = await db.bni_one_to_ones.find_one({"entry_id": entry_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="One-to-One not found")
+
+    await db.bni_one_to_ones.update_one(
+        {"entry_id": entry_id},
+        {"$set": {"meeting_status": payload.meeting_status, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
     return await db.bni_one_to_ones.find_one({"entry_id": entry_id}, {"_id": 0})
 
 

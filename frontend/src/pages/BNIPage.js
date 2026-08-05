@@ -68,6 +68,7 @@ const MONTHS = [
 
 const GIVE_ASK_STATUSES = ['Contacted', 'Not Related', 'Asked the give'];
 const ONE_TO_ONE_STATUSES = ['Lead', 'One to One', 'Relationship'];
+const MEETING_STATUSES = ['To do', 'Scheduled', 'Completed'];
 const OUTREACH_STATUSES = ['To do', 'Contacted', 'Interested', 'Not Interested', 'Converted'];
 
 const TABS = [
@@ -202,6 +203,9 @@ export default function BNIPage() {
 
   const [activeOto, setActiveOto] = useState(null);
 
+  const [showOtoHistory, setShowOtoHistory] = useState(false);
+  const [otoHistoryMember, setOtoHistoryMember] = useState(null);
+
   const [outreach, setOutreach] = useState([]);
   const [ouLoading, setOuLoading] = useState(false);
   const [showOutreachModal, setShowOutreachModal] = useState(false);
@@ -219,17 +223,19 @@ export default function BNIPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [membersRes, categoriesRes, rolePlayersRes, settingsRes, designationsRes] = await Promise.all([
+      const [membersRes, categoriesRes, rolePlayersRes, settingsRes, designationsRes, oneToOnesRes] = await Promise.all([
         api.get('/bni/members'),
         api.get('/bni/categories'),
         api.get('/bni/role-players'),
         api.get('/bni/settings'),
         api.get('/designations/').catch(() => ({ data: [] })),
+        api.get('/bni/one-to-ones').catch(() => ({ data: [] })),
       ]);
       setMembers(membersRes.data || []);
       setCategories(categoriesRes.data || []);
       setRolePlayers(rolePlayersRes.data || []);
       setChapterSettings(settingsRes.data || { chapter_name: '', region: '' });
+      setOneToOnes(oneToOnesRes.data || []);
       const userDesg = (user?.designation || '').toLowerCase().trim();
       const found = (designationsRes.data || []).find(
         (d) => (d.title || '').toLowerCase().trim() === userDesg
@@ -393,10 +399,29 @@ export default function BNIPage() {
     if (activeTab === 'one_to_one') loadOneToOnes();
   }, [activeTab, loadOneToOnes]);
 
-  const openNewOto = () => {
+  const openNewOto = (memberId) => {
     setOtoCreateTab('chapter');
-    setOtoForm({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
+    setOtoForm({ member_id: memberId || '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
     setShowNewOto(true);
+  };
+
+  const updateMeetingStatus = async (entryId, meetingStatus) => {
+    try {
+      await api.put(`/bni/one-to-ones/${entryId}/meeting-status`, { meeting_status: meetingStatus });
+      setOneToOnes((prev) => prev.map((o) => (o.entry_id === entryId ? { ...o, meeting_status: meetingStatus } : o)));
+    } catch (error) {
+      toast.error('Failed to update meeting status');
+    }
+  };
+
+  const memberOneToOnes = (memberId) =>
+    oneToOnes
+      .filter((o) => o.member_id === memberId)
+      .sort((a, b) => (b.meeting_date || '').localeCompare(a.meeting_date || ''));
+
+  const openOtoHistory = (member) => {
+    setOtoHistoryMember(member);
+    setShowOtoHistory(true);
   };
 
   const saveNewOto = async () => {
@@ -835,6 +860,12 @@ export default function BNIPage() {
     loadAll();
   };
 
+  const meetingStatusColor = (status) => {
+    if (status === 'Completed') return 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40';
+    if (status === 'To do') return 'bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40';
+    return 'bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40'; // Scheduled
+  };
+
   const renderMemberRow = (m) => {
     const catColor = tagColor(m.category_id || m.category_name);
     const roleColor = tagColor(m.role_player_id || m.role_player_name);
@@ -879,6 +910,30 @@ export default function BNIPage() {
           ) : (
             <span className={textSecondary}>—</span>
           )}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1">
+            {(() => {
+              const memberOtos = memberOneToOnes(m.member_id);
+              if (memberOtos.length === 0) return null;
+              const label = memberOtos.length === 1 ? (memberOtos[0].meeting_status || 'Scheduled') : memberOtos.length;
+              const colorClass = memberOtos.length === 1
+                ? meetingStatusColor(memberOtos[0].meeting_status)
+                : 'bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40';
+              return (
+                <Badge
+                  className={`cursor-pointer ${colorClass}`}
+                  onClick={() => openOtoHistory(m)}
+                  data-testid={`bni-member-oto-badge-${m.member_id}`}
+                >
+                  {label}
+                </Badge>
+              );
+            })()}
+            <Button variant="ghost" size="sm" onClick={() => openNewOto(m.member_id)} title="New One-to-One" data-testid={`bni-member-oto-add-${m.member_id}`}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </td>
         <td className="px-4 py-3">
           <div className="flex gap-1">
@@ -963,7 +1018,7 @@ export default function BNIPage() {
             </div>
           )}
           {activeTab === 'one_to_one' && !isViewOnly && (
-            <Button onClick={openNewOto} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-oto-btn">
+            <Button onClick={() => openNewOto()} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-add-oto-btn">
               <Plus className="h-4 w-4 mr-2" /> New One-to-One
             </Button>
           )}
@@ -1035,13 +1090,14 @@ export default function BNIPage() {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>City</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Role Player</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>One to One</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
                       {filteredMembers.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>
                             {members.length === 0
                               ? 'No members yet — click "Add Member" to add the first one.'
                               : 'No members match your search.'}
@@ -1051,7 +1107,7 @@ export default function BNIPage() {
                         <>
                           {pinnedMembers.length > 0 && (
                             <tr className={bgSecondary}>
-                              <td colSpan={9} className={`px-4 py-1.5 text-xs font-semibold tracking-wide ${textSecondary}`}>
+                              <td colSpan={10} className={`px-4 py-1.5 text-xs font-semibold tracking-wide ${textSecondary}`}>
                                 📌 PINNED
                               </td>
                             </tr>
@@ -1059,7 +1115,7 @@ export default function BNIPage() {
                           {pinnedMembers.map(renderMemberRow)}
                           {pinnedMembers.length > 0 && unpinnedMembers.length > 0 && (
                             <tr className={bgSecondary}>
-                              <td colSpan={9} className={`px-4 py-1.5 text-xs font-semibold tracking-wide ${textSecondary}`}>
+                              <td colSpan={10} className={`px-4 py-1.5 text-xs font-semibold tracking-wide ${textSecondary}`}>
                                 MEMBERS
                               </td>
                             </tr>
@@ -1561,16 +1617,17 @@ export default function BNIPage() {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Time</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Invited By</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Status</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Relationship Status</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
                       {ooLoading ? (
-                        <tr><td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                        <tr><td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
                       ) : oneToOnes.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
                             No One-to-Ones yet — click "New One-to-One" to schedule the first one.
                           </td>
                         </tr>
@@ -1587,6 +1644,18 @@ export default function BNIPage() {
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.invited_by === 'me' ? 'Me' : o.member_name}</td>
                             <td className="px-4 py-3">
+                              <Select value={o.meeting_status || 'Scheduled'} onValueChange={(v) => updateMeetingStatus(o.entry_id, v)}>
+                                <SelectTrigger className={`w-[130px] ${meetingStatusColor(o.meeting_status)}`} data-testid={`bni-oto-meeting-status-${o.entry_id}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {MEETING_STATUSES.map((s) => (
+                                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="px-4 py-3">
                               {o.status ? (
                                 <Badge className={
                                   o.status === 'Lead'
@@ -1598,9 +1667,7 @@ export default function BNIPage() {
                                   {o.status}
                                 </Badge>
                               ) : (
-                                <Badge className="bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40">
-                                  Scheduled
-                                </Badge>
+                                <span className={textSecondary}>—</span>
                               )}
                             </td>
                             <td className="px-4 py-3">
@@ -2374,6 +2441,82 @@ export default function BNIPage() {
               <Button variant="ghost" onClick={() => setShowOtoRemarks(false)}>Cancel</Button>
               <Button onClick={saveOtoRemarks} disabled={remarksSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-oto-remarks-save-btn">
                 {remarksSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* One-to-One History — every One-to-One entry logged with this member */}
+        <Dialog open={showOtoHistory} onOpenChange={setShowOtoHistory}>
+          <DialogContent className={`${bgCard} max-w-3xl max-h-[85vh] overflow-y-auto`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>One-to-One History — {otoHistoryMember?.name}</DialogTitle>
+            </DialogHeader>
+            <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className={bgSecondary}>
+                    <tr>
+                      <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Date</th>
+                      <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Time</th>
+                      <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
+                      <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Status</th>
+                      <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Relationship Status</th>
+                      <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}></th>
+                    </tr>
+                  </thead>
+                  <tbody className={`divide-y ${borderColor}`}>
+                    {otoHistoryMember && memberOneToOnes(otoHistoryMember.member_id).map((o) => (
+                      <tr key={o.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                        <td className="px-4 py-3">
+                          <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 font-semibold">
+                            {o.meeting_date ? new Date(o.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                          </Badge>
+                        </td>
+                        <td className={`px-4 py-3 ${textSecondary}`}>{o.meeting_time || '—'}</td>
+                        <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
+                        <td className="px-4 py-3">
+                          <Badge className={meetingStatusColor(o.meeting_status)}>{o.meeting_status || 'Scheduled'}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {o.status ? (
+                            <Badge className={
+                              o.status === 'Lead'
+                                ? 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40'
+                                : o.status === 'Relationship'
+                                ? 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40'
+                                : 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/40'
+                            }>
+                              {o.status}
+                            </Badge>
+                          ) : (
+                            <span className={textSecondary}>—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setShowOtoHistory(false); openOtoRemarks(o); }}
+                            title="Remarks"
+                            data-testid={`bni-oto-history-remarks-${o.entry_id}`}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => { setShowOtoHistory(false); openNewOto(otoHistoryMember?.member_id); }}
+                className="bg-[#6366f1] hover:bg-[#4f46e5]"
+                data-testid="bni-oto-history-add-btn"
+              >
+                <Plus className="h-4 w-4 mr-2" /> New One-to-One
               </Button>
             </DialogFooter>
           </DialogContent>
