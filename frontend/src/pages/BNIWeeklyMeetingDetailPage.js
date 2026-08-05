@@ -9,7 +9,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Gift, GraduationCap, Presentation, Mic, Plus, Pencil, Clock, MapPin, UserCheck, Trash2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Gift, GraduationCap, Presentation, Mic, Plus, Pencil, Clock, MapPin, UserCheck, Trash2, ExternalLink, Handshake } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SUB_TABS = [
@@ -17,6 +17,7 @@ const SUB_TABS = [
   { key: 'education_slot', label: 'Education Slot', icon: GraduationCap },
   { key: 'future_presentation', label: 'Future Presentation', icon: Presentation },
   { key: 'weekly_presentation', label: 'Weekly Presentation', icon: Mic },
+  { key: 'contribution', label: 'Contribution', icon: Handshake },
 ];
 
 const BNIWeeklyMeetingDetailPage = () => {
@@ -37,6 +38,8 @@ const BNIWeeklyMeetingDetailPage = () => {
   const [giveAsks, setGiveAsks] = useState([]);
   const [futurePresentations, setFuturePresentations] = useState([]);
   const [giveOfWeek, setGiveOfWeek] = useState(null);
+  const [oneToOnes, setOneToOnes] = useState([]);
+  const [showOtoContribution, setShowOtoContribution] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [showForm, setShowForm] = useState(false);
@@ -56,18 +59,20 @@ const BNIWeeklyMeetingDetailPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [meetingRes, membersRes, gaRes, fpRes, giveRes] = await Promise.all([
+      const [meetingRes, membersRes, gaRes, fpRes, giveRes, otoRes] = await Promise.all([
         api.get(`/bni/weekly-meetings/${meetingId}`),
         api.get('/bni/members'),
         api.get('/bni/give-ask', { params: { meeting_id: meetingId } }),
         api.get('/bni/future-presentations', { params: { meeting_id: meetingId } }),
         api.get('/bni/my-gives', { params: { meeting_id: meetingId } }),
+        api.get('/bni/one-to-ones'),
       ]);
       setMeeting(meetingRes.data);
       setMembers(membersRes.data || []);
       setGiveAsks(gaRes.data || []);
       setFuturePresentations(fpRes.data || []);
       setGiveOfWeek((giveRes.data || [])[0] || null);
+      setOneToOnes(otoRes.data || []);
     } catch (error) {
       toast.error('Failed to load weekly meeting');
     } finally {
@@ -76,6 +81,22 @@ const BNIWeeklyMeetingDetailPage = () => {
   }, [meetingId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // A One-to-One "counts" toward a week once its meeting status is marked
+  // Completed and its date falls in that week's 7-day window (Sat–Fri,
+  // ending on the week's meeting_date) — mirrors the week-boundary logic
+  // used to auto-generate weekly meetings.
+  const weekCompletedOtos = useMemo(() => {
+    if (!meeting?.meeting_date) return [];
+    const weekEnd = new Date(meeting.meeting_date);
+    const weekStart = new Date(weekEnd);
+    weekStart.setDate(weekStart.getDate() - 6);
+    return oneToOnes.filter((o) => {
+      if (o.meeting_status !== 'Completed' || !o.meeting_date) return false;
+      const d = new Date(o.meeting_date);
+      return d >= weekStart && d <= weekEnd;
+    });
+  }, [oneToOnes, meeting]);
 
   const giveAskByMember = useMemo(() => {
     const map = {};
@@ -386,6 +407,27 @@ const BNIWeeklyMeetingDetailPage = () => {
           </div>
         )}
 
+        {subTab === 'contribution' && (
+          <div className="space-y-4">
+            <div
+              className={`${bgCard} border ${borderColor} rounded-xl p-5 inline-flex items-center gap-3 ${weekCompletedOtos.length > 0 ? 'cursor-pointer hover:border-[#6366f1]/40 transition-colors' : ''}`}
+              onClick={() => weekCompletedOtos.length > 0 && setShowOtoContribution(true)}
+              data-testid="bni-week-contribution-oto-card"
+            >
+              <div className="h-10 w-10 rounded-lg bg-[#6366f1]/15 flex items-center justify-center">
+                <Handshake className="h-5 w-5 text-[#6366f1]" />
+              </div>
+              <div>
+                <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>One to One</p>
+                <p className={`text-2xl font-bold ${textPrimary}`}>{weekCompletedOtos.length}</p>
+              </div>
+            </div>
+            {weekCompletedOtos.length === 0 && (
+              <p className={`text-sm ${textSecondary}`}>No completed One-to-Ones for this week yet.</p>
+            )}
+          </div>
+        )}
+
         {subTab === 'education_slot' && (() => {
           const tab = SUB_TABS.find((t) => t.key === subTab);
           const Icon = tab?.icon || GraduationCap;
@@ -472,6 +514,27 @@ const BNIWeeklyMeetingDetailPage = () => {
                 {attendanceSaving ? 'Saving…' : 'Save'}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={showOtoContribution} onOpenChange={setShowOtoContribution}>
+          <DialogContent className={`${bgCard} max-w-lg max-h-[80vh] overflow-y-auto`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>One-to-Ones Completed — Week {meeting.week_number}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2">
+              {weekCompletedOtos.map((o) => (
+                <div key={o.entry_id} className={`flex items-center justify-between p-3 rounded-lg ${bgSecondary} border ${borderColor}`}>
+                  <div>
+                    <p className={`font-medium ${textPrimary}`}>{o.member_name}</p>
+                    <p className={`text-xs ${textSecondary}`}>
+                      {o.meeting_date ? new Date(o.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      {o.meeting_time ? ` · ${o.meeting_time}` : ''}
+                      {o.location ? ` · ${o.location}` : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </DialogContent>
         </Dialog>
       </div>
