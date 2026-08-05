@@ -29,6 +29,7 @@ class OutreachCreate(BaseModel):
     website: str = ""
     status: str = "To do"
     location: str = ""
+    category_id: str = ""
 
 
 class OutreachUpdate(BaseModel):
@@ -41,6 +42,7 @@ class OutreachUpdate(BaseModel):
     website: Optional[str] = None
     status: Optional[str] = None
     location: Optional[str] = None
+    category_id: Optional[str] = None
 
 
 @bni_outreach_router.get("")
@@ -57,6 +59,11 @@ async def create_outreach(payload: OutreachCreate, request: Request):
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="Name is required")
 
+    category_name = ""
+    if payload.category_id:
+        category = await db.bni_categories.find_one({"category_id": payload.category_id}, {"_id": 0, "name": 1})
+        category_name = category.get("name", "") if category else ""
+
     status = payload.status if payload.status in OUTREACH_STATUSES else "To do"
     now = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -70,6 +77,8 @@ async def create_outreach(payload: OutreachCreate, request: Request):
         "website": payload.website.strip(),
         "status": status,
         "location": payload.location.strip(),
+        "category_id": payload.category_id,
+        "category_name": category_name,
         "created_by": user.user_id,
         "created_at": now,
         "updated_at": now,
@@ -90,6 +99,12 @@ async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Re
     update_data = {k: v for k, v in payload.dict().items() if v is not None}
     if "status" in update_data and update_data["status"] not in OUTREACH_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {update_data['status']}")
+    if "category_id" in update_data:
+        category_name = ""
+        if update_data["category_id"]:
+            category = await db.bni_categories.find_one({"category_id": update_data["category_id"]}, {"_id": 0, "name": 1})
+            category_name = category.get("name", "") if category else ""
+        update_data["category_name"] = category_name
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.bni_outreach.update_one({"outreach_id": outreach_id}, {"$set": update_data})

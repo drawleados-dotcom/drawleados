@@ -56,6 +56,7 @@ const OUTREACH_IMPORT_FIELDS = [
   { key: 'website', label: 'Website', synonyms: ['website', 'site'] },
   { key: 'status', label: 'Status', synonyms: ['status'] },
   { key: 'location', label: 'Location', synonyms: ['location'] },
+  { key: 'category_name', label: 'Category', synonyms: ['category', 'category name', 'business category'] },
 ];
 
 const MONTHS = [
@@ -121,7 +122,7 @@ const emptyMemberForm = () => ({
 
 const emptyNameDescForm = () => ({ name: '', description: '' });
 
-const emptyOutreachForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '' });
+const emptyOutreachForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '', category_id: '' });
 
 export default function BNIPage() {
   const { isDark } = useTheme();
@@ -536,6 +537,7 @@ export default function BNIPage() {
       name: o.name || '', brand_name: o.brand_name || '', chapter_name: o.chapter_name || '',
       email: o.email || '', profile_link: o.profile_link || '', phone: o.phone || '',
       website: o.website || '', status: o.status || 'To do', location: o.location || '',
+      category_id: o.category_id || '',
     });
     setShowOutreachModal(true);
   };
@@ -581,9 +583,15 @@ export default function BNIPage() {
   };
 
   const importOutreach = async (rows) => {
-    const results = await Promise.allSettled(
-      rows.map((r) => api.post('/bni/outreach', { ...emptyOutreachForm(), ...r }))
-    );
+    const normalizeCategoryText = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const results = await Promise.allSettled(rows.map((r) => {
+      const catMatch = categories.find((c) => normalizeCategoryText(c.name) === normalizeCategoryText(r.category_name));
+      return api.post('/bni/outreach', {
+        ...emptyOutreachForm(),
+        ...r,
+        category_id: catMatch?.category_id || '',
+      });
+    }));
     const success = results.filter((r) => r.status === 'fulfilled').length;
     toast.success(`Imported ${success} of ${rows.length} outreach entries`);
     loadOutreach();
@@ -1480,15 +1488,16 @@ export default function BNIPage() {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Website</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
                       {ouLoading ? (
-                        <tr><td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                        <tr><td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
                       ) : outreach.length === 0 ? (
                         <tr>
-                          <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
                             No outreach entries yet — click "Add New" or "Import CSV" to get started.
                           </td>
                         </tr>
@@ -1521,6 +1530,7 @@ export default function BNIPage() {
                               </Select>
                             </td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.category_name || '—'}</td>
                             <td className="px-4 py-3">
                               <div className="flex gap-1">
                                 <Button variant="ghost" size="sm" onClick={() => openEditOutreach(o)} data-testid={`bni-outreach-edit-${o.outreach_id}`}>
@@ -2027,6 +2037,20 @@ export default function BNIPage() {
               <div>
                 <Label className={textPrimary}>Location</Label>
                 <Input value={outreachForm.location} onChange={(e) => setOutreachForm({ ...outreachForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} data-testid="bni-outreach-location-input" />
+              </div>
+              <div className="col-span-2">
+                <Label className={textPrimary}>Category</Label>
+                <Select value={outreachForm.category_id || 'none'} onValueChange={(v) => setOutreachForm({ ...outreachForm, category_id: v === 'none' ? '' : v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-outreach-category-select">
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.category_id} value={c.category_id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="col-span-2">
                 <Label className={textPrimary}>Status</Label>
