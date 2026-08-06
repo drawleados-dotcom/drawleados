@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, TrendingUp, TrendingDown, Loader2, Trash2, X, Eye, AlertCircle, Pencil } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Loader2, Trash2, X, Eye, AlertCircle, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -50,6 +50,15 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   const today = new Date().toISOString().slice(0, 10);
   const empty = { amount: '', date: today, payment_mode: 'bank', bank_id: '', party: '', category: '', notes: '' };
   const [form, setForm] = useState(empty);
+  // Which cashbook a new entry actually posts to — always equal to `gstType`
+  // except on the "All" view, where a picker inside the Add modal lets the
+  // user choose GST vs Non-GST before balances/banks/invoices load.
+  const [formGstType, setFormGstType] = useState(lockedGstType || 'gst');
+  // Month/year filter for the entries list — defaults to showing everything.
+  const _now = new Date();
+  const [filterAllTime, setFilterAllTime] = useState(true);
+  const [filterMonth, setFilterMonth] = useState(_now.getMonth() + 1);
+  const [filterYear, setFilterYear] = useState(_now.getFullYear());
   // Multi-source expense / income state
   const [balances, setBalances] = useState(null);
   const [allocs, setAllocs] = useState([{ source: 'cash', bank_id: '', amount: '' }]);
@@ -79,14 +88,15 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await axios.get(`${API}/api/finance/banks/cashbook/entries?gst_type=${gstType}`, { headers });
+      const period = filterAllTime ? '' : `&month=${filterMonth}&year=${filterYear}`;
+      const r = await axios.get(`${API}/api/finance/banks/cashbook/entries?gst_type=${gstType}${period}`, { headers });
       setData(r.data);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to load cashbook');
     } finally {
       setLoading(false);
     }
-  }, [gstType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gstType, filterAllTime, filterMonth, filterYear]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -182,11 +192,12 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
 
   const selectedPayslip = payablePayslips.find((p) => p.payslip_id === selectedPayslipId) || null;
 
-  const openAdd = async (kind, opts = {}) => {
-    setModal(kind);
-    setForm({ ...empty });
+  // Loads balances (+ invoices, for income) for whichever cashbook the Add
+  // modal is currently targeting. Called on open, and again if the user
+  // switches the GST/Non-GST picker shown when viewing "All".
+  const loadContextFor = async (fgt, kind) => {
     try {
-      const r = await axios.get(`${API}/api/finance/banks/cashbook/balances?gst_type=${gstType}`, { headers });
+      const r = await axios.get(`${API}/api/finance/banks/cashbook/balances?gst_type=${fgt}`, { headers });
       setBalances(r.data);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to load balances');
@@ -194,18 +205,24 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
     if (kind === 'credit') {
       // Load every invoice for this gst_type that is NOT fully paid.
       try {
-        const r2 = await axios.get(`${API}/api/finance/invoices?gst_type=${gstType}`, { headers });
+        const r2 = await axios.get(`${API}/api/finance/invoices?gst_type=${fgt}`, { headers });
         setInvoices((r2.data || []).filter((i) => (Number(i.paid_amount) || 0) < (Number(i.total_amount) || 0)));
       } catch (e) {
         setInvoices([]);
       }
       setSelectedInvoiceId('');
-      setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
-      setExpenseTotal('');
     }
+    setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
+    setExpenseTotal('');
+  };
+
+  const openAdd = async (kind, opts = {}) => {
+    setModal(kind);
+    setForm({ ...empty });
+    const fgt = gstType === 'all' ? (formGstType || 'gst') : gstType;
+    setFormGstType(fgt);
+    await loadContextFor(fgt, kind);
     if (kind === 'debit') {
-      setAllocs([{ source: 'cash', bank_id: '', amount: '' }]);
-      setExpenseTotal('');
       // Load Expense Split categories to tag this expense against a budget bucket.
       let cats = [];
       try {
@@ -236,6 +253,11 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
       setSelectedPayslipId('');
       setPayablePayslips([]);
     }
+  };
+
+  const changeFormGstType = (fgt) => {
+    setFormGstType(fgt);
+    loadContextFor(fgt, modal);
   };
 
   // Deep link from Master Expense's "Payroll" row (see MasterExpenseView /
@@ -307,7 +329,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
         const r = await axios.post(`${API}/api/finance/banks/ai-credits/record`, {
           project_id: aiSelectedProjectId,
           credit_ids: aiSelectedCreditIds,
-          gst_type: gstType,
+          gst_type: formGstType,
           split_category_id: splitCategoryId,
           split_top_category_id: splitTopId || null,
           notes: form.notes || '',
@@ -346,7 +368,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
         return;
       }
       await axios.post(`${API}/api/finance/banks/cashbook/expense`, {
-        gst_type: gstType,
+        gst_type: formGstType,
         date: form.date,
         party: form.party || (selectedPayslip ? selectedPayslip.employee_name : ''),
         category: derivedCategory,
@@ -485,8 +507,10 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
     setEditSplitSubId(path.subId);
     setEditSplitSubSubId(path.subSubId);
 
-    // Lazily load banks for the same gst bucket
-    axios.get(`${API}/api/finance/banks?gst_type=${gstType}`, { headers })
+    // Lazily load banks for this entry's own gst bucket (not the currently
+    // viewed tab — relevant on "All", which mixes both buckets together).
+    const entryGst = entry.gst_type === 'non_gst' || entry.gst_type === 'no_tax' ? 'non_gst' : 'gst';
+    axios.get(`${API}/api/finance/banks?gst_type=${entryGst}`, { headers })
       .then(r => setEditBanks(r.data || []))
       .catch(() => setEditBanks([]));
   };
@@ -555,12 +579,27 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
   const credits = entries.filter((e) => e.kind === 'credit');
   const debits = entries.filter((e) => e.kind === 'debit');
 
+  const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const filterYearOptions = Array.from({ length: 6 }, (_, i) => _now.getFullYear() - 3 + i);
+  const gotoMonth = (delta) => {
+    setFilterAllTime(false);
+    let m = filterMonth + delta;
+    let y = filterYear;
+    if (m < 1) { m = 12; y -= 1; }
+    if (m > 12) { m = 1; y += 1; }
+    setFilterMonth(m);
+    setFilterYear(y);
+  };
+
+  const entryGstLabel = (e) => (e.gst_type === 'non_gst' || e.gst_type === 'no_tax' ? 'Non-GST' : 'GST');
+
   return (
     <div className="space-y-5" data-testid={`cashbook-${gstType}`}>
-      {/* GST / Non-GST sub-tabs (hidden when locked to one) */}
+      {/* All / GST / Non-GST sub-tabs (hidden when locked to one) */}
       {!lockedGstType && (
         <div className={`flex items-center gap-1 border-b ${borderColor}`}>
           {[
+            { key: 'all', label: 'All' },
             { key: 'gst', label: 'GST' },
             { key: 'non_gst', label: 'Non-GST' },
           ].map((t) => (
@@ -581,11 +620,59 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
         </div>
       )}
 
+      {/* Month/Year filter */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setFilterAllTime(true)}
+          className={`h-8 px-3 rounded-full text-xs font-medium border transition-colors ${
+            filterAllTime ? 'bg-[#6366f1] border-[#6366f1] text-white' : `${borderColor} ${bgSecondary} ${textSecondary}`
+          }`}
+          data-testid="cashbook-filter-all-time"
+        >
+          All Time
+        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => gotoMonth(-1)}
+            className={`h-8 w-8 flex items-center justify-center rounded-md border ${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary}`}
+            data-testid="cashbook-filter-prev"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <select
+            value={filterMonth}
+            onChange={(e) => { setFilterAllTime(false); setFilterMonth(Number(e.target.value)); }}
+            className={`h-8 px-2 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+            data-testid="cashbook-filter-month"
+          >
+            {MONTH_NAMES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select
+            value={filterYear}
+            onChange={(e) => { setFilterAllTime(false); setFilterYear(Number(e.target.value)); }}
+            className={`h-8 px-2 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+            data-testid="cashbook-filter-year"
+          >
+            {filterYearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => gotoMonth(1)}
+            className={`h-8 w-8 flex items-center justify-center rounded-md border ${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary}`}
+            data-testid="cashbook-filter-next"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
       {/* Global action buttons */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className={`text-2xl font-bold ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
-            {gstType === 'gst' ? 'GST Cashbook' : 'Non-GST Cashbook'}
+            {gstType === 'all' ? 'All Cashbook' : gstType === 'gst' ? 'GST Cashbook' : 'Non-GST Cashbook'}
           </h2>
           <p className={`text-sm ${textSecondary}`}>Balance: <b style={{ color: summary.balance >= 0 ? '#22c55e' : '#ef4444' }}>{fmt(summary.balance)}</b></p>
         </div>
@@ -638,6 +725,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                   <th className="px-4 py-2 text-left">Date</th>
                   <th className="px-4 py-2 text-left">From</th>
                   <th className="px-4 py-2 text-left">Mode</th>
+                  <th className="px-4 py-2 text-left">GST</th>
                   <th className="px-4 py-2 text-right">Amount</th>
                   <th className="px-4 py-2 text-right">Action</th>
                 </tr>
@@ -648,6 +736,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                     <td className={`px-4 py-2 ${textSecondary}`}>{fmtDate(e.date)}</td>
                     <td className={`px-4 py-2 ${textPrimary}`}>{e.from || e.invoice_number || '—'}</td>
                     <td className={`px-4 py-2 ${textSecondary} capitalize`}>{e.payment_mode}{e.bank_label ? ` · ${e.bank_label}` : ''}</td>
+                    <td className={`px-4 py-2 ${textSecondary}`}>{entryGstLabel(e)}</td>
                     <td className="px-4 py-2 text-right font-semibold text-[#10b981]">{fmt(e.amount)}</td>
                     <td className="px-4 py-2 text-right">
                       <div className="inline-flex items-center gap-2">
@@ -690,6 +779,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                   <th className="px-4 py-2 text-left">Date</th>
                   <th className="px-4 py-2 text-left">To</th>
                   <th className="px-4 py-2 text-left">Mode</th>
+                  <th className="px-4 py-2 text-left">GST</th>
                   <th className="px-4 py-2 text-right">Amount</th>
                   <th className="px-4 py-2 text-right">Action</th>
                 </tr>
@@ -700,6 +790,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                     <td className={`px-4 py-2 ${textSecondary}`}>{fmtDate(e.date)}</td>
                     <td className={`px-4 py-2 ${textPrimary}`}>{e.to || '—'}</td>
                     <td className={`px-4 py-2 ${textSecondary} capitalize`}>{e.payment_mode}{e.bank_label ? ` · ${e.bank_label}` : ''}</td>
+                    <td className={`px-4 py-2 ${textSecondary}`}>{entryGstLabel(e)}</td>
                     <td className="px-4 py-2 text-right font-semibold text-[#ef4444]">{fmt(e.amount)}</td>
                     <td className="px-4 py-2 text-right">
                       <div className="inline-flex items-center gap-2">
@@ -746,13 +837,33 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-[#10b981]" />
-                Add Income — {gstType === 'gst' ? 'GST' : 'Non-GST'}
+                Add Income — {formGstType === 'gst' ? 'GST' : 'Non-GST'}
               </DialogTitle>
               <p className={`text-xs ${textSecondary}`}>Pick an invoice and record how much was collected, split across one or more payment sources.</p>
             </DialogHeader>
             <div className="space-y-3 mt-1">
+              {gstType === 'all' && (
+                <div>
+                  <Label className={textPrimary}>Cashbook *</Label>
+                  <div className="flex gap-2 mt-1">
+                    {[{ key: 'gst', label: 'GST' }, { key: 'non_gst', label: 'Non-GST' }].map((o) => (
+                      <button
+                        key={o.key}
+                        type="button"
+                        onClick={() => changeFormGstType(o.key)}
+                        className={`h-9 px-4 rounded-md border text-sm font-medium ${
+                          formGstType === o.key ? 'bg-[#6366f1] border-[#6366f1] text-white' : `${borderColor} ${bgSecondary} ${textPrimary}`
+                        }`}
+                        data-testid={`income-form-gst-${o.key}`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div>
-                <Label className={textPrimary}>Invoice * (only {gstType === 'gst' ? 'GST' : 'Non-GST'} invoices not fully paid)</Label>
+                <Label className={textPrimary}>Invoice * (only {formGstType === 'gst' ? 'GST' : 'Non-GST'} invoices not fully paid)</Label>
                 <select
                   value={selectedInvoiceId}
                   onChange={(e) => {
@@ -782,7 +893,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                 </select>
                 {invoices.length === 0 && (
                   <p className={`text-xs ${textSecondary} mt-1`}>
-                    No outstanding {gstType === 'gst' ? 'GST' : 'Non-GST'} invoices. Create one under the Invoice tab first.
+                    No outstanding {formGstType === 'gst' ? 'GST' : 'Non-GST'} invoices. Create one under the Invoice tab first.
                   </p>
                 )}
               </div>
@@ -871,11 +982,31 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <TrendingDown className="h-5 w-5 text-[#ef4444]" />
-                Add Expense — {gstType === 'gst' ? 'GST' : 'Non-GST'}
+                Add Expense — {formGstType === 'gst' ? 'GST' : 'Non-GST'}
               </DialogTitle>
               <p className={`text-xs ${textSecondary}`}>Split the amount across one or more payment sources. Each source must have enough balance.</p>
             </DialogHeader>
             <div className="space-y-3 mt-1">
+              {gstType === 'all' && (
+                <div>
+                  <Label className={textPrimary}>Cashbook *</Label>
+                  <div className="flex gap-2 mt-1">
+                    {[{ key: 'gst', label: 'GST' }, { key: 'non_gst', label: 'Non-GST' }].map((o) => (
+                      <button
+                        key={o.key}
+                        type="button"
+                        onClick={() => changeFormGstType(o.key)}
+                        className={`h-9 px-4 rounded-md border text-sm font-medium ${
+                          formGstType === o.key ? 'bg-[#6366f1] border-[#6366f1] text-white' : `${borderColor} ${bgSecondary} ${textPrimary}`
+                        }`}
+                        data-testid={`expense-form-gst-${o.key}`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {!isAICreditsMode && (
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -1313,7 +1444,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
                 Edit {editEntry.kind === 'credit' ? 'Income' : 'Expense'} Entry
               </DialogTitle>
               <p className={`text-xs ${textSecondary}`}>
-                {gstType === 'gst' ? 'GST' : 'Non-GST'} Cashbook
+                {editEntry.gst_type === 'non_gst' || editEntry.gst_type === 'no_tax' ? 'Non-GST' : 'GST'} Cashbook
                 {editEntry.invoice_number && ` • Linked to ${editEntry.invoice_number}`}
               </p>
             </DialogHeader>

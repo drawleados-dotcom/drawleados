@@ -437,22 +437,30 @@ class CashbookEntryPayload(BaseModel):
 
 
 @banks_router.get("/cashbook/entries")
-async def list_cashbook_entries(request: Request, gst_type: str):
-    """List all entries for one cashbook (GST or Non-GST) plus per-bank summary."""
+async def list_cashbook_entries(request: Request, gst_type: str, month: Optional[int] = None, year: Optional[int] = None):
+    """List all entries for one cashbook (GST or Non-GST), or both combined
+    ("all") plus per-bank summary. Optional month+year narrows both the
+    entries and the summary to that period — omit for all-time."""
     await _get_user(request)
-    if gst_type not in ("gst", "non_gst"):
-        raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
+    if gst_type not in ("gst", "non_gst", "all"):
+        raise HTTPException(status_code=400, detail="gst_type must be 'gst', 'non_gst' or 'all'")
 
-    entries = await db.cashbook_entries.find(
-        {"gst_type": cashbook_gst_match(gst_type)}, {"_id": 0}
-    ).sort("date", -1).to_list(5000)
+    entry_query = {} if gst_type == "all" else {"gst_type": cashbook_gst_match(gst_type)}
+    if month and year:
+        start = f"{year:04d}-{month:02d}-01"
+        end = f"{year + 1:04d}-01-01" if month == 12 else f"{year:04d}-{month + 1:02d}-01"
+        entry_query["date"] = {"$gte": start, "$lt": end}
+    entries = await db.cashbook_entries.find(entry_query, {"_id": 0}).sort("date", -1).to_list(5000)
     for e in entries:
         if isinstance(e.get("created_at"), datetime):
             e["created_at"] = e["created_at"].isoformat()
 
     # Bank lookup so we can label rows + fill missing bank labels
+    bank_query = {"is_deleted": {"$ne": True}}
+    if gst_type != "all":
+        bank_query["gst_type"] = gst_type
     banks = await db.finance_banks.find(
-        {"gst_type": gst_type, "is_deleted": {"$ne": True}},
+        bank_query,
         {"_id": 0, "bank_id": 1, "account_holder": 1, "bank_name": 1},
     ).to_list(500)
     bank_by_id = {b["bank_id"]: b.get("account_holder") or b.get("bank_name") or "Bank" for b in banks}
