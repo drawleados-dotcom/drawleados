@@ -103,6 +103,12 @@ const BNIOutreachPage = () => {
   const [sourceSaving, setSourceSaving] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
 
+  // Outreach tab filters
+  const [filterChapter, setFilterChapter] = useState('all');
+  const [filterLocation, setFilterLocation] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterStatus, setFilterStatus] = useState(null); // null = all; set by clicking a summary card
+
   // Per-tab search + group filters
   const [catSearch, setCatSearch] = useState('');
   const [catGroup, setCatGroup] = useState('all');
@@ -149,12 +155,32 @@ const BNIOutreachPage = () => {
     });
   };
 
+  const distinctVals = (key) => Array.from(new Set(outreach.map((o) => (o[key] || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const chapterOptions = useMemo(() => distinctVals('chapter_name'), [outreach]); // eslint-disable-line react-hooks/exhaustive-deps
+  const locationOptions = useMemo(() => distinctVals('location'), [outreach]); // eslint-disable-line react-hooks/exhaustive-deps
+  const categoryOptions = useMemo(() => distinctVals('category_name'), [outreach]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Rows matching the Chapter/Location/Category dropdowns — the summary card
+  // counts are computed over THIS set, so they stay meaningful per filter.
+  const dropdownFiltered = useMemo(() => outreach.filter((o) => {
+    if (filterChapter !== 'all' && (o.chapter_name || '') !== filterChapter) return false;
+    if (filterLocation !== 'all' && (o.location || '') !== filterLocation) return false;
+    if (filterCategory !== 'all' && (o.category_name || '') !== filterCategory) return false;
+    return true;
+  }), [outreach, filterChapter, filterLocation, filterCategory]);
+
   const outreachSummary = useMemo(() => {
-    const counts = { Total: outreach.length };
+    const counts = { Total: dropdownFiltered.length };
     SUMMARY_STATUSES.forEach((s) => { counts[s] = 0; });
-    outreach.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status] += 1; });
+    dropdownFiltered.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status] += 1; });
     return counts;
-  }, [outreach]);
+  }, [dropdownFiltered]);
+
+  // Table rows: dropdown-filtered, then narrowed by the clicked summary card.
+  const visibleOutreach = useMemo(
+    () => (filterStatus ? dropdownFiltered.filter((o) => o.status === filterStatus) : dropdownFiltered),
+    [dropdownFiltered, filterStatus],
+  );
 
   const targetByGroup = useMemo(() => countByGroup(categories.filter((c) => c.target_type === 'target')), [categories]);
   const partnershipByGroup = useMemo(() => countByGroup(categories.filter((c) => c.target_type === 'partnership')), [categories]);
@@ -396,13 +422,44 @@ const BNIOutreachPage = () => {
           <>
             {activeTab === 'outreach' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-                  {['Total', ...SUMMARY_STATUSES].map((label) => (
-                    <div key={label} className={`${bgCard} border ${borderColor} rounded-xl p-3`} data-testid={`bni-outreach-summary-${label.replace(/\s+/g, '-').toLowerCase()}`}>
-                      <p className={`text-[11px] ${textSecondary} leading-tight`}>{label}</p>
-                      <p className={`text-xl font-bold ${label === 'Lead' ? 'text-[#10b981]' : label === 'Not Interested' ? 'text-[#ef4444]' : textPrimary}`}>{outreachSummary[label] || 0}</p>
-                    </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {[
+                    { label: 'All Chapters', value: filterChapter, set: setFilterChapter, opts: chapterOptions, tid: 'bni-outreach-filter-chapter' },
+                    { label: 'All Locations', value: filterLocation, set: setFilterLocation, opts: locationOptions, tid: 'bni-outreach-filter-location' },
+                    { label: 'All Categories', value: filterCategory, set: setFilterCategory, opts: categoryOptions, tid: 'bni-outreach-filter-category' },
+                  ].map((f) => (
+                    <Select key={f.tid} value={f.value} onValueChange={f.set}>
+                      <SelectTrigger className={`w-[190px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={f.tid}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-72">
+                        <SelectItem value="all">{f.label}</SelectItem>
+                        {f.opts.map((v) => (<SelectItem key={v} value={v}>{v}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
                   ))}
+                  {filterStatus && (
+                    <Button variant="outline" size="sm" onClick={() => setFilterStatus(null)} data-testid="bni-outreach-clear-status">
+                      Status: {filterStatus} ✕
+                    </Button>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                  {['Total', ...SUMMARY_STATUSES].map((label) => {
+                    const active = label === 'Total' ? !filterStatus : filterStatus === label;
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setFilterStatus(label === 'Total' ? null : label)}
+                        className={`${bgCard} border rounded-xl p-3 text-left transition-colors ${active ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : `${borderColor} hover:border-[#6366f1]/40`}`}
+                        data-testid={`bni-outreach-summary-${label.replace(/\s+/g, '-').toLowerCase()}`}
+                      >
+                        <p className={`text-[11px] ${textSecondary} leading-tight`}>{label}</p>
+                        <p className={`text-xl font-bold ${label === 'Lead' ? 'text-[#10b981]' : label === 'Not Interested' ? 'text-[#ef4444]' : textPrimary}`}>{outreachSummary[label] || 0}</p>
+                      </button>
+                    );
+                  })}
                 </div>
               <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
@@ -425,14 +482,14 @@ const BNIOutreachPage = () => {
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
-                      {outreach.length === 0 ? (
+                      {visibleOutreach.length === 0 ? (
                         <tr>
                           <td colSpan={13} className={`px-4 py-8 text-center ${textSecondary}`}>
-                            No outreach entries yet — click "Add New" or "Import CSV" to get started.
+                            {outreach.length === 0 ? 'No outreach entries yet — click "Add New" or "Import CSV" to get started.' : 'No entries match these filters.'}
                           </td>
                         </tr>
                       ) : (
-                        outreach.map((o) => (
+                        visibleOutreach.map((o) => (
                           <tr key={o.outreach_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
                             <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.name}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.brand_name || '—'}</td>
