@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import CSVImportModal from '../components/shared/CSVImportModal';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw } from 'lucide-react';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone } from 'lucide-react';
 import { toast } from 'sonner';
 
 const OUTREACH_STATUSES = ['To do', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
@@ -478,7 +478,7 @@ const BNIOutreachPage = () => {
                     );
                   })}
                 </div>
-              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+              <div className={`hidden md:block ${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className={bgSecondary}>
@@ -555,6 +555,55 @@ const BNIOutreachPage = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* Mobile card view */}
+              <div className="md:hidden space-y-3">
+                {visibleOutreach.length === 0 ? (
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-6 text-center ${textSecondary}`}>
+                    {outreach.length === 0 ? 'No outreach entries yet — tap "Add New" or "Import CSV".' : 'No entries match these filters.'}
+                  </div>
+                ) : (
+                  visibleOutreach.map((o) => (
+                    <div key={o.outreach_id} className={`${bgCard} border ${borderColor} rounded-xl p-4 space-y-3`} data-testid={`bni-outreach-card-${o.outreach_id}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className={`font-semibold ${textPrimary} truncate`}>{o.name}</p>
+                          <p className={`text-xs ${textSecondary} truncate`}>{[o.brand_name, o.chapter_name].filter(Boolean).join(' · ') || '—'}</p>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)}><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)}><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </div>
+                      <div className={`text-xs ${textSecondary} space-y-0.5`}>
+                        {o.email && <p className="truncate">{o.email}</p>}
+                        {o.category_name && <p className="truncate">{o.category_name}</p>}
+                        {o.location && <p className="truncate">{o.location}</p>}
+                        {o.source_name && <p className="truncate">Source: {o.source_name}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select value={o.status || 'To do'} onValueChange={(v) => updateStatus(o.outreach_id, v)}>
+                          <SelectTrigger className={`flex-1 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-card-status-${o.outreach_id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {OUTREACH_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                        {o.phone ? (
+                          <a href={`tel:${o.phone}`} className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-md bg-[#10b981] text-white text-sm font-medium" data-testid={`bni-outreach-card-call-${o.outreach_id}`}>
+                            <Phone className="h-4 w-4" /> Call
+                          </a>
+                        ) : (
+                          <span className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-md bg-[#71717a]/15 text-[#71717a] text-sm">
+                            <Phone className="h-4 w-4" /> —
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
               </div>
             )}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopNav from './TopNav';
+import MobileBottomNav from './MobileBottomNav';
 import { useMenuLayout } from '../hooks/useMenuLayout';
 import DrawleadAI from './DrawleadAI';
 import ThemeToggle from './ThemeToggle';
@@ -527,7 +528,10 @@ const Layout = ({ children }) => {
 
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
-      {!isOperationsOnlyUser && menuLayout === 'sidebar' && <Sidebar />}
+      {/* Left sidebar — hidden on mobile in favour of the bottom nav */}
+      {!isOperationsOnlyUser && menuLayout === 'sidebar' && (
+        <div className="hidden md:flex"><Sidebar /></div>
+      )}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Header with Attendance & Theme Toggle */}
         <header className={`min-h-14 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-6 py-2 border-b ${isDark ? 'bg-[#0c0a09] border-[#27272a]' : 'bg-white border-gray-200'}`}>
@@ -649,14 +653,18 @@ const Layout = ({ children }) => {
           </div>
         </header>
 
-        {/* Top horizontal nav — only when user picked "Top Menu View" in Settings */}
-        {!isOperationsOnlyUser && menuLayout === 'top' && <TopNav />}
+        {/* Top horizontal nav — only when user picked "Top Menu View" in Settings.
+            Hidden on mobile in favour of the fixed bottom nav. */}
+        {!isOperationsOnlyUser && menuLayout === 'top' && (
+          <div className="hidden md:block"><TopNav /></div>
+        )}
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0">
-          <div className="p-4 sm:p-6 lg:p-8 min-w-0">{children}</div>
+          <div className="p-4 sm:p-6 lg:p-8 pb-24 md:pb-8 min-w-0">{children}</div>
         </div>
       </div>
+      {!isOperationsOnlyUser && <MobileBottomNav />}
       <DrawleadAI currentModule={currentModule} />
 
       {/* Clock In Modal */}
