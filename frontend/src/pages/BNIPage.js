@@ -795,6 +795,16 @@ export default function BNIPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [categoryGroups, categories]);
 
+  const groupCounts = useMemo(() => {
+    const byGroup = {};
+    let ungrouped = 0;
+    categories.forEach((c) => {
+      if (c.group) byGroup[c.group] = (byGroup[c.group] || 0) + 1;
+      else ungrouped += 1;
+    });
+    return { byGroup, ungrouped, total: categories.length };
+  }, [categories]);
+
   const filteredCategories = useMemo(() => {
     const q = categorySearch.trim().toLowerCase();
     return categories.filter((c) => {
@@ -1334,10 +1344,10 @@ export default function BNIPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Groups</SelectItem>
-                      <SelectItem value="__ungrouped__">Ungrouped</SelectItem>
+                      <SelectItem value="all">All Groups ({groupCounts.total})</SelectItem>
+                      <SelectItem value="__ungrouped__">Ungrouped ({groupCounts.ungrouped})</SelectItem>
                       {allGroupNames.map((name) => (
-                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                        <SelectItem key={name} value={name}>{name} ({groupCounts.byGroup[name] || 0})</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -2380,7 +2390,7 @@ export default function BNIPage() {
                 ) : (
                   categoryGroups.map((g) => (
                     <div key={g.group_id} className={`flex items-center justify-between px-3 py-2 rounded-lg ${bgSecondary} border ${borderColor}`}>
-                      <span className={textPrimary}>{g.name}</span>
+                      <span className={textPrimary}>{g.name} <span className={`text-xs ${textSecondary}`}>· {groupCounts.byGroup[g.name] || 0} categories</span></span>
                       <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteCategoryGroup(g.group_id, g.name)} data-testid={`bni-group-delete-${g.group_id}`}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
