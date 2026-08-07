@@ -24,14 +24,15 @@ const OUTREACH_IMPORT_FIELDS = [
   { key: 'chapter_name', label: 'Chapter Name', synonyms: ['chapter name', 'chapter'] },
   { key: 'email', label: 'Email', synonyms: ['email', 'email address'] },
   { key: 'profile_link', label: 'Profile Link', synonyms: ['profile link', 'profile'] },
-  { key: 'phone', label: 'Phone', synonyms: ['phone', 'phone number', 'mobile', 'contact number'] },
+  { key: 'phone', label: 'Phone', synonyms: ['phone', 'phone number', 'mobile', 'contact number', 'phone 01', 'phone1', 'phone 1'] },
+  { key: 'phone2', label: 'Phone 2', synonyms: ['phone 02', 'phone2', 'phone 2', 'alternate phone', 'secondary phone', 'mobile 2', 'mobile 02'] },
   { key: 'website', label: 'Website', synonyms: ['website', 'site'] },
   { key: 'status', label: 'Status', synonyms: ['status'] },
   { key: 'location', label: 'Location', synonyms: ['location'] },
   { key: 'category_name', label: 'Category', synonyms: ['category', 'category name', 'business category'] },
 ];
 
-const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '', category_id: '', remarks: '' });
+const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', phone2: '', website: '', status: 'To do', location: '', category_id: '', remarks: '' });
 
 const TABS = [
   { key: 'outreach', label: 'Outreach', icon: Send },
@@ -216,7 +217,7 @@ const BNIOutreachPage = () => {
     setEditingId(o.outreach_id);
     setForm({
       name: o.name || '', brand_name: o.brand_name || '', chapter_name: o.chapter_name || '',
-      email: o.email || '', profile_link: o.profile_link || '', phone: o.phone || '',
+      email: o.email || '', profile_link: o.profile_link || '', phone: o.phone || '', phone2: o.phone2 || '',
       website: o.website || '', status: o.status || 'To do', location: o.location || '',
       category_id: o.category_id || '', remarks: o.remarks || '',
     });
@@ -518,6 +519,7 @@ const BNIOutreachPage = () => {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Profile Link</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone 2</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Website</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
@@ -530,7 +532,7 @@ const BNIOutreachPage = () => {
                     <tbody className={`divide-y ${borderColor}`}>
                       {visibleOutreach.length === 0 ? (
                         <tr>
-                          <td colSpan={13} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={14} className={`px-4 py-8 text-center ${textSecondary}`}>
                             {outreach.length === 0 ? 'No outreach entries yet — click "Add New" or "Import CSV" to get started.' : 'No entries match these filters.'}
                           </td>
                         </tr>
@@ -549,6 +551,7 @@ const BNIOutreachPage = () => {
                               ) : '—'}
                             </td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.phone || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone2 || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
                             <td className="px-4 py-3">
                               <Select value={o.status || 'To do'} onValueChange={(v) => updateStatus(o.outreach_id, v)}>
@@ -632,6 +635,11 @@ const BNIOutreachPage = () => {
                           <span className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-md bg-[#71717a]/15 text-[#71717a] text-sm">
                             <Phone className="h-4 w-4" /> —
                           </span>
+                        )}
+                        {o.phone2 && (
+                          <a href={`tel:${o.phone2}`} className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-md border border-[#10b981] text-[#10b981] text-sm font-medium" data-testid={`bni-outreach-card-call2-${o.outreach_id}`}>
+                            <Phone className="h-4 w-4" /> Call 2
+                          </a>
                         )}
                       </div>
                     </div>
@@ -844,6 +852,7 @@ const BNIOutreachPage = () => {
                   ['Chapter Name', viewEntry.chapter_name],
                   ['Email', viewEntry.email],
                   ['Phone', viewEntry.phone],
+                  ['Phone 2', viewEntry.phone2],
                   ['Website', viewEntry.website],
                   ['Location', viewEntry.location],
                   ['Category', viewEntry.category_name],
@@ -865,6 +874,11 @@ const BNIOutreachPage = () => {
                   {viewEntry.phone && (
                     <a href={`tel:${viewEntry.phone}`} className="text-[#10b981] hover:underline inline-flex items-center gap-1">
                       <Phone className="h-4 w-4" /> Call
+                    </a>
+                  )}
+                  {viewEntry.phone2 && (
+                    <a href={`tel:${viewEntry.phone2}`} className="text-[#10b981] hover:underline inline-flex items-center gap-1">
+                      <Phone className="h-4 w-4" /> Call 2
                     </a>
                   )}
                 </div>
@@ -915,6 +929,10 @@ const BNIOutreachPage = () => {
               <div>
                 <Label className={textPrimary}>Phone</Label>
                 <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+              </div>
+              <div>
+                <Label className={textPrimary}>Phone 2</Label>
+                <Input value={form.phone2} onChange={(e) => setForm({ ...form, phone2: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
               </div>
               <div className="col-span-2">
                 <Label className={textPrimary}>Profile Link</Label>

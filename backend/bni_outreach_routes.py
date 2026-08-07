@@ -34,7 +34,8 @@ SOURCE_FIELD_SYNONYMS = {
     "chapter_name": ["chapter name", "chapter"],
     "email": ["email", "email address"],
     "profile_link": ["profile link", "profile"],
-    "phone": ["phone", "phone number", "mobile", "contact number"],
+    "phone": ["phone", "phone number", "mobile", "contact number", "phone 01", "phone1", "phone 1"],
+    "phone2": ["phone 02", "phone2", "phone 2", "alternate phone", "secondary phone", "mobile 2", "mobile 02"],
     "website": ["website", "site"],
     "status": ["status"],
     "location": ["location"],
@@ -90,6 +91,7 @@ async def _upsert_outreach_row(db, source_id, source_name, name, rec, cat_id, ca
         "email": rec.get("email", ""),
         "profile_link": rec.get("profile_link", ""),
         "phone": rec.get("phone", ""),
+        "phone2": rec.get("phone2", ""),
         "website": rec.get("website", ""),
         "location": rec.get("location", ""),
         "category_id": cat_id,
@@ -209,6 +211,7 @@ class OutreachCreate(BaseModel):
     email: str = ""
     profile_link: str = ""
     phone: str = ""
+    phone2: str = ""
     website: str = ""
     status: str = "To do"
     location: str = ""
@@ -223,6 +226,7 @@ class OutreachUpdate(BaseModel):
     email: Optional[str] = None
     profile_link: Optional[str] = None
     phone: Optional[str] = None
+    phone2: Optional[str] = None
     website: Optional[str] = None
     status: Optional[str] = None
     location: Optional[str] = None
@@ -262,6 +266,7 @@ async def create_outreach(payload: OutreachCreate, request: Request):
         "email": payload.email.strip(),
         "profile_link": payload.profile_link.strip(),
         "phone": payload.phone.strip(),
+        "phone2": payload.phone2.strip(),
         "website": payload.website.strip(),
         "status": status,
         "location": payload.location.strip(),
