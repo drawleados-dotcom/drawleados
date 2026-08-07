@@ -344,11 +344,22 @@ async def get_bni_payment_history(request: Request, month: Optional[int] = None,
             e["created_at"] = e["created_at"].isoformat()
 
     total = sum(float(e.get("amount") or 0) for e in entries)
+
+    # All-time total across every BNI-tagged debit, ignoring the period filter
+    # — powers the "Total (All Expenses)" box that stays constant as you page
+    # through months.
+    all_time_docs = await db.cashbook_entries.find(
+        {"kind": "debit", "split_category_id": {"$in": cat_ids}}, {"_id": 0, "amount": 1},
+    ).to_list(5000)
+    all_time_total = sum(float(d.get("amount") or 0) for d in all_time_docs)
+
     return {
         "entries": entries,
         "summary": {
             "total_amount": round(total, 2),
             "count": len(entries),
+            "all_time_total": round(all_time_total, 2),
+            "all_time_count": len(all_time_docs),
         },
         "has_bni_category": len(cat_ids) > 0,
     }

@@ -198,12 +198,23 @@ export default function BNIPage() {
   const [ooLoading, setOoLoading] = useState(false);
   const [showNewOto, setShowNewOto] = useState(false);
   const [otoCreateTab, setOtoCreateTab] = useState('chapter');
-  const [otoForm, setOtoForm] = useState({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
+  const [otoForm, setOtoForm] = useState({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me', meeting_mode: 'offline' });
   const [otoSaving, setOtoSaving] = useState(false);
 
   const [showEditOto, setShowEditOto] = useState(false);
-  const [editOtoForm, setEditOtoForm] = useState({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
+  const [editOtoForm, setEditOtoForm] = useState({ member_id: '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me', meeting_mode: 'offline' });
   const [editOtoSaving, setEditOtoSaving] = useState(false);
+
+  // One-to-One sub-view: meetings list vs. its expense payment history
+  const [otoSubView, setOtoSubView] = useState('meetings');
+  const [otoExpenses, setOtoExpenses] = useState([]);
+  const [otoExpensesSummary, setOtoExpensesSummary] = useState({ total_amount: 0, count: 0 });
+  const [otoExpensesLoading, setOtoExpensesLoading] = useState(false);
+  // Log-expense dialog
+  const [showOtoExpense, setShowOtoExpense] = useState(false);
+  const [otoExpenseForm, setOtoExpenseForm] = useState({ gst_type: 'non_gst', amount: '', date: '', payment_mode: 'cash', bank_id: '', notes: '' });
+  const [otoExpenseBanks, setOtoExpenseBanks] = useState([]);
+  const [otoExpenseSaving, setOtoExpenseSaving] = useState(false);
 
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleForm, setRescheduleForm] = useState({ meeting_date: '', meeting_time: '', location: '' });
@@ -427,9 +438,81 @@ export default function BNIPage() {
     if (activeTab === 'one_to_one') loadOneToOnes();
   }, [activeTab, loadOneToOnes]);
 
+  const loadOtoExpenses = useCallback(async () => {
+    setOtoExpensesLoading(true);
+    try {
+      const res = await api.get('/bni/one-to-ones/expenses');
+      setOtoExpenses(res.data?.entries || []);
+      setOtoExpensesSummary(res.data?.summary || { total_amount: 0, count: 0 });
+    } catch (error) {
+      toast.error('Failed to load One-to-One expenses');
+    } finally {
+      setOtoExpensesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'one_to_one' && otoSubView === 'expenses') loadOtoExpenses();
+  }, [activeTab, otoSubView, loadOtoExpenses]);
+
+  const openOtoExpense = async (entry) => {
+    setActiveOto(entry);
+    setOtoExpenseForm({ gst_type: 'non_gst', amount: '', date: entry.meeting_date || '', payment_mode: 'cash', bank_id: '', notes: '' });
+    setOtoExpenseBanks([]);
+    setShowOtoExpense(true);
+    try {
+      const res = await api.get('/finance/banks', { params: { gst_type: 'non_gst' } });
+      setOtoExpenseBanks(res.data || []);
+    } catch (error) {
+      setOtoExpenseBanks([]);
+    }
+  };
+
+  const changeOtoExpenseGst = async (gstType) => {
+    setOtoExpenseForm((f) => ({ ...f, gst_type: gstType, bank_id: '' }));
+    try {
+      const res = await api.get('/finance/banks', { params: { gst_type: gstType } });
+      setOtoExpenseBanks(res.data || []);
+    } catch (error) {
+      setOtoExpenseBanks([]);
+    }
+  };
+
+  const saveOtoExpense = async () => {
+    const amt = Number(otoExpenseForm.amount);
+    if (!amt || amt <= 0) { toast.error('Enter a valid amount'); return; }
+    if (otoExpenseForm.payment_mode === 'bank' && !otoExpenseForm.bank_id) { toast.error('Select a bank'); return; }
+    setOtoExpenseSaving(true);
+    try {
+      await api.post(`/bni/one-to-ones/${activeOto.entry_id}/expense`, {
+        ...otoExpenseForm,
+        amount: amt,
+        bank_id: otoExpenseForm.payment_mode === 'bank' ? otoExpenseForm.bank_id : null,
+      });
+      toast.success('Expense recorded to cashbook');
+      setShowOtoExpense(false);
+      loadOneToOnes();
+      if (otoSubView === 'expenses') loadOtoExpenses();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to record expense');
+    } finally {
+      setOtoExpenseSaving(false);
+    }
+  };
+
+  const otoSummary = useMemo(() => {
+    let completed = 0, offline = 0, online = 0, expenseTotal = 0;
+    oneToOnes.forEach((o) => {
+      if (o.meeting_status === 'Completed') completed += 1;
+      if ((o.meeting_mode || 'offline') === 'online') online += 1; else offline += 1;
+      expenseTotal += Number(o.expense_amount) || 0;
+    });
+    return { total: oneToOnes.length, completed, offline, online, expenseTotal };
+  }, [oneToOnes]);
+
   const openNewOto = (memberId) => {
     setOtoCreateTab('chapter');
-    setOtoForm({ member_id: memberId || '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me' });
+    setOtoForm({ member_id: memberId || '', meeting_date: '', meeting_time: '', location: '', invited_by: 'me', meeting_mode: 'offline' });
     setShowNewOto(true);
   };
 
@@ -476,6 +559,7 @@ export default function BNIPage() {
       meeting_time: entry.meeting_time || '',
       location: entry.location || '',
       invited_by: entry.invited_by || 'me',
+      meeting_mode: entry.meeting_mode || 'offline',
     });
     setShowEditOto(true);
   };
@@ -1295,7 +1379,7 @@ export default function BNIPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
                     <p className={`text-xs ${textSecondary}`}>
                       Total Paid{phAllTime ? ' (All Time)' : ` — ${MONTHS[phMonth - 1].l} ${phYear}`}
@@ -1303,6 +1387,13 @@ export default function BNIPage() {
                     <p className="text-2xl font-bold text-[#10b981]" data-testid="bni-ph-total">
                       ₹{Number(paymentHistory.summary?.total_amount || 0).toLocaleString('en-IN')}
                     </p>
+                  </div>
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
+                    <p className={`text-xs ${textSecondary}`}>Total (All Expenses)</p>
+                    <p className="text-2xl font-bold text-[#6366f1]" data-testid="bni-ph-all-time-total">
+                      ₹{Number(paymentHistory.summary?.all_time_total || 0).toLocaleString('en-IN')}
+                    </p>
+                    <p className={`text-[11px] ${textSecondary} mt-0.5`}>{paymentHistory.summary?.all_time_count || 0} payments · all time</p>
                   </div>
                   <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
                     <p className={`text-xs ${textSecondary}`}>Payments</p>
@@ -1699,88 +1790,200 @@ export default function BNIPage() {
             )}
 
             {activeTab === 'one_to_one' && (
-              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className={bgSecondary}>
-                      <tr>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Member</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Date</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Time</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Invited By</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Status</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Relationship Status</th>
-                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className={`divide-y ${borderColor}`}>
-                      {ooLoading ? (
-                        <tr><td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
-                      ) : oneToOnes.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>
-                            No One-to-Ones yet — click "New One-to-One" to schedule the first one.
-                          </td>
-                        </tr>
-                      ) : (
-                        oneToOnes.map((o) => (
-                          <tr key={o.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
-                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.member_name}</td>
-                            <td className="px-4 py-3">
-                              <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 font-semibold">
-                                {o.meeting_date ? new Date(o.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                              </Badge>
-                            </td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.meeting_time || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
-                            <td className={`px-4 py-3 ${textSecondary}`}>{o.invited_by === 'me' ? 'Me' : o.member_name}</td>
-                            <td className="px-4 py-3">
-                              <Select value={o.meeting_status || 'Scheduled'} onValueChange={(v) => updateMeetingStatus(o.entry_id, v)}>
-                                <SelectTrigger className={`w-[130px] ${meetingStatusColor(o.meeting_status)}`} data-testid={`bni-oto-meeting-status-${o.entry_id}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {MEETING_STATUSES.map((s) => (
-                                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </td>
-                            <td className="px-4 py-3">
-                              {o.status ? (
-                                <Badge className={
-                                  o.status === 'Lead'
-                                    ? 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40'
-                                    : o.status === 'Relationship'
-                                    ? 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40'
-                                    : 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/40'
-                                }>
-                                  {o.status}
-                                </Badge>
-                              ) : (
-                                <span className={textSecondary}>—</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex gap-1">
-                                <Button variant="ghost" size="sm" onClick={() => openEditOto(o)} title="Edit" data-testid={`bni-oto-edit-${o.entry_id}`}>
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => openReschedule(o)} title="Reschedule" data-testid={`bni-oto-reschedule-${o.entry_id}`}>
-                                  <RotateCcw className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => openOtoRemarks(o)} title="Remarks" data-testid={`bni-oto-remarks-${o.entry_id}`}>
-                                  <MessageSquare className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+              <div className="space-y-4">
+                {/* Sub-view toggle: Meetings | Payment History */}
+                <div className={`inline-flex rounded-lg border ${borderColor} p-1 ${bgSecondary}`}>
+                  {[{ k: 'meetings', l: 'Meetings' }, { k: 'expenses', l: 'Payment History' }].map((v) => (
+                    <button
+                      key={v.k}
+                      onClick={() => setOtoSubView(v.k)}
+                      data-testid={`bni-oto-subview-${v.k}`}
+                      className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        otoSubView === v.k ? 'bg-[#6366f1] text-white' : textSecondary
+                      }`}
+                    >
+                      {v.l}
+                    </button>
+                  ))}
                 </div>
+
+                {otoSubView === 'meetings' ? (
+                  <>
+                    {/* Summary strip */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                      {[
+                        { label: 'Total', value: otoSummary.total, color: textPrimary },
+                        { label: 'Completed', value: otoSummary.completed, color: 'text-[#10b981]' },
+                        { label: 'Offline', value: otoSummary.offline, color: 'text-[#6366f1]' },
+                        { label: 'Online', value: otoSummary.online, color: 'text-[#71717a]' },
+                        { label: 'Expenses', value: `₹${otoSummary.expenseTotal.toLocaleString('en-IN')}`, color: 'text-[#ef4444]' },
+                      ].map((s) => (
+                        <div key={s.label} className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
+                          <p className={`text-xs ${textSecondary}`}>{s.label}</p>
+                          <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className={bgSecondary}>
+                            <tr>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Member</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Date</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Time</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Mode</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Status</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Relationship Status</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Expense</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className={`divide-y ${borderColor}`}>
+                            {ooLoading ? (
+                              <tr><td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                            ) : oneToOnes.length === 0 ? (
+                              <tr>
+                                <td colSpan={9} className={`px-4 py-8 text-center ${textSecondary}`}>
+                                  No One-to-Ones yet — click "New One-to-One" to schedule the first one.
+                                </td>
+                              </tr>
+                            ) : (
+                              oneToOnes.map((o) => {
+                                const mode = o.meeting_mode || 'offline';
+                                return (
+                                  <tr key={o.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                                    <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.member_name}</td>
+                                    <td className="px-4 py-3">
+                                      <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 font-semibold">
+                                        {o.meeting_date ? new Date(o.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                      </Badge>
+                                    </td>
+                                    <td className={`px-4 py-3 ${textSecondary}`}>{o.meeting_time || '—'}</td>
+                                    <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
+                                    <td className="px-4 py-3">
+                                      <Badge className={mode === 'online'
+                                        ? 'bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40'
+                                        : 'bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40'}>
+                                        {mode === 'online' ? 'Online' : 'Offline'}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <Select value={o.meeting_status || 'Scheduled'} onValueChange={(v) => updateMeetingStatus(o.entry_id, v)}>
+                                        <SelectTrigger className={`w-[130px] ${meetingStatusColor(o.meeting_status)}`} data-testid={`bni-oto-meeting-status-${o.entry_id}`}>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {MEETING_STATUSES.map((s) => (
+                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {o.status ? (
+                                        <Badge className={
+                                          o.status === 'Lead'
+                                            ? 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40'
+                                            : o.status === 'Relationship'
+                                            ? 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40'
+                                            : 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/40'
+                                        }>
+                                          {o.status}
+                                        </Badge>
+                                      ) : (
+                                        <span className={textSecondary}>—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {o.expense_entry_id ? (
+                                        <Badge className="bg-[#ef4444]/15 text-[#ef4444] border border-[#ef4444]/40 font-semibold">
+                                          ₹{Number(o.expense_amount || 0).toLocaleString('en-IN')}
+                                        </Badge>
+                                      ) : mode === 'offline' && !isViewOnly ? (
+                                        <Button variant="outline" size="sm" onClick={() => openOtoExpense(o)} data-testid={`bni-oto-expense-${o.entry_id}`}>
+                                          <Wallet className="h-4 w-4 mr-1" /> Log
+                                        </Button>
+                                      ) : (
+                                        <span className={textSecondary}>—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex gap-1">
+                                        <Button variant="ghost" size="sm" onClick={() => openEditOto(o)} title="Edit" data-testid={`bni-oto-edit-${o.entry_id}`}>
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => openReschedule(o)} title="Reschedule" data-testid={`bni-oto-reschedule-${o.entry_id}`}>
+                                          <RotateCcw className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="sm" onClick={() => openOtoRemarks(o)} title="Remarks" data-testid={`bni-oto-remarks-${o.entry_id}`}>
+                                          <MessageSquare className="h-4 w-4" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
+                        <p className={`text-xs ${textSecondary}`}>Total Spent on One-to-Ones</p>
+                        <p className="text-2xl font-bold text-[#ef4444]">₹{Number(otoExpensesSummary.total_amount || 0).toLocaleString('en-IN')}</p>
+                      </div>
+                      <div className={`${bgCard} border ${borderColor} rounded-xl p-4`}>
+                        <p className={`text-xs ${textSecondary}`}>Payments</p>
+                        <p className={`text-2xl font-bold ${textPrimary}`}>{otoExpensesSummary.count || 0}</p>
+                      </div>
+                    </div>
+                    <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className={bgSecondary}>
+                            <tr>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Date</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Member</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Amount</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Cashbook</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Payment Mode</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Notes</th>
+                            </tr>
+                          </thead>
+                          <tbody className={`divide-y ${borderColor}`}>
+                            {otoExpensesLoading ? (
+                              <tr><td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                            ) : otoExpenses.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>
+                                  No One-to-One expenses recorded yet — log one from an Offline meeting.
+                                </td>
+                              </tr>
+                            ) : (
+                              otoExpenses.map((e) => (
+                                <tr key={e.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                                  <td className={`px-4 py-3 ${textSecondary}`}>{e.date || '—'}</td>
+                                  <td className={`px-4 py-3 font-medium ${textPrimary}`}>{e.to || '—'}</td>
+                                  <td className="px-4 py-3 font-semibold text-[#ef4444]">₹{Number(e.amount || 0).toLocaleString('en-IN')}</td>
+                                  <td className={`px-4 py-3 ${textSecondary}`}>{e.gst_type === 'gst' ? 'GST' : 'Non-GST'}</td>
+                                  <td className={`px-4 py-3 ${textSecondary} capitalize`}>{e.payment_mode}{e.bank_label ? ` · ${e.bank_label}` : ''}</td>
+                                  <td className={`px-4 py-3 ${textSecondary}`}>{e.notes || '—'}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -2352,6 +2555,19 @@ export default function BNIPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <Label className={textPrimary}>Meeting Mode</Label>
+                  <Select value={otoForm.meeting_mode} onValueChange={(v) => setOtoForm({ ...otoForm, meeting_mode: v })}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-oto-mode-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="offline">Offline</SelectItem>
+                      <SelectItem value="online">Online</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className={`text-xs ${textSecondary} mt-1`}>Expenses can only be logged for Offline meetings.</p>
+                </div>
               </div>
             ) : (
               <div className={`${bgSecondary} rounded-xl p-8 text-center`}>
@@ -2422,11 +2638,104 @@ export default function BNIPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label className={textPrimary}>Meeting Mode</Label>
+                <Select value={editOtoForm.meeting_mode} onValueChange={(v) => setEditOtoForm({ ...editOtoForm, meeting_mode: v })}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-oto-edit-mode-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="offline">Offline</SelectItem>
+                    <SelectItem value="online">Online</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowEditOto(false)}>Cancel</Button>
               <Button onClick={saveEditOto} disabled={editOtoSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-oto-edit-save-btn">
                 {editOtoSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Log One-to-One Expense */}
+        <Dialog open={showOtoExpense} onOpenChange={setShowOtoExpense}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Log Expense — {activeOto?.member_name}</DialogTitle>
+            </DialogHeader>
+            <p className={`text-xs ${textSecondary} -mt-1`}>Records a real debit to your cashbook, tagged under BNI &gt; One to Ones.</p>
+            <div className="space-y-3 mt-1">
+              <div>
+                <Label className={textPrimary}>Cashbook *</Label>
+                <div className="flex gap-2 mt-1">
+                  {[{ key: 'non_gst', label: 'Non-GST' }, { key: 'gst', label: 'GST' }].map((o) => (
+                    <button
+                      key={o.key}
+                      type="button"
+                      onClick={() => changeOtoExpenseGst(o.key)}
+                      className={`h-9 px-4 rounded-md border text-sm font-medium ${
+                        otoExpenseForm.gst_type === o.key ? 'bg-[#6366f1] border-[#6366f1] text-white' : `${borderColor} ${bgSecondary} ${textPrimary}`
+                      }`}
+                      data-testid={`bni-oto-expense-gst-${o.key}`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Amount *</Label>
+                  <Input type="number" value={otoExpenseForm.amount} onChange={(e) => setOtoExpenseForm({ ...otoExpenseForm, amount: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="500" autoFocus data-testid="bni-oto-expense-amount" />
+                </div>
+                <div>
+                  <Label className={textPrimary}>Date</Label>
+                  <Input type="date" value={otoExpenseForm.date} onChange={(e) => setOtoExpenseForm({ ...otoExpenseForm, date: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Payment Mode</Label>
+                  <Select value={otoExpenseForm.payment_mode} onValueChange={(v) => setOtoExpenseForm({ ...otoExpenseForm, payment_mode: v, bank_id: '' })}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['cash', 'bank', 'upi', 'cheque'].map((m) => (
+                        <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {otoExpenseForm.payment_mode === 'bank' && (
+                  <div>
+                    <Label className={textPrimary}>Bank *</Label>
+                    <Select value={otoExpenseForm.bank_id || 'none'} onValueChange={(v) => setOtoExpenseForm({ ...otoExpenseForm, bank_id: v === 'none' ? '' : v })}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                        <SelectValue placeholder="Select bank" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">— Select —</SelectItem>
+                        {otoExpenseBanks.map((b) => (
+                          <SelectItem key={b.bank_id} value={b.bank_id}>{b.account_holder || b.bank_name || 'Bank'}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <div>
+                <Label className={textPrimary}>Notes</Label>
+                <Input value={otoExpenseForm.notes} onChange={(e) => setOtoExpenseForm({ ...otoExpenseForm, notes: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="e.g. Coffee at Ambika" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowOtoExpense(false)}>Cancel</Button>
+              <Button onClick={saveOtoExpense} disabled={otoExpenseSaving} className="bg-[#ef4444] hover:bg-[#dc2626] text-white" data-testid="bni-oto-expense-save-btn">
+                {otoExpenseSaving ? 'Saving…' : 'Record Expense'}
               </Button>
             </DialogFooter>
           </DialogContent>
