@@ -21,7 +21,10 @@ from datetime import datetime, timezone
 bni_outreach_router = APIRouter(prefix="/bni/outreach", tags=["bni"])
 bni_outreach_sources_router = APIRouter(prefix="/bni/outreach-sources", tags=["bni"])
 
-OUTREACH_STATUSES = ["To do", "Contacted", "Interested", "Not Interested", "Converted"]
+OUTREACH_STATUSES = [
+    "To do", "RNR", "Scheduled One to One", "One to One Completed",
+    "Not Interested", "Relationship", "Lead", "Later",
+]
 
 # Column synonyms used when importing outreach rows from a Google Sheet source
 # (same columns as the CSV import on the Outreach tab).
@@ -109,6 +112,87 @@ async def _upsert_outreach_row(db, source_id, source_name, name, rec, cat_id, ca
     return 1, 0
 
 
+async def _lead_from_outreach(db, entry, user_id):
+    """When an outreach prospect is marked 'Lead', push it to the main Leads
+    pipeline (source 'BNI'), once per entry."""
+    if entry.get("lead_created"):
+        return
+    stage = await db.lead_stages.find_one(
+        {"name": {"$regex": "^lead$", "$options": "i"}, "is_deleted": {"$ne": True}},
+        {"_id": 0, "stage_id": 1},
+    )
+    now = datetime.now(timezone.utc)
+    await db.leads_v2.insert_one({
+        "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
+        "name": entry.get("name", ""),
+        "phone": entry.get("phone", ""),
+        "email": entry.get("email", ""),
+        "company_name": entry.get("brand_name", ""),
+        "location": entry.get("location", ""),
+        "website": entry.get("website", ""),
+        "social_media": entry.get("profile_link", ""),
+        "what_do_you_do": "",
+        "source": "BNI",
+        "lead_owner": user_id,
+        "lead_type": "",
+        "priority": "Medium",
+        "date_of_lead": now.date().isoformat(),
+        "industry": entry.get("category_name", ""),
+        "estimation": 0,
+        "quotation_link": "",
+        "proposal_link": "",
+        "notes": f"Auto-created from BNI Outreach ({entry.get('chapter_name', '') or 'cross chapter'})",
+        "stage_id": stage.get("stage_id") if stage else "",
+        "custom_fields": {},
+        "pipeline": "pre_sales",
+        "created_by": user_id,
+        "created_at": now,
+        "updated_at": now,
+        "is_deleted": False,
+    })
+    await db.bni_outreach.update_one({"outreach_id": entry["outreach_id"]}, {"$set": {"lead_created": True}})
+
+
+async def _sync_cross_chapter_oto(db, entry, meeting_status, user_id):
+    """Mirror an outreach prospect into the BNI One-to-One tab as a
+    cross-chapter one-to-one (kept in sync by outreach_id)."""
+    now = datetime.now(timezone.utc).isoformat()
+    fields = {
+        "member_name": entry.get("name", ""),
+        "member_phone": entry.get("phone", ""),
+        "member_email": entry.get("email", ""),
+        "member_company": entry.get("brand_name", ""),
+        "chapter_name": entry.get("chapter_name", "") or "Cross Chapter",
+        "meeting_status": meeting_status,
+        "updated_at": now,
+    }
+    existing = await db.bni_one_to_ones.find_one({"outreach_id": entry["outreach_id"]}, {"_id": 0, "entry_id": 1})
+    if existing:
+        await db.bni_one_to_ones.update_one({"entry_id": existing["entry_id"]}, {"$set": fields})
+        return
+    fields.update({
+        "entry_id": f"bniotoo_{uuid.uuid4().hex[:10]}",
+        "entry_type": "cross_chapter",
+        "member_id": "",
+        "meeting_date": now[:10],
+        "meeting_time": "",
+        "location": "",
+        "invited_by": "me",
+        "remark": "",
+        "gives": [],
+        "referrals": [],
+        "status": "",
+        "expense_entry_id": "",
+        "expense_amount": 0,
+        "meeting_mode": "offline",
+        "lead_created": False,
+        "outreach_id": entry["outreach_id"],
+        "created_by": user_id,
+        "created_at": now,
+    })
+    await db.bni_one_to_ones.insert_one(fields)
+
+
 class OutreachCreate(BaseModel):
     name: str
     brand_name: str = ""
@@ -185,7 +269,7 @@ async def create_outreach(payload: OutreachCreate, request: Request):
 @bni_outreach_router.put("/{outreach_id}")
 async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Request):
     from server import get_current_user, db
-    await get_current_user(request)
+    user = await get_current_user(request)
     entry = await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0})
     if not entry:
         raise HTTPException(status_code=404, detail="Outreach entry not found")
@@ -206,6 +290,17 @@ async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Re
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     await db.bni_outreach.update_one({"outreach_id": outreach_id}, {"$set": update_data})
+    updated = await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0})
+
+    # Status-driven downstream actions.
+    new_status = update_data.get("status")
+    if new_status == "Lead":
+        await _lead_from_outreach(db, updated, user.user_id)
+    elif new_status == "Scheduled One to One":
+        await _sync_cross_chapter_oto(db, updated, "Scheduled", user.user_id)
+    elif new_status == "One to One Completed":
+        await _sync_cross_chapter_oto(db, updated, "Completed", user.user_id)
+
     return await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0})
 
 

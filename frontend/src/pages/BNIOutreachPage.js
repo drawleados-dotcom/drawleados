@@ -12,7 +12,10 @@ import CSVImportModal from '../components/shared/CSVImportModal';
 import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
-const OUTREACH_STATUSES = ['To do', 'Contacted', 'Interested', 'Not Interested', 'Converted'];
+const OUTREACH_STATUSES = ['To do', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
+
+// Cells shown in the Outreach summary card (in this order).
+const SUMMARY_STATUSES = ['RNR', 'One to One Completed', 'Scheduled One to One', 'Not Interested', 'Relationship', 'Lead', 'Later'];
 
 const OUTREACH_IMPORT_FIELDS = [
   { key: 'name', label: 'Name', required: true, synonyms: ['name'] },
@@ -146,6 +149,13 @@ const BNIOutreachPage = () => {
     });
   };
 
+  const outreachSummary = useMemo(() => {
+    const counts = { Total: outreach.length };
+    SUMMARY_STATUSES.forEach((s) => { counts[s] = 0; });
+    outreach.forEach((o) => { if (counts[o.status] !== undefined) counts[o.status] += 1; });
+    return counts;
+  }, [outreach]);
+
   const targetByGroup = useMemo(() => countByGroup(categories.filter((c) => c.target_type === 'target')), [categories]);
   const partnershipByGroup = useMemo(() => countByGroup(categories.filter((c) => c.target_type === 'partnership')), [categories]);
 
@@ -189,6 +199,8 @@ const BNIOutreachPage = () => {
     try {
       await api.put(`/bni/outreach/${outreachId}`, { status });
       setOutreach((prev) => prev.map((o) => (o.outreach_id === outreachId ? { ...o, status } : o)));
+      if (status === 'Lead') toast.success('Marked as Lead — added to Sales Leads');
+      else if (status === 'Scheduled One to One' || status === 'One to One Completed') toast.success('Synced to BNI One-to-One (cross chapter)');
     } catch (error) { toast.error('Failed to update status'); }
   };
   const remove = async (outreachId) => {
@@ -383,6 +395,15 @@ const BNIOutreachPage = () => {
         ) : (
           <>
             {activeTab === 'outreach' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                  {['Total', ...SUMMARY_STATUSES].map((label) => (
+                    <div key={label} className={`${bgCard} border ${borderColor} rounded-xl p-3`} data-testid={`bni-outreach-summary-${label.replace(/\s+/g, '-').toLowerCase()}`}>
+                      <p className={`text-[11px] ${textSecondary} leading-tight`}>{label}</p>
+                      <p className={`text-xl font-bold ${label === 'Lead' ? 'text-[#10b981]' : label === 'Not Interested' ? 'text-[#ef4444]' : textPrimary}`}>{outreachSummary[label] || 0}</p>
+                    </div>
+                  ))}
+                </div>
               <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -460,6 +481,7 @@ const BNIOutreachPage = () => {
                     </tbody>
                   </table>
                 </div>
+              </div>
               </div>
             )}
 
