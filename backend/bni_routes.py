@@ -17,6 +17,7 @@ category. Resources:
 
 Storage: collections `bni_settings`, `bni_categories`, `bni_role_players`, `bni_members`.
 """
+import re
 import uuid
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -68,11 +69,17 @@ async def update_bni_settings(payload: BNISettingsUpdate, request: Request):
 class BNICategoryCreate(BaseModel):
     name: str
     description: Optional[str] = ""
+    group: Optional[str] = ""
 
 
 class BNICategoryUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    group: Optional[str] = None
+
+
+class BNICategoryGroupCreate(BaseModel):
+    name: str
 
 
 @bni_categories_router.get("")
@@ -80,6 +87,54 @@ async def list_bni_categories(request: Request):
     from server import get_current_user, db
     await get_current_user(request)
     return await db.bni_categories.find({}, {"_id": 0}).sort("name", 1).to_list(1000)
+
+
+# ---------- Category Groups (e.g. "Construction") — used to group/filter
+# categories on the BNI Category tab. Stored in `bni_category_groups`; a
+# category references its group by name (denormalized). ----------
+
+@bni_categories_router.get("/groups")
+async def list_bni_category_groups(request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    return await db.bni_category_groups.find({}, {"_id": 0}).sort("name", 1).to_list(500)
+
+
+@bni_categories_router.post("/groups")
+async def create_bni_category_group(payload: BNICategoryGroupCreate, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Group name is required")
+    existing = await db.bni_category_groups.find_one(
+        {"name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}}, {"_id": 0}
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="A group with this name already exists")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "group_id": f"bnicg_{uuid.uuid4().hex[:10]}",
+        "name": name,
+        "created_by": user.user_id,
+        "created_at": now,
+    }
+    await db.bni_category_groups.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@bni_categories_router.delete("/groups/{group_id}")
+async def delete_bni_category_group(group_id: str, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    grp = await db.bni_category_groups.find_one({"group_id": group_id}, {"_id": 0})
+    if not grp:
+        raise HTTPException(status_code=404, detail="Group not found")
+    await db.bni_category_groups.delete_one({"group_id": group_id})
+    # Detach the group from any categories that referenced it by name.
+    await db.bni_categories.update_many({"group": grp["name"]}, {"$set": {"group": ""}})
+    return {"message": "Group deleted"}
 
 
 @bni_categories_router.post("")
@@ -95,6 +150,7 @@ async def create_bni_category(payload: BNICategoryCreate, request: Request):
         "category_id": f"bnicat_{uuid.uuid4().hex[:10]}",
         "name": name,
         "description": (payload.description or "").strip(),
+        "group": (payload.group or "").strip(),
         "created_by": user.user_id,
         "created_at": now,
         "updated_at": now,
@@ -120,6 +176,8 @@ async def update_bni_category(category_id: str, payload: BNICategoryUpdate, requ
         update_data["name"] = name
     if payload.description is not None:
         update_data["description"] = payload.description.strip()
+    if payload.group is not None:
+        update_data["group"] = payload.group.strip()
 
     await db.bni_categories.update_one({"category_id": category_id}, {"$set": update_data})
     return await db.bni_categories.find_one({"category_id": category_id}, {"_id": 0})

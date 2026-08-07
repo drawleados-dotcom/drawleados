@@ -38,6 +38,7 @@ const MEMBER_IMPORT_FIELDS = [
 
 const CATEGORY_IMPORT_FIELDS = [
   { key: 'name', label: 'Category Name', required: true, synonyms: ['category name', 'category', 'name'] },
+  { key: 'group', label: 'Group', synonyms: ['group', 'category group'] },
   { key: 'description', label: 'Description', synonyms: ['description', 'desc'] },
 ];
 
@@ -157,7 +158,14 @@ export default function BNIPage() {
 
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState(null);
-  const [categoryForm, setCategoryForm] = useState(emptyNameDescForm());
+  const [categoryForm, setCategoryForm] = useState({ ...emptyNameDescForm(), group: '' });
+
+  // Category groups (e.g. "Construction") — create, assign, filter by
+  const [categoryGroups, setCategoryGroups] = useState([]);
+  const [categoryGroupFilter, setCategoryGroupFilter] = useState('all');
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [groupSaving, setGroupSaving] = useState(false);
 
   const [showRolePlayerModal, setShowRolePlayerModal] = useState(false);
   const [editingRolePlayerId, setEditingRolePlayerId] = useState(null);
@@ -246,19 +254,21 @@ export default function BNIPage() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [membersRes, categoriesRes, rolePlayersRes, settingsRes, designationsRes, oneToOnesRes] = await Promise.all([
+      const [membersRes, categoriesRes, rolePlayersRes, settingsRes, designationsRes, oneToOnesRes, groupsRes] = await Promise.all([
         api.get('/bni/members'),
         api.get('/bni/categories'),
         api.get('/bni/role-players'),
         api.get('/bni/settings'),
         api.get('/designations/').catch(() => ({ data: [] })),
         api.get('/bni/one-to-ones').catch(() => ({ data: [] })),
+        api.get('/bni/categories/groups').catch(() => ({ data: [] })),
       ]);
       setMembers(membersRes.data || []);
       setCategories(categoriesRes.data || []);
       setRolePlayers(rolePlayersRes.data || []);
       setChapterSettings(settingsRes.data || { chapter_name: '', region: '' });
       setOneToOnes(oneToOnesRes.data || []);
+      setCategoryGroups(groupsRes.data || []);
       const userDesg = (user?.designation || '').toLowerCase().trim();
       const found = (designationsRes.data || []).find(
         (d) => (d.title || '').toLowerCase().trim() === userDesg
@@ -776,11 +786,27 @@ export default function BNIPage() {
   const pinnedMembers = useMemo(() => filteredMembers.filter((m) => m.pinned), [filteredMembers]);
   const unpinnedMembers = useMemo(() => filteredMembers.filter((m) => !m.pinned), [filteredMembers]);
 
+  // Filter dropdown lists every group that exists — both formally created
+  // (categoryGroups collection) and any group name already on a category
+  // (e.g. from a CSV import that named a group before it was created).
+  const allGroupNames = useMemo(() => {
+    const set = new Set(categoryGroups.map((g) => g.name));
+    categories.forEach((c) => { if (c.group) set.add(c.group); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [categoryGroups, categories]);
+
   const filteredCategories = useMemo(() => {
     const q = categorySearch.trim().toLowerCase();
-    if (!q) return categories;
-    return categories.filter((c) => [c.name, c.description].some((v) => (v || '').toLowerCase().includes(q)));
-  }, [categories, categorySearch]);
+    return categories.filter((c) => {
+      if (categoryGroupFilter === '__ungrouped__') {
+        if (c.group) return false;
+      } else if (categoryGroupFilter !== 'all') {
+        if ((c.group || '') !== categoryGroupFilter) return false;
+      }
+      if (q && ![c.name, c.description, c.group].some((v) => (v || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [categories, categorySearch, categoryGroupFilter]);
 
   // ---------- Members ----------
 
@@ -854,14 +880,45 @@ export default function BNIPage() {
 
   const openAddCategory = () => {
     setEditingCategoryId(null);
-    setCategoryForm(emptyNameDescForm());
+    setCategoryForm({ ...emptyNameDescForm(), group: '' });
     setShowCategoryModal(true);
   };
 
   const openEditCategory = (c) => {
     setEditingCategoryId(c.category_id);
-    setCategoryForm({ name: c.name || '', description: c.description || '' });
+    setCategoryForm({ name: c.name || '', description: c.description || '', group: c.group || '' });
     setShowCategoryModal(true);
+  };
+
+  const createCategoryGroup = async () => {
+    const name = newGroupName.trim();
+    if (!name) { toast.error('Enter a group name'); return; }
+    setGroupSaving(true);
+    try {
+      await api.post('/bni/categories/groups', { name });
+      toast.success('Group created');
+      setNewGroupName('');
+      const res = await api.get('/bni/categories/groups');
+      setCategoryGroups(res.data || []);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to create group');
+    } finally {
+      setGroupSaving(false);
+    }
+  };
+
+  const deleteCategoryGroup = async (groupId, groupName) => {
+    if (!window.confirm(`Delete the group "${groupName}"? Categories in it will become ungrouped.`)) return;
+    try {
+      await api.delete(`/bni/categories/groups/${groupId}`);
+      toast.success('Group deleted');
+      const res = await api.get('/bni/categories/groups');
+      setCategoryGroups(res.data || []);
+      if (categoryGroupFilter === groupName) setCategoryGroupFilter('all');
+      loadAll();
+    } catch (error) {
+      toast.error('Failed to delete group');
+    }
   };
 
   const saveCategory = async () => {
@@ -956,7 +1013,7 @@ export default function BNIPage() {
 
   const importCategories = async (rows) => {
     const results = await Promise.allSettled(
-      rows.map((r) => api.post('/bni/categories', { name: r.name, description: r.description || '' }))
+      rows.map((r) => api.post('/bni/categories', { name: r.name, description: r.description || '', group: (r.group || '').trim() }))
     );
     const success = results.filter((r) => r.status === 'fulfilled').length;
     toast.success(`Imported ${success} of ${rows.length} categories`);
@@ -1244,15 +1301,34 @@ export default function BNIPage() {
 
             {activeTab === 'category' && (
               <div className="space-y-3">
-                <div className="relative max-w-sm">
-                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
-                  <Input
-                    value={categorySearch}
-                    onChange={(e) => setCategorySearch(e.target.value)}
-                    placeholder="Search categories…"
-                    className={`pl-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
-                    data-testid="bni-category-search"
-                  />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative max-w-sm flex-1 min-w-[180px]">
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
+                    <Input
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      placeholder="Search categories…"
+                      className={`pl-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      data-testid="bni-category-search"
+                    />
+                  </div>
+                  <Select value={categoryGroupFilter} onValueChange={setCategoryGroupFilter}>
+                    <SelectTrigger className={`w-[200px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-category-group-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Groups</SelectItem>
+                      <SelectItem value="__ungrouped__">Ungrouped</SelectItem>
+                      {allGroupNames.map((name) => (
+                        <SelectItem key={name} value={name}>{name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!isViewOnly && (
+                    <Button variant="outline" onClick={() => setShowGroupsModal(true)} data-testid="bni-manage-groups-btn">
+                      <Tag className="h-4 w-4 mr-2" /> Manage Groups
+                    </Button>
+                  )}
                 </div>
                 <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                 <div className="overflow-x-auto">
@@ -1260,6 +1336,7 @@ export default function BNIPage() {
                     <thead className={bgSecondary}>
                       <tr>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Group</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Description</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                       </tr>
@@ -1267,7 +1344,7 @@ export default function BNIPage() {
                     <tbody className={`divide-y ${borderColor}`}>
                       {filteredCategories.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>
                             {categories.length === 0
                               ? 'No categories yet — click "Add Category" to add the first one.'
                               : 'No categories match your search.'}
@@ -1281,6 +1358,7 @@ export default function BNIPage() {
                               <td className="px-4 py-3">
                                 <Badge className={`${color.bg} ${color.text} border ${color.border} font-semibold`}>{c.name}</Badge>
                               </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{c.group || '—'}</td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{c.description || '—'}</td>
                               <td className="px-4 py-3">
                                 {!isViewOnly && (
@@ -2219,6 +2297,21 @@ export default function BNIPage() {
                 />
               </div>
               <div>
+                <Label className={textPrimary}>Group</Label>
+                <Select value={categoryForm.group || 'none'} onValueChange={(v) => setCategoryForm((p) => ({ ...p, group: v === 'none' ? '' : v }))}>
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-category-group-select">
+                    <SelectValue placeholder="Select a group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">— No group —</SelectItem>
+                    {categoryGroups.map((g) => (
+                      <SelectItem key={g.group_id} value={g.name}>{g.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className={`text-xs ${textSecondary} mt-1`}>Create groups under "Manage Groups".</p>
+              </div>
+              <div>
                 <Label className={textPrimary}>Description</Label>
                 <Textarea
                   value={categoryForm.description}
@@ -2234,6 +2327,47 @@ export default function BNIPage() {
               <Button onClick={saveCategory} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-category-save">
                 {editingCategoryId ? 'Save Changes' : 'Add Category'}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manage Category Groups Modal */}
+        <Dialog open={showGroupsModal} onOpenChange={setShowGroupsModal}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Manage Groups</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <Input
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') createCategoryGroup(); }}
+                  placeholder="New group name (e.g. Construction)"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="bni-group-name-input"
+                />
+                <Button onClick={createCategoryGroup} disabled={groupSaving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-group-create-btn">
+                  {groupSaving ? '…' : 'Create'}
+                </Button>
+              </div>
+              <div className="space-y-1 max-h-72 overflow-y-auto">
+                {categoryGroups.length === 0 ? (
+                  <p className={`text-sm ${textSecondary} text-center py-4`}>No groups yet — create one above.</p>
+                ) : (
+                  categoryGroups.map((g) => (
+                    <div key={g.group_id} className={`flex items-center justify-between px-3 py-2 rounded-lg ${bgSecondary} border ${borderColor}`}>
+                      <span className={textPrimary}>{g.name}</span>
+                      <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteCategoryGroup(g.group_id, g.name)} data-testid={`bni-group-delete-${g.group_id}`}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowGroupsModal(false)}>Done</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
