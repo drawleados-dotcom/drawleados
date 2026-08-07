@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../utils/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import CSVImportModal from '../components/shared/CSVImportModal';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon } from 'lucide-react';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 const OUTREACH_STATUSES = ['To do', 'Contacted', 'Interested', 'Not Interested', 'Converted'];
@@ -28,6 +29,41 @@ const OUTREACH_IMPORT_FIELDS = [
 
 const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '', category_id: '' });
 
+const TABS = [
+  { key: 'outreach', label: 'Outreach', icon: Send },
+  { key: 'category', label: 'Category', icon: Tag },
+  { key: 'target', label: 'Target Category', icon: Target },
+  { key: 'partnership', label: 'Partnership', icon: Handshake },
+];
+
+const TYPE_OPTIONS = [
+  { value: 'none', label: 'No Target Now' },
+  { value: 'target', label: 'Target Category' },
+  { value: 'partnership', label: 'Partnership' },
+];
+
+const TAG_PALETTE = [
+  { bg: 'bg-[#3b82f6]/15', text: 'text-[#3b82f6]', border: 'border-[#3b82f6]/40' },
+  { bg: 'bg-[#10b981]/15', text: 'text-[#10b981]', border: 'border-[#10b981]/40' },
+  { bg: 'bg-[#f59e0b]/15', text: 'text-[#f59e0b]', border: 'border-[#f59e0b]/40' },
+  { bg: 'bg-[#8b5cf6]/15', text: 'text-[#8b5cf6]', border: 'border-[#8b5cf6]/40' },
+  { bg: 'bg-[#ec4899]/15', text: 'text-[#ec4899]', border: 'border-[#ec4899]/40' },
+  { bg: 'bg-[#06b6d4]/15', text: 'text-[#06b6d4]', border: 'border-[#06b6d4]/40' },
+  { bg: 'bg-[#ef4444]/15', text: 'text-[#ef4444]', border: 'border-[#ef4444]/40' },
+];
+const tagColor = (seed) => {
+  const s = String(seed || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffffffff;
+  return TAG_PALETTE[Math.abs(h) % TAG_PALETTE.length];
+};
+
+const typeTriggerColor = (t) => {
+  if (t === 'target') return 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40';
+  if (t === 'partnership') return 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40';
+  return 'bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40';
+};
+
 const BNIOutreachPage = () => {
   const { isDark } = useTheme();
 
@@ -37,8 +73,11 @@ const BNIOutreachPage = () => {
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
 
+  const [activeTab, setActiveTab] = useState('outreach');
+
   const [outreach, setOutreach] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [categoryGroups, setCategoryGroups] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [showModal, setShowModal] = useState(false);
@@ -47,15 +86,25 @@ const BNIOutreachPage = () => {
   const [saving, setSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
+  // Per-tab search + group filters
+  const [catSearch, setCatSearch] = useState('');
+  const [catGroup, setCatGroup] = useState('all');
+  const [tgtSearch, setTgtSearch] = useState('');
+  const [tgtGroup, setTgtGroup] = useState('all');
+  const [partSearch, setPartSearch] = useState('');
+  const [partGroup, setPartGroup] = useState('all');
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [outreachRes, categoriesRes] = await Promise.all([
+      const [outreachRes, categoriesRes, groupsRes] = await Promise.all([
         api.get('/bni/outreach'),
         api.get('/bni/categories'),
+        api.get('/bni/categories/groups').catch(() => ({ data: [] })),
       ]);
       setOutreach(outreachRes.data || []);
       setCategories(categoriesRes.data || []);
+      setCategoryGroups(groupsRes.data || []);
     } catch (error) {
       toast.error('Failed to load BNI Outreach');
     } finally {
@@ -65,12 +114,34 @@ const BNIOutreachPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const openAdd = () => {
-    setEditingId(null);
-    setForm(emptyForm());
-    setShowModal(true);
+  const allGroupNames = useMemo(() => {
+    const set = new Set(categoryGroups.map((g) => g.name));
+    categories.forEach((c) => { if (c.group) set.add(c.group); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [categoryGroups, categories]);
+
+  const filterCats = (list, search, group) => {
+    const q = search.trim().toLowerCase();
+    return list.filter((c) => {
+      if (group === '__ungrouped__') { if (c.group) return false; }
+      else if (group !== 'all') { if ((c.group || '') !== group) return false; }
+      if (q && ![c.name, c.description, c.group].some((v) => (v || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
   };
 
+  // Progress within the group currently selected in the Category tab.
+  const catProgress = useMemo(() => {
+    const scope = catGroup === 'all' || catGroup === '__ungrouped__'
+      ? (catGroup === '__ungrouped__' ? categories.filter((c) => !c.group) : categories)
+      : categories.filter((c) => (c.group || '') === catGroup);
+    const target = scope.filter((c) => c.target_type === 'target').length;
+    const partnership = scope.filter((c) => c.target_type === 'partnership').length;
+    return { total: scope.length, target, partnership };
+  }, [categories, catGroup]);
+
+  // ---- Outreach handlers ----
+  const openAdd = () => { setEditingId(null); setForm(emptyForm()); setShowModal(true); };
   const openEdit = (o) => {
     setEditingId(o.outreach_id);
     setForm({
@@ -81,18 +152,12 @@ const BNIOutreachPage = () => {
     });
     setShowModal(true);
   };
-
   const save = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
     setSaving(true);
     try {
-      if (editingId) {
-        await api.put(`/bni/outreach/${editingId}`, form);
-        toast.success('Outreach entry updated');
-      } else {
-        await api.post('/bni/outreach', form);
-        toast.success('Outreach entry added');
-      }
+      if (editingId) { await api.put(`/bni/outreach/${editingId}`, form); toast.success('Outreach entry updated'); }
+      else { await api.post('/bni/outreach', form); toast.success('Outreach entry added'); }
       setShowModal(false);
       load();
     } catch (error) {
@@ -101,41 +166,97 @@ const BNIOutreachPage = () => {
       setSaving(false);
     }
   };
-
   const updateStatus = async (outreachId, status) => {
     try {
       await api.put(`/bni/outreach/${outreachId}`, { status });
       setOutreach((prev) => prev.map((o) => (o.outreach_id === outreachId ? { ...o, status } : o)));
-    } catch (error) {
-      toast.error('Failed to update status');
-    }
+    } catch (error) { toast.error('Failed to update status'); }
   };
-
   const remove = async (outreachId) => {
     if (!window.confirm('Delete this outreach entry?')) return;
     try {
       await api.delete(`/bni/outreach/${outreachId}`);
       toast.success('Outreach entry deleted');
       load();
-    } catch (error) {
-      toast.error('Failed to delete outreach entry');
-    }
+    } catch (error) { toast.error('Failed to delete outreach entry'); }
   };
-
   const importRows = async (rows) => {
-    const normalizeCategoryText = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
     const results = await Promise.allSettled(rows.map((r) => {
-      const catMatch = categories.find((c) => normalizeCategoryText(c.name) === normalizeCategoryText(r.category_name));
-      return api.post('/bni/outreach', {
-        ...emptyForm(),
-        ...r,
-        category_id: catMatch?.category_id || '',
-      });
+      const catMatch = categories.find((c) => norm(c.name) === norm(r.category_name));
+      return api.post('/bni/outreach', { ...emptyForm(), ...r, category_id: catMatch?.category_id || '' });
     }));
     const success = results.filter((r) => r.status === 'fulfilled').length;
     toast.success(`Imported ${success} of ${rows.length} outreach entries`);
     load();
   };
+
+  // ---- Category type handler ----
+  const updateCategoryType = async (categoryId, targetType) => {
+    try {
+      await api.put(`/bni/categories/${categoryId}`, { target_type: targetType });
+      setCategories((prev) => prev.map((c) => (c.category_id === categoryId ? { ...c, target_type: targetType } : c)));
+    } catch (error) {
+      toast.error('Failed to update type');
+    }
+  };
+
+  // Plain render-functions (NOT components) so the search input keeps focus
+  // across re-renders — a `<SearchBox/>` component would remount each keystroke.
+  const groupFilter = (value, onChange, testid) => (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className={`w-[200px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={testid}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">All Groups</SelectItem>
+        <SelectItem value="__ungrouped__">Ungrouped</SelectItem>
+        {allGroupNames.map((name) => (
+          <SelectItem key={name} value={name}>{name}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
+  const searchBox = (value, onChange, placeholder, testid) => (
+    <div className="relative max-w-sm flex-1 min-w-[180px]">
+      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
+      <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={`pl-9 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={testid} />
+    </div>
+  );
+
+  const categoryTag = (c) => (
+    <Badge className={`${tagColor(c.category_id).bg} ${tagColor(c.category_id).text} border ${tagColor(c.category_id).border} font-semibold`}>{c.name}</Badge>
+  );
+
+  const readOnlyCategoryTable = (list, emptyMsg) => (
+    <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className={bgSecondary}>
+            <tr>
+              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category Name</th>
+              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Group</th>
+              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Description</th>
+            </tr>
+          </thead>
+          <tbody className={`divide-y ${borderColor}`}>
+            {list.length === 0 ? (
+              <tr><td colSpan={3} className={`px-4 py-8 text-center ${textSecondary}`}>{emptyMsg}</td></tr>
+            ) : (
+              list.map((c) => (
+                <tr key={c.category_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                  <td className="px-4 py-3">{categoryTag(c)}</td>
+                  <td className={`px-4 py-3 ${textSecondary}`}>{c.group || '—'}</td>
+                  <td className={`px-4 py-3 ${textSecondary}`}>{c.description || '—'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 
   return (
     <Layout>
@@ -145,92 +266,198 @@ const BNIOutreachPage = () => {
             <h1 className={`text-3xl font-bold flex items-center gap-2 ${textPrimary}`} style={{ fontFamily: 'Plus Jakarta Sans' }}>
               <Send className="h-7 w-7 text-[#6366f1]" /> BNI Outreach
             </h1>
-            <p className={`text-sm ${textSecondary} mt-1`}>Prospects being reached out to for the chapter — shared with the BNI module's Outreach tab.</p>
+            <p className={`text-sm ${textSecondary} mt-1`}>Prospects, categories, and partnership targets for the chapter — shares data with the BNI module.</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowImport(true)} data-testid="bni-outreach-import-btn">
-              <Upload className="h-4 w-4 mr-2" /> Import CSV
-            </Button>
-            <Button onClick={openAdd} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-outreach-add-btn">
-              <Plus className="h-4 w-4 mr-2" /> Add New
-            </Button>
-          </div>
+          {activeTab === 'outreach' && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowImport(true)} data-testid="bni-outreach-import-btn">
+                <Upload className="h-4 w-4 mr-2" /> Import CSV
+              </Button>
+              <Button onClick={openAdd} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-outreach-add-btn">
+                <Plus className="h-4 w-4 mr-2" /> Add New
+              </Button>
+            </div>
+          )}
         </div>
 
-        <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className={bgSecondary}>
-                <tr>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Brand Name</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Chapter Name</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Profile Link</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Website</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
-                  <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
-                </tr>
-              </thead>
-              <tbody className={`divide-y ${borderColor}`}>
-                {loading ? (
-                  <tr><td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
-                ) : outreach.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
-                      No outreach entries yet — click "Add New" or "Import CSV" to get started.
-                    </td>
-                  </tr>
-                ) : (
-                  outreach.map((o) => (
-                    <tr key={o.outreach_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
-                      <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.name}</td>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{o.brand_name || '—'}</td>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{o.chapter_name || '—'}</td>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{o.email || '—'}</td>
-                      <td className="px-4 py-3">
-                        {o.profile_link ? (
-                          <a href={o.profile_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1">
-                            <LinkIcon className="h-3.5 w-3.5" /> View
-                          </a>
-                        ) : '—'}
-                      </td>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{o.phone || '—'}</td>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
-                      <td className="px-4 py-3">
-                        <Select value={o.status || 'To do'} onValueChange={(v) => updateStatus(o.outreach_id, v)}>
-                          <SelectTrigger className={`w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {OUTREACH_STATUSES.map((s) => (
-                              <SelectItem key={s} value={s}>{s}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{o.category_name || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(o)} data-testid={`bni-outreach-edit-${o.outreach_id}`}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)} data-testid={`bni-outreach-delete-${o.outreach_id}`}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+        {/* Tab bar */}
+        <div className="flex flex-wrap gap-2">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                data-testid={`bni-outreach-tab-${tab.key}`}
+                className={`px-4 py-2 text-sm font-medium rounded-lg flex items-center gap-2 transition-all whitespace-nowrap border ${
+                  isActive ? 'bg-[#6366f1] text-white border-transparent shadow-sm' : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                }`}
+              >
+                <Icon className="h-4 w-4" /> {tab.label}
+              </button>
+            );
+          })}
         </div>
+
+        {loading ? (
+          <div className={`text-center py-12 ${textSecondary}`}>Loading…</div>
+        ) : (
+          <>
+            {activeTab === 'outreach' && (
+              <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Brand Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Chapter Name</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Email</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Profile Link</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Phone</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Website</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${borderColor}`}>
+                      {outreach.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
+                            No outreach entries yet — click "Add New" or "Import CSV" to get started.
+                          </td>
+                        </tr>
+                      ) : (
+                        outreach.map((o) => (
+                          <tr key={o.outreach_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                            <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.name}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.brand_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.chapter_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.email || '—'}</td>
+                            <td className="px-4 py-3">
+                              {o.profile_link ? (
+                                <a href={o.profile_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1">
+                                  <LinkIcon className="h-3.5 w-3.5" /> View
+                                </a>
+                              ) : '—'}
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.phone || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
+                            <td className="px-4 py-3">
+                              <Select value={o.status || 'To do'} onValueChange={(v) => updateStatus(o.outreach_id, v)}>
+                                <SelectTrigger className={`w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {OUTREACH_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.category_name || '—'}</td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => openEdit(o)} data-testid={`bni-outreach-edit-${o.outreach_id}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)} data-testid={`bni-outreach-delete-${o.outreach_id}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'category' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {searchBox(catSearch, setCatSearch, 'Search categories…', 'bni-outreach-cat-search')}
+                  {groupFilter(catGroup, setCatGroup, 'bni-outreach-cat-group')}
+                  <div className={`flex items-center gap-2 text-sm ${textSecondary}`}>
+                    <Badge className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40 font-semibold" data-testid="bni-outreach-target-progress">
+                      Target {catProgress.target} / {catProgress.total}
+                    </Badge>
+                    <Badge className="bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40 font-semibold">
+                      Partnership {catProgress.partnership} / {catProgress.total}
+                    </Badge>
+                  </div>
+                </div>
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className={bgSecondary}>
+                        <tr>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category Name</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Group</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Type</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Description</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${borderColor}`}>
+                        {filterCats(categories, catSearch, catGroup).length === 0 ? (
+                          <tr><td colSpan={4} className={`px-4 py-8 text-center ${textSecondary}`}>No categories match.</td></tr>
+                        ) : (
+                          filterCats(categories, catSearch, catGroup).map((c) => (
+                            <tr key={c.category_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                              <td className="px-4 py-3">{categoryTag(c)}</td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{c.group || '—'}</td>
+                              <td className="px-4 py-3">
+                                <Select value={c.target_type || 'none'} onValueChange={(v) => updateCategoryType(c.category_id, v)}>
+                                  <SelectTrigger className={`w-[170px] ${typeTriggerColor(c.target_type || 'none')}`} data-testid={`bni-outreach-cat-type-${c.category_id}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {TYPE_OPTIONS.map((t) => (<SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{c.description || '—'}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'target' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {searchBox(tgtSearch, setTgtSearch, 'Search target categories…', 'bni-outreach-tgt-search')}
+                  {groupFilter(tgtGroup, setTgtGroup, 'bni-outreach-tgt-group')}
+                </div>
+                {readOnlyCategoryTable(
+                  filterCats(categories.filter((c) => c.target_type === 'target'), tgtSearch, tgtGroup),
+                  'No target categories yet — mark categories as "Target Category" in the Category tab.'
+                )}
+              </div>
+            )}
+
+            {activeTab === 'partnership' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {searchBox(partSearch, setPartSearch, 'Search partnerships…', 'bni-outreach-part-search')}
+                  {groupFilter(partGroup, setPartGroup, 'bni-outreach-part-group')}
+                </div>
+                {readOnlyCategoryTable(
+                  filterCats(categories.filter((c) => c.target_type === 'partnership'), partSearch, partGroup),
+                  'No partnership categories yet — mark categories as "Partnership" in the Category tab.'
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         <CSVImportModal
           open={showImport}
@@ -291,9 +518,7 @@ const BNIOutreachPage = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">—</SelectItem>
-                    {categories.map((c) => (
-                      <SelectItem key={c.category_id} value={c.category_id}>{c.name}</SelectItem>
-                    ))}
+                    {categories.map((c) => (<SelectItem key={c.category_id} value={c.category_id}>{c.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
@@ -304,9 +529,7 @@ const BNIOutreachPage = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {OUTREACH_STATUSES.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
+                    {OUTREACH_STATUSES.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>

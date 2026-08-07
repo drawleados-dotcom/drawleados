@@ -66,16 +66,23 @@ async def update_bni_settings(payload: BNISettingsUpdate, request: Request):
 
 # ---------- Categories ----------
 
+# Outreach classification of a category (used by the BNI Outreach page's
+# Category / Target Category / Partnership tabs).
+CATEGORY_TARGET_TYPES = ["none", "target", "partnership"]
+
+
 class BNICategoryCreate(BaseModel):
     name: str
     description: Optional[str] = ""
     group: Optional[str] = ""
+    target_type: Optional[str] = "none"
 
 
 class BNICategoryUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     group: Optional[str] = None
+    target_type: Optional[str] = None
 
 
 class BNICategoryGroupCreate(BaseModel):
@@ -184,11 +191,13 @@ async def create_bni_category(payload: BNICategoryCreate, request: Request):
         raise HTTPException(status_code=400, detail="Category name is required")
 
     now = datetime.now(timezone.utc).isoformat()
+    target_type = payload.target_type if payload.target_type in CATEGORY_TARGET_TYPES else "none"
     category = {
         "category_id": f"bnicat_{uuid.uuid4().hex[:10]}",
         "name": name,
         "description": (payload.description or "").strip(),
         "group": (payload.group or "").strip(),
+        "target_type": target_type,
         "created_by": user.user_id,
         "created_at": now,
         "updated_at": now,
@@ -216,6 +225,10 @@ async def update_bni_category(category_id: str, payload: BNICategoryUpdate, requ
         update_data["description"] = payload.description.strip()
     if payload.group is not None:
         update_data["group"] = payload.group.strip()
+    if payload.target_type is not None:
+        if payload.target_type not in CATEGORY_TARGET_TYPES:
+            raise HTTPException(status_code=400, detail=f"Invalid target type: {payload.target_type}")
+        update_data["target_type"] = payload.target_type
 
     await db.bni_categories.update_one({"category_id": category_id}, {"$set": update_data})
     return await db.bni_categories.find_one({"category_id": category_id}, {"_id": 0})
