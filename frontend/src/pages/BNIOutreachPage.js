@@ -107,6 +107,7 @@ const BNIOutreachPage = () => {
   const [filterChapter, setFilterChapter] = useState('all');
   const [filterLocation, setFilterLocation] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [filterWebsite, setFilterWebsite] = useState('all'); // all | has | none
   const [filterStatus, setFilterStatus] = useState(null); // null = all; set by clicking a summary card
 
   // Per-tab search + group filters
@@ -162,12 +163,18 @@ const BNIOutreachPage = () => {
 
   // Rows matching the Chapter/Location/Category dropdowns — the summary card
   // counts are computed over THIS set, so they stay meaningful per filter.
+  const hasWebsite = (o) => {
+    const w = (o.website || '').trim().toLowerCase();
+    return w !== '' && w !== 'none' && w !== 'n/a' && w !== '-';
+  };
   const dropdownFiltered = useMemo(() => outreach.filter((o) => {
     if (filterChapter !== 'all' && (o.chapter_name || '') !== filterChapter) return false;
     if (filterLocation !== 'all' && (o.location || '') !== filterLocation) return false;
     if (filterCategory !== 'all' && (o.category_name || '') !== filterCategory) return false;
+    if (filterWebsite === 'has' && !hasWebsite(o)) return false;
+    if (filterWebsite === 'none' && hasWebsite(o)) return false;
     return true;
-  }), [outreach, filterChapter, filterLocation, filterCategory]);
+  }), [outreach, filterChapter, filterLocation, filterCategory, filterWebsite]);
 
   const outreachSummary = useMemo(() => {
     const counts = { Total: dropdownFiltered.length };
@@ -438,6 +445,16 @@ const BNIOutreachPage = () => {
                       </SelectContent>
                     </Select>
                   ))}
+                  <Select value={filterWebsite} onValueChange={setFilterWebsite}>
+                    <SelectTrigger className={`w-[160px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-outreach-filter-website">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Websites</SelectItem>
+                      <SelectItem value="has">Has Website</SelectItem>
+                      <SelectItem value="none">No Website</SelectItem>
+                    </SelectContent>
+                  </Select>
                   {filterStatus && (
                     <Button variant="outline" size="sm" onClick={() => setFilterStatus(null)} data-testid="bni-outreach-clear-status">
                       Status: {filterStatus} ✕
