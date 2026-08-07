@@ -398,6 +398,7 @@ const BNIOutreachPage = () => {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Group</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Source</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                       </tr>
@@ -405,7 +406,7 @@ const BNIOutreachPage = () => {
                     <tbody className={`divide-y ${borderColor}`}>
                       {outreach.length === 0 ? (
                         <tr>
-                          <td colSpan={12} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={13} className={`px-4 py-8 text-center ${textSecondary}`}>
                             No outreach entries yet — click "Add New" or "Import CSV" to get started.
                           </td>
                         </tr>
@@ -437,6 +438,7 @@ const BNIOutreachPage = () => {
                             </td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.category_name || '—'}</td>
+                            <td className={`px-4 py-3 ${textSecondary}`}>{o.group || '—'}</td>
                             <td className="px-4 py-3">
                               {o.source_name ? (
                                 <Badge className="bg-[#06b6d4]/15 text-[#06b6d4] border border-[#06b6d4]/40">{o.source_name}</Badge>
@@ -464,7 +466,7 @@ const BNIOutreachPage = () => {
             {activeTab === 'sources' && (
               <div className="space-y-3">
                 <p className={`text-sm ${textSecondary}`}>
-                  Add Google Sheets (shared as "Anyone with the link can view") with the same columns as the Outreach CSV. Sync pulls their rows into the Outreach tab.
+                  Add Google Sheets shared as "Anyone with the link can view". Each tab is treated as a category — the tab name is the category, and the part before its first bracket is the group. Sync pulls every tab's rows into the Outreach tab.
                 </p>
                 <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
                   <div className="overflow-x-auto">
@@ -613,7 +615,7 @@ const BNIOutreachPage = () => {
               <div>
                 <Label className={textPrimary}>Google Sheet Link *</Label>
                 <Input value={sourceForm.sheet_url} onChange={(e) => setSourceForm({ ...sourceForm, sheet_url: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="https://docs.google.com/spreadsheets/d/…" data-testid="bni-source-url-input" />
-                <p className={`text-xs ${textSecondary} mt-1`}>Share the sheet as "Anyone with the link can view". Columns: Name, Brand Name, Chapter Name, Email, Profile Link, Phone, Website, Status, Location, Category.</p>
+                <p className={`text-xs ${textSecondary} mt-1`}>Share the sheet as "Anyone with the link can view". Each tab becomes a category — the tab name is the category, and the part before its first bracket is the group. Row columns: Name, Brand Name, Chapter Name, Email, Profile Link, Phone, Website, Status, Location.</p>
               </div>
             </div>
             <DialogFooter>
