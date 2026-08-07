@@ -64,6 +64,13 @@ const typeTriggerColor = (t) => {
   return 'bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40';
 };
 
+const countByGroup = (list) => {
+  const byGroup = {};
+  let ungrouped = 0;
+  list.forEach((c) => { if (c.group) byGroup[c.group] = (byGroup[c.group] || 0) + 1; else ungrouped += 1; });
+  return { byGroup, ungrouped, total: list.length };
+};
+
 const BNIOutreachPage = () => {
   const { isDark } = useTheme();
 
@@ -129,6 +136,9 @@ const BNIOutreachPage = () => {
       return true;
     });
   };
+
+  const targetByGroup = useMemo(() => countByGroup(categories.filter((c) => c.target_type === 'target')), [categories]);
+  const partnershipByGroup = useMemo(() => countByGroup(categories.filter((c) => c.target_type === 'partnership')), [categories]);
 
   // Progress within the group currently selected in the Category tab.
   const catProgress = useMemo(() => {
@@ -203,20 +213,27 @@ const BNIOutreachPage = () => {
 
   // Plain render-functions (NOT components) so the search input keeps focus
   // across re-renders — a `<SearchBox/>` component would remount each keystroke.
-  const groupFilter = (value, onChange, testid) => (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={`w-[200px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={testid}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">All Groups</SelectItem>
-        <SelectItem value="__ungrouped__">Ungrouped</SelectItem>
-        {allGroupNames.map((name) => (
-          <SelectItem key={name} value={name}>{name}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
+  // When `counts` is passed, each group shows its count and groups that have
+  // any (e.g. target categories) are ordered first.
+  const groupFilter = (value, onChange, testid, counts) => {
+    const names = counts
+      ? [...allGroupNames].sort((a, b) => (counts.byGroup[b] || 0) - (counts.byGroup[a] || 0) || a.localeCompare(b))
+      : allGroupNames;
+    return (
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className={`w-[220px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={testid}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          <SelectItem value="all">All Groups{counts ? ` (${counts.total})` : ''}</SelectItem>
+          <SelectItem value="__ungrouped__">Ungrouped{counts ? ` (${counts.ungrouped})` : ''}</SelectItem>
+          {names.map((name) => (
+            <SelectItem key={name} value={name}>{name}{counts ? ` (${counts.byGroup[name] || 0})` : ''}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  };
 
   const searchBox = (value, onChange, placeholder, testid) => (
     <div className="relative max-w-sm flex-1 min-w-[180px]">
@@ -435,7 +452,10 @@ const BNIOutreachPage = () => {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   {searchBox(tgtSearch, setTgtSearch, 'Search target categories…', 'bni-outreach-tgt-search')}
-                  {groupFilter(tgtGroup, setTgtGroup, 'bni-outreach-tgt-group')}
+                  {groupFilter(tgtGroup, setTgtGroup, 'bni-outreach-tgt-group', targetByGroup)}
+                  <Badge className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40 font-semibold" data-testid="bni-outreach-target-count">
+                    {targetByGroup.total} Target Categories
+                  </Badge>
                 </div>
                 {readOnlyCategoryTable(
                   filterCats(categories.filter((c) => c.target_type === 'target'), tgtSearch, tgtGroup),
@@ -448,7 +468,10 @@ const BNIOutreachPage = () => {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 flex-wrap">
                   {searchBox(partSearch, setPartSearch, 'Search partnerships…', 'bni-outreach-part-search')}
-                  {groupFilter(partGroup, setPartGroup, 'bni-outreach-part-group')}
+                  {groupFilter(partGroup, setPartGroup, 'bni-outreach-part-group', partnershipByGroup)}
+                  <Badge className="bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40 font-semibold" data-testid="bni-outreach-partnership-count">
+                    {partnershipByGroup.total} Partnerships
+                  </Badge>
                 </div>
                 {readOnlyCategoryTable(
                   filterCats(categories.filter((c) => c.target_type === 'partnership'), partSearch, partGroup),
