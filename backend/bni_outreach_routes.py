@@ -12,7 +12,6 @@ import csv
 import io
 import re
 import uuid
-import html as htmllib
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -60,31 +59,6 @@ def _sheet_csv_url(url: str):
     if gm:
         export += f"&gid={gm.group(1)}"
     return export
-
-
-async def _fetch_worksheets(client, sheet_id):
-    """List every worksheet (tab) of a public sheet as [{name, gid}] by parsing
-    the htmlview page's sheet menu. Empty when it can't be read (private sheet
-    or unexpected markup) — caller then falls back to the single-CSV path."""
-    try:
-        r = await client.get(f"https://docs.google.com/spreadsheets/d/{sheet_id}/htmlview")
-    except Exception:
-        return []
-    if r.status_code != 200:
-        return []
-    page = r.text
-    pairs = re.findall(r'id="sheet-button-(\d+)"[^>]*>\s*<a[^>]*>([^<]*)</a>', page)
-    if not pairs:
-        pairs = re.findall(r'href="#gid=(\d+)"[^>]*>([^<]*)</a>', page)
-    out = []
-    seen = set()
-    for gid, name in pairs:
-        nm = htmllib.unescape(name).strip()
-        if gid in seen or not nm:
-            continue
-        seen.add(gid)
-        out.append({"gid": gid, "name": nm})
-    return out
 
 
 def _map_headers(header_row):
@@ -297,15 +271,53 @@ async def delete_outreach_source(source_id: str, request: Request):
     return {"success": True}
 
 
+def _cell_str(v):
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
 def _extract_row(row, header_map):
     rec = {}
     for i, field in header_map.items():
-        rec[field] = row[i].strip() if i < len(row) else ""
+        rec[field] = _cell_str(row[i]) if i < len(row) else ""
     return rec
 
 
 def _group_from(name):
     return name.split("(", 1)[0].strip() if "(" in (name or "") else (name or "")
+
+
+async def _fetch_workbook_sheets(client, sheet_id):
+    """Read every worksheet of a public sheet via its XLSX export — reliable
+    for 'anyone with the link can view' sheets. Returns [(name, rows)] where
+    rows is a list of value-tuples (first row = header), or None if the sheet
+    couldn't be read as a workbook (e.g. private, so an HTML login page comes
+    back instead of xlsx). Returns None (→ CSV fallback) if openpyxl isn't
+    installed yet, so a missing dep degrades gracefully."""
+    try:
+        import openpyxl
+    except Exception:
+        return None
+    try:
+        resp = await client.get(f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx")
+    except Exception:
+        return None
+    if resp.status_code != 200:
+        return None
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(resp.content), read_only=True, data_only=True)
+    except Exception:
+        return None
+    sheets = []
+    for nm in wb.sheetnames:
+        ws = wb[nm]
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        sheets.append((nm, rows))
+    wb.close()
+    return sheets
 
 
 @bni_outreach_sources_router.post("/{source_id}/sync")
@@ -331,29 +343,24 @@ async def sync_outreach_source(source_id: str, request: Request):
     imported = 0
     updated = 0
     total = 0
+    tabs = 0
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
-        worksheets = await _fetch_worksheets(client, sheet_id)
+    async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+        sheets = await _fetch_workbook_sheets(client, sheet_id)
 
-        if worksheets:
+        if sheets is not None:
             # Per-tab: tab name = category, before "(" = group.
-            for ws in worksheets:
-                try:
-                    resp = await client.get(f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={ws['gid']}")
-                except Exception:
-                    continue
-                if resp.status_code != 200 or "text/csv" not in (resp.headers.get("content-type") or ""):
-                    continue
-                rows = list(csv.reader(io.StringIO(resp.text)))
+            for nm, rows in sheets:
                 if not rows:
                     continue
                 header_map = _map_headers(rows[0])
                 if "name" not in header_map.values():
                     continue
-                cat = cat_by_name.get(_norm(ws["name"]))
+                tabs += 1
+                cat = cat_by_name.get(_norm(nm))
                 cat_id = cat["category_id"] if cat else ""
-                cat_name = ws["name"]
-                group = _group_from(ws["name"])
+                cat_name = nm
+                group = _group_from(nm)
                 for row in rows[1:]:
                     rec = _extract_row(row, header_map)
                     name = (rec.get("name") or "").strip()
@@ -364,7 +371,7 @@ async def sync_outreach_source(source_id: str, request: Request):
                     imported += i_add
                     updated += u_add
         else:
-            # Fallback: single sheet, category comes from a Category column.
+            # Fallback: single CSV sheet, category comes from a Category column.
             csv_url = _sheet_csv_url(source.get("sheet_url", ""))
             try:
                 resp = await client.get(csv_url)
@@ -378,6 +385,7 @@ async def sync_outreach_source(source_id: str, request: Request):
             header_map = _map_headers(rows[0])
             if "name" not in header_map.values():
                 raise HTTPException(status_code=400, detail="The sheet needs a 'Name' column")
+            tabs = 1
             for row in rows[1:]:
                 rec = _extract_row(row, header_map)
                 name = (rec.get("name") or "").strip()
@@ -392,8 +400,11 @@ async def sync_outreach_source(source_id: str, request: Request):
                 imported += i_add
                 updated += u_add
 
+    if tabs == 0 and total == 0:
+        raise HTTPException(status_code=400, detail="No rows found — make sure the sheet is shared as 'Anyone with the link can view' and each tab has a 'Name' column.")
+
     await db.bni_outreach_sources.update_one(
         {"source_id": source_id},
-        {"$set": {"last_synced_at": now, "last_row_count": total}},
+        {"$set": {"last_synced_at": now, "last_row_count": total, "last_tab_count": tabs}},
     )
-    return {"imported": imported, "updated": updated, "total_rows": total}
+    return {"imported": imported, "updated": updated, "total_rows": total, "tabs": tabs}

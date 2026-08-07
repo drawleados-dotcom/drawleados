@@ -237,8 +237,8 @@ const BNIOutreachPage = () => {
     setSyncingId(sourceId);
     try {
       const res = await api.post(`/bni/outreach-sources/${sourceId}/sync`);
-      const { imported = 0, updated = 0 } = res.data || {};
-      toast.success(`Synced — ${imported} added, ${updated} updated`);
+      const { imported = 0, updated = 0, tabs = 0, total_rows = 0 } = res.data || {};
+      toast.success(`Synced ${tabs} tab${tabs === 1 ? '' : 's'} · ${total_rows} rows — ${imported} added, ${updated} updated`);
       load();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to sync source');
@@ -476,13 +476,14 @@ const BNIOutreachPage = () => {
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Source</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Sheet</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Last Synced</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Tabs</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Rows</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${borderColor}`}>
                         {sources.length === 0 ? (
-                          <tr><td colSpan={5} className={`px-4 py-8 text-center ${textSecondary}`}>No sources yet — click "Add Source" to connect a Google Sheet.</td></tr>
+                          <tr><td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>No sources yet — click "Add Source" to connect a Google Sheet.</td></tr>
                         ) : (
                           sources.map((s) => (
                             <tr key={s.source_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
@@ -493,6 +494,7 @@ const BNIOutreachPage = () => {
                                 </a>
                               </td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{s.last_synced_at ? new Date(s.last_synced_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never'}</td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{s.last_tab_count || 0}</td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{s.last_row_count || 0}</td>
                               <td className="px-4 py-3">
                                 <div className="flex gap-1">
