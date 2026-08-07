@@ -32,6 +32,7 @@ import {
   Handshake,
   Bot,
   Linkedin,
+  Send,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -506,6 +507,21 @@ const Sidebar = () => {
           >
             <Handshake className="h-5 w-5" strokeWidth={2} />
             {!isCollapsed && 'BNI'}
+          </Link>
+        )}
+
+        {/* BNI Outreach — standalone page mirroring the BNI module's Outreach
+            tab (same data). Super Admin always sees it; also grantable via
+            Module Access. */}
+        {(userRole === 'super_admin' || hasAccess('bni_outreach') || hasAccess('bni')) && (
+          <Link
+            to="/bni-outreach"
+            data-testid="nav-bni-outreach"
+            className={`${navItemBase} ${isCollapsed ? 'justify-center px-2' : ''} ${location.pathname === '/bni-outreach' ? navItemActive : navItemInactive}`}
+            title={isCollapsed ? 'BNI Outreach' : ''}
+          >
+            <Send className="h-5 w-5" strokeWidth={2} />
+            {!isCollapsed && 'BNI Outreach'}
           </Link>
         )}
 

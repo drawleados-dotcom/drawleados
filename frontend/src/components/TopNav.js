@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, User, Settings as SettingsIcon, Package, DollarSign,
   UserCircle, Shield, MessageSquare, Megaphone, ClipboardList, ClipboardCheck,
   Globe, FolderOpen, Calendar, Briefcase, FileSpreadsheet, Search, Building2,
-  Handshake, Bot, Linkedin,
+  Handshake, Bot, Linkedin, Send,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -33,7 +33,7 @@ export default function TopNav() {
     if (module === 'dashboard' && (userRole === 'super_admin' || userRole === 'admin')) return true;
     // Client Master / Service & Packages / BNI / LinkedIn — Super Admin-only
     // additions, always visible regardless of a curated module_access list.
-    if ((module === 'client_master' || module === 'service_packages' || module === 'bni' || module === 'linkedin') && userRole === 'super_admin') return true;
+    if ((module === 'client_master' || module === 'service_packages' || module === 'bni' || module === 'bni_outreach' || module === 'linkedin') && userRole === 'super_admin') return true;
     // Automation — open to Admin too (not just Super Admin), plus a
     // hardcoded bypass for AUTOMATION_HARDCODED_EMAILS regardless of role.
     if (module === 'automation') {
@@ -71,6 +71,7 @@ export default function TopNav() {
     { key: 'client_master', path: '/client-master',   label: 'Clients Master View', icon: Building2 },
     { key: 'service_packages', path: '/service-packages', label: 'Service and Packages', icon: Package },
     { key: 'bni',           path: '/bni',             label: 'BNI',             icon: Handshake },
+    { key: 'bni_outreach',  path: '/bni-outreach',    label: 'BNI Outreach',    icon: Send },
     { key: 'automation',    path: '/automation',      label: 'Automation',      icon: Bot },
     { key: 'linkedin',      path: '/linkedin',        label: 'LinkedIn',       icon: Linkedin },
     { key: 'settings',      path: '/settings',        label: 'Settings',        icon: SettingsIcon },
