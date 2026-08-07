@@ -22,8 +22,8 @@ bni_outreach_router = APIRouter(prefix="/bni/outreach", tags=["bni"])
 bni_outreach_sources_router = APIRouter(prefix="/bni/outreach-sources", tags=["bni"])
 
 OUTREACH_STATUSES = [
-    "To do", "RNR", "Scheduled One to One", "One to One Completed",
-    "Not Interested", "Relationship", "Lead", "Later",
+    "To do", "New Lead", "Contacted", "RNR", "Scheduled One to One",
+    "One to One Completed", "Not Interested", "Relationship", "Lead", "Later",
 ]
 
 # Column synonyms used when importing outreach rows from a Google Sheet source
@@ -78,7 +78,11 @@ def _map_headers(header_row):
 async def _upsert_outreach_row(db, source_id, source_name, name, rec, cat_id, cat_name, group, user_id, now):
     """Insert-or-update one outreach row from a synced source. Deduped by
     (source, category, name). Returns (imported, updated) as 0/1."""
-    status = rec.get("status") if rec.get("status") in OUTREACH_STATUSES else "To do"
+    # Untouched leads from a sheet land in the "New Lead" stage by default.
+    status = rec.get("status") if rec.get("status") in OUTREACH_STATUSES else "New Lead"
+    # Sheet-owned columns that a re-sync always refreshes. Status and remarks
+    # are intentionally excluded on update so a user's manual pipeline changes
+    # aren't wiped by the next sync.
     fields = {
         "name": name,
         "brand_name": rec.get("brand_name", ""),
@@ -87,7 +91,6 @@ async def _upsert_outreach_row(db, source_id, source_name, name, rec, cat_id, ca
         "profile_link": rec.get("profile_link", ""),
         "phone": rec.get("phone", ""),
         "website": rec.get("website", ""),
-        "status": status,
         "location": rec.get("location", ""),
         "category_id": cat_id,
         "category_name": cat_name,
@@ -107,7 +110,13 @@ async def _upsert_outreach_row(db, source_id, source_name, name, rec, cat_id, ca
     if existing:
         await db.bni_outreach.update_one({"outreach_id": existing["outreach_id"]}, {"$set": fields})
         return 0, 1
-    fields.update({"outreach_id": f"bniout_{uuid.uuid4().hex[:10]}", "created_by": user_id, "created_at": now})
+    fields.update({
+        "status": status,
+        "remarks": "",
+        "outreach_id": f"bniout_{uuid.uuid4().hex[:10]}",
+        "created_by": user_id,
+        "created_at": now,
+    })
     await db.bni_outreach.insert_one(fields)
     return 1, 0
 
@@ -204,6 +213,7 @@ class OutreachCreate(BaseModel):
     status: str = "To do"
     location: str = ""
     category_id: str = ""
+    remarks: str = ""
 
 
 class OutreachUpdate(BaseModel):
@@ -217,6 +227,7 @@ class OutreachUpdate(BaseModel):
     status: Optional[str] = None
     location: Optional[str] = None
     category_id: Optional[str] = None
+    remarks: Optional[str] = None
 
 
 @bni_outreach_router.get("")
@@ -257,6 +268,7 @@ async def create_outreach(payload: OutreachCreate, request: Request):
         "category_id": payload.category_id,
         "category_name": category_name,
         "group": group,
+        "remarks": (payload.remarks or "").strip(),
         "created_by": user.user_id,
         "created_at": now,
         "updated_at": now,

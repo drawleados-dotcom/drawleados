@@ -9,13 +9,14 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import CSVImportModal from '../components/shared/CSVImportModal';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone } from 'lucide-react';
+import { Textarea } from '../components/ui/textarea';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
-const OUTREACH_STATUSES = ['To do', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
+const OUTREACH_STATUSES = ['To do', 'New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later'];
 
-// Cells shown in the Outreach summary card (in this order).
-const SUMMARY_STATUSES = ['RNR', 'One to One Completed', 'Scheduled One to One', 'Not Interested', 'Relationship', 'Lead', 'Later'];
+// Summary card cells — every stage (in this order).
+const SUMMARY_STATUSES = ['New Lead', 'Contacted', 'RNR', 'Scheduled One to One', 'One to One Completed', 'Not Interested', 'Relationship', 'Lead', 'Later', 'To do'];
 
 const OUTREACH_IMPORT_FIELDS = [
   { key: 'name', label: 'Name', required: true, synonyms: ['name'] },
@@ -30,7 +31,7 @@ const OUTREACH_IMPORT_FIELDS = [
   { key: 'category_name', label: 'Category', synonyms: ['category', 'category name', 'business category'] },
 ];
 
-const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '', category_id: '' });
+const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: '', profile_link: '', phone: '', website: '', status: 'To do', location: '', category_id: '', remarks: '' });
 
 const TABS = [
   { key: 'outreach', label: 'Outreach', icon: Send },
@@ -96,6 +97,13 @@ const BNIOutreachPage = () => {
   const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
+
+  // View popup (Details / Remarks)
+  const [showView, setShowView] = useState(false);
+  const [viewEntry, setViewEntry] = useState(null);
+  const [viewTab, setViewTab] = useState('details');
+  const [remarksDraft, setRemarksDraft] = useState('');
+  const [remarksSaving, setRemarksSaving] = useState(false);
 
   const [sources, setSources] = useState([]);
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -210,9 +218,30 @@ const BNIOutreachPage = () => {
       name: o.name || '', brand_name: o.brand_name || '', chapter_name: o.chapter_name || '',
       email: o.email || '', profile_link: o.profile_link || '', phone: o.phone || '',
       website: o.website || '', status: o.status || 'To do', location: o.location || '',
-      category_id: o.category_id || '',
+      category_id: o.category_id || '', remarks: o.remarks || '',
     });
     setShowModal(true);
+  };
+
+  const openView = (o) => {
+    setViewEntry(o);
+    setViewTab('details');
+    setRemarksDraft(o.remarks || '');
+    setShowView(true);
+  };
+  const saveRemarks = async () => {
+    if (!viewEntry) return;
+    setRemarksSaving(true);
+    try {
+      await api.put(`/bni/outreach/${viewEntry.outreach_id}`, { remarks: remarksDraft });
+      setOutreach((prev) => prev.map((o) => (o.outreach_id === viewEntry.outreach_id ? { ...o, remarks: remarksDraft } : o)));
+      setViewEntry((v) => ({ ...v, remarks: remarksDraft }));
+      toast.success('Remarks saved');
+    } catch (error) {
+      toast.error('Failed to save remarks');
+    } finally {
+      setRemarksSaving(false);
+    }
   };
   const save = async () => {
     if (!form.name.trim()) { toast.error('Name is required'); return; }
@@ -541,6 +570,9 @@ const BNIOutreachPage = () => {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex gap-1">
+                                <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => openView(o)} data-testid={`bni-outreach-view-${o.outreach_id}`}>
+                                  <Eye className="h-4 w-4" />
+                                </Button>
                                 <Button variant="ghost" size="sm" onClick={() => openEdit(o)} data-testid={`bni-outreach-edit-${o.outreach_id}`}>
                                   <Pencil className="h-4 w-4" />
                                 </Button>
@@ -572,6 +604,7 @@ const BNIOutreachPage = () => {
                           <p className={`text-xs ${textSecondary} truncate`}>{[o.brand_name, o.chapter_name].filter(Boolean).join(' · ') || '—'}</p>
                         </div>
                         <div className="flex gap-1 shrink-0">
+                          <Button variant="ghost" size="sm" className="text-[#6366f1]" onClick={() => openView(o)}><Eye className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => openEdit(o)}><Pencil className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => remove(o.outreach_id)}><Trash2 className="h-4 w-4" /></Button>
                         </div>
@@ -786,6 +819,76 @@ const BNIOutreachPage = () => {
           textSecondary={textSecondary}
           borderColor={borderColor}
         />
+
+        <Dialog open={showView} onOpenChange={setShowView}>
+          <DialogContent className={`${bgCard} max-w-lg`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>{viewEntry?.name}</DialogTitle>
+            </DialogHeader>
+            <div className={`inline-flex rounded-lg border ${borderColor} p-1 ${bgSecondary} w-fit`}>
+              {[{ k: 'details', l: 'Details' }, { k: 'remarks', l: 'Remarks' }].map((t) => (
+                <button
+                  key={t.k}
+                  onClick={() => setViewTab(t.k)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${viewTab === t.k ? 'bg-[#6366f1] text-white' : textSecondary}`}
+                  data-testid={`bni-outreach-view-tab-${t.k}`}
+                >
+                  {t.l}
+                </button>
+              ))}
+            </div>
+            {viewEntry && viewTab === 'details' && (
+              <div className="space-y-2 text-sm">
+                {[
+                  ['Brand Name', viewEntry.brand_name],
+                  ['Chapter Name', viewEntry.chapter_name],
+                  ['Email', viewEntry.email],
+                  ['Phone', viewEntry.phone],
+                  ['Website', viewEntry.website],
+                  ['Location', viewEntry.location],
+                  ['Category', viewEntry.category_name],
+                  ['Group', viewEntry.group],
+                  ['Status', viewEntry.status],
+                  ['Source', viewEntry.source_name],
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between gap-3">
+                    <span className={textSecondary}>{label}</span>
+                    <span className={`${textPrimary} text-right break-all`}>{val || '—'}</span>
+                  </div>
+                ))}
+                <div className="flex gap-2 pt-2">
+                  {viewEntry.profile_link && (
+                    <a href={viewEntry.profile_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline inline-flex items-center gap-1">
+                      <LinkIcon className="h-4 w-4" /> Profile
+                    </a>
+                  )}
+                  {viewEntry.phone && (
+                    <a href={`tel:${viewEntry.phone}`} className="text-[#10b981] hover:underline inline-flex items-center gap-1">
+                      <Phone className="h-4 w-4" /> Call
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+            {viewEntry && viewTab === 'remarks' && (
+              <div className="space-y-3">
+                <Textarea
+                  value={remarksDraft}
+                  onChange={(e) => setRemarksDraft(e.target.value)}
+                  rows={6}
+                  placeholder="Add remarks about this lead…"
+                  className={`${bgSecondary} border ${borderColor}`}
+                  data-testid="bni-outreach-remarks-input"
+                />
+                <div className="flex justify-end">
+                  <Button onClick={saveRemarks} disabled={remarksSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-outreach-remarks-save">
+                    {remarksSaving ? 'Saving…' : 'Save Remarks'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={showModal} onOpenChange={setShowModal}>
           <DialogContent className={`${bgCard} max-w-lg`}>
