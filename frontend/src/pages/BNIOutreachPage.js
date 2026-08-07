@@ -9,7 +9,7 @@ import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import CSVImportModal from '../components/shared/CSVImportModal';
-import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search } from 'lucide-react';
+import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const OUTREACH_STATUSES = ['To do', 'Contacted', 'Interested', 'Not Interested', 'Converted'];
@@ -31,6 +31,7 @@ const emptyForm = () => ({ name: '', brand_name: '', chapter_name: '', email: ''
 
 const TABS = [
   { key: 'outreach', label: 'Outreach', icon: Send },
+  { key: 'sources', label: 'Sources', icon: Database },
   { key: 'category', label: 'Category', icon: Tag },
   { key: 'target', label: 'Target Category', icon: Target },
   { key: 'partnership', label: 'Partnership', icon: Handshake },
@@ -93,6 +94,12 @@ const BNIOutreachPage = () => {
   const [saving, setSaving] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
+  const [sources, setSources] = useState([]);
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [sourceForm, setSourceForm] = useState({ name: '', sheet_url: '' });
+  const [sourceSaving, setSourceSaving] = useState(false);
+  const [syncingId, setSyncingId] = useState(null);
+
   // Per-tab search + group filters
   const [catSearch, setCatSearch] = useState('');
   const [catGroup, setCatGroup] = useState('all');
@@ -104,14 +111,16 @@ const BNIOutreachPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [outreachRes, categoriesRes, groupsRes] = await Promise.all([
+      const [outreachRes, categoriesRes, groupsRes, sourcesRes] = await Promise.all([
         api.get('/bni/outreach'),
         api.get('/bni/categories'),
         api.get('/bni/categories/groups').catch(() => ({ data: [] })),
+        api.get('/bni/outreach-sources').catch(() => ({ data: [] })),
       ]);
       setOutreach(outreachRes.data || []);
       setCategories(categoriesRes.data || []);
       setCategoryGroups(groupsRes.data || []);
+      setSources(sourcesRes.data || []);
     } catch (error) {
       toast.error('Failed to load BNI Outreach');
     } finally {
@@ -199,6 +208,53 @@ const BNIOutreachPage = () => {
     const success = results.filter((r) => r.status === 'fulfilled').length;
     toast.success(`Imported ${success} of ${rows.length} outreach entries`);
     load();
+  };
+
+  // ---- Sources handlers ----
+  const loadSources = async () => {
+    try {
+      const res = await api.get('/bni/outreach-sources');
+      setSources(res.data || []);
+    } catch (error) { /* silent */ }
+  };
+  const openAddSource = () => { setSourceForm({ name: '', sheet_url: '' }); setShowSourceModal(true); };
+  const saveSource = async () => {
+    if (!sourceForm.name.trim()) { toast.error('Source name is required'); return; }
+    if (!sourceForm.sheet_url.trim()) { toast.error('Paste the Google Sheet link'); return; }
+    setSourceSaving(true);
+    try {
+      await api.post('/bni/outreach-sources', sourceForm);
+      toast.success('Source added');
+      setShowSourceModal(false);
+      loadSources();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add source');
+    } finally {
+      setSourceSaving(false);
+    }
+  };
+  const syncSource = async (sourceId) => {
+    setSyncingId(sourceId);
+    try {
+      const res = await api.post(`/bni/outreach-sources/${sourceId}/sync`);
+      const { imported = 0, updated = 0 } = res.data || {};
+      toast.success(`Synced — ${imported} added, ${updated} updated`);
+      load();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to sync source');
+    } finally {
+      setSyncingId(null);
+    }
+  };
+  const deleteSource = async (sourceId) => {
+    if (!window.confirm('Delete this source? Rows it imported stay in the Outreach list.')) return;
+    try {
+      await api.delete(`/bni/outreach-sources/${sourceId}`);
+      toast.success('Source deleted');
+      load();
+    } catch (error) {
+      toast.error('Failed to delete source');
+    }
   };
 
   // ---- Category type handler ----
@@ -295,6 +351,11 @@ const BNIOutreachPage = () => {
               </Button>
             </div>
           )}
+          {activeTab === 'sources' && (
+            <Button onClick={openAddSource} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-outreach-add-source-btn">
+              <Plus className="h-4 w-4 mr-2" /> Add Source
+            </Button>
+          )}
         </div>
 
         {/* Tab bar */}
@@ -337,13 +398,14 @@ const BNIOutreachPage = () => {
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Status</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
+                        <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Source</th>
                         <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderColor}`}>
                       {outreach.length === 0 ? (
                         <tr>
-                          <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
+                          <td colSpan={12} className={`px-4 py-8 text-center ${textSecondary}`}>
                             No outreach entries yet — click "Add New" or "Import CSV" to get started.
                           </td>
                         </tr>
@@ -376,6 +438,11 @@ const BNIOutreachPage = () => {
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.location || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.category_name || '—'}</td>
                             <td className="px-4 py-3">
+                              {o.source_name ? (
+                                <Badge className="bg-[#06b6d4]/15 text-[#06b6d4] border border-[#06b6d4]/40">{o.source_name}</Badge>
+                              ) : <span className={textSecondary}>—</span>}
+                            </td>
+                            <td className="px-4 py-3">
                               <div className="flex gap-1">
                                 <Button variant="ghost" size="sm" onClick={() => openEdit(o)} data-testid={`bni-outreach-edit-${o.outreach_id}`}>
                                   <Pencil className="h-4 w-4" />
@@ -390,6 +457,57 @@ const BNIOutreachPage = () => {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'sources' && (
+              <div className="space-y-3">
+                <p className={`text-sm ${textSecondary}`}>
+                  Add Google Sheets (shared as "Anyone with the link can view") with the same columns as the Outreach CSV. Sync pulls their rows into the Outreach tab.
+                </p>
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className={bgSecondary}>
+                        <tr>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Source</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Sheet</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Last Synced</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Rows</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${borderColor}`}>
+                        {sources.length === 0 ? (
+                          <tr><td colSpan={5} className={`px-4 py-8 text-center ${textSecondary}`}>No sources yet — click "Add Source" to connect a Google Sheet.</td></tr>
+                        ) : (
+                          sources.map((s) => (
+                            <tr key={s.source_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
+                              <td className={`px-4 py-3 font-medium ${textPrimary}`}>{s.name}</td>
+                              <td className="px-4 py-3">
+                                <a href={s.sheet_url} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] hover:underline flex items-center gap-1">
+                                  <LinkIcon className="h-3.5 w-3.5" /> Open
+                                </a>
+                              </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{s.last_synced_at ? new Date(s.last_synced_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never'}</td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{s.last_row_count || 0}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex gap-1">
+                                  <Button variant="outline" size="sm" onClick={() => syncSource(s.source_id)} disabled={syncingId === s.source_id} data-testid={`bni-source-sync-${s.source_id}`}>
+                                    <RefreshCw className={`h-4 w-4 mr-1 ${syncingId === s.source_id ? 'animate-spin' : ''}`} /> {syncingId === s.source_id ? 'Syncing…' : 'Sync'}
+                                  </Button>
+                                  <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => deleteSource(s.source_id)} data-testid={`bni-source-delete-${s.source_id}`}>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -481,6 +599,31 @@ const BNIOutreachPage = () => {
             )}
           </>
         )}
+
+        <Dialog open={showSourceModal} onOpenChange={setShowSourceModal}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Add Source</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Source Name *</Label>
+                <Input value={sourceForm.name} onChange={(e) => setSourceForm({ ...sourceForm, name: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="e.g. Chennai Prospects Sheet" autoFocus data-testid="bni-source-name-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Google Sheet Link *</Label>
+                <Input value={sourceForm.sheet_url} onChange={(e) => setSourceForm({ ...sourceForm, sheet_url: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="https://docs.google.com/spreadsheets/d/…" data-testid="bni-source-url-input" />
+                <p className={`text-xs ${textSecondary} mt-1`}>Share the sheet as "Anyone with the link can view". Columns: Name, Brand Name, Chapter Name, Email, Profile Link, Phone, Website, Status, Location, Category.</p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowSourceModal(false)}>Cancel</Button>
+              <Button onClick={saveSource} disabled={sourceSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-source-save-btn">
+                {sourceSaving ? 'Saving…' : 'Add Source'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <CSVImportModal
           open={showImport}
