@@ -907,6 +907,23 @@ export default function BNIPage() {
     }
   };
 
+  const [autoGrouping, setAutoGrouping] = useState(false);
+  const autoGroupCategories = async () => {
+    if (!window.confirm('Auto-assign every category to a group from the name before its first bracket — e.g. "Advertising & Marketing (Branding)" becomes group "Advertising & Marketing". This creates any missing groups.')) return;
+    setAutoGrouping(true);
+    try {
+      const res = await api.post('/bni/categories/auto-group');
+      toast.success(`Grouped ${res.data?.updated || 0} categories · ${res.data?.groups_created || 0} new groups`);
+      const gr = await api.get('/bni/categories/groups');
+      setCategoryGroups(gr.data || []);
+      loadAll();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to auto-group');
+    } finally {
+      setAutoGrouping(false);
+    }
+  };
+
   const deleteCategoryGroup = async (groupId, groupName) => {
     if (!window.confirm(`Delete the group "${groupName}"? Categories in it will become ungrouped.`)) return;
     try {
@@ -2349,6 +2366,12 @@ export default function BNIPage() {
                 />
                 <Button onClick={createCategoryGroup} disabled={groupSaving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="bni-group-create-btn">
                   {groupSaving ? '…' : 'Create'}
+                </Button>
+              </div>
+              <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3 flex items-center justify-between gap-3`}>
+                <p className={`text-xs ${textSecondary}`}>Auto-assign every category to a group from the name before its first bracket.</p>
+                <Button variant="outline" size="sm" onClick={autoGroupCategories} disabled={autoGrouping} className="shrink-0" data-testid="bni-auto-group-btn">
+                  {autoGrouping ? 'Grouping…' : 'Auto-group'}
                 </Button>
               </div>
               <div className="space-y-1 max-h-72 overflow-y-auto">

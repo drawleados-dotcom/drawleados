@@ -124,6 +124,44 @@ async def create_bni_category_group(payload: BNICategoryGroupCreate, request: Re
     return doc
 
 
+@bni_categories_router.post("/auto-group")
+async def auto_group_bni_categories(request: Request):
+    """Bulk-assign every category to a group derived from the text before its
+    first "(" — e.g. "Advertising & Marketing (Branding)" → group
+    "Advertising & Marketing". Creates any missing groups. Categories with no
+    "(" in the name are left untouched."""
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    cats = await db.bni_categories.find({}, {"_id": 0, "category_id": 1, "name": 1}).to_list(2000)
+    existing_groups = await db.bni_category_groups.find({}, {"_id": 0, "name": 1}).to_list(500)
+    known = {g["name"].lower() for g in existing_groups}
+    now = datetime.now(timezone.utc).isoformat()
+    updated = 0
+    created = 0
+    for c in cats:
+        name = c.get("name", "")
+        if "(" not in name:
+            continue
+        group = name.split("(", 1)[0].strip()
+        if not group:
+            continue
+        if group.lower() not in known:
+            await db.bni_category_groups.insert_one({
+                "group_id": f"bnicg_{uuid.uuid4().hex[:10]}",
+                "name": group,
+                "created_by": user.user_id,
+                "created_at": now,
+            })
+            known.add(group.lower())
+            created += 1
+        await db.bni_categories.update_one(
+            {"category_id": c["category_id"]},
+            {"$set": {"group": group, "updated_at": now}},
+        )
+        updated += 1
+    return {"updated": updated, "groups_created": created}
+
+
 @bni_categories_router.delete("/groups/{group_id}")
 async def delete_bni_category_group(group_id: str, request: Request):
     from server import get_current_user, db
