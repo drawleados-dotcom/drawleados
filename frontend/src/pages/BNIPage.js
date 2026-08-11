@@ -1937,6 +1937,7 @@ export default function BNIPage() {
                             <tr>
                               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Member</th>
                               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Chapter</th>
+                              <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Category</th>
                               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Meeting Date</th>
                               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Time</th>
                               <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
@@ -1949,10 +1950,10 @@ export default function BNIPage() {
                           </thead>
                           <tbody className={`divide-y ${borderColor}`}>
                             {ooLoading ? (
-                              <tr><td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
+                              <tr><td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>Loading…</td></tr>
                             ) : oneToOnes.length === 0 ? (
                               <tr>
-                                <td colSpan={10} className={`px-4 py-8 text-center ${textSecondary}`}>
+                                <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
                                   No One-to-Ones yet — click "New One-to-One" to schedule the first one.
                                 </td>
                               </tr>
@@ -1960,6 +1961,7 @@ export default function BNIPage() {
                               oneToOnes.map((o) => {
                                 const mode = o.meeting_mode || 'offline';
                                 const isCross = o.entry_type === 'cross_chapter' || !!o.chapter_name;
+                                const memberCategory = members.find((m) => m.member_id === o.member_id)?.category_name;
                                 return (
                                   <tr key={o.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
                                     <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.member_name}</td>
@@ -1970,6 +1972,7 @@ export default function BNIPage() {
                                         <span className={textSecondary}>{chapterSettings.chapter_name || '—'}</span>
                                       )}
                                     </td>
+                                    <td className={`px-4 py-3 ${textSecondary}`}>{memberCategory || '—'}</td>
                                     <td className="px-4 py-3">
                                       <Badge className="bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40 font-semibold">
                                         {o.meeting_date ? new Date(o.meeting_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
