@@ -17,6 +17,17 @@ const STATUS_STYLE = {
   'Completed': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
 };
 
+// Per-task status colors — mirrors the pending/in_progress/completed
+// vocabulary used across the app (see OurTasksPage.js's "to do" bucket).
+const TASK_STATUS_STYLE = {
+  completed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
+  pending: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
+  in_progress: 'bg-red-500/20 text-red-400 border-red-500/40',
+};
+const taskStatusStyle = (status) => TASK_STATUS_STYLE[status || 'pending'] || 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+// "To Do" bucket = pending + in_progress, matching OurTasksPage's total_to_do.
+const isToDo = (status) => (status || 'pending') === 'pending' || status === 'in_progress';
+
 const newPageId = () => `pg_${Math.random().toString(36).slice(2, 10)}`;
 const emptyPage = () => ({
   id: newPageId(),
@@ -69,7 +80,36 @@ export default function ProjectPagesTab({
   // modal state: { mode: 'add' | 'view', page, editing } or null
   const [modal, setModal] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [expandedPageId, setExpandedPageId] = useState(null);
+  const [expandedPageIds, setExpandedPageIds] = useState(() => new Set());
+  const togglePage = (id) => setExpandedPageIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  // Summary cards + click-to-filter — only tasks actually tagged to a page
+  // count here (tasks without website_page_id live elsewhere in the project).
+  const [taskFilter, setTaskFilter] = useState(null); // null | 'to_do' | 'pending' | 'completed'
+  const pageTasksAll = tasks.filter(t => t.website_page_id);
+  const summary = {
+    totalPages: pages.length,
+    toDo: pageTasksAll.filter(t => isToDo(t.status)).length,
+    completed: pageTasksAll.filter(t => (t.status || 'pending') === 'completed').length,
+    pending: pageTasksAll.filter(t => (t.status || 'pending') === 'pending').length,
+  };
+  const matchesTaskFilter = (t) => {
+    if (!taskFilter) return true;
+    if (taskFilter === 'to_do') return isToDo(t.status);
+    return (t.status || 'pending') === taskFilter;
+  };
+  const applyCardFilter = (key) => {
+    if (!key) { setTaskFilter(null); setExpandedPageIds(new Set()); return; }
+    setTaskFilter(key);
+    const matchPages = pages
+      .filter(p => tasksForPage(p.id).some(t => (key === 'to_do' ? isToDo(t.status) : (t.status || 'pending') === key)))
+      .map(p => p.id);
+    setExpandedPageIds(new Set(matchPages));
+  };
 
   const persist = async (nextPages) => {
     try {
@@ -141,6 +181,29 @@ export default function ProjectPagesTab({
         )}
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { key: null, label: 'Total Pages', value: summary.totalPages, color: textPrimary },
+          { key: 'to_do', label: 'Total To-Do', value: summary.toDo, color: 'text-red-500' },
+          { key: 'completed', label: 'Completed', value: summary.completed, color: 'text-emerald-500' },
+          { key: 'pending', label: 'Pending', value: summary.pending, color: 'text-amber-500' },
+        ].map((c) => {
+          const active = c.key === null ? !taskFilter : taskFilter === c.key;
+          return (
+            <button
+              key={c.label}
+              type="button"
+              onClick={() => applyCardFilter(c.key)}
+              className={`${bgCard} border rounded-xl p-3 text-left transition-colors ${active ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : `${borderColor} hover:border-[#6366f1]/40`}`}
+              data-testid={`pages-summary-${c.label.replace(/\s+/g, '-').toLowerCase()}`}
+            >
+              <p className={`text-[11px] ${textSecondary} leading-tight`}>{c.label}</p>
+              <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
+            </button>
+          );
+        })}
+      </div>
+
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -160,7 +223,7 @@ export default function ProjectPagesTab({
               <tbody>
                 {pages.map((row, idx) => {
                   const pageTasks = tasksForPage(row.id);
-                  const isExpanded = expandedPageId === row.id;
+                  const isExpanded = expandedPageIds.has(row.id);
                   return (
                   <React.Fragment key={row.id}>
                   <tr className={`border-b ${borderColor}`} data-testid={`page-row-${row.id}`}>
@@ -190,7 +253,7 @@ export default function ProjectPagesTab({
                     <td className="p-3">
                       <button
                         type="button"
-                        onClick={() => setExpandedPageId(isExpanded ? null : row.id)}
+                        onClick={() => togglePage(row.id)}
                         className={`inline-flex items-center gap-1 text-xs ${textSecondary} hover:opacity-80`}
                         data-testid={`page-tasks-toggle-${row.id}`}
                       >
@@ -212,11 +275,16 @@ export default function ProjectPagesTab({
                       </div>
                     </td>
                   </tr>
-                  {isExpanded && (
+                  {isExpanded && (() => {
+                    const filteredTasks = pageTasks.filter(matchesTaskFilter);
+                    return (
                     <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`page-tasks-row-${row.id}`}>
                       <td colSpan={8} className="p-3">
-                        {pageTasks.length === 0 ? (
-                          <p className={`text-xs ${textSecondary}`}>No tasks tagged to this page yet.</p>
+                        {taskFilter && (
+                          <p className={`text-[11px] ${textSecondary} mb-2`}>Showing {filteredTasks.length} of {pageTasks.length} tasks matching the filter.</p>
+                        )}
+                        {filteredTasks.length === 0 ? (
+                          <p className={`text-xs ${textSecondary}`}>{taskFilter ? 'No tasks on this page match the filter.' : 'No tasks tagged to this page yet.'}</p>
                         ) : (
                           <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
                             <table className="w-full">
@@ -231,7 +299,7 @@ export default function ProjectPagesTab({
                                 </tr>
                               </thead>
                               <tbody>
-                                {pageTasks.map(t => (
+                                {filteredTasks.map(t => (
                                   <tr key={t.task_id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`page-task-row-${t.task_id}`}>
                                     <td className={`px-3 py-2 text-sm ${textPrimary}`}>{t.task_name}</td>
                                     <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.category || '—'}</td>
@@ -241,7 +309,7 @@ export default function ProjectPagesTab({
                                     <td className={`px-3 py-2 text-xs ${textSecondary}`}>{userName(t.assigned_to)}</td>
                                     <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.all_day ? 'All day' : (t.due_time || '—')}</td>
                                     <td className="px-3 py-2">
-                                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase ${textSecondary} border ${borderColor}`}>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase border ${taskStatusStyle(t.status)}`}>
                                         {(t.status || 'pending').replace('_', ' ')}
                                       </span>
                                     </td>
@@ -253,7 +321,8 @@ export default function ProjectPagesTab({
                         )}
                       </td>
                     </tr>
-                  )}
+                    );
+                  })()}
                   </React.Fragment>
                   );
                 })}
