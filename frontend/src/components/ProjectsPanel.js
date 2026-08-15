@@ -2454,6 +2454,8 @@ export default function ProjectsPanel({
                     className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors`}
                     onClick={async () => {
                       // Optimistic UI — show the project shell immediately, then hydrate with tasks.
+                      // Website projects land on Pages (their primary tab); everything else lands on Tasks.
+                      setProjectInnerTab((p.departments || []).includes('website') ? 'pages' : 'tasks');
                       setSelectedProject(p);
                       try {
                         const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
