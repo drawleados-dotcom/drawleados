@@ -3470,6 +3470,17 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
             {"$set": {"name": new_full_name}}
         )
 
+    # Active/Inactive status lives on users.status (that's what /admin/employees and the
+    # "Total Employees" count read), not employee_profiles — sync it there too.
+    new_status = profile_data.get("status")
+    if new_status:
+        if new_status == "inactive" and user_id == current_user.user_id:
+            raise HTTPException(status_code=400, detail="Cannot set your own account inactive")
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"status": new_status}}
+        )
+
     # Update or create profile
     profile_data["user_id"] = user_id
     profile_data["updated_at"] = datetime.now(timezone.utc)

@@ -17,7 +17,7 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check, Network, Coffee, Wallet, Handshake
+  ChevronDown, Check, Network, Coffee, Wallet, Handshake, UserX
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -3121,6 +3121,7 @@ function DashboardTab({ stats, attendanceOverview, bgCard, bgSecondary, textPrim
 function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit, onDelete, onDemote, currentUserEmail, canEdit, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
   // Calculate employee stats - active employees only
   const activeEmployees = employees.filter(e => e.status !== 'inactive');
+  const inactiveEmployees = employees.filter(e => e.status === 'inactive');
   const officeEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location !== 'home');
   const remoteEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location === 'home');
   
@@ -3131,8 +3132,8 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
     return (
       <div className="space-y-6">
         {/* Loading Summary Stats */}
-        <div className="grid grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
             <Card key={i} className={`${bgCard} border ${borderColor}`}>
               <CardContent className="p-4">
                 <div className="animate-pulse">
@@ -3176,7 +3177,7 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
   return (
     <div className="space-y-6">
       {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -3210,6 +3211,18 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
                 <p className={`text-xs ${textSecondary}`}>Working from home</p>
               </div>
               <Home className="h-10 w-10 text-[#8b5cf6]" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className={`text-sm ${textSecondary}`}>Inactive</p>
+                <p className={`text-3xl font-bold text-red-500`}>{inactiveEmployees.length}</p>
+                <p className={`text-xs ${textSecondary}`}>Deactivated employees</p>
+              </div>
+              <UserX className="h-10 w-10 text-red-500" />
             </div>
           </CardContent>
         </Card>
@@ -3745,6 +3758,7 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
     reporting_manager: employee.profile?.reporting_manager || '',
     work_location: employee.profile?.work_location || 'office',
     work_mode: employee.profile?.work_mode || employee.profile?.work_location || 'office',
+    status: employee.status || 'active',
     // Emergency Contact
     emergency_contact_name: employee.profile?.emergency_contact_name || '',
     emergency_contact_phone: employee.profile?.emergency_contact_phone || '',
@@ -4173,6 +4187,18 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
                         <SelectItem value="office">Office</SelectItem>
                         <SelectItem value="remote">Remote</SelectItem>
                         <SelectItem value="hybrid">Hybrid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className={textPrimary}>Status</Label>
+                    <Select value={formData.status} onValueChange={(v) => handleChange('status', v)}>
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent className={`${bgCard} border ${borderColor}`}>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
