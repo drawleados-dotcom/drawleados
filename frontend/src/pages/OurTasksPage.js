@@ -134,7 +134,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     assignedTo: 'all', // all, myself, or user_id
     assignedBy: 'all', // all or user_id
     taskType: 'all', // all, general, meeting, follow_up, proposal, call
-    status: 'pending', // all, pending, in_progress, completed, on_hold — defaults to Pending for both My Tasks and Assign to Team
+    status: 'completed', // all, pending, in_progress, completed, on_hold — defaults to Completed for both My Tasks and Assign to Team
     singleDate: '', // for single date filter
     department: 'all', // all or dept_key
     subDepartment: 'all', // all or sub_department id (only meaningful once a specific department is selected)
@@ -1530,7 +1530,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       assignedTo: 'all',
       assignedBy: 'all',
       taskType: 'all',
-      status: 'pending',
+      status: 'completed',
       department: 'all',
       subDepartment: 'all',
       project: 'all',
