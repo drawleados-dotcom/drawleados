@@ -45,6 +45,7 @@ class ProjectUpdate(BaseModel):
     content_calendar: Optional[List[dict]] = None
     pages: Optional[List[dict]] = None
     erp_users: Optional[List[dict]] = None
+    erp_departments: Optional[List[dict]] = None
     campaigns: Optional[List[dict]] = None
     backlinks: Optional[List[dict]] = None
     backlink_weekly_targets: Optional[List[dict]] = None
@@ -87,6 +88,7 @@ class ProjectTaskCreate(BaseModel):
     erp_user_name: Optional[str] = None
     erp_page_id: Optional[str] = None
     erp_page_name: Optional[str] = None
+    erp_task_type: Optional[str] = None  # New Module, New Feature, Correction
 
 
 async def _is_operation_head_or_admin(user, db) -> bool:
@@ -656,6 +658,7 @@ async def add_task_to_project(project_id: str, payload: ProjectTaskCreate, reque
         "erp_user_name": payload.erp_user_name,
         "erp_page_id": payload.erp_page_id,
         "erp_page_name": payload.erp_page_name,
+        "erp_task_type": payload.erp_task_type,
         "time_tracking": {"total_seconds": 0, "status": "not_started", "sessions": []},
         "created_at": now,
         "updated_at": now,

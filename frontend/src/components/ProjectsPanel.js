@@ -13,6 +13,7 @@ import ProjectDeliveryHistoryTab from './projects/ProjectDeliveryHistoryTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
+import ProjectErpDepartmentsTab from './projects/ProjectErpDepartmentsTab';
 import ProjectScopesTab from './projects/ProjectScopesTab';
 import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
@@ -38,6 +39,10 @@ const DEPARTMENTS = [
   { value: 'business_dev', label: 'Business Dev' },
   { value: 'erp', label: 'ERP' },
 ];
+
+// Same 3 options as an ERP User's Page "Type" field (ProjectErpUsersTab) —
+// tags what kind of work a task tagged to an ERP User/Page actually is.
+const ERP_TASK_TYPE_OPTIONS = ['New Module', 'New Feature', 'Correction'];
 
 export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
@@ -82,7 +87,7 @@ export default function ProjectsPanel({
 
   const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', project_type: 'onetime', departments: [], members: [] });
   const [clients, setClients] = useState([]);
-  const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' });
+  const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' });
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [deptStatuses, setDeptStatuses] = useState([]); // [{dept_key, label, statuses: [...]}]
   const [statusFilter, setStatusFilter] = useState('all'); // Project List View status sub-tab (only meaningful when deptFilter !== 'all')
@@ -586,7 +591,7 @@ export default function ProjectsPanel({
         await axios.post(`${API}/api/projects/${selectedProject.project_id}/tasks`, taskDraft, { headers });
         toast.success('Task added — appears in assignee\'s My Tasks');
       }
-      setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' });
+      setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' });
       setShowAddTask(false);
       setEditingTaskId(null);
       refreshSelectedProject();
@@ -612,6 +617,7 @@ export default function ProjectsPanel({
       erp_user_name: task.erp_user_name || '',
       erp_page_id: task.erp_page_id || '',
       erp_page_name: task.erp_page_name || '',
+      erp_task_type: task.erp_task_type || '',
     });
     setShowAddTask(true);
   };
@@ -636,7 +642,7 @@ export default function ProjectsPanel({
   const openAddTaskForSeoScope = (category) => {
     const defaultCategory = category || deptCategories.find(d => d.dept_key === 'seo')?.categories?.[0] || '';
     setEditingTaskId(null);
-    setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: 'seo', category: defaultCategory, erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' });
+    setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: 'seo', category: defaultCategory, erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' });
     setShowAddTask(true);
   };
 
@@ -1156,6 +1162,7 @@ export default function ProjectsPanel({
             // ERP / Website: department-specific tabs lead, ahead of the
             // generic Tasks/Payment Schedule/Expense tabs.
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
+            ...(isErpProject ? [{ id: 'erp_departments', label: 'Departments', icon: Building2 }] : []),
             ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
@@ -1296,6 +1303,20 @@ export default function ProjectsPanel({
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
             canEdit={canManageProjects}
             users={users}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'erp_departments' && (
+          <ProjectErpDepartmentsTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            canEdit={canManageProjects}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
@@ -2086,7 +2107,7 @@ export default function ProjectsPanel({
                       <Users className="h-4 w-4 text-[#6366f1]" />
                       <p className={`text-sm font-semibold ${textPrimary}`}>ERP Tagging</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                       <div>
                         <Label className={`text-xs ${textSecondary}`}>User</Label>
                         <select
@@ -2126,6 +2147,20 @@ export default function ProjectsPanel({
                             <option key={pg.id} value={pg.id}>{pg.page_name}</option>
                           ))}
                           <option value="others">Others</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label className={`text-xs ${textSecondary}`}>Type</Label>
+                        <select
+                          value={taskDraft.erp_task_type || ''}
+                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_task_type: e.target.value })}
+                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                          data-testid="task-erp-type"
+                        >
+                          <option value="">— select type —</option>
+                          {ERP_TASK_TYPE_OPTIONS.map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
                         </select>
                       </div>
                     </div>

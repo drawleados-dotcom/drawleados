@@ -27,6 +27,10 @@ import OperationsTabsBar from '../components/operations/OperationsTabsBar';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
+// Same 3 options as an ERP User's Page "Type" field (ProjectErpUsersTab) —
+// tags what kind of work a task tagged to an ERP User/Page actually is.
+const ERP_TASK_TYPE_OPTIONS = ['New Module', 'New Feature', 'Correction'];
+
 const priorityColors = {
   high: 'bg-[#ef4444]/20 text-[#ef4444] border-[#ef4444]',
   medium: 'bg-[#f59e0b]/20 text-[#f59e0b] border-[#f59e0b]',
@@ -220,6 +224,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     erp_user_name: '',
     erp_page_id: '',
     erp_page_name: '',
+    erp_task_type: '',
     sub_department_id: '',
     sub_department_name: '',
   });
@@ -1156,6 +1161,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_user_name: '',
       erp_page_id: '',
       erp_page_name: '',
+      erp_task_type: '',
       sub_department_id: '',
       sub_department_name: '',
     });
@@ -1193,6 +1199,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_user_name: task.erp_user_name || '',
       erp_page_id: task.erp_page_id || '',
       erp_page_name: task.erp_page_name || '',
+      erp_task_type: task.erp_task_type || '',
       sub_department_id: task.sub_department_id || '',
       sub_department_name: task.sub_department_name || '',
     });
@@ -2794,7 +2801,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           const defaultSubDept = getSelectableSubDepts(dept)[0];
                           setFormData(prev => ({
                             ...prev, department: dept, project_id: '', project_name: '', category: defaultCategory,
-                            website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '',
+                            website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '',
                             sub_department_id: defaultSubDept?.id || '', sub_department_name: defaultSubDept?.label || '',
                           }));
                         }}
@@ -2819,7 +2826,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           value={formData.project_id || 'none'}
                           onValueChange={(v) => {
                             if (v === 'none') {
-                              setFormData(prev => ({ ...prev, project_id: '', project_name: '', website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '' }));
+                              setFormData(prev => ({ ...prev, project_id: '', project_name: '', website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' }));
                             } else {
                               const proj = projectsForTask.find(p => p.project_id === v);
                               const projDepts = proj?.departments || [];
@@ -2845,6 +2852,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                   erp_user_name: '',
                                   erp_page_id: '',
                                   erp_page_name: '',
+                                  erp_task_type: '',
                                   sub_department_id: deptUnchanged ? (prev.sub_department_id || defaultSubDept?.id || '') : (defaultSubDept?.id || ''),
                                   sub_department_name: deptUnchanged ? (prev.sub_department_name || defaultSubDept?.label || '') : (defaultSubDept?.label || ''),
                                 };
@@ -2961,7 +2969,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     )}
 
                     {formData.department === 'erp' && formData.project_id && (
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
                         <div>
                           <Label className={textPrimary}>User <span className="text-red-500">*</span></Label>
                           <Select
@@ -3014,6 +3022,23 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                 <SelectItem key={pg.id} value={pg.id}>{pg.page_name}</SelectItem>
                               ))}
                               <SelectItem value="others">Others</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className={textPrimary}>Type</Label>
+                          <Select
+                            value={formData.erp_task_type || 'none'}
+                            onValueChange={(v) => setFormData(prev => ({ ...prev, erp_task_type: v === 'none' ? '' : v }))}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-erp-type">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">— None —</SelectItem>
+                              {ERP_TASK_TYPE_OPTIONS.map(t => (
+                                <SelectItem key={t} value={t}>{t}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
@@ -3430,6 +3455,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       <Link className="h-4 w-4 flex-shrink-0" />
                       {viewingTask.work_link}
                     </a>
+                  </div>
+                )}
+
+                {/* ERP Task Type */}
+                {viewingTask.department === 'erp' && viewingTask.erp_task_type && (
+                  <div className={`p-4 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-xs ${textSecondary} mb-1`}>Type</p>
+                    <p className={`font-medium ${textPrimary}`}>{viewingTask.erp_task_type}</p>
                   </div>
                 )}
 

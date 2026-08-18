@@ -17,6 +17,13 @@ const STATUS_STYLE = {
   'Completed': 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
 };
 
+const PAGE_TYPE_OPTIONS = ['New Module', 'New Feature', 'Correction'];
+const PAGE_TYPE_STYLE = {
+  'New Module': 'bg-violet-500/20 text-violet-400 border-violet-500/40',
+  'New Feature': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40',
+  'Correction': 'bg-orange-500/20 text-orange-400 border-orange-500/40',
+};
+
 const newId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 const emptyPage = () => ({
   id: newId('pg'),
@@ -25,6 +32,7 @@ const emptyPage = () => ({
   content_link: '',
   page_link: '',
   status: 'To-Do',
+  type: '',
 });
 const emptyTab = (prefix) => ({
   id: newId(prefix),
@@ -210,8 +218,17 @@ export default function ProjectErpUsersTab({
   const assigneeName = (userId) => (users || []).find(u => u.user_id === userId)?.name || userId || '—';
 
   const erpUsers = project?.erp_users || [];
+  const erpDepartments = project?.erp_departments || [];
+  const departmentName = (deptId) => erpDepartments.find(d => d.id === deptId)?.name || '';
   const tasks = project?.tasks || [];
   const tasksForPage = (pageId) => tasks.filter(t => t.erp_page_id === pageId);
+
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const visibleErpUsers = departmentFilter === 'all'
+    ? erpUsers
+    : (departmentFilter === '_none'
+      ? erpUsers.filter(u => !u.department_id)
+      : erpUsers.filter(u => u.department_id === departmentFilter));
 
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [expandedPageId, setExpandedPageId] = useState(null);
@@ -246,16 +263,17 @@ export default function ProjectErpUsersTab({
   };
 
   // ---- User CRUD ----
-  const openAddUser = () => { if (canEdit) setUserModal({ mode: 'add', name: '' }); };
-  const openRenameUser = (u) => { if (canEdit) setUserModal({ mode: 'edit', id: u.id, name: u.user_name }); };
+  const openAddUser = () => { if (canEdit) setUserModal({ mode: 'add', name: '', department_id: '' }); };
+  const openRenameUser = (u) => { if (canEdit) setUserModal({ mode: 'edit', id: u.id, name: u.user_name, department_id: u.department_id || '' }); };
   const closeUserModal = () => setUserModal(null);
 
   const saveUserModal = async () => {
     if (!userModal.name.trim()) { toast.error('User name is required'); return; }
     setSaving(true);
+    const deptName = departmentName(userModal.department_id);
     const next = userModal.mode === 'add'
-      ? [...erpUsers, { id: newId('eu'), user_name: userModal.name.trim(), pages: [] }]
-      : erpUsers.map(u => (u.id === userModal.id ? { ...u, user_name: userModal.name.trim() } : u));
+      ? [...erpUsers, { id: newId('eu'), user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, pages: [] }]
+      : erpUsers.map(u => (u.id === userModal.id ? { ...u, user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName } : u));
     const ok = await persistUsers(next);
     setSaving(false);
     if (ok) {
@@ -460,17 +478,29 @@ export default function ProjectErpUsersTab({
             Each user's pages track ERP work the same way the Website department tracks pages.
           </p>
         </div>
-        {canEdit && (
-          <Button
-            type="button"
-            onClick={openAddUser}
-            size="sm"
-            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-            data-testid="erp-user-add-btn"
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add User
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[180px]`} data-testid="erp-user-department-filter">
+              <SelectValue placeholder="All Departments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Departments</SelectItem>
+              {erpDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              <SelectItem value="_none">No Department</SelectItem>
+            </SelectContent>
+          </Select>
+          {canEdit && (
+            <Button
+              type="button"
+              onClick={openAddUser}
+              size="sm"
+              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+              data-testid="erp-user-add-btn"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add User
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className={`${bgCard} border ${borderColor}`}>
@@ -481,12 +511,13 @@ export default function ProjectErpUsersTab({
                 <tr className={`border-b ${borderColor}`}>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase w-12`}>S.No</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>User Name</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Department</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Pages</th>
                   <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {erpUsers.map((u, idx) => {
+                {visibleErpUsers.map((u, idx) => {
                   const isExpanded = expandedUserId === u.id;
                   const pages = u.pages || [];
                   return (
@@ -504,6 +535,7 @@ export default function ProjectErpUsersTab({
                             {u.user_name || '—'}
                           </button>
                         </td>
+                        <td className={`p-3 text-xs ${textSecondary}`}>{u.department_name || departmentName(u.department_id) || '—'}</td>
                         <td className={`p-3 text-xs ${textSecondary}`}>{pages.length}</td>
                         <td className="p-3 text-right">
                           <div className="inline-flex gap-1">
@@ -529,7 +561,7 @@ export default function ProjectErpUsersTab({
                       </tr>
                       {isExpanded && (
                         <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`erp-user-pages-row-${u.id}`}>
-                          <td colSpan={4} className="p-3">
+                          <td colSpan={5} className="p-3">
                             <div className="flex items-center justify-between mb-2">
                               <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Pages</p>
                               {canEdit && (
@@ -554,6 +586,7 @@ export default function ProjectErpUsersTab({
                                     <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Content Link</th>
                                     <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Page Link</th>
                                     <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                                    <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Type</th>
                                     <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Tasks</th>
                                     <th className={`text-right px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
                                   </tr>
@@ -601,6 +634,15 @@ export default function ProjectErpUsersTab({
                                             </span>
                                           </td>
                                           <td className="px-3 py-2">
+                                            {row.type ? (
+                                              <span className={`px-2 py-1 rounded-md text-xs font-medium border ${PAGE_TYPE_STYLE[row.type] || ''}`}>
+                                                {row.type}
+                                              </span>
+                                            ) : (
+                                              <span className={`text-xs ${textSecondary}`}>—</span>
+                                            )}
+                                          </td>
+                                          <td className="px-3 py-2">
                                             <button
                                               type="button"
                                               onClick={() => setExpandedPageId(isPageExpanded ? null : row.id)}
@@ -639,7 +681,7 @@ export default function ProjectErpUsersTab({
                                         </tr>
                                         {isPageExpanded && (
                                           <tr className={`border-b ${borderColor}`} data-testid={`erp-page-tasks-row-${row.id}`}>
-                                            <td colSpan={8} className="p-3">
+                                            <td colSpan={9} className="p-3">
                                               {pageTasks.length === 0 ? (
                                                 <p className={`text-xs ${textSecondary}`}>No tasks tagged to this page yet.</p>
                                               ) : (
@@ -681,7 +723,7 @@ export default function ProjectErpUsersTab({
                                         )}
                                         {isSubTabsExpanded && (
                                           <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`erp-page-subtabs-row-${row.id}`}>
-                                            <td colSpan={8} className="p-3">
+                                            <td colSpan={9} className="p-3">
                                               <div className="flex items-center justify-between mb-2">
                                                 <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sub Tabs</p>
                                                 {canEdit && (
@@ -965,7 +1007,7 @@ export default function ProjectErpUsersTab({
                                   })}
                                   {pages.length === 0 && (
                                     <tr>
-                                      <td colSpan={8} className={`p-6 text-center text-xs ${textSecondary}`}>
+                                      <td colSpan={9} className={`p-6 text-center text-xs ${textSecondary}`}>
                                         No pages yet. {canEdit && <span>Click <span className="font-medium">Add Page</span> to add one.</span>}
                                       </td>
                                     </tr>
@@ -979,10 +1021,12 @@ export default function ProjectErpUsersTab({
                     </React.Fragment>
                   );
                 })}
-                {erpUsers.length === 0 && (
+                {visibleErpUsers.length === 0 && (
                   <tr>
-                    <td colSpan={4} className={`p-8 text-center text-xs ${textSecondary}`}>
-                      No users yet. {canEdit && <span>Click <span className="font-medium">Add User</span> to add one.</span>}
+                    <td colSpan={5} className={`p-8 text-center text-xs ${textSecondary}`}>
+                      {erpUsers.length === 0
+                        ? <>No users yet. {canEdit && <span>Click <span className="font-medium">Add User</span> to add one.</span>}</>
+                        : 'No users in this department.'}
                     </td>
                   </tr>
                 )}
@@ -993,8 +1037,11 @@ export default function ProjectErpUsersTab({
       </Card>
 
       {/* Add / Rename User popup */}
+      {/* z-40, not z-[70]: the Department <Select> below portals to
+          document.body at z-50 (ui/select.jsx) — z-[70] would render this
+          modal on top of it. */}
       {userModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeUserModal}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeUserModal}>
           <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
               <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
@@ -1005,16 +1052,36 @@ export default function ProjectErpUsersTab({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-5">
-              <p className={`text-xs font-medium ${textSecondary} mb-1`}>User Name</p>
-              <Input
-                value={userModal.name}
-                onChange={(e) => setUserModal(m => ({ ...m, name: e.target.value }))}
-                placeholder="e.g. Super Admin"
-                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                data-testid="erp-user-form-name"
-                autoFocus
-              />
+            <div className="p-5 space-y-4">
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>User Name</p>
+                <Input
+                  value={userModal.name}
+                  onChange={(e) => setUserModal(m => ({ ...m, name: e.target.value }))}
+                  placeholder="e.g. Super Admin"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="erp-user-form-name"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Department</p>
+                <Select
+                  value={userModal.department_id || '_none'}
+                  onValueChange={(v) => setUserModal(m => ({ ...m, department_id: v === '_none' ? '' : v }))}
+                >
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-user-form-department">
+                    <SelectValue placeholder="— No department —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">— No department —</SelectItem>
+                    {erpDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {erpDepartments.length === 0 && (
+                  <p className={`text-[11px] ${textSecondary} mt-1`}>No departments yet — add one from the Departments tab.</p>
+                )}
+              </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={closeUserModal}>Cancel</Button>
@@ -1104,6 +1171,21 @@ export default function ProjectErpUsersTab({
                       </SelectContent>
                     </Select>
                   </div>
+                  <div>
+                    <p className={`text-xs font-medium ${textSecondary} mb-1`}>Type</p>
+                    <Select
+                      value={pageModal.page.type || '_none'}
+                      onValueChange={(v) => setPageModal(m => ({ ...m, page: { ...m.page, type: v === '_none' ? '' : v } }))}
+                    >
+                      <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-page-form-type">
+                        <SelectValue placeholder="— Select type —" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">— Select type —</SelectItem>
+                        {PAGE_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </>
               ) : (
                 <div className="grid grid-cols-1 gap-4">
@@ -1116,6 +1198,14 @@ export default function ProjectErpUsersTab({
                       {pageModal.page.status || 'To-Do'}
                     </span>
                   </div>
+                  {pageModal.page.type && (
+                    <div>
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Type</p>
+                      <span className={`inline-block mt-1 px-2 py-1 rounded-md text-xs font-medium border ${PAGE_TYPE_STYLE[pageModal.page.type] || ''}`}>
+                        {pageModal.page.type}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
