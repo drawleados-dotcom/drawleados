@@ -441,6 +441,10 @@ export default function ProjectErpUsersTab({
     setSubTabModal({ mode: 'add', userId, pageId, tab: emptyTab('st'), editing: true });
   };
   const openViewSubTab = (userId, pageId, tab) => setSubTabModal({ mode: 'view', userId, pageId, tab: { ...tab }, editing: false });
+  const openEditSubTab = (userId, pageId, tab) => {
+    if (!canEdit) return;
+    setSubTabModal({ mode: 'view', userId, pageId, tab: { ...tab }, editing: true });
+  };
   const closeSubTabModal = () => setSubTabModal(null);
 
   const saveSubTabModal = async () => {
@@ -476,6 +480,10 @@ export default function ProjectErpUsersTab({
     setUltraTabModal({ mode: 'add', userId, pageId, subTabId, tab: emptyTab('ut'), editing: true });
   };
   const openViewUltraTab = (userId, pageId, subTabId, tab) => setUltraTabModal({ mode: 'view', userId, pageId, subTabId, tab: { ...tab }, editing: false });
+  const openEditUltraTab = (userId, pageId, subTabId, tab) => {
+    if (!canEdit) return;
+    setUltraTabModal({ mode: 'view', userId, pageId, subTabId, tab: { ...tab }, editing: true });
+  };
   const closeUltraTabModal = () => setUltraTabModal(null);
 
   const saveUltraTabModal = async () => {
@@ -528,6 +536,10 @@ export default function ProjectErpUsersTab({
     setUltraTabItemModal({ mode: 'add', userId, pageId, subTabId, ultraTabId, tab: emptyTab('utt'), editing: true });
   };
   const openViewUltraTabItem = (userId, pageId, subTabId, ultraTabId, tab) => setUltraTabItemModal({ mode: 'view', userId, pageId, subTabId, ultraTabId, tab: { ...tab }, editing: false });
+  const openEditUltraTabItem = (userId, pageId, subTabId, ultraTabId, tab) => {
+    if (!canEdit) return;
+    setUltraTabItemModal({ mode: 'view', userId, pageId, subTabId, ultraTabId, tab: { ...tab }, editing: true });
+  };
   const closeUltraTabItemModal = () => setUltraTabItemModal(null);
 
   const saveUltraTabItemModal = async () => {
@@ -1014,6 +1026,11 @@ export default function ProjectErpUsersTab({
                                                                   <Eye className="h-4 w-4" />
                                                                 </button>
                                                                 {canEdit && (
+                                                                  <button type="button" onClick={() => openEditSubTab(u.id, row.id, st)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`erp-subtab-edit-${st.id}`}>
+                                                                    <Pencil className="h-4 w-4" />
+                                                                  </button>
+                                                                )}
+                                                                {canEdit && (
                                                                   <button type="button" onClick={() => deleteSubTab(u.id, row.id, st.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-subtab-delete-${st.id}`}>
                                                                     <Trash2 className="h-4 w-4" />
                                                                   </button>
@@ -1101,6 +1118,11 @@ export default function ProjectErpUsersTab({
                                                                                     <Eye className="h-4 w-4" />
                                                                                   </button>
                                                                                   {canEdit && (
+                                                                                    <button type="button" onClick={() => openEditUltraTab(u.id, row.id, st.id, ut)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`erp-ultratab-edit-${ut.id}`}>
+                                                                                      <Pencil className="h-4 w-4" />
+                                                                                    </button>
+                                                                                  )}
+                                                                                  {canEdit && (
                                                                                     <button type="button" onClick={() => deleteUltraTab(u.id, row.id, st.id, ut.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-delete-${ut.id}`}>
                                                                                       <Trash2 className="h-4 w-4" />
                                                                                     </button>
@@ -1174,6 +1196,11 @@ export default function ProjectErpUsersTab({
                                                                                                 <button type="button" onClick={() => openViewUltraTabItem(u.id, row.id, st.id, ut.id, it)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-item-view-${it.id}`}>
                                                                                                   <Eye className="h-4 w-4" />
                                                                                                 </button>
+                                                                                                {canEdit && (
+                                                                                                  <button type="button" onClick={() => openEditUltraTabItem(u.id, row.id, st.id, ut.id, it)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`erp-ultratab-item-edit-${it.id}`}>
+                                                                                                    <Pencil className="h-4 w-4" />
+                                                                                                  </button>
+                                                                                                )}
                                                                                                 {canEdit && (
                                                                                                   <button type="button" onClick={() => deleteUltraTabItem(u.id, row.id, st.id, ut.id, it.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-item-delete-${it.id}`}>
                                                                                                     <Trash2 className="h-4 w-4" />
