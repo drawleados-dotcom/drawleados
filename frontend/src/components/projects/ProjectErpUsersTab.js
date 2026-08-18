@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -557,6 +557,71 @@ export default function ProjectErpUsersTab({
     if (ok) { toast.success('Ultra tab removed'); closeUltraTabItemModal(); }
   };
 
+  // ---- Drag-and-drop reordering (Pages / Sub Tabs / Ultra Sub Tab / Ultra Tab) ----
+  // Plain HTML5 drag events rather than a DnD library — no new dependency needed,
+  // and it drops straight onto the existing rows without restructuring the table.
+  const reorderArray = (arr, fromIndex, toIndex) => {
+    const next = [...arr];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    return next;
+  };
+
+  const movePage = (userId, fromIndex, toIndex) => {
+    if (!canEdit || fromIndex === toIndex) return;
+    persistUsers(erpUsers.map(u => (
+      u.id === userId ? { ...u, pages: reorderArray(u.pages || [], fromIndex, toIndex) } : u
+    )));
+  };
+  const moveSubTab = (userId, pageId, fromIndex, toIndex) => {
+    if (!canEdit || fromIndex === toIndex) return;
+    persistPages(userId, pages => pages.map(p => (
+      p.id === pageId ? { ...p, sub_tabs: reorderArray(p.sub_tabs || [], fromIndex, toIndex) } : p
+    )));
+  };
+  const moveUltraSubTab = (userId, pageId, subTabId, fromIndex, toIndex) => {
+    if (!canEdit || fromIndex === toIndex) return;
+    persistPages(userId, pages => pages.map(p => (
+      p.id !== pageId ? p : {
+        ...p,
+        sub_tabs: (p.sub_tabs || []).map(st => (
+          st.id === subTabId ? { ...st, ultra_sub_tabs: reorderArray(st.ultra_sub_tabs || [], fromIndex, toIndex) } : st
+        )),
+      }
+    )));
+  };
+  const moveUltraTabItem = (userId, pageId, subTabId, ultraTabId, fromIndex, toIndex) => {
+    if (!canEdit || fromIndex === toIndex) return;
+    persistPages(userId, pages => mapUltraSubTab(pages, pageId, subTabId, ut => (
+      ut.id === ultraTabId ? { ...ut, ultra_tabs: reorderArray(ut.ultra_tabs || [], fromIndex, toIndex) } : ut
+    )));
+  };
+
+  // { level, key, index } — key scopes a drag to its own list (e.g. a page's
+  // own sub_tabs) so dropping never reorders across two different parents.
+  const [dragItem, setDragItem] = useState(null);
+  const dragRowProps = (level, key, index, moveFn) => (!canEdit ? {} : {
+    draggable: true,
+    onDragStart: (e) => {
+      setDragItem({ level, key, index });
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    onDragOver: (e) => {
+      if (dragItem && dragItem.level === level && dragItem.key === key) e.preventDefault();
+    },
+    onDrop: (e) => {
+      e.preventDefault();
+      if (dragItem && dragItem.level === level && dragItem.key === key && dragItem.index !== index) {
+        moveFn(dragItem.index, index);
+      }
+      setDragItem(null);
+    },
+    onDragEnd: () => setDragItem(null),
+  });
+  const DragHandle = () => (
+    <GripVertical className={`h-3.5 w-3.5 ${textSecondary} cursor-grab shrink-0 inline-block align-middle mr-1`} />
+  );
+
   return (
     <div className="space-y-3" data-testid="project-erp-users-tab">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -725,8 +790,12 @@ export default function ProjectErpUsersTab({
                                     const isSubTabsExpanded = expandedSubTabsPageId === row.id;
                                     return (
                                       <React.Fragment key={row.id}>
-                                        <tr className={`border-b ${borderColor}`} data-testid={`erp-page-row-${row.id}`}>
-                                          <td className={`px-3 py-2 text-xs ${textSecondary}`}>{pIdx + 1}</td>
+                                        <tr
+                                          className={`border-b ${borderColor} ${dragItem?.level === 'page' && dragItem.index === pIdx && dragItem.key === u.id ? 'opacity-40' : ''}`}
+                                          data-testid={`erp-page-row-${row.id}`}
+                                          {...dragRowProps('page', u.id, pIdx, (from, to) => movePage(u.id, from, to))}
+                                        >
+                                          <td className={`px-3 py-2 text-xs ${textSecondary}`}>{canEdit && <DragHandle />}{pIdx + 1}</td>
                                           <td className="px-3 py-2">
                                             <button
                                               type="button"
@@ -901,8 +970,12 @@ export default function ProjectErpUsersTab({
                                                       const isUltraExpanded = expandedUltraTabsSubTabId === st.id;
                                                       return (
                                                         <React.Fragment key={st.id}>
-                                                          <tr className={`border-b ${borderColor}`} data-testid={`erp-subtab-row-${st.id}`}>
-                                                            <td className={`px-3 py-2 text-xs ${textSecondary}`}>{stIdx + 1}</td>
+                                                          <tr
+                                                            className={`border-b ${borderColor} ${dragItem?.level === 'subtab' && dragItem.index === stIdx && dragItem.key === `${u.id}::${row.id}` ? 'opacity-40' : ''}`}
+                                                            data-testid={`erp-subtab-row-${st.id}`}
+                                                            {...dragRowProps('subtab', `${u.id}::${row.id}`, stIdx, (from, to) => moveSubTab(u.id, row.id, from, to))}
+                                                          >
+                                                            <td className={`px-3 py-2 text-xs ${textSecondary}`}>{canEdit && <DragHandle />}{stIdx + 1}</td>
                                                             <td className="px-3 py-2">
                                                               <button
                                                                 type="button"
@@ -984,8 +1057,12 @@ export default function ProjectErpUsersTab({
                                                                         const isUltraTabItemsExpanded = expandedUltraTabItemsId === ut.id;
                                                                         return (
                                                                           <React.Fragment key={ut.id}>
-                                                                            <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-row-${ut.id}`}>
-                                                                              <td className={`px-3 py-2 text-xs ${textSecondary}`}>{utIdx + 1}</td>
+                                                                            <tr
+                                                                              className={`border-b ${borderColor} ${dragItem?.level === 'ultrasubtab' && dragItem.index === utIdx && dragItem.key === `${u.id}::${row.id}::${st.id}` ? 'opacity-40' : ''}`}
+                                                                              data-testid={`erp-ultratab-row-${ut.id}`}
+                                                                              {...dragRowProps('ultrasubtab', `${u.id}::${row.id}::${st.id}`, utIdx, (from, to) => moveUltraSubTab(u.id, row.id, st.id, from, to))}
+                                                                            >
+                                                                              <td className={`px-3 py-2 text-xs ${textSecondary}`}>{canEdit && <DragHandle />}{utIdx + 1}</td>
                                                                               <td className="px-3 py-2">
                                                                                 <button
                                                                                   type="button"
@@ -1063,8 +1140,13 @@ export default function ProjectErpUsersTab({
                                                                                       </thead>
                                                                                       <tbody>
                                                                                         {ultraTabItems.map((it, itIdx) => (
-                                                                                          <tr key={it.id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`erp-ultratab-item-row-${it.id}`}>
-                                                                                            <td className={`px-3 py-2 text-xs ${textSecondary}`}>{itIdx + 1}</td>
+                                                                                          <tr
+                                                                                            key={it.id}
+                                                                                            className={`border-b ${borderColor} last:border-b-0 ${dragItem?.level === 'ultratabitem' && dragItem.index === itIdx && dragItem.key === `${u.id}::${row.id}::${st.id}::${ut.id}` ? 'opacity-40' : ''}`}
+                                                                                            data-testid={`erp-ultratab-item-row-${it.id}`}
+                                                                                            {...dragRowProps('ultratabitem', `${u.id}::${row.id}::${st.id}::${ut.id}`, itIdx, (from, to) => moveUltraTabItem(u.id, row.id, st.id, ut.id, from, to))}
+                                                                                          >
+                                                                                            <td className={`px-3 py-2 text-xs ${textSecondary}`}>{canEdit && <DragHandle />}{itIdx + 1}</td>
                                                                                             <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>{it.name || '—'}</td>
                                                                                             {['ui_link', 'content_link', 'page_link'].map((key) => (
                                                                                               <td key={key} className="px-3 py-2">
