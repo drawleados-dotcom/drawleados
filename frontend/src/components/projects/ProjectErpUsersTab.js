@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -714,18 +714,111 @@ export default function ProjectErpUsersTab({
     <GripVertical className={`h-3.5 w-3.5 ${textSecondary} cursor-grab shrink-0 inline-block align-middle mr-1`} />
   );
 
+  const summaryCard = (label, value, Icon, colorClass, active, onClick) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${bgCard} border ${active ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : borderColor} rounded-lg p-3 text-left transition-colors hover:border-[#6366f1]/60`}
+      data-testid={`erp-task-summary-${label.toLowerCase().replace(/\s+/g, '-')}`}
+    >
+      <div className="flex items-center justify-between">
+        <p className={`text-xs ${textSecondary}`}>{label}</p>
+        <Icon className={`h-4 w-4 ${colorClass}`} />
+      </div>
+      <p className={`text-2xl font-bold mt-1 ${textPrimary}`}>{value}</p>
+    </button>
+  );
+
   return (
     <div className="space-y-3" data-testid="project-erp-users-tab">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className={`text-lg font-semibold ${textPrimary} flex items-center gap-2`}>
-            <UsersIcon className="h-5 w-5 text-[#6366f1]" /> Users
-          </h3>
-          <p className={`text-xs ${textSecondary}`}>
-            Each user's pages track ERP work the same way the Website department tracks pages.
-          </p>
+      <div>
+        <h3 className={`text-lg font-semibold ${textPrimary} flex items-center gap-2`}>
+          <UsersIcon className="h-5 w-5 text-[#6366f1]" /> Users
+        </h3>
+        <p className={`text-xs ${textSecondary}`}>
+          Each user's pages track ERP work the same way the Website department tracks pages.
+        </p>
+      </div>
+
+      {/* Task summary cards — scoped to the Department/User/Page filters below, date-filterable */}
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {summaryCard('Total Tasks', totalTasksCount, ListChecks, 'text-[#6366f1]', taskStatusFilter === 'all', () => setTaskStatusFilter('all'))}
+          <div className={`${bgCard} border ${(taskStatusFilter === 'todo_created' || taskStatusFilter === 'todo_assigned') ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : borderColor} rounded-lg p-3`} data-testid="erp-task-summary-to-do">
+            <div className="flex items-center justify-between">
+              <p className={`text-xs ${textSecondary}`}>To-do</p>
+              <ListTodo className="h-4 w-4 text-amber-400" />
+            </div>
+            <div className="flex items-center gap-3 mt-1">
+              <button
+                type="button"
+                onClick={() => setTaskStatusFilter(taskStatusFilter === 'todo_created' ? 'all' : 'todo_created')}
+                className={`text-left ${taskStatusFilter === 'todo_created' ? 'text-[#6366f1]' : textPrimary}`}
+                data-testid="erp-task-summary-todo-created"
+              >
+                <span className="text-xl font-bold">{todoCreatedCount}</span>
+                <span className={`text-[10px] block uppercase ${textSecondary}`}>Created</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTaskStatusFilter(taskStatusFilter === 'todo_assigned' ? 'all' : 'todo_assigned')}
+                className={`text-left ${taskStatusFilter === 'todo_assigned' ? 'text-[#6366f1]' : textPrimary}`}
+                data-testid="erp-task-summary-todo-assigned"
+              >
+                <span className="text-xl font-bold">{todoAssignedCount}</span>
+                <span className={`text-[10px] block uppercase ${textSecondary}`}>Assigned</span>
+              </button>
+            </div>
+          </div>
+          {summaryCard('Pending', pendingTasksCount, Clock, 'text-yellow-400', taskStatusFilter === 'pending', () => setTaskStatusFilter(taskStatusFilter === 'pending' ? 'all' : 'pending'))}
+          {summaryCard('Completed', completedTasksCount, CheckCircle2, 'text-emerald-400', taskStatusFilter === 'completed', () => setTaskStatusFilter(taskStatusFilter === 'completed' ? 'all' : 'completed'))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={taskDateFilter} onValueChange={setTaskDateFilter}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[150px]`} data-testid="erp-task-date-filter">
+              <SelectValue placeholder="All Time" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">This Week</SelectItem>
+              <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="custom">Custom Range</SelectItem>
+            </SelectContent>
+          </Select>
+          {taskDateFilter === 'custom' && (
+            <>
+              <Input
+                type="date"
+                value={taskDateFrom}
+                onChange={(e) => setTaskDateFrom(e.target.value)}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[150px]`}
+                data-testid="erp-task-date-from"
+              />
+              <span className={`text-xs ${textSecondary}`}>to</span>
+              <Input
+                type="date"
+                value={taskDateTo}
+                onChange={(e) => setTaskDateTo(e.target.value)}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[150px]`}
+                data-testid="erp-task-date-to"
+              />
+            </>
+          )}
+          {(taskDateFilter !== 'all' || taskStatusFilter !== 'all') && (
+            <button
+              type="button"
+              onClick={() => { setTaskDateFilter('all'); setTaskDateFrom(''); setTaskDateTo(''); setTaskStatusFilter('all'); }}
+              className={`text-xs ${textSecondary} hover:${textPrimary} inline-flex items-center gap-1`}
+              data-testid="erp-task-filter-clear"
+            >
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
           <Select value={departmentFilter} onValueChange={handleDepartmentFilterChange}>
             <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[160px]`} data-testid="erp-user-department-filter">
               <SelectValue placeholder="All Departments" />
@@ -792,7 +885,6 @@ export default function ProjectErpUsersTab({
               <Plus className="h-3.5 w-3.5 mr-1" /> Add User
             </Button>
           )}
-        </div>
       </div>
 
       <Card className={`${bgCard} border ${borderColor}`}>

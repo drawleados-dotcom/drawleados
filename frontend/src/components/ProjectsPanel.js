@@ -1361,6 +1361,7 @@ export default function ProjectsPanel({
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
             onTasksChanged={() => { refreshSelectedProject(); loadProjects(); }}
             canEdit={canManageProjects}
+            currentUser={currentUser}
             users={users}
             isDark={isDark}
             bgCard={bgCard}
