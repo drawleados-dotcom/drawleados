@@ -231,6 +231,78 @@ export default function ProjectErpUsersTab({
       ? erpUsers.filter(u => !u.department_id)
       : erpUsers.filter(u => u.department_id === departmentFilter));
 
+  // Cascading jump-to filters: Departments -> Users -> Sub Tabs -> Ultra Sub Tab -> Ultra Tab.
+  // Each level's options are scoped by whatever's selected above it; picking a value at any
+  // level also expands the tree down to reveal that item, without needing to click every chevron.
+  const [userFilter, setUserFilter] = useState('all');
+  const [subTabFilter, setSubTabFilter] = useState('all');
+  const [ultraSubTabFilter, setUltraSubTabFilter] = useState('all');
+  const [ultraTabFilter, setUltraTabFilter] = useState('all');
+
+  const filteredErpUsers = userFilter === 'all' ? visibleErpUsers : visibleErpUsers.filter(u => u.id === userFilter);
+
+  const filteredPages = filteredErpUsers.flatMap(u => (u.pages || []).map(pg => ({ ...pg, _userId: u.id })));
+  const subTabOptions = filteredPages.flatMap(pg => (pg.sub_tabs || []).map(st => ({
+    key: `${pg.id}::${st.id}`,
+    label: `${pg.page_name} → ${st.name}`,
+    userId: pg._userId, pageId: pg.id, subTabId: st.id,
+  })));
+
+  const scopedSubTabs = filteredPages.flatMap(pg => (pg.sub_tabs || []).map(st => ({ pg, st })))
+    .filter(({ pg, st }) => subTabFilter === 'all' || `${pg.id}::${st.id}` === subTabFilter);
+  const ultraSubTabOptions = scopedSubTabs.flatMap(({ pg, st }) => (st.ultra_sub_tabs || []).map(ut => ({
+    key: `${pg.id}::${st.id}::${ut.id}`,
+    label: `${st.name} → ${ut.name}`,
+    userId: pg._userId, pageId: pg.id, subTabId: st.id, ultraSubTabId: ut.id,
+  })));
+
+  const scopedUltraSubTabs = scopedSubTabs.flatMap(({ pg, st }) => (st.ultra_sub_tabs || []).map(ut => ({ pg, st, ut })))
+    .filter(({ pg, st, ut }) => ultraSubTabFilter === 'all' || `${pg.id}::${st.id}::${ut.id}` === ultraSubTabFilter);
+  const ultraTabOptions = scopedUltraSubTabs.flatMap(({ pg, st, ut }) => (ut.ultra_tabs || []).map(item => ({
+    key: `${pg.id}::${st.id}::${ut.id}::${item.id}`,
+    label: `${ut.name} → ${item.name}`,
+    userId: pg._userId, pageId: pg.id, subTabId: st.id, ultraSubTabId: ut.id, itemId: item.id,
+  })));
+
+  const handleDepartmentFilterChange = (v) => {
+    setDepartmentFilter(v);
+    setUserFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+  };
+  const handleUserFilterChange = (v) => {
+    setUserFilter(v);
+    setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setExpandedUserId(v === 'all' ? null : v);
+    setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+  };
+  const handleSubTabFilterChange = (v) => {
+    setSubTabFilter(v);
+    setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+    if (v === 'all') { setExpandedSubTabsPageId(null); return; }
+    const opt = subTabOptions.find(o => o.key === v);
+    if (opt) { setExpandedUserId(opt.userId); setExpandedSubTabsPageId(opt.pageId); }
+  };
+  const handleUltraSubTabFilterChange = (v) => {
+    setUltraSubTabFilter(v);
+    setUltraTabFilter('all');
+    setExpandedUltraTabItemsId(null);
+    if (v === 'all') { setExpandedUltraTabsSubTabId(null); return; }
+    const opt = ultraSubTabOptions.find(o => o.key === v);
+    if (opt) { setExpandedUserId(opt.userId); setExpandedSubTabsPageId(opt.pageId); setExpandedUltraTabsSubTabId(opt.subTabId); }
+  };
+  const handleUltraTabFilterChange = (v) => {
+    setUltraTabFilter(v);
+    if (v === 'all') { setExpandedUltraTabItemsId(null); return; }
+    const opt = ultraTabOptions.find(o => o.key === v);
+    if (opt) {
+      setExpandedUserId(opt.userId);
+      setExpandedSubTabsPageId(opt.pageId);
+      setExpandedUltraTabsSubTabId(opt.subTabId);
+      setExpandedUltraTabItemsId(opt.ultraSubTabId);
+    }
+  };
+
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [expandedPageId, setExpandedPageId] = useState(null);
   const [expandedSubTabsPageId, setExpandedSubTabsPageId] = useState(null);
@@ -496,15 +568,51 @@ export default function ProjectErpUsersTab({
             Each user's pages track ERP work the same way the Website department tracks pages.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[180px]`} data-testid="erp-user-department-filter">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={departmentFilter} onValueChange={handleDepartmentFilterChange}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[160px]`} data-testid="erp-user-department-filter">
               <SelectValue placeholder="All Departments" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Departments</SelectItem>
               {erpDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
               <SelectItem value="_none">No Department</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={userFilter} onValueChange={handleUserFilterChange}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[150px]`} data-testid="erp-user-filter">
+              <SelectValue placeholder="All Users" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Users</SelectItem>
+              {visibleErpUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.user_name || '—'}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={subTabFilter} onValueChange={handleSubTabFilterChange} disabled={subTabOptions.length === 0}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[160px]`} data-testid="erp-subtab-filter">
+              <SelectValue placeholder="All Sub Tabs" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sub Tabs</SelectItem>
+              {subTabOptions.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={ultraSubTabFilter} onValueChange={handleUltraSubTabFilterChange} disabled={ultraSubTabOptions.length === 0}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[170px]`} data-testid="erp-ultra-subtab-filter">
+              <SelectValue placeholder="All Ultra Sub Tab" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Ultra Sub Tab</SelectItem>
+              {ultraSubTabOptions.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={ultraTabFilter} onValueChange={handleUltraTabFilterChange} disabled={ultraTabOptions.length === 0}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[160px]`} data-testid="erp-ultra-tab-filter">
+              <SelectValue placeholder="All Ultra Tab" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Ultra Tab</SelectItem>
+              {ultraTabOptions.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
             </SelectContent>
           </Select>
           {canEdit && (
@@ -535,7 +643,7 @@ export default function ProjectErpUsersTab({
                 </tr>
               </thead>
               <tbody>
-                {visibleErpUsers.map((u, idx) => {
+                {filteredErpUsers.map((u, idx) => {
                   const isExpanded = expandedUserId === u.id;
                   const pages = u.pages || [];
                   return (
@@ -1057,12 +1165,12 @@ export default function ProjectErpUsersTab({
                     </React.Fragment>
                   );
                 })}
-                {visibleErpUsers.length === 0 && (
+                {filteredErpUsers.length === 0 && (
                   <tr>
                     <td colSpan={5} className={`p-8 text-center text-xs ${textSecondary}`}>
                       {erpUsers.length === 0
                         ? <>No users yet. {canEdit && <span>Click <span className="font-medium">Add User</span> to add one.</span>}</>
-                        : 'No users in this department.'}
+                        : 'No users match the current filters.'}
                     </td>
                   </tr>
                 )}
