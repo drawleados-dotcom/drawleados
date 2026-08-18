@@ -1729,36 +1729,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           const contentCalendarViewOnly = isPrivileged ? false : designationGrantsView;
           return (
             <>
-              {/* View / Edit toggle — privileged users + designations granted Edit */}
-              {showToggle && (
-                <div className={`flex items-center justify-end gap-2 mb-1`} data-testid="projects-view-edit-toggle">
-                  <span className={`text-xs ${textSecondary}`}>Mode:</span>
-                  <div className={`inline-flex rounded-lg border ${borderColor} ${bgCard} p-1`}>
-                    <button
-                      onClick={() => setProjectsViewMode('view')}
-                      data-testid="projects-mode-view"
-                      className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                        projectsViewMode === 'view'
-                          ? 'bg-[#6366f1] text-white shadow'
-                          : `${textSecondary} hover:bg-[#6366f1]/10`
-                      }`}
-                    >
-                      View only
-                    </button>
-                    <button
-                      onClick={() => setProjectsViewMode('edit')}
-                      data-testid="projects-mode-edit"
-                      className={`px-3 py-1.5 text-xs rounded-md transition-all ${
-                        projectsViewMode === 'edit'
-                          ? 'bg-[#10b981] text-white shadow'
-                          : `${textSecondary} hover:bg-[#10b981]/10`
-                      }`}
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* The View/Edit toggle used to render here (full-width row,
+                  right-aligned, mostly empty space to its left). It now
+                  renders inside ProjectsPanel's own project header instead —
+                  see showModeToggle/projectsViewMode/setProjectsViewMode
+                  below — so there's no redundant near-empty row up here. */}
               <ProjectsPanel
                 isDark={isDark}
                 textPrimary={textPrimary}
