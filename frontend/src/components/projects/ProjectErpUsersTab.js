@@ -205,6 +205,7 @@ export default function ProjectErpUsersTab({
   onProjectUpdated,
   onTasksChanged,
   canEdit,
+  currentUser,
   users,
   isDark,
   bgCard,
@@ -222,7 +223,57 @@ export default function ProjectErpUsersTab({
   const erpDepartments = project?.erp_departments || [];
   const departmentName = (deptId) => erpDepartments.find(d => d.id === deptId)?.name || '';
   const tasks = project?.tasks || [];
-  const tasksForPage = (pageId) => tasks.filter(t => t.erp_page_id === pageId);
+
+  // Summary-card date filter + click-to-filter status, both applied to every
+  // task list this tab renders (per-page Tasks badge + the expandable table).
+  const [taskDateFilter, setTaskDateFilter] = useState('all'); // all | today | week | month | custom
+  const [taskDateFrom, setTaskDateFrom] = useState('');
+  const [taskDateTo, setTaskDateTo] = useState('');
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // all | pending | completed | todo_created | todo_assigned
+
+  const inTaskDateRange = (dueDateStr) => {
+    if (taskDateFilter === 'all') return true;
+    if (!dueDateStr) return false;
+    const d = new Date(dueDateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (taskDateFilter === 'today') {
+      return d.toDateString() === today.toDateString();
+    }
+    if (taskDateFilter === 'week') {
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay());
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      return d >= weekStart && d <= weekEnd;
+    }
+    if (taskDateFilter === 'month') {
+      return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+    }
+    if (taskDateFilter === 'custom') {
+      if (taskDateFrom && d < new Date(taskDateFrom)) return false;
+      if (taskDateTo) {
+        const to = new Date(taskDateTo);
+        to.setHours(23, 59, 59, 999);
+        if (d > to) return false;
+      }
+      return true;
+    }
+    return true;
+  };
+  const isTodo = (t) => (t.status || 'pending') === 'pending' || t.status === 'in_progress';
+  const matchesStatusFilter = (t) => {
+    if (taskStatusFilter === 'all') return true;
+    if (taskStatusFilter === 'pending') return t.status === 'pending';
+    if (taskStatusFilter === 'completed') return t.status === 'completed';
+    if (taskStatusFilter === 'todo_created') return isTodo(t) && t.created_by === currentUser?.user_id;
+    if (taskStatusFilter === 'todo_assigned') return isTodo(t) && t.assigned_to === currentUser?.user_id;
+    return true;
+  };
+  const matchesTaskFilters = (t) => inTaskDateRange(t.due_date) && matchesStatusFilter(t);
+
+  const tasksForPage = (pageId) => tasks.filter(t => t.erp_page_id === pageId && matchesTaskFilters(t));
 
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const visibleErpUsers = departmentFilter === 'all'
@@ -231,17 +282,38 @@ export default function ProjectErpUsersTab({
       ? erpUsers.filter(u => !u.department_id)
       : erpUsers.filter(u => u.department_id === departmentFilter));
 
-  // Cascading jump-to filters: Departments -> Users -> Sub Tabs -> Ultra Sub Tab -> Ultra Tab.
+  // Cascading jump-to filters: Departments -> Users -> Pages -> Sub Tabs -> Ultra Sub Tab -> Ultra Tab.
   // Each level's options are scoped by whatever's selected above it; picking a value at any
   // level also expands the tree down to reveal that item, without needing to click every chevron.
   const [userFilter, setUserFilter] = useState('all');
+  const [pageFilter, setPageFilter] = useState('all');
   const [subTabFilter, setSubTabFilter] = useState('all');
   const [ultraSubTabFilter, setUltraSubTabFilter] = useState('all');
   const [ultraTabFilter, setUltraTabFilter] = useState('all');
 
   const filteredErpUsers = userFilter === 'all' ? visibleErpUsers : visibleErpUsers.filter(u => u.id === userFilter);
 
-  const filteredPages = filteredErpUsers.flatMap(u => (u.pages || []).map(pg => ({ ...pg, _userId: u.id })));
+  const pageOptions = filteredErpUsers.flatMap(u => (u.pages || []).map(pg => ({
+    key: pg.id,
+    label: userFilter === 'all' ? `${u.user_name || '—'} → ${pg.page_name}` : pg.page_name,
+    userId: u.id, pageId: pg.id,
+  })));
+
+  const filteredPages = filteredErpUsers
+    .flatMap(u => (u.pages || []).map(pg => ({ ...pg, _userId: u.id })))
+    .filter(pg => pageFilter === 'all' || pg.id === pageFilter);
+
+  // Summary-card counts — scoped to whatever Department/User/Page filters are
+  // active above, with just the date filter applied (the status cards below
+  // are themselves the click-to-narrow-by-status control, via taskStatusFilter).
+  const scopedPageIds = new Set(filteredPages.map(pg => pg.id));
+  const scopedDateFilteredTasks = tasks.filter(t => scopedPageIds.has(t.erp_page_id) && inTaskDateRange(t.due_date));
+  const totalTasksCount = scopedDateFilteredTasks.length;
+  const pendingTasksCount = scopedDateFilteredTasks.filter(t => t.status === 'pending').length;
+  const completedTasksCount = scopedDateFilteredTasks.filter(t => t.status === 'completed').length;
+  const todoCreatedCount = scopedDateFilteredTasks.filter(t => isTodo(t) && t.created_by === currentUser?.user_id).length;
+  const todoAssignedCount = scopedDateFilteredTasks.filter(t => isTodo(t) && t.assigned_to === currentUser?.user_id).length;
+
   const subTabOptions = filteredPages.flatMap(pg => (pg.sub_tabs || []).map(st => ({
     key: `${pg.id}::${st.id}`,
     label: `${pg.page_name} → ${st.name}`,
@@ -266,14 +338,22 @@ export default function ProjectErpUsersTab({
 
   const handleDepartmentFilterChange = (v) => {
     setDepartmentFilter(v);
-    setUserFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setUserFilter('all'); setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
     setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
   };
   const handleUserFilterChange = (v) => {
     setUserFilter(v);
-    setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
     setExpandedUserId(v === 'all' ? null : v);
     setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+  };
+  const handlePageFilterChange = (v) => {
+    setPageFilter(v);
+    setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+    if (v === 'all') return;
+    const opt = pageOptions.find(o => o.key === v);
+    if (opt) setExpandedUserId(opt.userId);
   };
   const handleSubTabFilterChange = (v) => {
     setSubTabFilter(v);
@@ -665,6 +745,15 @@ export default function ProjectErpUsersTab({
               {visibleErpUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.user_name || '—'}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={pageFilter} onValueChange={handlePageFilterChange} disabled={pageOptions.length === 0}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[160px]`} data-testid="erp-page-filter">
+              <SelectValue placeholder="All Pages" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Pages</SelectItem>
+              {pageOptions.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Select value={subTabFilter} onValueChange={handleSubTabFilterChange} disabled={subTabOptions.length === 0}>
             <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[160px]`} data-testid="erp-subtab-filter">
               <SelectValue placeholder="All Sub Tabs" />
@@ -722,7 +811,7 @@ export default function ProjectErpUsersTab({
               <tbody>
                 {filteredErpUsers.map((u, idx) => {
                   const isExpanded = expandedUserId === u.id;
-                  const pages = u.pages || [];
+                  const pages = (u.pages || []).filter(pg => pageFilter === 'all' || pg.id === pageFilter);
                   return (
                     <React.Fragment key={u.id}>
                       <tr className={`border-b ${borderColor}`} data-testid={`erp-user-row-${u.id}`}>
