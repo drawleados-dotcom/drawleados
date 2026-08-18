@@ -1756,6 +1756,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 onTaskCreated={loadTasks}
                 viewOnly={effectiveViewOnly}
                 contentCalendarViewOnly={contentCalendarViewOnly}
+                showModeToggle={showToggle}
+                projectsViewMode={projectsViewMode}
+                setProjectsViewMode={setProjectsViewMode}
               />
             </>
           );

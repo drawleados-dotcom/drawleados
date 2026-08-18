@@ -47,6 +47,10 @@ const ERP_TASK_TYPE_OPTIONS = ['New Module', 'New Feature', 'Correction'];
 export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
   viewOnly = false, contentCalendarViewOnly,
+  // View/Edit mode toggle — owned by the parent (OurTasksPage), just rendered
+  // here too so it's reachable from inside a project's header without
+  // scrolling back up to the top of the Projects tab.
+  showModeToggle = false, projectsViewMode, setProjectsViewMode,
 }) {
   // Permission: the parent (OurTasksPage) already resolves this correctly — privileged
   // roles via their own View/Edit toggle, everyone else via their designation's
@@ -799,6 +803,32 @@ export default function ProjectsPanel({
             <p className={textSecondary}>{selectedProject.description}</p>
           </div>
           <div className="flex items-center gap-2">
+            {showModeToggle && (
+              <div className={`inline-flex items-center gap-1.5 rounded-lg border ${borderColor} ${bgCard} p-1 mr-1`} data-testid="project-detail-mode-toggle">
+                <button
+                  onClick={() => setProjectsViewMode('view')}
+                  data-testid="project-detail-mode-view"
+                  className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                    projectsViewMode === 'view'
+                      ? 'bg-[#6366f1] text-white shadow'
+                      : `${textSecondary} hover:bg-[#6366f1]/10`
+                  }`}
+                >
+                  View only
+                </button>
+                <button
+                  onClick={() => setProjectsViewMode('edit')}
+                  data-testid="project-detail-mode-edit"
+                  className={`px-2.5 py-1 text-xs rounded-md transition-all ${
+                    projectsViewMode === 'edit'
+                      ? 'bg-[#10b981] text-white shadow'
+                      : `${textSecondary} hover:bg-[#10b981]/10`
+                  }`}
+                >
+                  Edit
+                </button>
+              </div>
+            )}
             <Button
               onClick={openTeamModal}
               variant="outline"
