@@ -266,7 +266,12 @@ export default function ProjectErpUsersTab({
 
   const deleteUser = async (userId) => {
     if (!canEdit) return;
-    if (!window.confirm('Remove this user and all its pages?')) return;
+    const target = erpUsers.find(u => u.id === userId);
+    if ((target?.pages || []).length > 0) {
+      toast.error('Cannot delete a user that has pages or tasks. Remove its pages first.');
+      return;
+    }
+    if (!window.confirm('Remove this user?')) return;
     const next = erpUsers.filter(u => u.id !== userId);
     const ok = await persistUsers(next);
     if (ok) toast.success('User removed');
@@ -508,7 +513,14 @@ export default function ProjectErpUsersTab({
                               </button>
                             )}
                             {canEdit && (
-                              <button type="button" onClick={() => deleteUser(u.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-user-delete-${u.id}`}>
+                              <button
+                                type="button"
+                                onClick={() => deleteUser(u.id)}
+                                disabled={pages.length > 0}
+                                className={`p-1 ${pages.length > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
+                                title={pages.length > 0 ? 'Cannot delete: this user has pages/tasks' : 'Delete'}
+                                data-testid={`erp-user-delete-${u.id}`}
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </button>
                             )}
