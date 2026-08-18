@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
@@ -826,15 +827,15 @@ export default function ProjectsPanel({
     return (
       <div className="space-y-4" data-testid="project-detail-view">
         {navTabsBar}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-[200px]">
             <button onClick={() => setSelectedProject(null)} className={`text-sm ${textSecondary} hover:underline mb-1`}>
               ← Back to Projects
             </button>
             <h2 className={`text-2xl font-bold ${textPrimary}`}>{selectedProject.name}</h2>
             <p className={textSecondary}>{selectedProject.description}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {showModeToggle && (
               <div className={`inline-flex items-center gap-1.5 rounded-lg border ${borderColor} ${bgCard} p-1 mr-1`} data-testid="project-detail-mode-toggle">
                 <button
@@ -878,22 +879,6 @@ export default function ProjectsPanel({
               <Info className="h-4 w-4" /> Project Details
             </Button>
             <Button
-              onClick={() => { setShowDocsModal(true); setEditingDocId(null); setDocDraft({ name: '', link: '' }); }}
-              variant="outline"
-              className="gap-2"
-              data-testid="project-docs-btn"
-            >
-              <FileText className="h-4 w-4" /> Documents ({(selectedProject.documents || []).length})
-            </Button>
-            <Button
-              onClick={() => setShowMeetingsList(true)}
-              variant="outline"
-              className="gap-2"
-              data-testid="project-meetings-list-btn"
-            >
-              <Video className="h-4 w-4" /> Meetings ({projectMeetings.length})
-            </Button>
-            <Button
               onClick={() => setShowMeetingModal(true)}
               className="gap-2 bg-[#10b981] hover:bg-[#059669] text-white"
               data-testid="project-schedule-meeting-btn"
@@ -903,36 +888,50 @@ export default function ProjectsPanel({
             <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
               <Plus className="h-4 w-4 mr-1" /> Add Task
             </Button>
-            {canManageProjects && ['erp', 'website'].some((d) => (selectedProject.departments || []).includes(d)) && (
-              <Button
-                onClick={() => setShowClientPortalModal(true)}
-                variant="outline"
-                className="gap-2"
-                data-testid="project-client-portal-btn"
-              >
-                <KeyRound className="h-4 w-4" /> Client Portal
-              </Button>
-            )}
-            {canManageProjects && selectedProject.status !== 'Hand Over' && (
-              <Button
-                onClick={openHandoverModal}
-                variant="outline"
-                className={`gap-2 ${selectedProject?.handover?.status === 'otp_requested' ? 'border-amber-500/40 text-amber-500 hover:bg-amber-500/10' : ''}`}
-                data-testid="project-handover-btn"
-              >
-                <KeyRound className="h-4 w-4" /> {selectedProject?.handover?.status === 'otp_requested' ? 'OTP Requested' : 'Handover'}
-              </Button>
-            )}
-            {role === 'super_admin' && (
-              <Button
-                onClick={() => { setDeleteTargetProject(selectedProject); setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
-                variant="outline"
-                className="gap-2 border-red-500/40 text-red-500 hover:bg-red-500/10"
-                data-testid="project-delete-btn"
-              >
-                <Trash2 className="h-4 w-4" /> Delete
-              </Button>
-            )}
+            {/* Everything below is used far less often than the buttons above —
+                grouped into one popover instead of five separate buttons so
+                this row doesn't overflow and squeeze the project title. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="gap-1.5 px-2.5" data-testid="project-more-actions-btn">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className={`${bgCard} border ${borderColor}`}>
+                <DropdownMenuItem onClick={() => { setShowDocsModal(true); setEditingDocId(null); setDocDraft({ name: '', link: '' }); }} className={textPrimary} data-testid="project-docs-btn">
+                  <FileText className="h-4 w-4" /> Documents ({(selectedProject.documents || []).length})
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowMeetingsList(true)} className={textPrimary} data-testid="project-meetings-list-btn">
+                  <Video className="h-4 w-4" /> Meetings ({projectMeetings.length})
+                </DropdownMenuItem>
+                {canManageProjects && ['erp', 'website'].some((d) => (selectedProject.departments || []).includes(d)) && (
+                  <DropdownMenuItem onClick={() => setShowClientPortalModal(true)} className={textPrimary} data-testid="project-client-portal-btn">
+                    <KeyRound className="h-4 w-4" /> Client Portal
+                  </DropdownMenuItem>
+                )}
+                {canManageProjects && selectedProject.status !== 'Hand Over' && (
+                  <DropdownMenuItem
+                    onClick={openHandoverModal}
+                    className={selectedProject?.handover?.status === 'otp_requested' ? 'text-amber-500' : textPrimary}
+                    data-testid="project-handover-btn"
+                  >
+                    <KeyRound className="h-4 w-4" /> {selectedProject?.handover?.status === 'otp_requested' ? 'OTP Requested' : 'Handover'}
+                  </DropdownMenuItem>
+                )}
+                {role === 'super_admin' && (
+                  <>
+                    <DropdownMenuSeparator className={borderColor} />
+                    <DropdownMenuItem
+                      onClick={() => { setDeleteTargetProject(selectedProject); setDeleteProjectPassword(''); setShowDeleteProjectModal(true); }}
+                      className="text-red-500 focus:text-red-500"
+                      data-testid="project-delete-btn"
+                    >
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
