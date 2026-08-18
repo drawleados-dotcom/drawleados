@@ -203,6 +203,7 @@ const TabDetailModal = ({
 export default function ProjectErpUsersTab({
   project,
   onProjectUpdated,
+  onTasksChanged,
   canEdit,
   users,
   isDark,
@@ -338,6 +339,23 @@ export default function ProjectErpUsersTab({
     ));
     const ok = await persistUsers(next);
     if (ok) { toast.success('Page removed'); closePageModal(); }
+  };
+
+  // Reassign a task to a different page within the same user, without leaving this table.
+  const moveTaskPage = async (task, userId, newPageId) => {
+    if (!canEdit || newPageId === (task.erp_page_id || 'others')) return;
+    const eu = erpUsers.find(x => x.id === userId);
+    const newPageName = newPageId === 'others' ? 'Others' : ((eu?.pages || []).find(p => p.id === newPageId)?.page_name || '');
+    try {
+      await axios.put(`${API}/api/our-tasks/tasks/${task.task_id}`, {
+        erp_page_id: newPageId,
+        erp_page_name: newPageName,
+      }, { headers });
+      toast.success('Task moved to another page');
+      onTasksChanged?.();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to move task');
+    }
   };
 
   // ---- Sub Tab CRUD (nested under a Page) ----
@@ -695,6 +713,7 @@ export default function ProjectErpUsersTab({
                                                         <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Assign To</th>
                                                         <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Delivery Time</th>
                                                         <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-40`}>Move To Page</th>
                                                       </tr>
                                                     </thead>
                                                     <tbody>
@@ -711,6 +730,23 @@ export default function ProjectErpUsersTab({
                                                             <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase ${textSecondary} border ${borderColor}`}>
                                                               {(t.status || 'pending').replace('_', ' ')}
                                                             </span>
+                                                          </td>
+                                                          <td className="px-3 py-2">
+                                                            {canEdit ? (
+                                                              <Select value={t.erp_page_id || 'others'} onValueChange={(v) => moveTaskPage(t, u.id, v)}>
+                                                                <SelectTrigger className={`h-7 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`erp-task-move-${t.task_id}`}>
+                                                                  <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                  {pages.map(pg => (
+                                                                    <SelectItem key={pg.id} value={pg.id}>{pg.page_name}</SelectItem>
+                                                                  ))}
+                                                                  <SelectItem value="others">Others</SelectItem>
+                                                                </SelectContent>
+                                                              </Select>
+                                                            ) : (
+                                                              <span className={`text-xs ${textSecondary}`}>{row.page_name}</span>
+                                                            )}
                                                           </td>
                                                         </tr>
                                                       ))}

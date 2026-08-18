@@ -1301,6 +1301,7 @@ export default function ProjectsPanel({
           <ProjectErpUsersTab
             project={selectedProject}
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            onTasksChanged={() => { refreshSelectedProject(); loadProjects(); }}
             canEdit={canManageProjects}
             users={users}
             isDark={isDark}
