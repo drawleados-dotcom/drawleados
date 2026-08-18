@@ -131,6 +131,38 @@ export default function ProjectsPanel({
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
 
+  // Remember which project + inner tab was open so a hard refresh restores it
+  // instead of dropping back to the bare project list.
+  const LAST_VIEW_KEY = 'dl_operations_last_project_view';
+  useEffect(() => {
+    try {
+      if (selectedProject?.project_id) {
+        localStorage.setItem(LAST_VIEW_KEY, JSON.stringify({ project_id: selectedProject.project_id, projectInnerTab, deptFilter }));
+      } else {
+        localStorage.removeItem(LAST_VIEW_KEY);
+      }
+    } catch { /* ignore storage errors */ }
+  }, [selectedProject?.project_id, projectInnerTab, deptFilter]);
+
+  useEffect(() => {
+    let raw;
+    try { raw = localStorage.getItem(LAST_VIEW_KEY); } catch { raw = null; }
+    if (!raw) return;
+    let saved;
+    try { saved = JSON.parse(raw); } catch { return; }
+    if (!saved?.project_id) return;
+    axios.get(`${API}/api/projects/${saved.project_id}`, { headers })
+      .then((res) => {
+        setSelectedProject(res.data);
+        setProjectInnerTab(saved.projectInnerTab || 'tasks');
+        setDeptFilter(saved.deptFilter || 'all');
+      })
+      .catch(() => {
+        try { localStorage.removeItem(LAST_VIEW_KEY); } catch { /* ignore */ }
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const loadProjects = useCallback(async (showSpinner = false) => {
     try {
       if (showSpinner) setLoading(true);
@@ -2517,8 +2549,10 @@ export default function ProjectsPanel({
                     className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors`}
                     onClick={async () => {
                       // Optimistic UI — show the project shell immediately, then hydrate with tasks.
-                      // Website projects land on Pages (their primary tab); everything else lands on Tasks.
-                      setProjectInnerTab((p.departments || []).includes('website') ? 'pages' : 'tasks');
+                      // Website projects land on Pages, ERP projects land on Users — each
+                      // department's own primary tab; everything else lands on Tasks.
+                      const deps = p.departments || [];
+                      setProjectInnerTab(deps.includes('website') ? 'pages' : (deps.includes('erp') ? 'erp_users' : 'tasks'));
                       setSelectedProject(p);
                       try {
                         const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });

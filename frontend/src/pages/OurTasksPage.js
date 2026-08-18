@@ -90,7 +90,22 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [filter, setFilter] = useState('all');
-  const [mainTab, setMainTab] = useState(defaultTab); // assigned_to_me, assign_to_team, projects, departments, approvals, meetings
+  // Remembers the last main tab across a hard refresh (localStorage) so a refresh
+  // while on Operations/Projects doesn't drop the user back to My Tasks. Never
+  // overrides an explicit defaultTab (e.g. the Approvals deep link modal).
+  const [mainTab, setMainTab] = useState(() => {
+    if (inModal || defaultTab !== 'assigned_to_me') return defaultTab;
+    try {
+      return localStorage.getItem('dl_our_tasks_main_tab') || defaultTab;
+    } catch {
+      return defaultTab;
+    }
+  }); // assigned_to_me, assign_to_team, projects, departments, approvals, meetings
+
+  useEffect(() => {
+    if (inModal) return;
+    try { localStorage.setItem('dl_our_tasks_main_tab', mainTab); } catch { /* ignore storage errors */ }
+  }, [mainTab, inModal]);
   // View/Edit toggle for Projects tab — visible only to super_admin
   const [projectsViewMode, setProjectsViewMode] = useState('view'); // 'view' | 'edit'
   // Operations Summary cards (Feb 2026) — driven by /api/our-tasks/summary/{date}
