@@ -278,6 +278,10 @@ export default function ProjectErpUsersTab({
     setPageModal({ mode: 'add', userId, page: emptyPage(), editing: true });
   };
   const openViewPage = (userId, page) => setPageModal({ mode: 'view', userId, page: { ...page }, editing: false });
+  const openEditPage = (userId, page) => {
+    if (!canEdit) return;
+    setPageModal({ mode: 'view', userId, page: { ...page }, editing: true });
+  };
   const closePageModal = () => setPageModal(null);
 
   const savePageModal = async () => {
@@ -302,6 +306,10 @@ export default function ProjectErpUsersTab({
 
   const deletePage = async (userId, pageId) => {
     if (!canEdit) return;
+    if (tasksForPage(pageId).length > 0) {
+      toast.error('Cannot delete a page that has tasks tagged to it');
+      return;
+    }
     const next = erpUsers.map(u => (
       u.id === userId ? { ...u, pages: (u.pages || []).filter(p => p.id !== pageId) } : u
     ));
@@ -598,7 +606,19 @@ export default function ProjectErpUsersTab({
                                                 <Eye className="h-4 w-4" />
                                               </button>
                                               {canEdit && (
-                                                <button type="button" onClick={() => deletePage(u.id, row.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-page-delete-${row.id}`}>
+                                                <button type="button" onClick={() => openEditPage(u.id, row)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`erp-page-edit-${row.id}`}>
+                                                  <Pencil className="h-4 w-4" />
+                                                </button>
+                                              )}
+                                              {canEdit && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => deletePage(u.id, row.id)}
+                                                  disabled={pageTasks.length > 0}
+                                                  className={`p-1 ${pageTasks.length > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
+                                                  title={pageTasks.length > 0 ? 'Cannot delete: this page has tasks' : 'Delete'}
+                                                  data-testid={`erp-page-delete-${row.id}`}
+                                                >
                                                   <Trash2 className="h-4 w-4" />
                                                 </button>
                                               )}
@@ -1089,14 +1109,20 @@ export default function ProjectErpUsersTab({
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-between gap-2`}>
               {pageModal.mode === 'view' && canEdit ? (
-                <button
-                  type="button"
-                  onClick={() => deletePage(pageModal.userId, pageModal.page.id)}
-                  className="text-sm text-red-500 hover:text-red-400 inline-flex items-center gap-1"
-                  data-testid="erp-page-modal-delete"
-                >
-                  <Trash2 className="h-4 w-4" /> Delete
-                </button>
+                tasksForPage(pageModal.page.id).length > 0 ? (
+                  <span className={`text-sm ${textSecondary} inline-flex items-center gap-1`} title="Cannot delete: this page has tasks">
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => deletePage(pageModal.userId, pageModal.page.id)}
+                    className="text-sm text-red-500 hover:text-red-400 inline-flex items-center gap-1"
+                    data-testid="erp-page-modal-delete"
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </button>
+                )
               ) : <span />}
               <div className="flex items-center gap-2">
                 {canEdit && pageModal.mode === 'view' && !pageModal.editing && (
