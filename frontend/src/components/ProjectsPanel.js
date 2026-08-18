@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, ChevronDown, ChevronRight, KeyRound, Link2, History, NotebookPen } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info } from 'lucide-react';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
@@ -65,7 +65,7 @@ export default function ProjectsPanel({
   const [loading, setLoading] = useState(true);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null); // project being viewed
-  const [projectDetailCollapsed, setProjectDetailCollapsed] = useState(false);
+  const [projectDetailCollapsed, setProjectDetailCollapsed] = useState(true);
   const [showClientPortalModal, setShowClientPortalModal] = useState(false);
   const [editingWeblink, setEditingWeblink] = useState(false);
   const [weblinkDraft, setWeblinkDraft] = useState('');
@@ -808,6 +808,14 @@ export default function ProjectsPanel({
               <Users className="h-4 w-4" /> Team ({selectedProject.members?.length || 0})
             </Button>
             <Button
+              onClick={() => setProjectDetailCollapsed(v => !v)}
+              variant="outline"
+              className="gap-2"
+              data-testid="project-detail-collapse-toggle"
+            >
+              <Info className="h-4 w-4" /> Project Details
+            </Button>
+            <Button
               onClick={() => { setShowDocsModal(true); setEditingDocId(null); setDocDraft({ name: '', link: '' }); }}
               variant="outline"
               className="gap-2"
@@ -866,19 +874,9 @@ export default function ProjectsPanel({
           </div>
         </div>
 
+        {!projectDetailCollapsed && (
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-4 space-y-3">
-            <button
-              type="button"
-              onClick={() => setProjectDetailCollapsed(v => !v)}
-              className={`flex items-center gap-2 text-sm font-medium ${textPrimary} hover:opacity-80`}
-              data-testid="project-detail-collapse-toggle"
-            >
-              {projectDetailCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              Project Details
-            </button>
-            {!projectDetailCollapsed && (
-            <>
             <div className="flex items-center gap-6 flex-wrap text-sm">
               <div className="flex items-center gap-2">
                 <Calendar className={`h-4 w-4 ${textSecondary}`} />
@@ -1137,10 +1135,9 @@ export default function ProjectsPanel({
                 ));
               })()}
             </div>
-            </>
-            )}
           </CardContent>
         </Card>
+        )}
 
         {/* Inner tabs: Tasks · Payment Schedule */}
         {(() => {
