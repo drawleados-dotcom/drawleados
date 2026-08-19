@@ -11,7 +11,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Checkbox } from '../components/ui/checkbox';
-import { Plus, Pencil, Trash2, Users, FileText, Search, BarChart3 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, FileText, Search, BarChart3, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import ClientAnalyticsTab from '../components/clientMaster/ClientAnalyticsTab';
 import SourceSelect from '../components/clientMaster/SourceSelect';
@@ -203,6 +203,31 @@ export default function ClientMasterPage() {
     }
   };
 
+  // The PDF is generated fresh on the server on every request — no caching
+  // anywhere in the chain — so this always reflects whatever's currently
+  // in Client Master, including a client added moments ago.
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const downloadReport = async () => {
+    setDownloadingReport(true);
+    try {
+      const res = await api.get('/client-master/report/pdf', { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `client_master_report_${todayIso()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Report downloaded');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to generate report');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
   const filteredClients = useMemo(() => {
     return clients.filter((c) => {
       if (monthFilter) {
@@ -249,9 +274,19 @@ export default function ClientMasterPage() {
             </h1>
             <p className={`text-sm ${textSecondary}`}>Onboarding, service/package, and delivery status for every client.</p>
           </div>
-          <Button onClick={openAdd} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="add-client-btn">
-            <Plus className="h-4 w-4 mr-2" /> Add Client
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={downloadReport}
+              disabled={downloadingReport}
+              variant="outline"
+              data-testid="client-master-download-report-btn"
+            >
+              <FileDown className="h-4 w-4 mr-2" /> {downloadingReport ? 'Generating...' : 'Download Report'}
+            </Button>
+            <Button onClick={openAdd} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="add-client-btn">
+              <Plus className="h-4 w-4 mr-2" /> Add Client
+            </Button>
+          </div>
         </div>
 
         {/* Tab bar */}
