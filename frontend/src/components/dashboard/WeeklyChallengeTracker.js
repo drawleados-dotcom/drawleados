@@ -109,9 +109,41 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
   const textPrimary = isDark ? 'text-[#fafafa]' : 'text-gray-900';
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-500';
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
+  const incomeText = isDark ? 'text-emerald-400' : 'text-emerald-600';
+  const expenseText = isDark ? 'text-red-400' : 'text-red-600';
+
+  // One accent per table section — carried through its group header, sub-header,
+  // metric pills, and the summary/target rows so a color always maps to the
+  // same section at a glance.
+  const SECTION = {
+    finance: { solid: 'bg-emerald-500', tint: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50', border: 'border-b-emerald-500', pill: isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700' },
+    sales: { solid: 'bg-orange-500', tint: isDark ? 'bg-orange-500/10' : 'bg-orange-50', border: 'border-b-orange-500', pill: isDark ? 'bg-orange-500/20 text-orange-400' : 'bg-orange-100 text-orange-700' },
+    vinoth: { solid: 'bg-sky-500', tint: isDark ? 'bg-sky-500/10' : 'bg-sky-50', border: 'border-b-sky-500', pill: isDark ? 'bg-sky-500/20 text-sky-400' : 'bg-sky-100 text-sky-700' },
+    drawlead: { solid: 'bg-violet-500', tint: isDark ? 'bg-violet-500/10' : 'bg-violet-50', border: 'border-b-violet-500', pill: isDark ? 'bg-violet-500/20 text-violet-400' : 'bg-violet-100 text-violet-700' },
+  };
 
   const thCls = `text-center p-2 text-[10px] font-semibold uppercase tracking-wide ${textSecondary} border ${borderColor} whitespace-nowrap`;
+  const thGroupCls = (section) => `text-center p-2 text-[11px] font-bold uppercase tracking-wider text-white border ${borderColor} ${SECTION[section].solid} whitespace-nowrap`;
+  const thSubCls = (section) => `text-center p-2 text-[10px] font-semibold uppercase tracking-wide ${textSecondary} border ${borderColor} border-b-2 ${SECTION[section].border} ${SECTION[section].tint} whitespace-nowrap`;
   const tdCls = `text-center p-2 text-sm ${textPrimary} border ${borderColor} whitespace-nowrap`;
+
+  // Count columns (Sales, Marketing) render as a colored pill when there's
+  // activity that day, and a muted "0" otherwise — so the eye lands on days
+  // with something to see instead of a grid full of zeroes.
+  const pill = (value, section) => {
+    const v = value ?? 0;
+    if (!v) return <span className={`text-sm ${textSecondary}`}>0</span>;
+    return (
+      <span className={`inline-flex min-w-[26px] justify-center px-2 py-0.5 rounded-full text-xs font-bold ${SECTION[section].pill}`}>
+        {v}
+      </span>
+    );
+  };
+  const strongPill = (value, section) => (
+    <span className={`inline-flex min-w-[30px] justify-center px-2.5 py-0.5 rounded-full text-xs font-bold text-white ${SECTION[section].solid}`}>
+      {value ?? 0}
+    </span>
+  );
 
   if (loading && !data) {
     return (
@@ -177,68 +209,83 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="border-collapse">
+      <div className="overflow-x-auto rounded-lg border border-inherit">
+        <table className="border-collapse w-full">
           <thead>
             <tr>
               <th className={thCls} rowSpan={2}>Day</th>
               <th className={thCls} rowSpan={2}>Date</th>
-              <th className={`${thCls} bg-emerald-500/10`} colSpan={3}>Finance</th>
-              <th className={`${thCls} bg-rose-500/10`} colSpan={4}>Sales</th>
-              <th className={`${thCls} bg-sky-500/10`} colSpan={6}>Marketing – Vinoth</th>
-              <th className={`${thCls} bg-violet-500/10`} colSpan={6}>Marketing – Drawlead</th>
+              <th className={thGroupCls('finance')} colSpan={3}>Finance</th>
+              <th className={thGroupCls('sales')} colSpan={5}>Sales</th>
+              <th className={thGroupCls('vinoth')} colSpan={6}>Marketing – Vinoth</th>
+              <th className={thGroupCls('drawlead')} colSpan={6}>Marketing – Drawlead</th>
             </tr>
             <tr>
-              <th className={thCls}>Income</th>
-              <th className={thCls}>Expense</th>
-              <th className={thCls}>Cash in Bank</th>
-              <th className={thCls}>Inbound Lead</th>
-              <th className={thCls}>Outbound Prospect</th>
-              <th className={thCls}>Appointment</th>
-              <th className={thCls}>Sales</th>
-              {PLATFORMS.map((p) => <th key={`v-${p.id}`} className={thCls}>{p.label}</th>)}
-              <th className={thCls}>Total Posted</th>
-              {PLATFORMS.map((p) => <th key={`d-${p.id}`} className={thCls}>{p.label}</th>)}
-              <th className={thCls}>Total Posted</th>
+              <th className={thSubCls('finance')}>Income</th>
+              <th className={thSubCls('finance')}>Expense</th>
+              <th className={thSubCls('finance')}>Cash in Bank</th>
+              <th className={thSubCls('sales')}>Inbound Lead</th>
+              <th className={thSubCls('sales')}>Outbound Prospect</th>
+              <th className={thSubCls('sales')}>One to One</th>
+              <th className={thSubCls('sales')}>Appointment</th>
+              <th className={thSubCls('sales')}>Sales</th>
+              {PLATFORMS.map((p) => <th key={`v-${p.id}`} className={thSubCls('vinoth')}>{p.label}</th>)}
+              <th className={thSubCls('vinoth')}>Total Posted</th>
+              {PLATFORMS.map((p) => <th key={`d-${p.id}`} className={thSubCls('drawlead')}>{p.label}</th>)}
+              <th className={thSubCls('drawlead')}>Total Posted</th>
             </tr>
           </thead>
           <tbody>
-            {days.map((day) => (
-              <tr key={day.date} className={day.is_today ? 'bg-[#6366f1]/5' : ''} data-testid={`weekly-tracker-row-${day.date}`}>
-                <td className={tdCls}>{day.day_name}</td>
-                <td className={tdCls}>{fmtShortDate(day.date)}</td>
-                <td className={tdCls}>{fmtMoney(day.finance.income)}</td>
-                <td className={tdCls}>{fmtMoney(day.finance.expense)}</td>
-                <td className={tdCls}>{fmtMoney(day.finance.cash_in_bank)}</td>
-                <td className={tdCls}>{day.sales.inbound_lead}</td>
-                <td className={tdCls}>{day.sales.outbound_prospect}</td>
-                <td className={tdCls}>{day.sales.appointment}</td>
-                <td className={tdCls}>{day.sales.sales}</td>
-                {PLATFORMS.map((p) => <td key={`v-${p.id}`} className={tdCls}>{day.marketing_vinoth?.[p.id] ?? 0}</td>)}
-                <td className={`${tdCls} font-semibold`} data-testid={`weekly-tracker-vinoth-posted-${day.date}`}>{day.marketing_vinoth_posted_total ?? 0}</td>
-                {PLATFORMS.map((p) => <td key={`d-${p.id}`} className={tdCls}>{day.marketing_drawlead?.[p.id] ?? 0}</td>)}
-                <td className={`${tdCls} font-semibold`} data-testid={`weekly-tracker-drawlead-posted-${day.date}`}>{day.marketing_drawlead_posted_total ?? 0}</td>
-              </tr>
-            ))}
+            {days.map((day, idx) => {
+              const zebra = idx % 2 === 1 ? (isDark ? 'bg-white/[0.03]' : 'bg-gray-50') : '';
+              const rowCls = day.is_today
+                ? `${isDark ? 'bg-indigo-500/10' : 'bg-indigo-50'}`
+                : `${zebra} ${isDark ? 'hover:bg-white/5' : 'hover:bg-gray-100/70'} transition-colors`;
+              const dayCellCls = `${tdCls} font-semibold ${day.is_today ? 'border-l-4 border-l-indigo-500' : ''}`;
+              return (
+                <tr key={day.date} className={rowCls} data-testid={`weekly-tracker-row-${day.date}`}>
+                  <td className={dayCellCls}>
+                    {day.day_name}
+                    {day.is_today && <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-indigo-500 align-middle" />}
+                  </td>
+                  <td className={tdCls}>{fmtShortDate(day.date)}</td>
+                  <td className={`${tdCls} font-semibold ${incomeText}`}>{fmtMoney(day.finance.income)}</td>
+                  <td className={`${tdCls} font-semibold ${expenseText}`}>{fmtMoney(day.finance.expense)}</td>
+                  <td className={`${tdCls} font-semibold`}>{fmtMoney(day.finance.cash_in_bank)}</td>
+                  <td className={tdCls}>{pill(day.sales.inbound_lead, 'sales')}</td>
+                  <td className={tdCls}>{pill(day.sales.outbound_prospect, 'sales')}</td>
+                  <td className={tdCls}>{pill(day.sales.one_to_one, 'sales')}</td>
+                  <td className={tdCls}>{pill(day.sales.appointment, 'sales')}</td>
+                  <td className={tdCls}>{pill(day.sales.sales, 'sales')}</td>
+                  {PLATFORMS.map((p) => <td key={`v-${p.id}`} className={tdCls}>{pill(day.marketing_vinoth?.[p.id], 'vinoth')}</td>)}
+                  <td className={tdCls} data-testid={`weekly-tracker-vinoth-posted-${day.date}`}>{strongPill(day.marketing_vinoth_posted_total, 'vinoth')}</td>
+                  {PLATFORMS.map((p) => <td key={`d-${p.id}`} className={tdCls}>{pill(day.marketing_drawlead?.[p.id], 'drawlead')}</td>)}
+                  <td className={tdCls} data-testid={`weekly-tracker-drawlead-posted-${day.date}`}>{strongPill(day.marketing_drawlead_posted_total, 'drawlead')}</td>
+                </tr>
+              );
+            })}
 
             {/* Week summary */}
-            <tr className="bg-amber-400/20 font-semibold">
-              <td className={tdCls} colSpan={2}>WEEK SUMMARY</td>
-              <td className={tdCls}>{fmtMoney(summary.finance?.income)}</td>
-              <td className={tdCls}>{fmtMoney(summary.finance?.expense)}</td>
+            <tr className={`${isDark ? 'bg-amber-500/15' : 'bg-amber-100'} font-semibold border-t-2 border-t-amber-500`}>
+              <td className={tdCls} colSpan={2}>
+                <span className={isDark ? 'text-amber-400' : 'text-amber-700'}>WEEK SUMMARY</span>
+              </td>
+              <td className={`${tdCls} ${incomeText}`}>{fmtMoney(summary.finance?.income)}</td>
+              <td className={`${tdCls} ${expenseText}`}>{fmtMoney(summary.finance?.expense)}</td>
               <td className={tdCls}>—</td>
-              <td className={tdCls}>{summary.sales?.inbound_lead}</td>
-              <td className={tdCls}>{summary.sales?.outbound_prospect}</td>
-              <td className={tdCls}>{summary.sales?.appointment}</td>
-              <td className={tdCls}>{summary.sales?.sales}</td>
+              <td className={tdCls}>{strongPill(summary.sales?.inbound_lead, 'sales')}</td>
+              <td className={tdCls}>{strongPill(summary.sales?.outbound_prospect, 'sales')}</td>
+              <td className={tdCls}>{strongPill(summary.sales?.one_to_one, 'sales')}</td>
+              <td className={tdCls}>{strongPill(summary.sales?.appointment, 'sales')}</td>
+              <td className={tdCls}>{strongPill(summary.sales?.sales, 'sales')}</td>
               {PLATFORMS.map((p) => <td key={`v-sum-${p.id}`} className={tdCls}>{summary.marketing_vinoth?.[p.id] ?? 0}</td>)}
-              <td className={tdCls}>{summary.marketing_vinoth_posted_total ?? 0}</td>
+              <td className={tdCls}>{strongPill(summary.marketing_vinoth_posted_total, 'vinoth')}</td>
               {PLATFORMS.map((p) => <td key={`d-sum-${p.id}`} className={tdCls}>{summary.marketing_drawlead?.[p.id] ?? 0}</td>)}
-              <td className={tdCls}>{summary.marketing_drawlead_posted_total ?? 0}</td>
+              <td className={tdCls}>{strongPill(summary.marketing_drawlead_posted_total, 'drawlead')}</td>
             </tr>
 
             {/* Target row (editable) */}
-            <tr className={`${textSecondary}`}>
+            <tr className={`${textSecondary} border-t border-dashed ${borderColor}`}>
               <td className={tdCls} colSpan={2}>
                 <div className="flex items-center justify-center gap-1">
                   TARGET
@@ -261,39 +308,41 @@ export default function WeeklyChallengeTracker({ isDark, isAdmin }) {
               </td>
               {editingTargets ? (
                 <>
-                  <td className={tdCls}><Input type="number" value={targetDraft.income ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, income: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
-                  <td className={tdCls}><Input type="number" value={targetDraft.expense ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, expense: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
-                  <td className={tdCls}>—</td>
-                  <td className={tdCls}><Input type="number" value={targetDraft.inbound_lead ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, inbound_lead: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
-                  <td className={tdCls}><Input type="number" value={targetDraft.outbound_prospect ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, outbound_prospect: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
-                  <td className={tdCls}><Input type="number" value={targetDraft.appointment ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, appointment: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
-                  <td className={tdCls}><Input type="number" value={targetDraft.sales ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, sales: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
+                  <td className={`${tdCls} ${SECTION.finance.tint}`}><Input type="number" value={targetDraft.income ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, income: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
+                  <td className={`${tdCls} ${SECTION.finance.tint}`}><Input type="number" value={targetDraft.expense ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, expense: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
+                  <td className={`${tdCls} ${SECTION.finance.tint}`}>—</td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}><Input type="number" value={targetDraft.inbound_lead ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, inbound_lead: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}><Input type="number" value={targetDraft.outbound_prospect ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, outbound_prospect: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}><Input type="number" value={targetDraft.one_to_one ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, one_to_one: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}><Input type="number" value={targetDraft.appointment ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, appointment: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}><Input type="number" value={targetDraft.sales ?? 0} onChange={(e) => setTargetDraft((p) => ({ ...p, sales: Number(e.target.value) }))} className="h-7 text-xs text-center" /></td>
                   {PLATFORMS.map((p) => (
-                    <td key={`v-t-${p.id}`} className={tdCls}>
+                    <td key={`v-t-${p.id}`} className={`${tdCls} ${SECTION.vinoth.tint}`}>
                       <Input type="number" value={targetDraft.marketing_vinoth?.[p.id] ?? 0} onChange={(e) => setTargetDraft((prev) => ({ ...prev, marketing_vinoth: { ...prev.marketing_vinoth, [p.id]: Number(e.target.value) } }))} className="h-7 text-xs text-center" />
                     </td>
                   ))}
-                  <td className={tdCls}>—</td>
+                  <td className={`${tdCls} ${SECTION.vinoth.tint}`}>—</td>
                   {PLATFORMS.map((p) => (
-                    <td key={`d-t-${p.id}`} className={tdCls}>
+                    <td key={`d-t-${p.id}`} className={`${tdCls} ${SECTION.drawlead.tint}`}>
                       <Input type="number" value={targetDraft.marketing_drawlead?.[p.id] ?? 0} onChange={(e) => setTargetDraft((prev) => ({ ...prev, marketing_drawlead: { ...prev.marketing_drawlead, [p.id]: Number(e.target.value) } }))} className="h-7 text-xs text-center" />
                     </td>
                   ))}
-                  <td className={tdCls}>—</td>
+                  <td className={`${tdCls} ${SECTION.drawlead.tint}`}>—</td>
                 </>
               ) : (
                 <>
-                  <td className={tdCls}>{fmtMoney(t.income)}</td>
-                  <td className={tdCls}>{fmtMoney(t.expense)}</td>
-                  <td className={tdCls}>—</td>
-                  <td className={tdCls}>{t.inbound_lead ?? 0}</td>
-                  <td className={tdCls}>{t.outbound_prospect ?? 0}</td>
-                  <td className={tdCls}>{t.appointment ?? 0}</td>
-                  <td className={tdCls}>{t.sales ?? 0}</td>
-                  {PLATFORMS.map((p) => <td key={`v-t-${p.id}`} className={tdCls}>{t.marketing_vinoth?.[p.id] ?? 0}</td>)}
-                  <td className={tdCls}>—</td>
-                  {PLATFORMS.map((p) => <td key={`d-t-${p.id}`} className={tdCls}>{t.marketing_drawlead?.[p.id] ?? 0}</td>)}
-                  <td className={tdCls}>—</td>
+                  <td className={`${tdCls} ${SECTION.finance.tint}`}>{fmtMoney(t.income)}</td>
+                  <td className={`${tdCls} ${SECTION.finance.tint}`}>{fmtMoney(t.expense)}</td>
+                  <td className={`${tdCls} ${SECTION.finance.tint}`}>—</td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}>{t.inbound_lead ?? 0}</td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}>{t.outbound_prospect ?? 0}</td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}>{t.one_to_one ?? 0}</td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}>{t.appointment ?? 0}</td>
+                  <td className={`${tdCls} ${SECTION.sales.tint}`}>{t.sales ?? 0}</td>
+                  {PLATFORMS.map((p) => <td key={`v-t-${p.id}`} className={`${tdCls} ${SECTION.vinoth.tint}`}>{t.marketing_vinoth?.[p.id] ?? 0}</td>)}
+                  <td className={`${tdCls} ${SECTION.vinoth.tint}`}>—</td>
+                  {PLATFORMS.map((p) => <td key={`d-t-${p.id}`} className={`${tdCls} ${SECTION.drawlead.tint}`}>{t.marketing_drawlead?.[p.id] ?? 0}</td>)}
+                  <td className={`${tdCls} ${SECTION.drawlead.tint}`}>—</td>
                 </>
               )}
             </tr>

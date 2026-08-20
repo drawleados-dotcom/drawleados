@@ -16,14 +16,10 @@ from datetime import datetime, timedelta, date, timezone
 dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 PLATFORMS = ["instagram", "facebook", "x", "linkedin", "youtube"]
-# Best-effort inbound/outbound split — leads_v2's `source` field is free
-# text seeded from these known values; anything else (blank, "other",
-# manually-added) is treated as outbound/prospected.
-INBOUND_SOURCES = {"meta", "website", "whatsapp", "referral", "link"}
 
 DEFAULT_TARGETS = {
     "income": 0, "expense": 0,
-    "inbound_lead": 0, "outbound_prospect": 0, "appointment": 0, "sales": 0,
+    "inbound_lead": 0, "outbound_prospect": 0, "one_to_one": 0, "appointment": 0, "sales": 0,
     "marketing_vinoth": {p: 0 for p in PLATFORMS},
     "marketing_drawlead": {p: 0 for p in PLATFORMS},
 }
@@ -34,6 +30,7 @@ class TargetsUpdate(BaseModel):
     expense: Optional[float] = None
     inbound_lead: Optional[float] = None
     outbound_prospect: Optional[float] = None
+    one_to_one: Optional[float] = None
     appointment: Optional[float] = None
     sales: Optional[float] = None
     marketing_vinoth: Optional[Dict[str, float]] = None
@@ -73,19 +70,43 @@ async def get_weekly_dashboard(request: Request, date_str: Optional[str] = None,
     start_iso, end_iso = start.isoformat(), end.isoformat()
     today_iso = datetime.now(timezone.utc).date().isoformat()
 
-    # ---- Finance: cashbook_entries (kind=credit/debit) grouped by date ----
+    day_start_dt = datetime.combine(start, datetime.min.time()).replace(tzinfo=timezone.utc)
+    day_end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone.utc)
+    day_start_iso, day_end_iso = day_start_dt.isoformat(), day_end_dt.isoformat()
+
+    # ---- Finance: cashbook_entries (kind=credit/debit) grouped by date.
+    # Credit entries linked to an invoice (`invoice_id`) are grouped by that
+    # invoice's `invoice_date` instead of the entry's own payment date;
+    # unlinked credits (e.g. manual Cash In) and all debits use their own
+    # `date` as before. ----
+    income_by_day, expense_by_day = {}, {}
+
+    window_invoices = await db.invoices.find(
+        {"invoice_date": {"$gte": day_start_dt, "$lt": day_end_dt}},
+        {"_id": 0, "invoice_id": 1, "invoice_date": 1},
+    ).to_list(20000)
+    invoice_date_by_id = {i["invoice_id"]: _day_key(i.get("invoice_date")) for i in window_invoices}
+    if invoice_date_by_id:
+        async for e in db.cashbook_entries.find(
+            {"kind": "credit", "invoice_id": {"$in": list(invoice_date_by_id)}},
+            {"_id": 0, "amount": 1, "invoice_id": 1},
+        ):
+            d = invoice_date_by_id.get(e.get("invoice_id"))
+            if d:
+                income_by_day[d] = income_by_day.get(d, 0) + float(e.get("amount", 0) or 0)
+
     cashbook_entries = await db.cashbook_entries.find(
         {"date": {"$gte": start_iso, "$lte": end_iso}},
-        {"_id": 0, "date": 1, "kind": 1, "amount": 1},
+        {"_id": 0, "date": 1, "kind": 1, "amount": 1, "invoice_id": 1},
     ).to_list(20000)
-    income_by_day, expense_by_day = {}, {}
     for e in cashbook_entries:
         d = _day_key(e.get("date"))
         if not d:
             continue
         amt = float(e.get("amount", 0) or 0)
         if e.get("kind") == "credit":
-            income_by_day[d] = income_by_day.get(d, 0) + amt
+            if not e.get("invoice_id"):
+                income_by_day[d] = income_by_day.get(d, 0) + amt
         elif e.get("kind") == "debit":
             expense_by_day[d] = expense_by_day.get(d, 0) + amt
 
@@ -99,22 +120,50 @@ async def get_weekly_dashboard(request: Request, date_str: Optional[str] = None,
         amt = float(e.get("amount", 0) or 0)
         running_balance += amt if e.get("kind") == "credit" else -amt
 
-    # ---- Sales: leads_v2 — created-that-day (inbound/outbound), and
-    # updated-that-day + stage name (appointment/sales) ----
-    day_start_dt = datetime.combine(start, datetime.min.time()).replace(tzinfo=timezone.utc)
-    day_end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time()).replace(tzinfo=timezone.utc)
-
-    inbound_by_day, outbound_by_day = {}, {}
+    # ---- Sales ----
+    # Inbound Lead: every leads_v2 record created that day (added by any user
+    # via Add New Lead, or auto-created from BNI) plus every BNI One-to-One
+    # created that day.
+    inbound_by_day = {}
     async for l in db.leads_v2.find(
         {"created_at": {"$gte": day_start_dt, "$lt": day_end_dt}},
-        {"_id": 0, "created_at": 1, "source": 1},
+        {"_id": 0, "created_at": 1},
     ):
         d = _day_key(l.get("created_at"))
-        if not d:
-            continue
-        src = (l.get("source") or "").strip().lower()
-        bucket = inbound_by_day if src in INBOUND_SOURCES else outbound_by_day
-        bucket[d] = bucket.get(d, 0) + 1
+        if d:
+            inbound_by_day[d] = inbound_by_day.get(d, 0) + 1
+
+    # One to One: BNI One-to-Ones completed on their scheduled meeting date.
+    # (One-to-Ones created that day are folded into Inbound Lead above —
+    # both read off the same `bni_one_to_ones` collection via different
+    # date fields, so a single query covers both.)
+    one_to_one_by_day = {}
+    async for o in db.bni_one_to_ones.find(
+        {"$or": [
+            {"created_at": {"$gte": day_start_iso, "$lt": day_end_iso}},
+            {"meeting_date": {"$gte": start_iso, "$lte": end_iso}},
+        ]},
+        {"_id": 0, "created_at": 1, "meeting_date": 1, "meeting_status": 1},
+    ):
+        created_d = _day_key(o.get("created_at"))
+        if created_d and start_iso <= created_d <= end_iso:
+            inbound_by_day[created_d] = inbound_by_day.get(created_d, 0) + 1
+        meeting_d = _day_key(o.get("meeting_date"))
+        if meeting_d and start_iso <= meeting_d <= end_iso and o.get("meeting_status") == "Completed":
+            one_to_one_by_day[meeting_d] = one_to_one_by_day.get(meeting_d, 0) + 1
+
+    # Outbound Prospect: BNI Outreach records no longer sitting on "New Lead"
+    # (i.e. moved out of it to any other stage), keyed by the day they were
+    # last updated — there's no stage-change history, so `updated_at` is the
+    # best available proxy for "moved that day".
+    outbound_by_day = {}
+    async for o in db.bni_outreach.find(
+        {"status": {"$ne": "New Lead"}, "updated_at": {"$gte": day_start_iso, "$lt": day_end_iso}},
+        {"_id": 0, "updated_at": 1},
+    ):
+        d = _day_key(o.get("updated_at"))
+        if d:
+            outbound_by_day[d] = outbound_by_day.get(d, 0) + 1
 
     stages = await db.lead_stages.find({}, {"_id": 0, "stage_id": 1, "name": 1}).to_list(500)
     stage_name = {s["stage_id"]: (s.get("name") or "").strip().lower() for s in stages}
@@ -178,6 +227,7 @@ async def get_weekly_dashboard(request: Request, date_str: Optional[str] = None,
             "sales": {
                 "inbound_lead": inbound_by_day.get(d_iso, 0),
                 "outbound_prospect": outbound_by_day.get(d_iso, 0),
+                "one_to_one": one_to_one_by_day.get(d_iso, 0),
                 "appointment": appointment_by_day.get(d_iso, 0),
                 "sales": sales_by_day.get(d_iso, 0),
             },
@@ -192,7 +242,7 @@ async def get_weekly_dashboard(request: Request, date_str: Optional[str] = None,
 
     week_summary = {
         "finance": {"income": _sum("finance", "income"), "expense": _sum("finance", "expense")},
-        "sales": {k: _sum("sales", k) for k in ["inbound_lead", "outbound_prospect", "appointment", "sales"]},
+        "sales": {k: _sum("sales", k) for k in ["inbound_lead", "outbound_prospect", "one_to_one", "appointment", "sales"]},
         "marketing_vinoth": {p: _sum("marketing_vinoth", p) for p in PLATFORMS},
         "marketing_vinoth_posted_total": sum(day["marketing_vinoth_posted_total"] for day in days),
         "marketing_drawlead": {p: _sum("marketing_drawlead", p) for p in PLATFORMS},
