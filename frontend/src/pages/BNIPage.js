@@ -535,6 +535,21 @@ export default function BNIPage() {
     }
   };
 
+  // Same outcome-status field the Remarks popup writes to (One to One /
+  // Relationship / Lead) — exposed here as a direct row dropdown so marking
+  // something a Lead doesn't require opening that popup. The backend already
+  // auto-creates a Sales lead (source "BNI") the first time this is set to
+  // "Lead", via the same /remarks endpoint.
+  const updateOtoOutcomeStatus = async (entryId, status) => {
+    try {
+      const res = await api.put(`/bni/one-to-ones/${entryId}/remarks`, { status });
+      setOneToOnes((prev) => prev.map((o) => (o.entry_id === entryId ? { ...o, ...res.data } : o)));
+      toast.success(status === 'Lead' ? 'Saved — added to Leads (source: BNI)' : 'Saved');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update status');
+    }
+  };
+
   const memberOneToOnes = (memberId) =>
     oneToOnes
       .filter((o) => o.member_id === memberId)
@@ -1060,6 +1075,13 @@ export default function BNIPage() {
     if (status === 'Completed') return 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40';
     if (status === 'To do') return 'bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40';
     return 'bg-[#6366f1]/15 text-[#6366f1] border border-[#6366f1]/40'; // Scheduled
+  };
+
+  const otoOutcomeStatusColor = (status) => {
+    if (status === 'Lead') return 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40';
+    if (status === 'Relationship') return 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40';
+    if (status === 'One to One') return 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/40';
+    return 'bg-[#71717a]/15 text-[#71717a] border border-[#71717a]/40'; // unset
   };
 
   const renderMemberRow = (m) => {
@@ -2000,19 +2022,17 @@ export default function BNIPage() {
                                       </Select>
                                     </td>
                                     <td className="px-4 py-3">
-                                      {o.status ? (
-                                        <Badge className={
-                                          o.status === 'Lead'
-                                            ? 'bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/40'
-                                            : o.status === 'Relationship'
-                                            ? 'bg-[#8b5cf6]/15 text-[#8b5cf6] border border-[#8b5cf6]/40'
-                                            : 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/40'
-                                        }>
-                                          {o.status}
-                                        </Badge>
-                                      ) : (
-                                        <span className={textSecondary}>—</span>
-                                      )}
+                                      <Select value={o.status || 'none'} onValueChange={(v) => updateOtoOutcomeStatus(o.entry_id, v === 'none' ? '' : v)}>
+                                        <SelectTrigger className={`w-[150px] ${otoOutcomeStatusColor(o.status)}`} data-testid={`bni-oto-outcome-status-${o.entry_id}`}>
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="none">—</SelectItem>
+                                          {ONE_TO_ONE_STATUSES.map((s) => (
+                                            <SelectItem key={s} value={s}>{s}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
                                     </td>
                                     <td className="px-4 py-3">
                                       {o.expense_entry_id ? (
