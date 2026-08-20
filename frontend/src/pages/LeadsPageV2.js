@@ -81,7 +81,7 @@ const LeadsPageV2 = () => {
   const [leadCfg, setLeadCfg] = useState(null);
   const [showProspectSheetModal, setShowProspectSheetModal] = useState(false);
   const [showLeadSheetModal, setShowLeadSheetModal] = useState(false);
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   
   // Dropdown data
@@ -334,7 +334,7 @@ const LeadsPageV2 = () => {
       loadLeads();
       loadStats();
     } catch (error) {
-      toast.error('Failed to update lead');
+      toast.error(error.response?.data?.detail || 'Failed to update lead');
     }
   };
 
@@ -416,7 +416,7 @@ const LeadsPageV2 = () => {
       what_do_you_do: '',
       // Lead Details
       source: '',
-      lead_owner: '',
+      lead_owner: currentUser?.user_id || '',
       service: '',
       priority: 'Medium',
       lead_type: '',
@@ -1404,9 +1404,8 @@ const LeadsPageV2 = () => {
             <DialogHeader>
               <DialogTitle>{editingLead ? 'Edit Lead' : 'Add New Lead'}</DialogTitle>
             </DialogHeader>
-            <Tabs defaultValue="basic" className="w-full">
-              <TabsList className={`grid w-full grid-cols-4 ${bgSecondary}`}>
-                <TabsTrigger value="basic">Basic Details</TabsTrigger>
+            <Tabs defaultValue="lead" className="w-full">
+              <TabsList className={`grid w-full grid-cols-3 ${bgSecondary}`}>
                 <TabsTrigger value="lead">Lead Details</TabsTrigger>
                 <TabsTrigger value="appointments" data-testid="appointments-tab-trigger">Appointments</TabsTrigger>
                 <TabsTrigger value="followup" className="gap-1.5">
@@ -1418,9 +1417,9 @@ const LeadsPageV2 = () => {
                   )}
                 </TabsTrigger>
               </TabsList>
-              
-              {/* Basic Details Tab */}
-              <TabsContent value="basic" className="space-y-4 mt-4">
+
+              {/* Lead Details Tab — merged Basic Details + Lead Details into one tab */}
+              <TabsContent value="lead" className="space-y-4 mt-4">
                 <div>
                   <label className={`text-sm ${textSecondary} block mb-1`}>Name *</label>
                   <Input
@@ -1515,10 +1514,7 @@ const LeadsPageV2 = () => {
                     data-testid="lead-remarks-input"
                   />
                 </div>
-              </TabsContent>
-              
-              {/* Lead Details Tab */}
-              <TabsContent value="lead" className="space-y-4 mt-4">
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={`text-sm ${textSecondary} block mb-1`}>Stage</label>
@@ -1553,17 +1549,28 @@ const LeadsPageV2 = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={`text-sm ${textSecondary} block mb-1`}>Lead Owner</label>
-                    <Select
-                      value={leadForm.lead_owner}
-                      onValueChange={(v) => setLeadForm({ ...leadForm, lead_owner: v })}
-                    >
-                      <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select owner" /></SelectTrigger>
-                      <SelectContent>
-                        {teamMembers.map(m => (
-                          <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {(() => {
+                      const canChangeOwner = !editingLead || editingLead.created_by === currentUser?.user_id || isAdmin;
+                      return (
+                        <>
+                          <Select
+                            value={leadForm.lead_owner}
+                            onValueChange={(v) => setLeadForm({ ...leadForm, lead_owner: v })}
+                            disabled={!canChangeOwner}
+                          >
+                            <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select owner" /></SelectTrigger>
+                            <SelectContent>
+                              {teamMembers.map(m => (
+                                <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {!canChangeOwner && (
+                            <p className={`text-xs ${textSecondary} mt-1`}>Only the lead's creator can change the owner.</p>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                   <div>
                     <label className={`text-sm ${textSecondary} block mb-1`}>Services</label>
@@ -1681,17 +1688,6 @@ const LeadsPageV2 = () => {
                       className={bgSecondary}
                     />
                   </div>
-                </div>
-                
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Notes</label>
-                  <Textarea
-                    value={leadForm.notes}
-                    onChange={(e) => setLeadForm({ ...leadForm, notes: e.target.value })}
-                    placeholder="Additional notes..."
-                    className={bgSecondary}
-                    rows={3}
-                  />
                 </div>
               </TabsContent>
 

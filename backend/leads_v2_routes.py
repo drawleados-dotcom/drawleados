@@ -531,7 +531,18 @@ async def update_lead(lead_id: str, update_data: Dict[str, Any], request: Reques
     
     # Get current lead data for comparison
     old_lead = await db.leads_v2.find_one({"lead_id": lead_id}, {"_id": 0})
-    
+
+    # Only the lead's creator (or an admin) may reassign the Lead Owner —
+    # everyone else can still edit every other field on the lead.
+    if (
+        old_lead
+        and "lead_owner" in update_data
+        and update_data["lead_owner"] != old_lead.get("lead_owner")
+    ):
+        role = (current_user.get("role") or "").lower()
+        if current_user.get("user_id") != old_lead.get("created_by") and role not in ("super_admin", "admin"):
+            raise HTTPException(status_code=403, detail="Only the lead's creator can change the Lead Owner")
+
     update_data["updated_at"] = datetime.now(timezone.utc)
     
     await db.leads_v2.update_one(
