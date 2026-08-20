@@ -8,6 +8,7 @@ import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { Combobox } from '../components/ui/combobox';
 import CSVImportModal from '../components/shared/CSVImportModal';
 import { Textarea } from '../components/ui/textarea';
 import { Send, Plus, Upload, Pencil, Trash2, Link as LinkIcon, Tag, Target, Handshake, Search, Database, RefreshCw, Phone, Eye } from 'lucide-react';
@@ -108,9 +109,13 @@ const BNIOutreachPage = () => {
 
   const [sources, setSources] = useState([]);
   const [showSourceModal, setShowSourceModal] = useState(false);
-  const [sourceForm, setSourceForm] = useState({ name: '', sheet_url: '' });
+  const [sourceForm, setSourceForm] = useState({ name: '', sheet_url: '', sourced_by: '', location: '' });
   const [sourceSaving, setSourceSaving] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [showEditSourceModal, setShowEditSourceModal] = useState(false);
+  const [editSourceForm, setEditSourceForm] = useState({ source_id: '', sourced_by: '', location: '' });
+  const [editSourceSaving, setEditSourceSaving] = useState(false);
 
   // Outreach tab filters
   const [filterChapter, setFilterChapter] = useState('all');
@@ -130,16 +135,18 @@ const BNIOutreachPage = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [outreachRes, categoriesRes, groupsRes, sourcesRes] = await Promise.all([
+      const [outreachRes, categoriesRes, groupsRes, sourcesRes, employeesRes] = await Promise.all([
         api.get('/bni/outreach'),
         api.get('/bni/categories'),
         api.get('/bni/categories/groups').catch(() => ({ data: [] })),
         api.get('/bni/outreach-sources').catch(() => ({ data: [] })),
+        api.get('/hr/employee-reviews/employees').catch(() => ({ data: [] })),
       ]);
       setOutreach(outreachRes.data || []);
       setCategories(categoriesRes.data || []);
       setCategoryGroups(groupsRes.data || []);
       setSources(sourcesRes.data || []);
+      setEmployees(employeesRes.data || []);
     } catch (error) {
       toast.error('Failed to load BNI Outreach');
     } finally {
@@ -148,6 +155,11 @@ const BNIOutreachPage = () => {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const employeeOptions = useMemo(
+    () => employees.map((e) => ({ value: e.user_id, label: e.name, sublabel: e.designation || '' })),
+    [employees]
+  );
 
   const allGroupNames = useMemo(() => {
     const set = new Set(categoryGroups.map((g) => g.name));
@@ -292,7 +304,7 @@ const BNIOutreachPage = () => {
       setSources(res.data || []);
     } catch (error) { /* silent */ }
   };
-  const openAddSource = () => { setSourceForm({ name: '', sheet_url: '' }); setShowSourceModal(true); };
+  const openAddSource = () => { setSourceForm({ name: '', sheet_url: '', sourced_by: '', location: '' }); setShowSourceModal(true); };
   const saveSource = async () => {
     if (!sourceForm.name.trim()) { toast.error('Source name is required'); return; }
     if (!sourceForm.sheet_url.trim()) { toast.error('Paste the Google Sheet link'); return; }
@@ -306,6 +318,26 @@ const BNIOutreachPage = () => {
       toast.error(error.response?.data?.detail || 'Failed to add source');
     } finally {
       setSourceSaving(false);
+    }
+  };
+  const openEditSource = (s) => {
+    setEditSourceForm({ source_id: s.source_id, sourced_by: s.sourced_by || '', location: s.location || '' });
+    setShowEditSourceModal(true);
+  };
+  const saveEditSource = async () => {
+    setEditSourceSaving(true);
+    try {
+      await api.put(`/bni/outreach-sources/${editSourceForm.source_id}`, {
+        sourced_by: editSourceForm.sourced_by,
+        location: editSourceForm.location,
+      });
+      toast.success('Source updated');
+      setShowEditSourceModal(false);
+      loadSources();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update source');
+    } finally {
+      setEditSourceSaving(false);
     }
   };
   const syncSource = async (sourceId) => {
@@ -661,6 +693,8 @@ const BNIOutreachPage = () => {
                         <tr>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Source</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Sheet</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Sourced By</th>
+                          <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Location</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Last Synced</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Tabs</th>
                           <th className={`px-4 py-3 text-left font-medium ${textSecondary}`}>Rows</th>
@@ -669,7 +703,7 @@ const BNIOutreachPage = () => {
                       </thead>
                       <tbody className={`divide-y ${borderColor}`}>
                         {sources.length === 0 ? (
-                          <tr><td colSpan={6} className={`px-4 py-8 text-center ${textSecondary}`}>No sources yet — click "Add Source" to connect a Google Sheet.</td></tr>
+                          <tr><td colSpan={8} className={`px-4 py-8 text-center ${textSecondary}`}>No sources yet — click "Add Source" to connect a Google Sheet.</td></tr>
                         ) : (
                           sources.map((s) => (
                             <tr key={s.source_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
@@ -679,11 +713,16 @@ const BNIOutreachPage = () => {
                                   <LinkIcon className="h-3.5 w-3.5" /> Open
                                 </a>
                               </td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{s.sourced_by || '—'}</td>
+                              <td className={`px-4 py-3 ${textSecondary}`}>{s.location || '—'}</td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{s.last_synced_at ? new Date(s.last_synced_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Never'}</td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{s.last_tab_count || 0}</td>
                               <td className={`px-4 py-3 ${textSecondary}`}>{s.last_row_count || 0}</td>
                               <td className="px-4 py-3">
                                 <div className="flex gap-1">
+                                  <Button variant="ghost" size="sm" onClick={() => openEditSource(s)} data-testid={`bni-source-edit-${s.source_id}`}>
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
                                   <Button variant="outline" size="sm" onClick={() => syncSource(s.source_id)} disabled={syncingId === s.source_id} data-testid={`bni-source-sync-${s.source_id}`}>
                                     <RefreshCw className={`h-4 w-4 mr-1 ${syncingId === s.source_id ? 'animate-spin' : ''}`} /> {syncingId === s.source_id ? 'Syncing…' : 'Sync'}
                                   </Button>
@@ -805,11 +844,60 @@ const BNIOutreachPage = () => {
                 <Input value={sourceForm.sheet_url} onChange={(e) => setSourceForm({ ...sourceForm, sheet_url: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="https://docs.google.com/spreadsheets/d/…" data-testid="bni-source-url-input" />
                 <p className={`text-xs ${textSecondary} mt-1`}>Share the sheet as "Anyone with the link can view". Each tab becomes a category — the tab name is the category, and the part before its first bracket is the group. Row columns: Name, Brand Name, Chapter Name, Email, Profile Link, Phone, Website, Status, Location.</p>
               </div>
+              <div>
+                <Label className={textPrimary}>Sourced By</Label>
+                <Combobox
+                  value={sourceForm.sourced_by}
+                  onChange={(v) => setSourceForm({ ...sourceForm, sourced_by: v })}
+                  options={employeeOptions}
+                  placeholder="Search employees…"
+                  emptyText="No matching employee — you can still type a name"
+                  className={`${bgSecondary} border ${borderColor}`}
+                  data-testid="bni-source-sourced-by-input"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Location</Label>
+                <Input value={sourceForm.location} onChange={(e) => setSourceForm({ ...sourceForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="e.g. Chennai" data-testid="bni-source-location-input" />
+              </div>
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowSourceModal(false)}>Cancel</Button>
               <Button onClick={saveSource} disabled={sourceSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-source-save-btn">
                 {sourceSaving ? 'Saving…' : 'Add Source'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showEditSourceModal} onOpenChange={setShowEditSourceModal}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Edit Source</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Sourced By</Label>
+                <Combobox
+                  value={editSourceForm.sourced_by}
+                  onChange={(v) => setEditSourceForm({ ...editSourceForm, sourced_by: v })}
+                  options={employeeOptions}
+                  placeholder="Search employees…"
+                  emptyText="No matching employee — you can still type a name"
+                  className={`${bgSecondary} border ${borderColor}`}
+                  autoFocus
+                  data-testid="bni-source-edit-sourced-by-input"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Location</Label>
+                <Input value={editSourceForm.location} onChange={(e) => setEditSourceForm({ ...editSourceForm, location: e.target.value })} className={`${bgSecondary} border ${borderColor}`} placeholder="e.g. Chennai" data-testid="bni-source-edit-location-input" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowEditSourceModal(false)}>Cancel</Button>
+              <Button onClick={saveEditSource} disabled={editSourceSaving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-source-edit-save-btn">
+                {editSourceSaving ? 'Saving…' : 'Save'}
               </Button>
             </DialogFooter>
           </DialogContent>

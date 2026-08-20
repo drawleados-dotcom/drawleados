@@ -336,6 +336,13 @@ async def delete_outreach(outreach_id: str, request: Request):
 class OutreachSourceCreate(BaseModel):
     name: str
     sheet_url: str
+    sourced_by: str = ""
+    location: str = ""
+
+
+class OutreachSourceUpdate(BaseModel):
+    sourced_by: Optional[str] = None
+    location: Optional[str] = None
 
 
 @bni_outreach_sources_router.get("")
@@ -360,6 +367,8 @@ async def create_outreach_source(payload: OutreachSourceCreate, request: Request
         "source_id": f"bnisrc_{uuid.uuid4().hex[:10]}",
         "name": name,
         "sheet_url": sheet_url,
+        "sourced_by": (payload.sourced_by or "").strip(),
+        "location": (payload.location or "").strip(),
         "last_synced_at": None,
         "last_row_count": 0,
         "created_by": user.user_id,
@@ -368,6 +377,19 @@ async def create_outreach_source(payload: OutreachSourceCreate, request: Request
     await db.bni_outreach_sources.insert_one(doc)
     doc.pop("_id", None)
     return doc
+
+
+@bni_outreach_sources_router.put("/{source_id}")
+async def update_outreach_source(source_id: str, payload: OutreachSourceUpdate, request: Request):
+    from server import get_current_user, db
+    await get_current_user(request)
+    update_data = {k: v.strip() if isinstance(v, str) else v for k, v in payload.dict().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    result = await db.bni_outreach_sources.update_one({"source_id": source_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return await db.bni_outreach_sources.find_one({"source_id": source_id}, {"_id": 0})
 
 
 @bni_outreach_sources_router.delete("/{source_id}")
