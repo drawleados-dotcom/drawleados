@@ -1400,7 +1400,7 @@ const LeadsPageV2 = () => {
 
         {/* Add/Edit Lead Modal - Comprehensive Form */}
         <Dialog open={showAddLeadModal} onOpenChange={setShowAddLeadModal}>
-          <DialogContent className={`${bgCard} ${textPrimary} max-w-2xl max-h-[85vh] overflow-y-auto`}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-4xl max-h-[85vh] overflow-y-auto`}>
             <DialogHeader>
               <DialogTitle>{editingLead ? 'Edit Lead' : 'Add New Lead'}</DialogTitle>
             </DialogHeader>
@@ -1420,15 +1420,26 @@ const LeadsPageV2 = () => {
 
               {/* Lead Details Tab — merged Basic Details + Lead Details into one tab */}
               <TabsContent value="lead" className="space-y-4 mt-4">
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Name *</label>
-                  <Input
-                    value={leadForm.name}
-                    onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
-                    placeholder="Lead name"
-                    data-testid="lead-name-input"
-                    className={bgSecondary}
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Name *</label>
+                    <Input
+                      value={leadForm.name}
+                      onChange={(e) => setLeadForm({ ...leadForm, name: e.target.value })}
+                      placeholder="Lead name"
+                      data-testid="lead-name-input"
+                      className={bgSecondary}
+                    />
+                  </div>
+                  <div>
+                    <label className={`text-sm ${textSecondary} block mb-1`}>Location</label>
+                    <Input
+                      value={leadForm.location}
+                      onChange={(e) => setLeadForm({ ...leadForm, location: e.target.value })}
+                      placeholder="City, State"
+                      className={bgSecondary}
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1450,15 +1461,6 @@ const LeadsPageV2 = () => {
                       className={bgSecondary}
                     />
                   </div>
-                </div>
-                <div>
-                  <label className={`text-sm ${textSecondary} block mb-1`}>Location</label>
-                  <Input
-                    value={leadForm.location}
-                    onChange={(e) => setLeadForm({ ...leadForm, location: e.target.value })}
-                    placeholder="City, State"
-                    className={bgSecondary}
-                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1660,24 +1662,26 @@ const LeadsPageV2 = () => {
                 
                 <div className={`p-4 rounded-lg border ${borderColor} space-y-4`}>
                   <h4 className={`text-sm font-medium ${textPrimary}`}>Documents & Estimation</h4>
-                  <div>
-                    <label className={`text-sm ${textSecondary} block mb-1`}>Estimation Amount (₹)</label>
-                    <Input
-                      type="number"
-                      value={leadForm.estimation}
-                      onChange={(e) => setLeadForm({ ...leadForm, estimation: e.target.value })}
-                      placeholder="50000"
-                      className={bgSecondary}
-                    />
-                  </div>
-                  <div>
-                    <label className={`text-sm ${textSecondary} block mb-1`}>Quotation Link</label>
-                    <Input
-                      value={leadForm.quotation_link}
-                      onChange={(e) => setLeadForm({ ...leadForm, quotation_link: e.target.value })}
-                      placeholder="https://drive.google.com/..."
-                      className={bgSecondary}
-                    />
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={`text-sm ${textSecondary} block mb-1`}>Estimation Amount (₹)</label>
+                      <Input
+                        type="number"
+                        value={leadForm.estimation}
+                        onChange={(e) => setLeadForm({ ...leadForm, estimation: e.target.value })}
+                        placeholder="50000"
+                        className={bgSecondary}
+                      />
+                    </div>
+                    <div>
+                      <label className={`text-sm ${textSecondary} block mb-1`}>Quotation Link</label>
+                      <Input
+                        value={leadForm.quotation_link}
+                        onChange={(e) => setLeadForm({ ...leadForm, quotation_link: e.target.value })}
+                        placeholder="https://drive.google.com/..."
+                        className={bgSecondary}
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className={`text-sm ${textSecondary} block mb-1`}>Proposal Link</label>
