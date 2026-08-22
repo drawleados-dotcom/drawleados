@@ -187,12 +187,20 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // department filter to 'management' whenever it drifts (right after
   // login, or after visiting Assign to Team and switching back), so My
   // Tasks only ever shows Management's own sub-department tabs, never the
-  // other department tabs.
+  // other department tabs. And the reverse: Assign to Team has no
+  // "Management" pill of its own (see groupedDepts below), so leaving My
+  // Tasks with 'management' still selected must not leak Management's
+  // sub-department row into Assign to Team — reset it back to 'all'.
   useEffect(() => {
     if (!user) return;
     const role = (user.role || '').toLowerCase();
-    if (role === 'super_admin' && mainTab === 'assigned_to_me' && filters.department !== 'management') {
-      setFilters(prev => ({ ...prev, department: 'management', subDepartment: 'all' }));
+    if (role !== 'super_admin') return;
+    if (mainTab === 'assigned_to_me') {
+      if (filters.department !== 'management') {
+        setFilters(prev => ({ ...prev, department: 'management', subDepartment: 'all' }));
+      }
+    } else if (filters.department === 'management') {
+      setFilters(prev => ({ ...prev, department: 'all', subDepartment: 'all' }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id, mainTab, filters.department]);
@@ -406,14 +414,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     return visibleDeptCategories;
   }, [visibleDeptCategories, mainTab, user?.role]);
 
-  // Reset the Technology/Marketing scope — and any department/sub-department
-  // drill-down — whenever the main tab changes, so Assign to Team always
-  // opens on the clean "All" default instead of carrying over a department
-  // (e.g. Management) picked while on a different tab, which would otherwise
-  // leave that department's sub-tab row showing with no matching pill above it.
+  // Reset the Technology/Marketing scope whenever the main tab changes so
+  // it never bleeds stale state between My Tasks / Assign to Team. (The
+  // Management department leak itself is handled by the effect above, which
+  // owns pinning/unpinning it symmetrically.)
   useEffect(() => {
     setOpGroupFilter('all');
-    setFilters(prev => ({ ...prev, department: 'all', subDepartment: 'all' }));
   }, [mainTab]);
 
   const usersById = useMemo(() => {
