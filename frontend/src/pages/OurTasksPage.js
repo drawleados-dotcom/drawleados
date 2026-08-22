@@ -158,7 +158,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     subDepartment: 'all', // all or sub_department id (only meaningful once a specific department is selected)
     project: 'all', // all or project_id
     category: 'all', // all or category name (depends on selected department)
-    priority: 'all' // all, high, medium, low
+    priority: 'all', // all, high, medium, low
+    relation: 'all' // all, created_by_me, assigned_to_me — narrows My Tasks' created-OR-assigned union
   });
   
   const token = localStorage.getItem('session_token');
@@ -1534,6 +1535,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (filters.assignedTo === 'myself' && task.assigned_to !== user?.user_id) return false;
     if (filters.assignedTo !== 'all' && filters.assignedTo !== 'myself' && task.assigned_to !== filters.assignedTo) return false;
 
+    // Relation filter — narrows My Tasks' "assigned to me OR created by me"
+    // union down to just one side.
+    if (filters.relation === 'created_by_me' && task.created_by !== user?.user_id) return false;
+    if (filters.relation === 'assigned_to_me' && task.assigned_to !== user?.user_id) return false;
+
     // Assigned By filter
     if (filters.assignedBy !== 'all' && task.assigned_by !== filters.assignedBy) return false;
 
@@ -1701,7 +1707,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       subDepartment: 'all',
       project: 'all',
       category: 'all',
-      priority: 'all'
+      priority: 'all',
+      relation: 'all'
     });
   };
 
@@ -2139,6 +2146,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 <SelectItem value="high">🔴 Urgent</SelectItem>
                 <SelectItem value="medium">🟡 Medium</SelectItem>
                 <SelectItem value="low">🟢 Low</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Relation — narrows My Tasks' "assigned to me OR created by me" union down to one side */}
+            <Select value={filters.relation} onValueChange={(v) => setFilters({...filters, relation: v})}>
+              <SelectTrigger className={`h-9 w-[160px] ${bgSecondary} border ${borderColor}`} data-testid="filter-relation">
+                <User className="h-3.5 w-3.5 mr-1 opacity-60" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">Created & Assigned</SelectItem>
+                <SelectItem value="created_by_me">Created by you</SelectItem>
+                <SelectItem value="assigned_to_me">Assigned to you</SelectItem>
               </SelectContent>
             </Select>
 
