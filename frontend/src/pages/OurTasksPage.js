@@ -35,19 +35,9 @@ const priorityColors = {
   low: 'bg-[#10b981]/20 text-[#10b981] border-[#10b981]'
 };
 
-// Solid dot color per priority — red/yellow/green — shown next to the task
-// name in the list so priority is visible without opening the task.
-// Whole-row wash per priority, paired with a solid left-edge bar (see
-// priorityDotColors below) which carries the actual tier signal — the wash
-// is just a faint assist and shouldn't read as a full-row highlight.
-// Applied as an inline style rather than a Tailwind class because the class
-// name would be built at runtime and JIT would never emit it.
-const priorityRowColors = {
-  high:   { light: '#fef2f2', dark: 'rgba(239, 68, 68, 0.09)' },
-  medium: { light: '#fffbeb', dark: 'rgba(245, 158, 11, 0.09)' },
-  low:    { light: '#f0fdf4', dark: 'rgba(16, 185, 129, 0.09)' },
-};
-
+// Solid color per priority — red/amber/green — shown as the row's left-edge
+// bar and the priority badge text. The row itself stays a plain light/dark
+// background; only this accent carries the tier signal.
 const priorityDotColors = {
   high: '#ef4444',
   medium: '#f59e0b',
@@ -2423,8 +2413,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       key={task.task_id}
                       className={`cursor-pointer transition-all border-l-4 ${isDark ? 'hover:brightness-125' : 'hover:brightness-95'}`}
                       style={{
-                        backgroundColor: (priorityRowColors[task.priority] || {})[isDark ? 'dark' : 'light']
-                          || (isDark ? '#18181b' : '#ffffff'),
+                        backgroundColor: isDark ? '#18181b' : '#ffffff',
                         borderLeftColor: priorityDotColors[task.priority] || priorityDotColors.medium,
                       }}
                       data-testid={`task-row-${task.task_id}`}
