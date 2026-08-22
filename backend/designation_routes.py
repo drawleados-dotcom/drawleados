@@ -17,6 +17,10 @@ class DesignationCreate(BaseModel):
     roles_responsibilities: Optional[str] = ""
     reporting_to: Optional[List[str]] = []
     module_access: Optional[List[str]] = []
+    # HR department (db.departments) this designation belongs to, and
+    # optionally one of that department's sub-departments.
+    department_id: Optional[str] = ""
+    sub_department_id: Optional[str] = ""
     approval_departments: Optional[List[str]] = []
     approval_stages: Optional[List[str]] = []
     # Operations module sub-options
@@ -44,6 +48,8 @@ class DesignationUpdate(BaseModel):
     roles_responsibilities: Optional[str] = None
     reporting_to: Optional[List[str]] = None
     module_access: Optional[List[str]] = None
+    department_id: Optional[str] = None
+    sub_department_id: Optional[str] = None
     approval_departments: Optional[List[str]] = None
     approval_stages: Optional[List[str]] = None
     operations_my_tasks: Optional[bool] = None
@@ -119,6 +125,8 @@ async def create_designation(data: DesignationCreate, db=Depends(get_db)):
             "roles_responsibilities": data.roles_responsibilities or "",
             "reporting_to": data.reporting_to or [],
             "module_access": data.module_access or [],
+            "department_id": data.department_id or "",
+            "sub_department_id": data.sub_department_id or "",
             "approval_departments": data.approval_departments or [],
             "approval_stages": data.approval_stages or [],
             "operations_my_tasks": data.operations_my_tasks if data.operations_my_tasks is not None else True,
@@ -166,6 +174,10 @@ async def update_designation(designation_id: str, data: DesignationUpdate, db=De
             update_data["reporting_to"] = data.reporting_to
         if data.module_access is not None:
             update_data["module_access"] = data.module_access
+        if data.department_id is not None:
+            update_data["department_id"] = data.department_id
+        if data.sub_department_id is not None:
+            update_data["sub_department_id"] = data.sub_department_id
         if data.approval_departments is not None:
             update_data["approval_departments"] = data.approval_departments
         if data.approval_stages is not None:

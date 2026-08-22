@@ -193,9 +193,11 @@ export default function HRAdminPage() {
   const [newDesignation, setNewDesignation] = useState({ 
     title: '', 
     description: '', 
-    roles_responsibilities: '', 
-    reporting_to: [], 
+    roles_responsibilities: '',
+    reporting_to: [],
     module_access: [],
+    department_id: '',      // HR department (db.departments) this designation belongs to
+    sub_department_id: '',  // Optional sub-department within that department
     approval_departments: [],  // Departments this designation can approve
     approval_stages: [],       // Website stages this designation can approve
     // Operations module sub-options
@@ -1135,7 +1137,7 @@ export default function HRAdminPage() {
       await axios.post(`${API}/api/designations/`, newDesignation, { headers });
       toast.success('Designation created successfully');
       setShowDesignationModal(false);
-      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_management_subdepts: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false, bni_tabs: [], bni_access: 'edit' });
+      setNewDesignation({ title: '', description: '', roles_responsibilities: '', reporting_to: [], module_access: [], department_id: '', sub_department_id: '', approval_departments: [], approval_stages: [], operations_my_tasks: true, operations_assign_to_team: false, operations_departments: [], operations_management_subdepts: [], operations_approval_queue: null, operations_projects: 'none', operations_payment_schedule: 'visible', operations_departments_tab: false, operations_approvals_tab: false, operations_meetings_tab: false, bni_tabs: [], bni_access: 'edit' });
       loadDesignations();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create designation');
@@ -6372,11 +6374,12 @@ function DesignationsDeptsTab({
             <table className="w-full text-sm table-fixed">
               <thead className={`${bgSecondary} ${textSecondary} text-xs uppercase`}>
                 <tr>
-                  <th className="text-left px-4 py-3 w-[18%]">Title</th>
-                  <th className="text-left px-4 py-3 w-[30%]">Description</th>
-                  <th className="text-left px-4 py-3 w-[30%]">Module Access</th>
+                  <th className="text-left px-4 py-3 w-[15%]">Title</th>
+                  <th className="text-left px-4 py-3 w-[20%]">Description</th>
+                  <th className="text-left px-4 py-3 w-[15%]">Department</th>
+                  <th className="text-left px-4 py-3 w-[25%]">Module Access</th>
                   <th className="text-left px-4 py-3 w-[10%]">Employees</th>
-                  <th className="text-right px-4 py-3 w-[12%]">Actions</th>
+                  <th className="text-right px-4 py-3 w-[15%]">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -6387,6 +6390,20 @@ function DesignationsDeptsTab({
                     </td>
                     <td className="px-4 py-3">
                       <p className={`text-sm ${textSecondary} truncate`}>{desg.description || 'No description'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {desg.department_id ? (() => {
+                        const dept = departments.find(d => d.department_id === desg.department_id);
+                        const subDept = dept?.sub_departments?.find(sd => sd.sub_department_id === desg.sub_department_id);
+                        return (
+                          <div>
+                            <p className={`text-sm ${textPrimary} truncate`}>{dept?.name || '—'}</p>
+                            {subDept && <p className={`text-xs ${textSecondary} truncate`}>{subDept.name}</p>}
+                          </div>
+                        );
+                      })() : (
+                        <span className={`text-xs ${textSecondary}`}>—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       {desg.module_access?.length > 0 ? (
@@ -6427,7 +6444,7 @@ function DesignationsDeptsTab({
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center">
+                    <td colSpan={6} className="p-8 text-center">
                       <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                       <p className={textSecondary}>{designationSearch ? 'No designations match your search' : 'No designations created yet'}</p>
                     </td>
@@ -6524,6 +6541,48 @@ function DesignationsDeptsTab({
                         onChange={(e) => setEditingDesignation(prev => ({ ...prev, description: e.target.value }))}
                         className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className={textPrimary}>Department</Label>
+                        <Select
+                          value={editingDesignation.department_id || 'none'}
+                          onValueChange={(v) => setEditingDesignation(prev => ({
+                            ...prev,
+                            department_id: v === 'none' ? '' : v,
+                            sub_department_id: '',
+                          }))}
+                        >
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No department</SelectItem>
+                            {departments.map(dept => (
+                              <SelectItem key={dept.department_id} value={dept.department_id}>{dept.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {(departments.find(d => d.department_id === editingDesignation.department_id)?.sub_departments || []).length > 0 && (
+                        <div>
+                          <Label className={textPrimary}>Sub Department</Label>
+                          <Select
+                            value={editingDesignation.sub_department_id || 'none'}
+                            onValueChange={(v) => setEditingDesignation(prev => ({ ...prev, sub_department_id: v === 'none' ? '' : v }))}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                              <SelectValue placeholder="Select sub department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No sub department</SelectItem>
+                              {(departments.find(d => d.department_id === editingDesignation.department_id)?.sub_departments || []).map(sd => (
+                                <SelectItem key={sd.sub_department_id} value={sd.sub_department_id}>{sd.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label className={textPrimary}>Roles & Responsibilities</Label>
@@ -6629,6 +6688,48 @@ function DesignationsDeptsTab({
                         placeholder="Brief description"
                         className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className={textPrimary}>Department</Label>
+                        <Select
+                          value={newDesignation.department_id || 'none'}
+                          onValueChange={(v) => setNewDesignation(prev => ({
+                            ...prev,
+                            department_id: v === 'none' ? '' : v,
+                            sub_department_id: '',
+                          }))}
+                        >
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                            <SelectValue placeholder="Select department" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No department</SelectItem>
+                            {departments.map(dept => (
+                              <SelectItem key={dept.department_id} value={dept.department_id}>{dept.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {(departments.find(d => d.department_id === newDesignation.department_id)?.sub_departments || []).length > 0 && (
+                        <div>
+                          <Label className={textPrimary}>Sub Department</Label>
+                          <Select
+                            value={newDesignation.sub_department_id || 'none'}
+                            onValueChange={(v) => setNewDesignation(prev => ({ ...prev, sub_department_id: v === 'none' ? '' : v }))}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                              <SelectValue placeholder="Select sub department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No sub department</SelectItem>
+                              {(departments.find(d => d.department_id === newDesignation.department_id)?.sub_departments || []).map(sd => (
+                                <SelectItem key={sd.sub_department_id} value={sd.sub_department_id}>{sd.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <Label className={textPrimary}>Roles & Responsibilities</Label>
