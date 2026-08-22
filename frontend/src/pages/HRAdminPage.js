@@ -6183,6 +6183,13 @@ function DesignationsDeptsTab({
   const [showBniConfigModal, setShowBniConfigModal] = useState(false);
   const [bniCfgMode, setBniCfgMode] = useState('create'); // 'create' | 'edit' — which designation state BniConfig modal writes to
   const [managementSubDepts, setManagementSubDepts] = useState([]);
+  const [designationSearch, setDesignationSearch] = useState('');
+
+  const filteredDesignations = useMemo(() => {
+    const q = designationSearch.trim().toLowerCase();
+    if (!q) return designations;
+    return designations.filter(d => (d.title || '').toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q));
+  }, [designations, designationSearch]);
 
   // Fetch the Management department's sub-departments (Sales, Marketing, ...)
   // once, so the Operations config modal can offer per-sub-department access.
@@ -6263,89 +6270,124 @@ function DesignationsDeptsTab({
 
   return (
     <div className="space-y-4">
-      {/* Sub-tabs */}
-      <div className="flex gap-2">
-        <Button
-          variant={activeSubTab === 'designations' ? 'default' : 'outline'}
-          onClick={() => setActiveSubTab('designations')}
-          className={activeSubTab === 'designations' ? 'bg-[#6366f1]' : ''}
-        >
-          <Briefcase className="h-4 w-4 mr-2" />
-          Designations ({designations.length})
-        </Button>
-        <Button
-          variant={activeSubTab === 'departments' ? 'default' : 'outline'}
-          onClick={() => setActiveSubTab('departments')}
-          className={activeSubTab === 'departments' ? 'bg-[#6366f1]' : ''}
-        >
-          <Building className="h-4 w-4 mr-2" />
-          Departments ({departments.length})
-        </Button>
+      {/* Sub-tabs — sticky so they (and, on Designations, the search/add
+          row) stay pinned while the table beneath scrolls. Needs its own
+          opaque background matching the page, not the card, so scrolled-
+          under rows don't show through. */}
+      <div className={`sticky top-0 z-20 pb-3 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
+        <div className="flex gap-2 mb-3">
+          <Button
+            variant={activeSubTab === 'designations' ? 'default' : 'outline'}
+            onClick={() => setActiveSubTab('designations')}
+            className={activeSubTab === 'designations' ? 'bg-[#6366f1]' : ''}
+          >
+            <Briefcase className="h-4 w-4 mr-2" />
+            Designations ({designations.length})
+          </Button>
+          <Button
+            variant={activeSubTab === 'departments' ? 'default' : 'outline'}
+            onClick={() => setActiveSubTab('departments')}
+            className={activeSubTab === 'departments' ? 'bg-[#6366f1]' : ''}
+          >
+            <Building className="h-4 w-4 mr-2" />
+            Departments ({departments.length})
+          </Button>
+        </div>
+
+        {activeSubTab === 'designations' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${textSecondary}`} />
+              <Input
+                placeholder="Search designations..."
+                value={designationSearch}
+                onChange={(e) => setDesignationSearch(e.target.value)}
+                className={`pl-10 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+              />
+            </div>
+            {!isViewOnly && (
+              <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Designation
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Designations Sub-Tab */}
       {activeSubTab === 'designations' && (
         <div className="space-y-4">
-          {!isViewOnly && (
-            <div className="flex justify-end">
-              <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Designation
-              </Button>
-            </div>
-          )}
-          
-          {/* 3-Column Card Grid */}
-          <div className="grid md:grid-cols-3 gap-4">
-            {designations.length > 0 ? designations.map((desg) => (
-              <Card key={desg.designation_id} className={`${bgCard} border ${borderColor} hover:border-[#6366f1] transition-colors cursor-pointer`}>
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className={`font-semibold ${textPrimary}`}>{desg.title}</h3>
-                    <Badge className="bg-[#10b981]/20 text-[#10b981] text-xs">
-                      {desg.employee_count || 0}
-                    </Badge>
-                  </div>
-                  <p className={`text-sm ${textSecondary} line-clamp-2 mb-3`}>
-                    {desg.description || 'No description'}
-                  </p>
-                  {desg.module_access?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {desg.module_access.slice(0, 3).map(m => (
-                        <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{m}</Badge>
-                      ))}
-                      {desg.module_access.length > 3 && (
-                        <Badge className={`${bgSecondary} ${textSecondary} text-xs`}>+{desg.module_access.length - 3}</Badge>
+          {/* Row-wise table (was a 3-column card grid) */}
+          <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+            <table className="w-full text-sm table-fixed">
+              <thead className={`${bgSecondary} ${textSecondary} text-xs uppercase`}>
+                <tr>
+                  <th className="text-left px-4 py-3 w-[18%]">Title</th>
+                  <th className="text-left px-4 py-3 w-[30%]">Description</th>
+                  <th className="text-left px-4 py-3 w-[30%]">Module Access</th>
+                  <th className="text-left px-4 py-3 w-[10%]">Employees</th>
+                  <th className="text-right px-4 py-3 w-[12%]">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDesignations.length > 0 ? filteredDesignations.map((desg) => (
+                  <tr key={desg.designation_id} className={`border-t ${borderColor} hover:bg-[#6366f1]/5 transition-colors`}>
+                    <td className="px-4 py-3">
+                      <p className={`font-semibold ${textPrimary} truncate`}>{desg.title}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className={`text-sm ${textSecondary} truncate`}>{desg.description || 'No description'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {desg.module_access?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {desg.module_access.slice(0, 3).map(m => (
+                            <Badge key={m} className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{m}</Badge>
+                          ))}
+                          {desg.module_access.length > 3 && (
+                            <Badge className={`${bgSecondary} ${textSecondary} text-xs`}>+{desg.module_access.length - 3}</Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <span className={`text-xs ${textSecondary}`}>—</span>
                       )}
-                    </div>
-                  )}
-                  <div className="flex gap-2 justify-end pt-2 border-t border-[#27272a]">
-                    <Button size="sm" variant="ghost" onClick={() => setViewDesignation(desg)}>
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    {!isViewOnly && (
-                      <>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingDesignation(desg)}>
-                          <Edit className="h-4 w-4" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge className="bg-[#10b981]/20 text-[#10b981] text-xs">
+                        {desg.employee_count || 0}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => setViewDesignation(desg)}>
+                          <Eye className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="ghost" className="text-[#ef4444]" onClick={() => onDeleteDesignation(desg.designation_id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )) : (
-              <Card className={`${bgCard} border ${borderColor} col-span-3`}>
-                <CardContent className="p-8 text-center">
-                  <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
-                  <p className={textSecondary}>No designations created yet</p>
-                </CardContent>
-              </Card>
-            )}
+                        {!isViewOnly && (
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => setEditingDesignation(desg)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="text-[#ef4444]" onClick={() => onDeleteDesignation(desg.designation_id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )) : (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center">
+                      <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                      <p className={textSecondary}>{designationSearch ? 'No designations match your search' : 'No designations created yet'}</p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-          
+
           {/* View Designation Modal */}
           {viewDesignation && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
