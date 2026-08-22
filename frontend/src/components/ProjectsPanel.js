@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -69,6 +69,12 @@ export default function ProjectsPanel({
   // designation title didn't match that literal string (e.g. "Head of Operations").
   const role = (currentUser?.role || '').toLowerCase();
   const canManageProjects = !viewOnly;
+  const isAdminRole = role === 'super_admin' || role === 'admin';
+  // A task's Edit/Delete in the generic Tasks tab is only for whoever created it,
+  // or an admin/super_admin — narrower than canManageProjects, which just gates
+  // "not in view-only mode". ERP-tagged tasks are excluded entirely: they're only
+  // ever edited from the ERP Users tab, which has their full page/sub-tab context.
+  const canEditProjectTask = (task) => !task.erp_user_id && (isAdminRole || task.created_by === currentUser?.user_id);
   // Content Calendar ignores admins'/super admins' own View/Edit self-toggle (that
   // toggle is a personal "look, don't touch" convenience, not a real restriction on
   // them) — falls back to the general viewOnly rule if the parent didn't pass one.
@@ -144,6 +150,16 @@ export default function ProjectsPanel({
   const [taskSingleDate, setTaskSingleDate] = useState('');
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
+  // ERP hierarchy filters for the Tasks tab list — mirrors the ERP Users
+  // tab's cascading filter bar, but filters the flat task list directly by
+  // whichever erp_* ids each task carries (no tree to reveal here).
+  const [taskErpDeptFilter, setTaskErpDeptFilter] = useState('all');
+  const [taskErpUserFilter, setTaskErpUserFilter] = useState('all');
+  const [taskErpPageFilter, setTaskErpPageFilter] = useState('all');
+  const [taskErpSubTabFilter, setTaskErpSubTabFilter] = useState('all');
+  const [taskErpUltraSubTabFilter, setTaskErpUltraSubTabFilter] = useState('all');
+  const [taskErpUltraTabFilter, setTaskErpUltraTabFilter] = useState('all');
+  const [taskErpTypeFilter, setTaskErpTypeFilter] = useState('all');
 
   // Remember which project + inner tab was open so a hard refresh restores it
   // instead of dropping back to the bare project list.
@@ -848,14 +864,54 @@ export default function ProjectsPanel({
       if (taskStatusFilter === 'completed') return t.status === 'completed';
       return true;
     };
-    const statusScopedTasks = projectTasks.filter(matchesMemberAndDate);
+    // ERP hierarchy filters — a task carries its erp_* ids directly, so this
+    // is a plain match rather than a tree walk. Department has no field of
+    // its own on the task; it's resolved via the tagged erp_user's own
+    // department_id.
+    const erpUsersForFilter = selectedProject.erp_users || [];
+    const matchesErpFilters = (t) => {
+      if (taskErpDeptFilter !== 'all') {
+        const eu = erpUsersForFilter.find(u => u.id === t.erp_user_id);
+        if (eu?.department_id !== taskErpDeptFilter) return false;
+      }
+      if (taskErpUserFilter !== 'all' && t.erp_user_id !== taskErpUserFilter) return false;
+      if (taskErpPageFilter !== 'all' && t.erp_page_id !== taskErpPageFilter) return false;
+      if (taskErpSubTabFilter !== 'all' && t.erp_sub_tab_id !== taskErpSubTabFilter) return false;
+      if (taskErpUltraSubTabFilter !== 'all' && t.erp_ultra_sub_tab_id !== taskErpUltraSubTabFilter) return false;
+      if (taskErpUltraTabFilter !== 'all' && t.erp_ultra_tab_id !== taskErpUltraTabFilter) return false;
+      if (taskErpTypeFilter !== 'all' && t.erp_task_type !== taskErpTypeFilter) return false;
+      return true;
+    };
+    const matchesScopeFilters = (t) => matchesMemberAndDate(t) && matchesErpFilters(t);
+    const statusScopedTasks = projectTasks.filter(matchesScopeFilters);
     const allTasksCount = statusScopedTasks.length;
     const todoTasksCount = statusScopedTasks.filter(t => (t.status || 'pending') === 'pending').length;
     const pendingTasksCount = statusScopedTasks.filter(t => t.status === 'in_progress').length;
     const approvalTasksCount = statusScopedTasks.filter(t => t.approval_request?.status === 'pending').length;
     const completedTasksCount = statusScopedTasks.filter(t => t.status === 'completed').length;
 
-    const filteredTasks = projectTasks.filter(t => matchesMemberAndDate(t) && matchesTaskStatus(t));
+    const filteredTasks = projectTasks.filter(t => matchesScopeFilters(t) && matchesTaskStatus(t));
+
+    // Cascading option lists for the ERP filter selects below.
+    const erpFilterVisibleUsers = taskErpDeptFilter === 'all'
+      ? erpUsersForFilter
+      : erpUsersForFilter.filter(u => u.department_id === taskErpDeptFilter);
+    const erpFilterSelectedUser = erpUsersForFilter.find(u => u.id === taskErpUserFilter);
+    const erpFilterPages = erpFilterSelectedUser?.pages || [];
+    const erpFilterSelectedPage = erpFilterPages.find(p => p.id === taskErpPageFilter);
+    const erpFilterSubTabs = erpFilterSelectedPage?.sub_tabs || [];
+    const erpFilterSelectedSubTab = erpFilterSubTabs.find(s => s.id === taskErpSubTabFilter);
+    const erpFilterUltraSubTabs = erpFilterSelectedSubTab?.ultra_sub_tabs || [];
+    const erpFilterSelectedUltraSubTab = erpFilterUltraSubTabs.find(u => u.id === taskErpUltraSubTabFilter);
+    const erpFilterUltraTabs = erpFilterSelectedUltraSubTab?.ultra_tabs || [];
+    const hasErpDept = (selectedProject.departments || []).includes('erp');
+    const erpFiltersActive = taskErpDeptFilter !== 'all' || taskErpUserFilter !== 'all' || taskErpPageFilter !== 'all'
+      || taskErpSubTabFilter !== 'all' || taskErpUltraSubTabFilter !== 'all' || taskErpUltraTabFilter !== 'all' || taskErpTypeFilter !== 'all';
+    const resetErpTaskFilters = () => {
+      setTaskErpDeptFilter('all'); setTaskErpUserFilter('all'); setTaskErpPageFilter('all');
+      setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
+      setTaskErpTypeFilter('all');
+    };
 
     const taskSummaryCard = (label, value, Icon, colorClass, active, onClick) => (
       <button
@@ -1632,7 +1688,7 @@ export default function ProjectsPanel({
               </>
             )}
 
-            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all' || taskStatusFilter !== 'all') && (
+            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all' || taskStatusFilter !== 'all' || erpFiltersActive) && (
               <button
                 onClick={() => {
                   setTaskMemberFilter('all');
@@ -1641,6 +1697,7 @@ export default function ProjectsPanel({
                   setTaskDateFrom('');
                   setTaskDateTo('');
                   setTaskStatusFilter('all');
+                  resetErpTaskFilters();
                 }}
                 className={`text-xs ${textSecondary} hover:underline`}
                 data-testid="project-filter-reset"
@@ -1650,6 +1707,96 @@ export default function ProjectsPanel({
             )}
           </div>
 
+          {/* ERP hierarchy + Task Type filters — only when the project has
+              an `erp` department to tag tasks against. */}
+          {hasErpDept && (
+            <div className="flex flex-wrap items-center gap-2 mb-2" data-testid="project-task-erp-filters">
+              <select
+                value={taskErpTypeFilter}
+                onChange={(e) => setTaskErpTypeFilter(e.target.value)}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                data-testid="project-filter-erp-task-type"
+              >
+                <option value="all">All Task Types</option>
+                {ERP_TASK_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select
+                value={taskErpDeptFilter}
+                onChange={(e) => {
+                  setTaskErpDeptFilter(e.target.value);
+                  setTaskErpUserFilter('all'); setTaskErpPageFilter('all');
+                  setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
+                }}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                data-testid="project-filter-erp-department"
+              >
+                <option value="all">All Departments</option>
+                {(selectedProject.erp_departments || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              <select
+                value={taskErpUserFilter}
+                onChange={(e) => {
+                  setTaskErpUserFilter(e.target.value);
+                  setTaskErpPageFilter('all'); setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
+                }}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                data-testid="project-filter-erp-user"
+              >
+                <option value="all">All Users</option>
+                {erpFilterVisibleUsers.map(u => <option key={u.id} value={u.id}>{u.user_name}</option>)}
+              </select>
+              <select
+                value={taskErpPageFilter}
+                onChange={(e) => {
+                  setTaskErpPageFilter(e.target.value);
+                  setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
+                }}
+                disabled={erpFilterPages.length === 0}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
+                data-testid="project-filter-erp-page"
+              >
+                <option value="all">All Pages</option>
+                {erpFilterPages.map(p => <option key={p.id} value={p.id}>{p.page_name}</option>)}
+              </select>
+              <select
+                value={taskErpSubTabFilter}
+                onChange={(e) => {
+                  setTaskErpSubTabFilter(e.target.value);
+                  setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
+                }}
+                disabled={erpFilterSubTabs.length === 0}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
+                data-testid="project-filter-erp-subtab"
+              >
+                <option value="all">All Sub Tabs</option>
+                {erpFilterSubTabs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <select
+                value={taskErpUltraSubTabFilter}
+                onChange={(e) => {
+                  setTaskErpUltraSubTabFilter(e.target.value);
+                  setTaskErpUltraTabFilter('all');
+                }}
+                disabled={erpFilterUltraSubTabs.length === 0}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
+                data-testid="project-filter-erp-ultra-subtab"
+              >
+                <option value="all">All Ultra Sub Tab</option>
+                {erpFilterUltraSubTabs.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+              <select
+                value={taskErpUltraTabFilter}
+                onChange={(e) => setTaskErpUltraTabFilter(e.target.value)}
+                disabled={erpFilterUltraTabs.length === 0}
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
+                data-testid="project-filter-erp-ultra-tab"
+              >
+                <option value="all">All Ultra Tab</option>
+                {erpFilterUltraTabs.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+          )}
+
           {filteredTasks.length === 0 ? (
             <p className={`text-sm ${textSecondary}`}>
               {projectTasks.length === 0 ? 'No tasks yet. Click "Add Task" to create one.' : 'No tasks match the current filters.'}
@@ -1657,6 +1804,7 @@ export default function ProjectsPanel({
           ) : (
             filteredTasks.map(task => {
               const user = users.find(u => u.user_id === task.assigned_to);
+              const erpBreadcrumb = [task.erp_user_name, task.erp_page_name, task.erp_sub_tab_name, task.erp_ultra_sub_tab_name, task.erp_ultra_tab_name].filter(Boolean).join(' > ');
               return (
                 <Card key={task.task_id} className={`${bgCard} border ${borderColor}`} data-testid={`project-task-${task.task_id}`}>
                   <CardContent className="p-4 flex items-center justify-between gap-3">
@@ -1668,14 +1816,27 @@ export default function ProjectsPanel({
                           task.status === 'in_progress' ? 'bg-[#3b82f6]/20 text-[#3b82f6]' :
                           'bg-[#71717a]/20 text-[#71717a]'
                         }>{task.status?.replace('_', ' ') || 'pending'}</Badge>
+                        <Badge className={
+                          task.priority === 'high' ? 'bg-[#ef4444]/20 text-[#ef4444] text-xs' :
+                          task.priority === 'low' ? 'bg-[#10b981]/20 text-[#10b981] text-xs' :
+                          'bg-[#f59e0b]/20 text-[#f59e0b] text-xs'
+                        }>{task.priority || 'medium'}</Badge>
                         {task.category && (
                           <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{task.category}</Badge>
+                        )}
+                        {task.erp_task_type && (
+                          <Badge className="bg-violet-500/20 text-violet-400 text-xs">{task.erp_task_type}</Badge>
                         )}
                       </div>
                       <p className={`text-xs ${textSecondary} mt-1`}>
                         Assigned to <span className={textPrimary}>{user?.name || task.assigned_to}</span>
                         {task.due_date && <> · Due {fmtDate(task.due_date)}</>}
                       </p>
+                      {erpBreadcrumb && (
+                        <p className={`text-xs ${textSecondary} mt-1 flex items-center gap-1`}>
+                          <Users className="h-3 w-3" /> {erpBreadcrumb}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       {task.work_link && (
@@ -1683,7 +1844,17 @@ export default function ProjectsPanel({
                           <ExternalLink className="h-3 w-3" /> Link
                         </a>
                       )}
-                      {canManageProjects && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setViewOnlyTask(task)}
+                        className={`h-8 w-8 p-0 ${textSecondary} hover:bg-[#6366f1]/10`}
+                        data-testid={`project-task-view-${task.task_id}`}
+                        title="View task"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {canManageProjects && canEditProjectTask(task) && (
                         <>
                           <Button
                             size="sm"
@@ -2250,9 +2421,11 @@ export default function ProjectsPanel({
           </div>
         )}
 
-        {/* View-only popup for a task tagged to the ERP hierarchy — edit or
-            move it from the ERP Users tab instead, where its full
-            page/sub-tab context is visible. */}
+        {/* View popup — read-only for everyone. A task tagged to the ERP
+            hierarchy can only be edited/moved from the ERP Users tab (its
+            full page/sub-tab context lives there); any other task can be
+            edited from here too, via the button below, but only by whoever
+            created it or an admin/super_admin (see canEditProjectTask). */}
         {viewOnlyTask && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => setViewOnlyTask(null)}>
             <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
@@ -2261,9 +2434,11 @@ export default function ProjectsPanel({
                   <h3 className={`text-lg font-semibold ${textPrimary}`}>{viewOnlyTask.task_name}</h3>
                   <button onClick={() => setViewOnlyTask(null)} className={textSecondary}><X className="h-5 w-5" /></button>
                 </div>
-                <p className={`text-xs ${textSecondary}`}>
-                  This task is tagged to the ERP Users tab — edit or move it from there.
-                </p>
+                {viewOnlyTask.erp_user_id && (
+                  <p className={`text-xs ${textSecondary}`}>
+                    This task is tagged to the ERP Users tab — edit or move it from there.
+                  </p>
+                )}
                 {viewOnlyTask.description && <p className={`text-sm ${textPrimary}`}>{viewOnlyTask.description}</p>}
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div><p className={`text-xs ${textSecondary}`}>Assigned To</p><p className={textPrimary}>{users.find(u => u.user_id === viewOnlyTask.assigned_to)?.name || viewOnlyTask.assigned_to || '—'}</p></div>
@@ -2273,30 +2448,39 @@ export default function ProjectsPanel({
                   {viewOnlyTask.erp_task_type && (
                     <div><p className={`text-xs ${textSecondary}`}>Type</p><p className={textPrimary}>{viewOnlyTask.erp_task_type}</p></div>
                   )}
+                  <div><p className={`text-xs ${textSecondary}`}>Created By</p><p className={textPrimary}>{users.find(u => u.user_id === viewOnlyTask.created_by)?.name || '—'}</p></div>
                 </div>
                 {viewOnlyTask.work_link && (
                   <a href={viewOnlyTask.work_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] text-sm hover:underline flex items-center gap-1">
                     <ExternalLink className="h-3.5 w-3.5" /> {viewOnlyTask.work_link}
                   </a>
                 )}
-                <div className={`p-3 rounded-lg ${bgSecondary}`}>
-                  <p className={`text-[11px] uppercase tracking-wide ${textSecondary} mb-1`}>ERP Location</p>
-                  <p className={`text-sm ${textPrimary} break-words`}>
-                    {buildErpPrompt({
-                      projectName: selectedProject.name,
-                      userName: viewOnlyTask.erp_user_name,
-                      pageName: viewOnlyTask.erp_page_name,
-                      subTabName: viewOnlyTask.erp_sub_tab_name,
-                      ultraSubTabName: viewOnlyTask.erp_ultra_sub_tab_name,
-                      ultraTabName: viewOnlyTask.erp_ultra_tab_name,
-                      taskName: viewOnlyTask.task_name,
-                    })}
-                  </p>
-                </div>
+                {viewOnlyTask.erp_user_id && (
+                  <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                    <p className={`text-[11px] uppercase tracking-wide ${textSecondary} mb-1`}>ERP Location</p>
+                    <p className={`text-sm ${textPrimary} break-words`}>
+                      {buildErpPrompt({
+                        projectName: selectedProject.name,
+                        userName: viewOnlyTask.erp_user_name,
+                        pageName: viewOnlyTask.erp_page_name,
+                        subTabName: viewOnlyTask.erp_sub_tab_name,
+                        ultraSubTabName: viewOnlyTask.erp_ultra_sub_tab_name,
+                        ultraTabName: viewOnlyTask.erp_ultra_tab_name,
+                        taskName: viewOnlyTask.task_name,
+                      })}
+                    </p>
+                  </div>
+                )}
                 <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={() => { setProjectInnerTab('erp_users'); setViewOnlyTask(null); }}>
-                    Open in Users tab
-                  </Button>
+                  {viewOnlyTask.erp_user_id ? (
+                    <Button variant="outline" onClick={() => { setProjectInnerTab('erp_users'); setViewOnlyTask(null); }}>
+                      Open in Users tab
+                    </Button>
+                  ) : canManageProjects && canEditProjectTask(viewOnlyTask) && (
+                    <Button variant="outline" onClick={() => { const t = viewOnlyTask; setViewOnlyTask(null); handleEditTask(t); }}>
+                      <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+                    </Button>
+                  )}
                   <Button variant="ghost" onClick={() => setViewOnlyTask(null)}>Close</Button>
                 </div>
               </CardContent>
