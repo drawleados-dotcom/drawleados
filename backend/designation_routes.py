@@ -285,6 +285,27 @@ async def create_department(data: DepartmentCreate, db=Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Update department
+@designation_router.put("/departments/{department_id}")
+async def update_department(department_id: str, data: DepartmentUpdate, db=Depends(get_db)):
+    try:
+        update_data = {k: v for k, v in data.dict(exclude_unset=True).items() if v is not None}
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+        if update_data.get("name"):
+            existing = await db.departments.find_one({"name": update_data["name"], "department_id": {"$ne": department_id}})
+            if existing:
+                raise HTTPException(status_code=400, detail="Department already exists")
+        result = await db.departments.update_one({"department_id": department_id}, {"$set": update_data})
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Department not found")
+        updated = await db.departments.find_one({"department_id": department_id}, {"_id": 0})
+        return updated
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Delete department
 @designation_router.delete("/departments/{department_id}")
 async def delete_department(department_id: str, db=Depends(get_db)):

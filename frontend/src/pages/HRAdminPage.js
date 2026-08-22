@@ -215,6 +215,7 @@ export default function HRAdminPage() {
   });
   const [newDepartment, setNewDepartment] = useState({ name: '', description: '' });
   const [editingDesignation, setEditingDesignation] = useState(null);
+  const [editingDepartment, setEditingDepartment] = useState(null);
 
   // Payroll Management state
   const [payrollEmployees, setPayrollEmployees] = useState([]);
@@ -1183,6 +1184,21 @@ export default function HRAdminPage() {
     }
   };
 
+  const handleUpdateDepartment = async () => {
+    if (!editingDepartment?.name.trim()) {
+      toast.error('Department name is required');
+      return;
+    }
+    try {
+      await axios.put(`${API}/api/designations/departments/${editingDepartment.department_id}`, editingDepartment, { headers });
+      toast.success('Department updated successfully');
+      setEditingDepartment(null);
+      loadDepartments();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update department');
+    }
+  };
+
   const handleDeleteDepartment = async (id) => {
     try {
       await axios.delete(`${API}/api/designations/departments/${id}`, { headers });
@@ -1400,6 +1416,9 @@ export default function HRAdminPage() {
             onDeleteDesignation={handleDeleteDesignation}
             onCreateDepartment={handleCreateDepartment}
             onDeleteDepartment={handleDeleteDepartment}
+            editingDepartment={editingDepartment}
+            setEditingDepartment={setEditingDepartment}
+            onUpdateDepartment={handleUpdateDepartment}
             canEdit={canEdit}
             isDark={isDark}
             bgCard={bgCard}
@@ -6150,6 +6169,7 @@ function DesignationsDeptsTab({
   newDesignation, setNewDesignation, newDepartment, setNewDepartment,
   onCreateDesignation, onUpdateDesignation, onDeleteDesignation,
   onCreateDepartment, onDeleteDepartment,
+  editingDepartment, setEditingDepartment, onUpdateDepartment,
   canEdit = true,
   isDark = false,
   bgCard, bgSecondary, textPrimary, textSecondary, borderColor
@@ -7168,37 +7188,57 @@ function DesignationsDeptsTab({
             </div>
           )}
           
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {departments.length > 0 ? departments.map((dept) => (
-              <Card key={dept.department_id} className={`${bgCard} border ${borderColor}`}>
-                <CardContent className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className={`font-semibold ${textPrimary}`}>{dept.name}</h3>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge className="bg-[#10b981]/20 text-[#10b981]">
-                          <Users className="h-3 w-3 mr-1" />
-                          {dept.employee_count || 0} Members
-                        </Badge>
-                      </div>
-                    </div>
-                    {!isViewOnly && (
-                      <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => onDeleteDepartment(dept.department_id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )) : (
-              <Card className={`${bgCard} border ${borderColor} col-span-full`}>
-                <CardContent className="p-8 text-center">
-                  <Building className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
-                  <p className={textSecondary}>No departments created yet</p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          {departments.length > 0 ? (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${borderColor}`}>
+                        <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase w-12`}>S.No</th>
+                        <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Department Name</th>
+                        <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Members</th>
+                        <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {departments.map((dept, idx) => (
+                        <tr key={dept.department_id} className={`border-b ${borderColor} last:border-b-0`}>
+                          <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
+                          <td className={`p-3 text-sm font-medium ${textPrimary}`}>{dept.name}</td>
+                          <td className="p-3">
+                            <Badge className="bg-[#10b981]/20 text-[#10b981]">
+                              <Users className="h-3 w-3 mr-1" />
+                              {dept.employee_count || 0} Members
+                            </Badge>
+                          </td>
+                          <td className="p-3 text-right">
+                            {!isViewOnly && (
+                              <div className="inline-flex gap-1">
+                                <Button variant="ghost" size="sm" onClick={() => setEditingDepartment(dept)} data-testid={`dept-edit-${dept.department_id}`}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-[#ef4444]" onClick={() => onDeleteDepartment(dept.department_id)} data-testid={`dept-delete-${dept.department_id}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-8 text-center">
+                <Building className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
+                <p className={textSecondary}>No departments created yet</p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Add Department Modal */}
           {showDepartmentModal && (
@@ -7225,6 +7265,38 @@ function DesignationsDeptsTab({
                   <div className="flex justify-end gap-2 mt-6">
                     <Button variant="ghost" onClick={() => setShowDepartmentModal(false)}>Cancel</Button>
                     <Button onClick={onCreateDepartment} className="bg-[#6366f1] hover:bg-[#4f46e5]">Create</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Edit Department Modal */}
+          {editingDepartment && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className={`${bgCard} w-full max-w-md`}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>Edit Department</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setEditingDepartment(null)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className={textPrimary}>Department Name *</Label>
+                      <Input
+                        value={editingDepartment.name}
+                        onChange={(e) => setEditingDepartment({ ...editingDepartment, name: e.target.value })}
+                        placeholder="e.g., Engineering"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="dept-edit-form-name"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6">
+                    <Button variant="ghost" onClick={() => setEditingDepartment(null)}>Cancel</Button>
+                    <Button onClick={onUpdateDepartment} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="dept-edit-form-save">Save</Button>
                   </div>
                 </CardContent>
               </Card>
