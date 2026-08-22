@@ -1325,14 +1325,14 @@ export default function ProjectsPanel({
           // Scope tab only renders for SEO-department projects
           const isSeoProject = (selectedProject?.departments || []).includes('seo');
           const innerTabs = [
-            // ERP / Website: department-specific tabs lead, ahead of the
-            // generic Tasks/Payment Schedule/Expense tabs.
+            // Tasks leads every project type — the department-specific tabs
+            // (ERP Users/Departments/Others, Website Pages/Others) follow it.
+            { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
             ...(isErpProject ? [{ id: 'erp_departments', label: 'Departments', icon: Building2 }] : []),
             ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
-            { id: 'tasks', label: 'Tasks', icon: ListChecks },
             // Daily Notes — universal, every project regardless of department.
             { id: 'daily_notes', label: 'Daily Notes', icon: NotebookPen },
             ...(showPaymentSchedule ? [{ id: 'payment', label: 'Payment Schedule', icon: Wallet }] : []),
@@ -1623,6 +1623,11 @@ export default function ProjectsPanel({
         <div className="space-y-2">
           <h3 className={`text-base font-semibold ${textPrimary}`}>Tasks</h3>
 
+          {/* Sticky on scroll — stays pinned below the tab row while only the
+              task list beneath it scrolls. Needs its own opaque background
+              (matching the page, not the card) so scrolled-under task cards
+              don't show through. */}
+          <div className={`sticky top-0 z-20 pb-2 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
           {/* Status summary cards — each a toggle filter, computed without its
               own filter dimension (so every bucket stays visible to jump
               between) but with the Team Member + Date filters below applied. */}
@@ -1796,6 +1801,7 @@ export default function ProjectsPanel({
               </select>
             </div>
           )}
+          </div>
 
           {filteredTasks.length === 0 ? (
             <p className={`text-sm ${textSecondary}`}>
