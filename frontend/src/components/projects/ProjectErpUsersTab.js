@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2, Search } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -290,8 +290,11 @@ export default function ProjectErpUsersTab({
   const [subTabFilter, setSubTabFilter] = useState('all');
   const [ultraSubTabFilter, setUltraSubTabFilter] = useState('all');
   const [ultraTabFilter, setUltraTabFilter] = useState('all');
+  // Free-text search by user name, on top of the exact-match "All Users" dropdown.
+  const [userSearchQuery, setUserSearchQuery] = useState('');
 
-  const filteredErpUsers = userFilter === 'all' ? visibleErpUsers : visibleErpUsers.filter(u => u.id === userFilter);
+  const filteredErpUsers = (userFilter === 'all' ? visibleErpUsers : visibleErpUsers.filter(u => u.id === userFilter))
+    .filter(u => !userSearchQuery.trim() || (u.user_name || '').toLowerCase().includes(userSearchQuery.trim().toLowerCase()));
 
   const pageOptions = filteredErpUsers.flatMap(u => (u.pages || []).map(pg => ({
     key: pg.id,
@@ -659,6 +662,17 @@ export default function ProjectErpUsersTab({
     return next;
   };
 
+  // Users are reordered by id (not list position) because the visible rows can be a
+  // filtered/searched subset of erpUsers — an index-based reorder would scramble the
+  // underlying array whenever a Department or search filter is active.
+  const moveUser = (fromId, toId) => {
+    if (!canEdit || fromId === toId) return;
+    const fromIndex = erpUsers.findIndex(u => u.id === fromId);
+    const toIndex = erpUsers.findIndex(u => u.id === toId);
+    if (fromIndex === -1 || toIndex === -1) return;
+    persistUsers(reorderArray(erpUsers, fromIndex, toIndex));
+  };
+
   const movePage = (userId, fromIndex, toIndex) => {
     if (!canEdit || fromIndex === toIndex) return;
     persistUsers(erpUsers.map(u => (
@@ -713,6 +727,25 @@ export default function ProjectErpUsersTab({
   const DragHandle = () => (
     <GripVertical className={`h-3.5 w-3.5 ${textSecondary} cursor-grab shrink-0 inline-block align-middle mr-1`} />
   );
+
+  // Separate id-based drag handlers for the top-level Users table (see moveUser above).
+  const [dragUserId, setDragUserId] = useState(null);
+  const userDragRowProps = (userId) => (!canEdit ? {} : {
+    draggable: true,
+    onDragStart: (e) => {
+      setDragUserId(userId);
+      e.dataTransfer.effectAllowed = 'move';
+    },
+    onDragOver: (e) => {
+      if (dragUserId && dragUserId !== userId) e.preventDefault();
+    },
+    onDrop: (e) => {
+      e.preventDefault();
+      if (dragUserId && dragUserId !== userId) moveUser(dragUserId, userId);
+      setDragUserId(null);
+    },
+    onDragEnd: () => setDragUserId(null),
+  });
 
   const summaryCard = (label, value, Icon, colorClass, active, onClick) => (
     <button
@@ -819,6 +852,16 @@ export default function ProjectErpUsersTab({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <Search className={`h-3.5 w-3.5 ${textSecondary} absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none`} />
+            <Input
+              value={userSearchQuery}
+              onChange={(e) => setUserSearchQuery(e.target.value)}
+              placeholder="Search users..."
+              className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[180px] pl-8`}
+              data-testid="erp-user-search"
+            />
+          </div>
           <Select value={departmentFilter} onValueChange={handleDepartmentFilterChange}>
             <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[160px]`} data-testid="erp-user-department-filter">
               <SelectValue placeholder="All Departments" />
@@ -906,8 +949,12 @@ export default function ProjectErpUsersTab({
                   const pages = (u.pages || []).filter(pg => pageFilter === 'all' || pg.id === pageFilter);
                   return (
                     <React.Fragment key={u.id}>
-                      <tr className={`border-b ${borderColor}`} data-testid={`erp-user-row-${u.id}`}>
-                        <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
+                      <tr
+                        className={`border-b ${borderColor} ${dragUserId === u.id ? 'opacity-40' : ''}`}
+                        data-testid={`erp-user-row-${u.id}`}
+                        {...userDragRowProps(u.id)}
+                      >
+                        <td className={`p-3 text-xs ${textSecondary}`}>{canEdit && <DragHandle />}{idx + 1}</td>
                         <td className="p-3">
                           <button
                             type="button"
