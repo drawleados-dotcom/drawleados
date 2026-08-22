@@ -116,6 +116,10 @@ export default function ProjectsPanel({
   const [timeEditOpen, setTimeEditOpen] = useState(false);
   const [timeEditDraft, setTimeEditDraft] = useState({ date: '', start_time: '', end_time: '' });
   const [deptFilter, setDeptFilter] = useState('all');
+  // Technology / Marketing grouping — a top-level scope above the department
+  // pills, sourced from each department's `group` field (set in Operations >
+  // Departments). Narrows which department pills show as "sub tabs" below it.
+  const [projectGroupFilter, setProjectGroupFilter] = useState('all');
 
   const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', project_type: 'onetime', departments: [], members: [] });
   const [clients, setClients] = useState([]);
@@ -917,9 +921,39 @@ export default function ProjectsPanel({
     const statuses = deptStatuses.find(d => d.dept_key === deptKey)?.statuses || [];
     return statuses.includes('Developing') ? 'Developing' : 'all';
   };
+  // Technology / Marketing grouping — sourced from each department's own
+  // `group` field (deptCategories, set via Operations > Departments), not
+  // hardcoded here. A department with no group set won't appear under
+  // either scope, only under "All".
+  const deptGroupOf = (deptKey) => deptCategories.find(d => d.dept_key === deptKey)?.group || '';
+  const scopedDepartments = projectGroupFilter === 'all'
+    ? DEPARTMENTS
+    : DEPARTMENTS.filter(d => deptGroupOf(d.value) === projectGroupFilter);
   const navTabsBar = (
     <div data-testid="project-nav-tabs">
-      {/* Department filter tabs with counts */}
+      {/* Technology / Marketing scope — narrows the department pills below */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {[{ value: 'all', label: 'All' }, { value: 'technology', label: 'Technology' }, { value: 'marketing', label: 'Marketing' }].map(g => (
+          <button
+            key={g.value}
+            onClick={() => {
+              setProjectGroupFilter(g.value);
+              if (g.value !== 'all' && deptFilter !== 'all' && deptGroupOf(deptFilter) !== g.value) {
+                setDeptFilter('all');
+                setStatusFilter('all');
+              }
+            }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              projectGroupFilter === g.value ? 'bg-[#111827] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#111827]/10`
+            }`}
+            data-testid={`project-group-filter-${g.value}`}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Department filter tabs with counts — sub-tabs of the group above */}
       <div className="flex flex-wrap gap-2 mb-4">
         <button
           onClick={() => { setSelectedProject(null); setDeptFilter('all'); setStatusFilter('all'); }}
@@ -930,7 +964,7 @@ export default function ProjectsPanel({
         >
           All ({projects.length})
         </button>
-        {DEPARTMENTS.map(d => {
+        {scopedDepartments.map(d => {
           const count = projects.filter(p => (p.departments || []).includes(d.value)).length;
           if (count === 0) return null;
           return (
