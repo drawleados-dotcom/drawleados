@@ -781,6 +781,12 @@ export default function ProjectsPanel({
   // is showing. Clicking a tab from inside a project detail also exits back
   // to the (filtered) list, since that's what picking a different
   // department/status scope means.
+  // Picking a department defaults its status filter to "Developing" when
+  // that department's own status vocabulary has one, else "all".
+  const defaultStatusForDept = (deptKey) => {
+    const statuses = deptStatuses.find(d => d.dept_key === deptKey)?.statuses || [];
+    return statuses.includes('Developing') ? 'Developing' : 'all';
+  };
   const navTabsBar = (
     <div data-testid="project-nav-tabs">
       {/* Department filter tabs with counts */}
@@ -800,7 +806,7 @@ export default function ProjectsPanel({
           return (
             <button
               key={d.value}
-              onClick={() => { setSelectedProject(null); setDeptFilter(d.value); setStatusFilter('all'); }}
+              onClick={() => { setSelectedProject(null); setDeptFilter(d.value); setStatusFilter(defaultStatusForDept(d.value)); }}
               className={`px-3 py-1.5 rounded-full text-sm transition-all ${
                 deptFilter === d.value ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
               }`}
@@ -833,31 +839,19 @@ export default function ProjectsPanel({
         const statuses = deptStatuses.find(d => d.dept_key === deptFilter)?.statuses || [];
         if (statuses.length === 0) return null;
         return (
-          <div className="flex flex-wrap gap-2 mb-4" data-testid="project-status-subtabs">
-            <button
-              onClick={() => { setSelectedProject(null); setStatusFilter('all'); }}
-              className={`px-3 py-1 rounded-full text-xs transition-all ${
-                statusFilter === 'all' ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
-              }`}
-              data-testid="status-filter-all"
+          <div className="flex justify-end mb-4" data-testid="project-status-subtabs">
+            <select
+              value={statusFilter}
+              onChange={(e) => { setSelectedProject(null); setStatusFilter(e.target.value); }}
+              className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+              data-testid="status-filter-select"
             >
-              All Status ({deptProjects.length})
-            </button>
-            {statuses.map(s => {
-              const count = deptProjects.filter(p => (p.status || 'active') === s).length;
-              return (
-                <button
-                  key={s}
-                  onClick={() => { setSelectedProject(null); setStatusFilter(s); }}
-                  className={`px-3 py-1 rounded-full text-xs transition-all ${
-                    statusFilter === s ? 'bg-[#10b981] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#10b981]/20`
-                  }`}
-                  data-testid={`status-filter-${s.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  {s} ({count})
-                </button>
-              );
-            })}
+              <option value="all">All Status ({deptProjects.length})</option>
+              {statuses.map(s => {
+                const count = deptProjects.filter(p => (p.status || 'active') === s).length;
+                return <option key={s} value={s}>{s} ({count})</option>;
+              })}
+            </select>
           </div>
         );
       })()}
