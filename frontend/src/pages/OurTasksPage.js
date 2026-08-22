@@ -1779,48 +1779,6 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           borderColor={borderColor}
         />
 
-        {/* Sticky header block — summary cards, filter toolbar and the
-            department pills stay pinned while only the task list scrolls
-            beneath them. Layout's `.flex-1.overflow-y-auto` wrapper is the
-            scroll container, so top-0 lands just under the app header. The
-            opaque background is the page's own, so rows can't show through
-            as they pass behind. */}
-        {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
-        <div className={`sticky top-0 z-30 space-y-4 pb-3 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} data-testid="tasks-sticky-header">
-        {/* Operations Summary Cards — Feb 2026
-            5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO.
-            Now driven by `filterScopedSummary` so the numbers always reflect
-            the active filter bar (date, project, person, department, category,
-            status) — see useMemo above. Only relevant for the task-list tabs
-            (My Tasks / Assign to Team); Projects/Departments/Approvals/Meetings
-            have their own summaries. */}
-        {(mainTab === 'assigned_to_me' || mainTab === 'assign_to_team') && (
-        <OperationsSummaryCards
-          summary={filterScopedSummary}
-          isSuperAdmin={(user?.role || '').toLowerCase() === 'super_admin'}
-          summaryDate={summaryDate}
-          onDateChange={(d) => {
-            // Keep the legacy summary date in sync AND push the same date into
-            // the table date filter so the cards and the table stay aligned.
-            setSummaryDate(d);
-            setFilters(prev => ({ ...prev, dateFilter: 'single', singleDate: d }));
-          }}
-          activeFilter={filter}
-          onCardClick={(key) => {
-            // 'todo'  -> show all (open + in progress + others)
-            // 'pending' -> show only pending
-            // 'ops' / 'ceo' / 'worked' -> reset to all (visual highlight only)
-            if (key === 'pending') setFilter('pending');
-            else setFilter('all');
-          }}
-          textPrimary={textPrimary}
-          textSecondary={textSecondary}
-          bgCard={bgCard}
-          bgSecondary={bgSecondary}
-          borderColor={borderColor}
-        />
-        )}
-
         {/* Approvals tab — embed the dedicated page */}
         {mainTab === 'approvals' && (
           <div data-testid="ops-approvals-panel">
@@ -1898,6 +1856,48 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             headers={headers}
             users={users}
           />
+        )}
+
+        {/* Sticky header block — summary cards, filter toolbar and the
+            department pills stay pinned while only the task list scrolls
+            beneath them. Layout's `.flex-1.overflow-y-auto` wrapper is the
+            scroll container, so top-0 lands just under the app header. The
+            opaque background is the page's own, so rows can't show through
+            as they pass behind. */}
+        {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
+        <div className={`sticky top-0 z-30 space-y-4 pb-3 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} data-testid="tasks-sticky-header">
+        {/* Operations Summary Cards — Feb 2026
+            5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO.
+            Now driven by `filterScopedSummary` so the numbers always reflect
+            the active filter bar (date, project, person, department, category,
+            status) — see useMemo above. Only relevant for the task-list tabs
+            (My Tasks / Assign to Team); Projects/Departments/Approvals/Meetings
+            have their own summaries. */}
+        {(mainTab === 'assigned_to_me' || mainTab === 'assign_to_team') && (
+        <OperationsSummaryCards
+          summary={filterScopedSummary}
+          isSuperAdmin={(user?.role || '').toLowerCase() === 'super_admin'}
+          summaryDate={summaryDate}
+          onDateChange={(d) => {
+            // Keep the legacy summary date in sync AND push the same date into
+            // the table date filter so the cards and the table stay aligned.
+            setSummaryDate(d);
+            setFilters(prev => ({ ...prev, dateFilter: 'single', singleDate: d }));
+          }}
+          activeFilter={filter}
+          onCardClick={(key) => {
+            // 'todo'  -> show all (open + in progress + others)
+            // 'pending' -> show only pending
+            // 'ops' / 'ceo' / 'worked' -> reset to all (visual highlight only)
+            if (key === 'pending') setFilter('pending');
+            else setFilter('all');
+          }}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          borderColor={borderColor}
+        />
         )}
 
         {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
