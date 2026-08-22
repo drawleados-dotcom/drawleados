@@ -1484,7 +1484,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Single source of truth for task filtering. `tabCtx` lets us reuse the
   // predicate to compute counts for OTHER tabs without flipping `mainTab`
   // state (used by the tab badges — see myTabCount / teamTabCount below).
-  const taskPasses = useCallback((task, tabCtx = mainTab) => {
+  const taskPasses = useCallback((task, tabCtx = mainTab, opts = {}) => {
     // Management-department tasks are Super Admin-only territory for general
     // browsing — an assignee/creator still sees their own, everyone else
     // (dept monitoring, team-wide views) does not.
@@ -1552,11 +1552,21 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
     // Department filter — a task marked "all" (Select All) belongs to every
     // department's view, so it always passes a specific-department filter.
-    if (filters.department !== 'all' && task.department !== filters.department && task.department !== 'all') return false;
+    // Skipped by opts.ignoreDepartment for the per-department pill badge
+    // counts, which need every department's count regardless of which one
+    // is currently selected (sub-department goes with it — it's meaningless
+    // once we're no longer scoped to one specific department).
+    if (!opts.ignoreDepartment) {
+      if (filters.department !== 'all' && task.department !== filters.department && task.department !== 'all') return false;
+    }
 
     // Sub Department filter — only meaningful once a specific department is
-    // selected (the sub-tabs bar only shows it in that state).
-    if (filters.subDepartment !== 'all' && task.sub_department_id !== filters.subDepartment) return false;
+    // selected (the sub-tabs bar only shows it in that state). Skipped by
+    // opts.ignoreSubDepartment for the per-sub-department pill badge counts
+    // (need every sub-department's own count, not just the selected one).
+    if (!opts.ignoreDepartment && !opts.ignoreSubDepartment) {
+      if (filters.subDepartment !== 'all' && task.sub_department_id !== filters.subDepartment) return false;
+    }
 
     // Project filter
     if (filters.project !== 'all' && task.project_id !== filters.project) return false;
@@ -1567,10 +1577,17 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // Type filter
     if (filters.taskType !== 'all' && task.type !== filters.taskType) return false;
 
-    // Status filter (from advanced filters) — a task acted on in this session
-    // (e.g. Start Timer) stays visible even if its new status no longer
-    // matches the filter, so the row doesn't vanish mid-interaction.
-    if (filters.status !== 'all' && task.status !== filters.status && !statusFilterBypassIds.has(task.task_id)) return false;
+    // Status filter — opts.forceStatus (the pill badges: always "pending",
+    // i.e. to-do, no matter what the advanced Status dropdown is set to)
+    // overrides the advanced filter below it entirely.
+    if (opts.forceStatus) {
+      if ((task.status || 'pending') !== opts.forceStatus) return false;
+    } else if (
+      // Status filter (from advanced filters) — a task acted on in this session
+      // (e.g. Start Timer) stays visible even if its new status no longer
+      // matches the filter, so the row doesn't vanish mid-interaction.
+      filters.status !== 'all' && task.status !== filters.status && !statusFilterBypassIds.has(task.task_id)
+    ) return false;
 
     // Priority filter
     if (filters.priority !== 'all' && (task.priority || 'medium') !== filters.priority) return false;
@@ -2192,12 +2209,16 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             above the (now scoped) department pills — no more separate
             Management/Operation pills. My Tasks keeps the flat department row. */}
         {(() => {
-          const sourceTasks = mainTab === 'assigned_to_me'
-            ? [...assignedToMeTasks, ...myOwnTasks]
-            : assignedToTeamTasks;
+          // Pill badges = to-do count per department, scoped by every active
+          // filter (date, project, category, assigned to, priority, ...) the
+          // same way the task list below is — just ignoring the department
+          // filter itself (so every department gets its own count) and
+          // pinning status to "pending" (to-do) regardless of the advanced
+          // Status dropdown. Reuses taskPasses so this can never drift from
+          // what's actually in the list once you click a pill.
           const pendingByDept = {};
-          sourceTasks.forEach(t => {
-            if ((t.status || 'pending') !== 'pending') return;
+          tasks.forEach(t => {
+            if (!taskPasses(t, mainTab, { ignoreDepartment: true, forceStatus: 'pending' })) return;
             const d = t.department || '_unassigned';
             pendingByDept[d] = (pendingByDept[d] || 0) + 1;
           });
@@ -2442,13 +2463,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           const subDepts = getSelectableSubDepts(filters.department);
           if (!activeDept || subDepts.length === 0) return null;
 
-          const sourceTasks = mainTab === 'assigned_to_me'
-            ? [...assignedToMeTasks, ...myOwnTasks]
-            : assignedToTeamTasks;
+          // Same to-do-count-per-filter-bar approach as the department pills
+          // above — just scoped to the active department and broken out by
+          // sub-department instead.
           const pendingBySubDept = {};
-          sourceTasks.forEach(t => {
-            if ((t.status || 'pending') !== 'pending') return;
-            if (t.department !== filters.department) return;
+          tasks.forEach(t => {
+            if (!taskPasses(t, mainTab, { ignoreSubDepartment: true, forceStatus: 'pending' })) return;
             const sd = t.sub_department_id || '_unassigned';
             pendingBySubDept[sd] = (pendingBySubDept[sd] || 0) + 1;
           });
