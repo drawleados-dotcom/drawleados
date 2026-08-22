@@ -3041,25 +3041,25 @@ export default function ProjectsPanel({
             />
           ) : (
           <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`} data-testid="projects-list">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm table-fixed">
               <thead className={`${bgSecondary} ${textSecondary} text-xs uppercase`}>
                 <tr>
-                  <th className="text-left px-2 py-3" aria-label="Reorder / Pin" />
-                  <th className="text-left px-4 py-3">Project</th>
-                  <th className="text-left px-4 py-3">Departments</th>
-                  <th className="text-left px-4 py-3">Client</th>
-                  <th className="text-left px-4 py-3">Status</th>
-                  <th className="text-left px-4 py-3">Type</th>
-                  <th className="text-left px-4 py-3">Start Date</th>
-                  <th className="text-left px-4 py-3">Due Date</th>
-                  <th className="text-left px-4 py-3">Due Balance</th>
-                  {deptFilter === 'website' && <th className="text-left px-4 py-3">Weblink</th>}
-                  {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3">Handover Date</th>}
-                  {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3">Remarks</th>}
-                  <th className="text-left px-4 py-3">Tasks</th>
-                  <th className="text-left px-4 py-3">Progress</th>
-                  <th className="text-left px-4 py-3">Members</th>
-                  {role === 'super_admin' && <th className="text-right px-4 py-3">Actions</th>}
+                  <th className="text-left px-2 py-3 w-[5%]" aria-label="Reorder / Pin" />
+                  <th className="text-left px-4 py-3 w-[15%]">Project</th>
+                  <th className="text-left px-4 py-3 w-[8%]">Departments</th>
+                  <th className="text-left px-4 py-3 w-[9%]">Client</th>
+                  <th className="text-left px-4 py-3 w-[9%]">Status</th>
+                  <th className="text-left px-4 py-3 w-[6%]">Type</th>
+                  <th className="text-left px-4 py-3 w-[7%]">Start Date</th>
+                  <th className="text-left px-4 py-3 w-[7%]">Due Date</th>
+                  <th className="text-left px-4 py-3 w-[6%]">Due Balance</th>
+                  {deptFilter === 'website' && <th className="text-left px-4 py-3 w-[5%]">Weblink</th>}
+                  {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3 w-[7%]">Handover Date</th>}
+                  {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3 w-[8%]">Remarks</th>}
+                  <th className="text-left px-4 py-3 w-[5%]">Tasks</th>
+                  <th className="text-left px-4 py-3 w-[12%]">Progress</th>
+                  <th className="text-left px-4 py-3 w-[5%]">Members</th>
+                  {role === 'super_admin' && <th className="text-right px-4 py-3 w-[5%]">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -3199,7 +3199,7 @@ export default function ProjectsPanel({
                         <ListChecks className="h-3 w-3" />{p.task_count || 0}
                       </span>
                     </td>
-                    <td className="px-4 py-3 min-w-[180px]">
+                    <td className="px-4 py-3 overflow-hidden">
                       {(() => {
                         const total = p.task_count || 0;
                         const approved = p.approved_task_count || 0;
