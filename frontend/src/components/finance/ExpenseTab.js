@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -64,6 +65,7 @@ import {
   Building2,
   Target as TargetIcon,
   FolderOpen,
+  Package,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import BanksTab from './BanksTab';
@@ -106,6 +108,15 @@ const DEFAULT_TABS = [
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'pipeline', label: 'Pipeline', icon: TargetIcon, isDefault: true },
+];
+
+// Clients Master View / Service and Packages moved here (next to Pipeline)
+// from the top nav — both are full standalone pages (their own <Layout>),
+// not embeddable tab content, so these link out to their real routes
+// instead of switching `activeTab` like the pills above.
+const LINKED_TABS = [
+  { path: '/client-master', label: 'Clients Master View', icon: Building2 },
+  { path: '/service-packages', label: 'Service and Packages', icon: Package },
 ];
 
 const ExpenseTab = () => {
@@ -1990,6 +2001,19 @@ const ExpenseTab = () => {
               </button>
             );
           })}
+          {LINKED_TABS.map(({ path, label, icon: Icon }) => (
+            <Link
+              key={path}
+              to={path}
+              data-testid={`tab-link-${path.replace('/', '')}`}
+              className={`px-4 py-2 text-sm font-medium rounded-md flex items-center gap-2 transition-all whitespace-nowrap ${
+                isDark ? 'text-gray-600 dark:text-[#a1a1aa] hover:text-white' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </Link>
+          ))}
           {/* Add Custom Tab Button */}
           <button
             onClick={() => setShowAddTab(true)}
