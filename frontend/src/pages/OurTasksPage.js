@@ -1902,10 +1902,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
         {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
         <>
-        {/* Compact Filter Toolbar */}
-        <div className={`${bgCard} border ${borderColor} rounded-xl p-3`}>
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+        {/* Compact Filter Toolbar — one row, no wrap. On a narrow viewport the
+            row scrolls horizontally instead of breaking Create Task (or the
+            Sort select) onto their own dangling line. */}
+        <div className={`${bgCard} border ${borderColor} rounded-xl p-3 overflow-x-auto`}>
+          <div className="flex items-center gap-2 flex-nowrap w-max">
             {/* Date filter */}
             <Select value={filters.dateFilter} onValueChange={(v) => setFilters({...filters, dateFilter: v})}>
               <SelectTrigger className={`h-9 w-[140px] ${bgSecondary} border ${borderColor}`} data-testid="filter-date">
@@ -2116,16 +2117,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               </SelectContent>
             </Select>
 
-          </div>
-
-          <Button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-9 flex-shrink-0"
-            data-testid="create-task-btn"
-          >
-            <Plus className="h-4 w-4 mr-1.5" />
-            Create Task
-          </Button>
+            <Button
+              onClick={() => setShowCreateModal(true)}
+              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-9 flex-shrink-0"
+              data-testid="create-task-btn"
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              Create Task
+            </Button>
           </div>
         </div>
 
