@@ -1759,6 +1759,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           borderColor={borderColor}
         />
 
+        {/* Sticky header block — summary cards, filter toolbar and the
+            department pills stay pinned while only the task list scrolls
+            beneath them. Layout's `.flex-1.overflow-y-auto` wrapper is the
+            scroll container, so top-0 lands just under the app header. The
+            opaque background is the page's own, so rows can't show through
+            as they pass behind. */}
+        {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
+        <div className={`sticky top-0 z-30 space-y-4 pb-3 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} data-testid="tasks-sticky-header">
         {/* Operations Summary Cards — Feb 2026
             5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO.
             Now driven by `filterScopedSummary` so the numbers always reflect
@@ -2329,6 +2337,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           );
         })()}
 
+        </>
+        )}
+        </div>
+        )}
+
+        {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
+        <>
         {/* Render Meetings panel when the Meetings sub-tab is selected */}
         {meetingsSubActive ? (
           <Card className={`${bgCard} border ${borderColor}`}>
