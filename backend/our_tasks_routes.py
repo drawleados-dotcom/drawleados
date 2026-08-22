@@ -580,12 +580,12 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        # Authorization: only creator or super_admin/admin can do a full update.
-        # Assignees (when not also the creator) can only edit timing via /time-edit, not field-level.
+        # Authorization: creator, assignee, or super_admin/admin can do a full update.
         is_admin = user.role in ["super_admin", "admin"]
         is_creator = task.get("created_by") == user.user_id
-        if not (is_admin or is_creator):
-            raise HTTPException(status_code=403, detail="Only the creator or an admin can edit this task. Assignees may edit only the timing.")
+        is_assignee = task.get("assigned_to") == user.user_id
+        if not (is_admin or is_creator or is_assignee):
+            raise HTTPException(status_code=403, detail="Only the creator, the assignee, or an admin can edit this task.")
         
         update_dict = {k: v for k, v in task_data.dict().items() if v is not None}
         update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
