@@ -6,10 +6,9 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, Search, Building2, FileText, Layers, LayoutGrid, Boxes } from 'lucide-react';
-import { buildErpPrompt } from '../../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
-import ErpLocationPicker from './ErpLocationPicker';
 import ErpTaskList, { ErpTaskCountBadge } from './ErpTaskList';
+import ErpTaskModal from './ErpTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -837,7 +836,6 @@ export default function ProjectErpUsersTab({
   // logging a task is a much lower-risk action than editing the ERP
   // structure itself, and any team member should be able to do it from here.
   const [taskModal, setTaskModal] = useState(null);
-  const [savingTask, setSavingTask] = useState(false);
 
   const openAddTask = (ctx) => {
     setTaskModal({
@@ -882,38 +880,6 @@ export default function ProjectErpUsersTab({
   };
 
   const closeTaskModal = () => setTaskModal(null);
-
-  const submitTaskModal = async () => {
-    if (!taskModal.draft.task_name.trim()) { toast.error('Task name is required'); return; }
-    setSavingTask(true);
-    const payload = {
-      task_name: taskModal.draft.task_name.trim(),
-      priority: taskModal.draft.priority,
-      assigned_to: taskModal.draft.assigned_to || currentUser?.user_id,
-      due_date: taskModal.draft.due_date || null,
-      work_link: taskModal.draft.work_link || '',
-      department: 'erp',
-      project_id: project.project_id,
-      project_name: project.name,
-      ...taskModal.location,
-      erp_task_type: taskModal.draft.erp_task_type || '',
-    };
-    try {
-      if (taskModal.taskId) {
-        await axios.put(`${API}/api/our-tasks/tasks/${taskModal.taskId}`, payload, { headers });
-        toast.success('Task updated');
-      } else {
-        await axios.post(`${API}/api/our-tasks/tasks`, { ...payload, type: 'general', status: 'pending' }, { headers });
-        toast.success('Task added');
-      }
-      closeTaskModal();
-      onTasksChanged?.();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save task');
-    } finally {
-      setSavingTask(false);
-    }
-  };
 
   const AddTaskButton = ({ onClick, testId }) => (
     <button
@@ -2072,144 +2038,23 @@ export default function ProjectErpUsersTab({
         titleEdit="Edit Ultra Tab"
       />
 
-      {/* Add/Edit Task popup — opened from a row's Add Task button or its Edit
-          action (see AddTaskButton / ErpTaskList above). z-40, not z-[70]: the
-          selects below portal to document.body at z-50 (ui/select.jsx). */}
       {taskModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeTaskModal}>
-          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
-            <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
-              <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
-                <ListChecks className="h-4 w-4 text-[#6366f1]" /> {taskModal.taskId ? 'Edit Task' : 'Add Task'}
-              </h3>
-              <button onClick={closeTaskModal} className={textSecondary}>
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Task Name</p>
-                <Input
-                  value={taskModal.draft.task_name}
-                  onChange={(e) => setTaskModal(m => ({ ...m, draft: { ...m.draft, task_name: e.target.value } }))}
-                  placeholder="e.g. Fix validation on Save button"
-                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  data-testid="erp-quicktask-form-name"
-                  autoFocus
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Priority</p>
-                  <Select
-                    value={taskModal.draft.priority}
-                    onValueChange={(v) => setTaskModal(m => ({ ...m, draft: { ...m.draft, priority: v } }))}
-                  >
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-quicktask-form-priority">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="low">Low</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Type</p>
-                  <Select
-                    value={taskModal.draft.erp_task_type || '_none'}
-                    onValueChange={(v) => setTaskModal(m => ({ ...m, draft: { ...m.draft, erp_task_type: v === '_none' ? '' : v } }))}
-                  >
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-quicktask-form-type">
-                      <SelectValue placeholder="— Select type —" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="_none">— Select type —</SelectItem>
-                      {ERP_TASK_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
-                  <Select
-                    value={taskModal.draft.assigned_to || '_none'}
-                    onValueChange={(v) => setTaskModal(m => ({ ...m, draft: { ...m.draft, assigned_to: v === '_none' ? '' : v } }))}
-                  >
-                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-quicktask-form-assignee">
-                      <SelectValue placeholder="— Select —" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projectMembers.map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Due Date</p>
-                  <Input
-                    type="date"
-                    value={taskModal.draft.due_date}
-                    onChange={(e) => setTaskModal(m => ({ ...m, draft: { ...m.draft, due_date: e.target.value } }))}
-                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                    data-testid="erp-quicktask-form-due-date"
-                  />
-                </div>
-              </div>
-              <div>
-                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Work Link</p>
-                <Input
-                  value={taskModal.draft.work_link}
-                  onChange={(e) => setTaskModal(m => ({ ...m, draft: { ...m.draft, work_link: e.target.value } }))}
-                  placeholder="https://…"
-                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                  data-testid="erp-quicktask-form-worklink"
-                />
-              </div>
-              <div>
-                <p className={`text-xs font-medium ${textSecondary} mb-2`}>Location {taskModal.taskId && <span className={textSecondary}>— change these to move the task</span>}</p>
-                <ErpLocationPicker
-                  project={project}
-                  value={taskModal.location}
-                  onChange={(next) => setTaskModal(m => ({ ...m, location: next }))}
-                  bgSecondary={bgSecondary}
-                  borderColor={borderColor}
-                  textPrimary={textPrimary}
-                  textSecondary={textSecondary}
-                  testPrefix="erp-quicktask-location"
-                />
-              </div>
-              {/* Live breadcrumb — shows exactly where in the hierarchy this task is tagged */}
-              <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="erp-quicktask-prompt">
-                <p className={`text-xs font-medium ${textSecondary} mb-2`}>Prompt</p>
-                <p className={`text-sm ${textPrimary} break-words`}>
-                  {buildErpPrompt({
-                    projectName: project?.name,
-                    userName: taskModal.location.erp_user_name,
-                    pageName: taskModal.location.erp_page_name,
-                    subTabName: taskModal.location.erp_sub_tab_name,
-                    ultraSubTabName: taskModal.location.erp_ultra_sub_tab_name,
-                    ultraTabName: taskModal.location.erp_ultra_tab_name,
-                    taskName: taskModal.draft.task_name,
-                  })}
-                </p>
-              </div>
-            </div>
-            <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
-              <Button type="button" variant="outline" onClick={closeTaskModal}>Cancel</Button>
-              <Button
-                type="button"
-                onClick={submitTaskModal}
-                disabled={savingTask}
-                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                data-testid="erp-quicktask-form-save"
-              >
-                {savingTask ? 'Saving…' : (taskModal.taskId ? 'Save Changes' : 'Add Task')}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <ErpTaskModal
+          project={project}
+          projectMembers={projectMembers}
+          currentUser={currentUser}
+          headers={headers}
+          taskId={taskModal.taskId}
+          initialLocation={taskModal.location}
+          initialDraft={taskModal.draft}
+          onClose={closeTaskModal}
+          onSaved={onTasksChanged}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
       )}
     </div>
   );
