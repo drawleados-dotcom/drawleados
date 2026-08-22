@@ -24,6 +24,7 @@ import MeetingsPanel from '../components/MeetingsPanel';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import OperationsSummaryCards from '../components/operations/OperationsSummaryCards';
 import OperationsTabsBar from '../components/operations/OperationsTabsBar';
+import { buildErpPrompt } from '../utils/erpPrompt';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -70,15 +71,6 @@ const statusColors = {
   'in_progress': 'bg-[#3b82f6]/20 text-[#3b82f6]',
   'completed': 'bg-[#10b981]/20 text-[#10b981]',
   'on_hold': 'bg-[#f59e0b]/20 text-[#f59e0b]'
-};
-
-// ERP task "Prompt" breadcrumb: Project > User > Page > [Sub Page] > [Super
-// Sub Page] > "Task Name" — the [Sub Page]/[Super Sub Page] levels only show
-// once that nesting exists on an ERP page; today's Page model has neither,
-// so the breadcrumb currently ends at Page.
-const buildErpPrompt = ({ projectName, userName, pageName, subPageName, superSubPageName, taskName }) => {
-  const parts = [projectName, userName, pageName, subPageName, superSubPageName].filter(Boolean);
-  return `${parts.join(' > ')}${parts.length ? ' > ' : ''}"${taskName || ''}"`;
 };
 
 export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_to_me' }) {
@@ -239,6 +231,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     erp_user_name: '',
     erp_page_id: '',
     erp_page_name: '',
+    erp_sub_tab_id: '',
+    erp_sub_tab_name: '',
+    erp_ultra_sub_tab_id: '',
+    erp_ultra_sub_tab_name: '',
+    erp_ultra_tab_id: '',
+    erp_ultra_tab_name: '',
     erp_task_type: '',
     sub_department_id: '',
     sub_department_name: '',
@@ -1176,6 +1174,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_user_name: '',
       erp_page_id: '',
       erp_page_name: '',
+      erp_sub_tab_id: '',
+      erp_sub_tab_name: '',
+      erp_ultra_sub_tab_id: '',
+      erp_ultra_sub_tab_name: '',
+      erp_ultra_tab_id: '',
+      erp_ultra_tab_name: '',
       erp_task_type: '',
       sub_department_id: '',
       sub_department_name: '',
@@ -1214,6 +1218,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_user_name: task.erp_user_name || '',
       erp_page_id: task.erp_page_id || '',
       erp_page_name: task.erp_page_name || '',
+      erp_sub_tab_id: task.erp_sub_tab_id || '',
+      erp_sub_tab_name: task.erp_sub_tab_name || '',
+      erp_ultra_sub_tab_id: task.erp_ultra_sub_tab_id || '',
+      erp_ultra_sub_tab_name: task.erp_ultra_sub_tab_name || '',
+      erp_ultra_tab_id: task.erp_ultra_tab_id || '',
+      erp_ultra_tab_name: task.erp_ultra_tab_name || '',
       erp_task_type: task.erp_task_type || '',
       sub_department_id: task.sub_department_id || '',
       sub_department_name: task.sub_department_name || '',
@@ -3056,6 +3066,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     projectName: formData.project_name,
                     userName: formData.erp_user_name,
                     pageName: formData.erp_page_name,
+                    subTabName: formData.erp_sub_tab_name,
+                    ultraSubTabName: formData.erp_ultra_sub_tab_name,
+                    ultraTabName: formData.erp_ultra_tab_name,
                     taskName: formData.task_name,
                   });
                   return (
@@ -3465,6 +3478,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     projectName: viewingTask.project_name,
                     userName: viewingTask.erp_user_name,
                     pageName: viewingTask.erp_page_name,
+                    subTabName: viewingTask.erp_sub_tab_name,
+                    ultraSubTabName: viewingTask.erp_ultra_sub_tab_name,
+                    ultraTabName: viewingTask.erp_ultra_tab_name,
                     taskName: viewingTask.task_name,
                   });
                   return (
