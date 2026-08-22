@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -109,7 +109,7 @@ export default function ProjectsPanel({
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [deptStatuses, setDeptStatuses] = useState([]); // [{dept_key, label, statuses: [...]}]
   const [statusFilter, setStatusFilter] = useState('all'); // Project List View status sub-tab (only meaningful when deptFilter !== 'all')
-  const [activeCategoryTab, setActiveCategoryTab] = useState('all');
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // all | todo | pending | approval | completed
   // Team management for selected project
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [teamDraft, setTeamDraft] = useState([]);
@@ -821,37 +821,56 @@ export default function ProjectsPanel({
 
   // ---------- Project Detail View ----------
   if (selectedProject) {
-    // Build category sub-tabs from project's selected departments
-    const projectDepts = selectedProject.departments || [];
-    const categoryTabs = projectDepts.flatMap(deptKey => {
-      const dept = deptCategories.find(d => d.dept_key === deptKey);
-      if (!dept) return [];
-      return (dept.categories || []).map(cat => ({
-        id: `${deptKey}::${cat}`,
-        deptKey,
-        deptLabel: dept.label,
-        category: cat,
-      }));
-    });
     const projectTasks = selectedProject.tasks || [];
-    // Apply member + date filters on top of category sub-tab filter
     const todayStr = new Date().toISOString().slice(0, 10);
-    const filteredTasks = projectTasks
-      .filter(t => activeCategoryTab === 'all' || `${t.department}::${t.category}` === activeCategoryTab)
-      .filter(t => taskMemberFilter === 'all' || t.assigned_to === taskMemberFilter)
-      .filter(t => {
-        const td = (t.due_date || t.created_at || '').slice(0, 10);
-        if (taskDateFilter === 'today') return td === todayStr;
-        if (taskDateFilter === 'single') return taskSingleDate ? td === taskSingleDate : true;
-        if (taskDateFilter === 'range') {
-          if (taskDateFrom && td < taskDateFrom) return false;
-          if (taskDateTo && td > taskDateTo) return false;
-          return true;
-        }
+    // Member + date filters, shared by both the status summary cards below
+    // (each card's own count is computed without the status filter itself,
+    // so every bucket stays visible to jump between) and the task list.
+    const matchesMemberAndDate = (t) => {
+      if (taskMemberFilter !== 'all' && t.assigned_to !== taskMemberFilter) return false;
+      const td = (t.due_date || t.created_at || '').slice(0, 10);
+      if (taskDateFilter === 'today') return td === todayStr;
+      if (taskDateFilter === 'single') return taskSingleDate ? td === taskSingleDate : true;
+      if (taskDateFilter === 'range') {
+        if (taskDateFrom && td < taskDateFrom) return false;
+        if (taskDateTo && td > taskDateTo) return false;
         return true;
-      });
+      }
+      return true;
+    };
+    // Todo = not started, Pending = started but not done, Approval = has an
+    // open approval_request regardless of its own status, Completed = done.
+    const matchesTaskStatus = (t) => {
+      if (taskStatusFilter === 'all') return true;
+      if (taskStatusFilter === 'todo') return (t.status || 'pending') === 'pending';
+      if (taskStatusFilter === 'pending') return t.status === 'in_progress';
+      if (taskStatusFilter === 'approval') return t.approval_request?.status === 'pending';
+      if (taskStatusFilter === 'completed') return t.status === 'completed';
+      return true;
+    };
+    const statusScopedTasks = projectTasks.filter(matchesMemberAndDate);
+    const allTasksCount = statusScopedTasks.length;
+    const todoTasksCount = statusScopedTasks.filter(t => (t.status || 'pending') === 'pending').length;
+    const pendingTasksCount = statusScopedTasks.filter(t => t.status === 'in_progress').length;
+    const approvalTasksCount = statusScopedTasks.filter(t => t.approval_request?.status === 'pending').length;
+    const completedTasksCount = statusScopedTasks.filter(t => t.status === 'completed').length;
 
-    const countFor = (tab) => projectTasks.filter(t => `${t.department}::${t.category}` === tab.id).length;
+    const filteredTasks = projectTasks.filter(t => matchesMemberAndDate(t) && matchesTaskStatus(t));
+
+    const taskSummaryCard = (label, value, Icon, colorClass, active, onClick) => (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`${bgCard} border ${active ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : borderColor} rounded-lg p-3 text-left transition-colors hover:border-[#6366f1]/60`}
+        data-testid={`project-task-summary-${label.toLowerCase()}`}
+      >
+        <div className="flex items-center justify-between">
+          <p className={`text-xs ${textSecondary}`}>{label}</p>
+          <Icon className={`h-4 w-4 ${colorClass}`} />
+        </div>
+        <p className={`text-2xl font-bold mt-1 ${textPrimary}`}>{value}</p>
+      </button>
+    );
 
     // Members of the project (resolved against user list)
     const projectMembers = (selectedProject.members || [])
@@ -1548,6 +1567,17 @@ export default function ProjectsPanel({
         <div className="space-y-2">
           <h3 className={`text-base font-semibold ${textPrimary}`}>Tasks</h3>
 
+          {/* Status summary cards — each a toggle filter, computed without its
+              own filter dimension (so every bucket stays visible to jump
+              between) but with the Team Member + Date filters below applied. */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-2" data-testid="project-task-summary-cards">
+            {taskSummaryCard('All', allTasksCount, ListChecks, 'text-[#6366f1]', taskStatusFilter === 'all', () => setTaskStatusFilter('all'))}
+            {taskSummaryCard('Todo', todoTasksCount, ListTodo, 'text-amber-400', taskStatusFilter === 'todo', () => setTaskStatusFilter(taskStatusFilter === 'todo' ? 'all' : 'todo'))}
+            {taskSummaryCard('Pending', pendingTasksCount, Clock, 'text-yellow-400', taskStatusFilter === 'pending', () => setTaskStatusFilter(taskStatusFilter === 'pending' ? 'all' : 'pending'))}
+            {taskSummaryCard('Approval', approvalTasksCount, ShieldQuestion, 'text-orange-400', taskStatusFilter === 'approval', () => setTaskStatusFilter(taskStatusFilter === 'approval' ? 'all' : 'approval'))}
+            {taskSummaryCard('Completed', completedTasksCount, CheckCircle2, 'text-emerald-400', taskStatusFilter === 'completed', () => setTaskStatusFilter(taskStatusFilter === 'completed' ? 'all' : 'completed'))}
+          </div>
+
           {/* Task filters: Team Member + Date */}
           <div className="flex flex-wrap items-center gap-2 mb-2" data-testid="project-task-filters">
             <select
@@ -1602,7 +1632,7 @@ export default function ProjectsPanel({
               </>
             )}
 
-            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all') && (
+            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all' || taskStatusFilter !== 'all') && (
               <button
                 onClick={() => {
                   setTaskMemberFilter('all');
@@ -1610,6 +1640,7 @@ export default function ProjectsPanel({
                   setTaskSingleDate('');
                   setTaskDateFrom('');
                   setTaskDateTo('');
+                  setTaskStatusFilter('all');
                 }}
                 className={`text-xs ${textSecondary} hover:underline`}
                 data-testid="project-filter-reset"
@@ -1619,37 +1650,9 @@ export default function ProjectsPanel({
             )}
           </div>
 
-          {/* Category sub-tabs */}
-          {categoryTabs.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-2" data-testid="project-category-tabs">
-              <button
-                onClick={() => setActiveCategoryTab('all')}
-                className={`px-3 py-1.5 rounded-full text-xs transition-all ${
-                  activeCategoryTab === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
-                }`}
-                data-testid="project-cat-tab-all"
-              >
-                All ({projectTasks.length})
-              </button>
-              {categoryTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveCategoryTab(tab.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
-                    activeCategoryTab === tab.id ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
-                  }`}
-                  data-testid={`project-cat-tab-${tab.deptKey}-${tab.category.toLowerCase().replace(/\s+/g, '-')}`}
-                  title={`${tab.deptLabel} · ${tab.category}`}
-                >
-                  {tab.category} ({countFor(tab)})
-                </button>
-              ))}
-            </div>
-          )}
-
           {filteredTasks.length === 0 ? (
             <p className={`text-sm ${textSecondary}`}>
-              {activeCategoryTab === 'all' ? 'No tasks yet. Click "Add Task" to create one.' : 'No tasks in this category.'}
+              {projectTasks.length === 0 ? 'No tasks yet. Click "Add Task" to create one.' : 'No tasks match the current filters.'}
             </p>
           ) : (
             filteredTasks.map(task => {
