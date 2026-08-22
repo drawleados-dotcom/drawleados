@@ -38,14 +38,14 @@ const priorityColors = {
 // Solid dot color per priority — red/yellow/green — shown next to the task
 // name in the list so priority is visible without opening the task.
 // Whole-row wash per priority, paired with a solid left-edge bar (see
-// priorityDotColors below) so the tier reads even for someone who can't
-// distinguish the pale background tints. Applied as an inline style rather
-// than a Tailwind class because the class name would be built at runtime and
-// JIT would never emit it.
+// priorityDotColors below) which carries the actual tier signal — the wash
+// is just a faint assist and shouldn't read as a full-row highlight.
+// Applied as an inline style rather than a Tailwind class because the class
+// name would be built at runtime and JIT would never emit it.
 const priorityRowColors = {
-  high:   { light: '#fee2e2', dark: 'rgba(239, 68, 68, 0.14)' },
-  medium: { light: '#fef3c7', dark: 'rgba(245, 158, 11, 0.14)' },
-  low:    { light: '#d1fae5', dark: 'rgba(16, 185, 129, 0.14)' },
+  high:   { light: '#fef2f2', dark: 'rgba(239, 68, 68, 0.09)' },
+  medium: { light: '#fffbeb', dark: 'rgba(245, 158, 11, 0.09)' },
+  low:    { light: '#f0fdf4', dark: 'rgba(16, 185, 129, 0.09)' },
 };
 
 const priorityDotColors = {
@@ -1904,7 +1904,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         <>
         {/* Compact Filter Toolbar */}
         <div className={`${bgCard} border ${borderColor} rounded-xl p-3`}>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
             {/* Date filter */}
             <Select value={filters.dateFilter} onValueChange={(v) => setFilters({...filters, dateFilter: v})}>
               <SelectTrigger className={`h-9 w-[140px] ${bgSecondary} border ${borderColor}`} data-testid="filter-date">
@@ -2115,16 +2116,16 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               </SelectContent>
             </Select>
 
-            <div className="ml-auto">
-              <Button
-                onClick={() => setShowCreateModal(true)}
-                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-9"
-                data-testid="create-task-btn"
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                Create Task
-              </Button>
-            </div>
+          </div>
+
+          <Button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-9 flex-shrink-0"
+            data-testid="create-task-btn"
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            Create Task
+          </Button>
           </div>
         </div>
 
