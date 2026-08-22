@@ -318,3 +318,70 @@ async def delete_department(department_id: str, db=Depends(get_db)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class SubDepartmentCreate(BaseModel):
+    name: str
+
+
+class SubDepartmentUpdate(BaseModel):
+    name: str
+
+
+# Add a sub-department under an HR department
+@designation_router.post("/departments/{department_id}/sub-departments")
+async def add_sub_department(department_id: str, payload: SubDepartmentCreate, db=Depends(get_db)):
+    try:
+        name = (payload.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Sub department name is required")
+        dept = await db.departments.find_one({"department_id": department_id})
+        if not dept:
+            raise HTTPException(status_code=404, detail="Department not found")
+        sub_department = {"sub_department_id": f"subdept_{uuid.uuid4().hex[:10]}", "name": name}
+        await db.departments.update_one(
+            {"department_id": department_id},
+            {"$push": {"sub_departments": sub_department}},
+        )
+        return sub_department
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Rename a sub-department
+@designation_router.put("/departments/{department_id}/sub-departments/{sub_department_id}")
+async def rename_sub_department(department_id: str, sub_department_id: str, payload: SubDepartmentUpdate, db=Depends(get_db)):
+    try:
+        name = (payload.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Sub department name is required")
+        result = await db.departments.update_one(
+            {"department_id": department_id, "sub_departments.sub_department_id": sub_department_id},
+            {"$set": {"sub_departments.$.name": name}},
+        )
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Sub department not found")
+        return {"sub_department_id": sub_department_id, "name": name}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Delete a sub-department
+@designation_router.delete("/departments/{department_id}/sub-departments/{sub_department_id}")
+async def delete_sub_department(department_id: str, sub_department_id: str, db=Depends(get_db)):
+    try:
+        result = await db.departments.update_one(
+            {"department_id": department_id},
+            {"$pull": {"sub_departments": {"sub_department_id": sub_department_id}}},
+        )
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Department not found")
+        return {"message": "Sub department removed"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

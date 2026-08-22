@@ -17,7 +17,7 @@ import {
   AlertCircle, TrendingUp, Eye, EyeOff, FileText, Plus, User,
   Briefcase, CreditCard, FolderOpen, Shield, Mail, Key, Link, ExternalLink,
   Send, AlertTriangle, RefreshCw, Settings, Globe, Star, ClipboardList, Copy, Loader2,
-  ChevronDown, Check, Network, Coffee, Wallet, Handshake, UserX
+  ChevronDown, ChevronRight, Layers, Check, Network, Coffee, Wallet, Handshake, UserX
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -1209,6 +1209,36 @@ export default function HRAdminPage() {
     }
   };
 
+  const handleAddSubDepartment = async (departmentId, name) => {
+    try {
+      await axios.post(`${API}/api/designations/departments/${departmentId}/sub-departments`, { name }, { headers });
+      toast.success('Sub-department added');
+      loadDepartments();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add sub-department');
+    }
+  };
+
+  const handleRenameSubDepartment = async (departmentId, subDepartmentId, name) => {
+    try {
+      await axios.put(`${API}/api/designations/departments/${departmentId}/sub-departments/${subDepartmentId}`, { name }, { headers });
+      toast.success('Sub-department updated');
+      loadDepartments();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update sub-department');
+    }
+  };
+
+  const handleDeleteSubDepartment = async (departmentId, subDepartmentId) => {
+    try {
+      await axios.delete(`${API}/api/designations/departments/${departmentId}/sub-departments/${subDepartmentId}`, { headers });
+      toast.success('Sub-department removed');
+      loadDepartments();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to remove sub-department');
+    }
+  };
+
   const formatTime = (dateStr) => {
     if (!dateStr) return '-';
     const date = new Date(dateStr);
@@ -1419,6 +1449,9 @@ export default function HRAdminPage() {
             editingDepartment={editingDepartment}
             setEditingDepartment={setEditingDepartment}
             onUpdateDepartment={handleUpdateDepartment}
+            onAddSubDepartment={handleAddSubDepartment}
+            onRenameSubDepartment={handleRenameSubDepartment}
+            onDeleteSubDepartment={handleDeleteSubDepartment}
             canEdit={canEdit}
             isDark={isDark}
             bgCard={bgCard}
@@ -6170,6 +6203,7 @@ function DesignationsDeptsTab({
   onCreateDesignation, onUpdateDesignation, onDeleteDesignation,
   onCreateDepartment, onDeleteDepartment,
   editingDepartment, setEditingDepartment, onUpdateDepartment,
+  onAddSubDepartment, onRenameSubDepartment, onDeleteSubDepartment,
   canEdit = true,
   isDark = false,
   bgCard, bgSecondary, textPrimary, textSecondary, borderColor
@@ -6177,6 +6211,21 @@ function DesignationsDeptsTab({
   // HR Manager cannot edit - view only
   const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('designations');
+  const [expandedDeptId, setExpandedDeptId] = useState(null);
+  // { mode: 'add' | 'edit', departmentId, sub_department_id, name }
+  const [subDeptModal, setSubDeptModal] = useState(null);
+  const openAddSubDept = (departmentId) => setSubDeptModal({ mode: 'add', departmentId, name: '' });
+  const openEditSubDept = (departmentId, sd) => setSubDeptModal({ mode: 'edit', departmentId, sub_department_id: sd.sub_department_id, name: sd.name });
+  const closeSubDeptModal = () => setSubDeptModal(null);
+  const saveSubDeptModal = () => {
+    if (!subDeptModal.name.trim()) return;
+    if (subDeptModal.mode === 'add') {
+      onAddSubDepartment(subDeptModal.departmentId, subDeptModal.name.trim());
+    } else {
+      onRenameSubDepartment(subDeptModal.departmentId, subDeptModal.sub_department_id, subDeptModal.name.trim());
+    }
+    closeSubDeptModal();
+  };
   const [viewDesignation, setViewDesignation] = useState(null);
   const [showOpsConfigModal, setShowOpsConfigModal] = useState(false);
   const [opsCfgMode, setOpsCfgMode] = useState('create'); // 'create' | 'edit' — which designation state OpsConfig modal writes to
@@ -7244,10 +7293,29 @@ function DesignationsDeptsTab({
                       </tr>
                     </thead>
                     <tbody>
-                      {departments.map((dept, idx) => (
-                        <tr key={dept.department_id} className={`border-b ${borderColor} last:border-b-0`}>
+                      {departments.map((dept, idx) => {
+                        const isExpanded = expandedDeptId === dept.department_id;
+                        const subDepts = dept.sub_departments || [];
+                        return (
+                        <React.Fragment key={dept.department_id}>
+                        <tr className={`border-b ${borderColor} last:border-b-0`}>
                           <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
-                          <td className={`p-3 text-sm font-medium ${textPrimary}`}>{dept.name}</td>
+                          <td className="p-3">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedDeptId(isExpanded ? null : dept.department_id)}
+                              className={`inline-flex items-center gap-1.5 text-sm font-medium ${textPrimary} hover:opacity-80`}
+                              data-testid={`dept-toggle-${dept.department_id}`}
+                            >
+                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              {dept.name}
+                              {subDepts.length > 0 && (
+                                <span className={`inline-flex items-center gap-1 text-[10px] font-normal px-1.5 py-0.5 rounded ${bgSecondary} ${textSecondary}`}>
+                                  <Layers className="h-3 w-3" /> {subDepts.length}
+                                </span>
+                              )}
+                            </button>
+                          </td>
                           <td className="p-3">
                             <Badge className="bg-[#10b981]/20 text-[#10b981]">
                               <Users className="h-3 w-3 mr-1" />
@@ -7267,7 +7335,54 @@ function DesignationsDeptsTab({
                             )}
                           </td>
                         </tr>
-                      ))}
+                        {isExpanded && (
+                          <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`dept-subdepts-row-${dept.department_id}`}>
+                            <td colSpan={4} className="p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sub Departments</p>
+                                {!isViewOnly && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openAddSubDept(dept.department_id)}
+                                    className="text-xs font-medium text-[#6366f1] hover:text-[#4f46e5] inline-flex items-center gap-1"
+                                    data-testid={`subdept-add-${dept.department_id}`}
+                                  >
+                                    <Plus className="h-3 w-3" /> Add Sub Department
+                                  </button>
+                                )}
+                              </div>
+                              {subDepts.length === 0 ? (
+                                <p className={`text-xs ${textSecondary}`}>No sub-departments yet.</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-2">
+                                  {subDepts.map(sd => (
+                                    <span
+                                      key={sd.sub_department_id}
+                                      className={`inline-flex items-center gap-1.5 pl-2.5 pr-1 py-1 rounded-md text-xs border ${borderColor} ${bgCard} ${textPrimary}`}
+                                      data-testid={`subdept-row-${sd.sub_department_id}`}
+                                    >
+                                      <Layers className="h-3 w-3 text-[#6366f1]" />
+                                      {sd.name}
+                                      {!isViewOnly && (
+                                        <span className="inline-flex items-center ml-1">
+                                          <button type="button" onClick={() => openEditSubDept(dept.department_id, sd)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`subdept-edit-${sd.sub_department_id}`}>
+                                            <Edit className="h-3 w-3" />
+                                          </button>
+                                          <button type="button" onClick={() => onDeleteSubDepartment(dept.department_id, sd.sub_department_id)} className="p-1 text-[#ef4444] hover:opacity-80" title="Delete" data-testid={`subdept-delete-${sd.sub_department_id}`}>
+                                            <Trash2 className="h-3 w-3" />
+                                          </button>
+                                        </span>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -7339,6 +7454,41 @@ function DesignationsDeptsTab({
                   <div className="flex justify-end gap-2 mt-6">
                     <Button variant="ghost" onClick={() => setEditingDepartment(null)}>Cancel</Button>
                     <Button onClick={onUpdateDepartment} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="dept-edit-form-save">Save</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Add / Rename Sub-Department Modal */}
+          {subDeptModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className={`${bgCard} w-full max-w-md`}>
+                <CardContent className="p-6">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className={`text-lg font-semibold ${textPrimary}`}>
+                      {subDeptModal.mode === 'add' ? 'Add Sub Department' : 'Rename Sub Department'}
+                    </h3>
+                    <Button variant="ghost" size="sm" onClick={closeSubDeptModal}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <Label className={textPrimary}>Sub Department Name *</Label>
+                      <Input
+                        value={subDeptModal.name}
+                        onChange={(e) => setSubDeptModal(m => ({ ...m, name: e.target.value }))}
+                        placeholder="e.g., Inside Sales"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="subdept-form-name"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-6">
+                    <Button variant="ghost" onClick={closeSubDeptModal}>Cancel</Button>
+                    <Button onClick={saveSubDeptModal} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="subdept-form-save">Save</Button>
                   </div>
                 </CardContent>
               </Card>
