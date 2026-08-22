@@ -112,6 +112,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Super-Admin-only "Operation" umbrella pill — when active, the dept sub-tabs
   // bar nests every non-Management department as a second row (see visibleDeptCategoriesForBar).
   const [opGroupActive, setOpGroupActive] = useState(false);
+  // Technology / Marketing scope within the Operation umbrella — narrows
+  // which of those departments show as pills below it. Sourced from each
+  // department's own `group` field (set in Operations > Departments).
+  const [opGroupFilter, setOpGroupFilter] = useState('all');
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
   const [runningTimers, setRunningTimers] = useState({});
@@ -407,6 +411,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // it never bleeds stale state between My Tasks / Assign to Team.
   useEffect(() => {
     setOpGroupActive(false);
+    setOpGroupFilter('all');
   }, [mainTab]);
 
   const usersById = useMemo(() => {
@@ -1956,6 +1961,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               value={filters.department}
               onValueChange={(v) => {
                 setOpGroupActive(false);
+                setOpGroupFilter('all');
                 setMeetingsSubActive(false);
                 setFilters({ ...filters, department: v, subDepartment: 'all', category: 'all', project: 'all' });
               }}
@@ -2144,7 +2150,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               {useOpGrouping ? (
                 <>
                   <button
-                    onClick={() => { setOpGroupActive(false); setMeetingsSubActive(false); setFilters({...filters, department: 'management', subDepartment: 'all', project: 'all', category: 'all'}); }}
+                    onClick={() => { setOpGroupActive(false); setOpGroupFilter('all'); setMeetingsSubActive(false); setFilters({...filters, department: 'management', subDepartment: 'all', project: 'all', category: 'all'}); }}
                     data-testid="dept-subtab-management"
                     className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
                       filters.department === 'management' && !meetingsSubActive && !opGroupActive
@@ -2240,11 +2246,15 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           );
         })()}
 
-        {/* Operation umbrella second row — Super Admin only. Lists every
-            non-Management department as a pill, same pattern as Management's
-            own sub-department row just below. */}
+        {/* Operation umbrella — Super Admin only. A Technology/Marketing scope
+            row (sourced from each department's own `group` field, set in
+            Operations > Departments) narrows which non-Management department
+            shows as a pill in the row beneath it. */}
         {opGroupActive && !meetingsSubActive && (() => {
           const operationDepts = visibleDeptCategoriesForBar.filter(d => d.dept_key !== 'management');
+          const scopedOperationDepts = opGroupFilter === 'all'
+            ? operationDepts
+            : operationDepts.filter(d => d.group === opGroupFilter);
           const sourceTasks = mainTab === 'assigned_to_me'
             ? [...assignedToMeTasks, ...myOwnTasks]
             : assignedToTeamTasks;
@@ -2254,47 +2264,84 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             const d = t.department || '_unassigned';
             pendingByDept[d] = (pendingByDept[d] || 0) + 1;
           });
+          const groupCount = (groupValue) => operationDepts
+            .filter(d => groupValue === 'all' || d.group === groupValue)
+            .reduce((sum, d) => sum + (pendingByDept[d.dept_key] || 0), 0) + (pendingByDept['all'] || 0);
 
           return (
-            <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="opgroup-subtabs">
-              <button
-                onClick={() => setFilters({...filters, department: 'all', subDepartment: 'all'})}
-                data-testid="opgroup-subtab-all"
-                className={`px-3 py-1.5 rounded-lg text-xs transition-all border ${
-                  filters.department === 'all'
-                    ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
-                    : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
-                }`}
-              >
-                All Operation
-              </button>
-              {operationDepts.map(d => {
-                const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
-                const isActive = filters.department === d.dept_key;
-                return (
-                  <button
-                    key={d.dept_key}
-                    onClick={() => setFilters({...filters, department: d.dept_key, subDepartment: 'all'})}
-                    data-testid={`opgroup-subtab-${d.dept_key}`}
-                    className={`relative px-3 py-1.5 rounded-lg text-xs transition-all border ${
-                      isActive
-                        ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
-                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
-                    }`}
-                  >
-                    {d.label}
-                    {count > 0 && (
-                      <span
-                        className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1"
-                        data-testid={`opgroup-pending-${d.dept_key}`}
-                      >
-                        {count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="opgroup-scope-tabs">
+                {[{ value: 'all', label: 'All' }, { value: 'technology', label: 'Technology' }, { value: 'marketing', label: 'Marketing' }].map(g => {
+                  const count = groupCount(g.value);
+                  return (
+                    <button
+                      key={g.value}
+                      onClick={() => setOpGroupFilter(g.value)}
+                      data-testid={`opgroup-scope-${g.value}`}
+                      className={`relative px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        opGroupFilter === g.value
+                          ? 'bg-[#111827] text-white border-transparent shadow-sm'
+                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#111827]/40`
+                      }`}
+                    >
+                      {g.label}
+                      {count > 0 && (
+                        <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] rounded-full bg-[#ef4444] text-white text-[9px] font-bold px-1">
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+                <Button
+                  onClick={() => setShowCreateModal(true)}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-xl h-9 px-4 ml-auto"
+                  data-testid="opgroup-create-task-btn"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Create Task
+                </Button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="opgroup-subtabs">
+                <button
+                  onClick={() => setFilters({...filters, department: 'all', subDepartment: 'all'})}
+                  data-testid="opgroup-subtab-all"
+                  className={`px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                    filters.department === 'all'
+                      ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                      : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
+                  }`}
+                >
+                  All Operation
+                </button>
+                {scopedOperationDepts.map(d => {
+                  const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
+                  const isActive = filters.department === d.dept_key;
+                  return (
+                    <button
+                      key={d.dept_key}
+                      onClick={() => setFilters({...filters, department: d.dept_key, subDepartment: 'all'})}
+                      data-testid={`opgroup-subtab-${d.dept_key}`}
+                      className={`relative px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                        isActive
+                          ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
+                      }`}
+                    >
+                      {d.label}
+                      {count > 0 && (
+                        <span
+                          className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1"
+                          data-testid={`opgroup-pending-${d.dept_key}`}
+                        >
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
           );
         })()}
 
