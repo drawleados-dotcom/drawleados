@@ -1688,6 +1688,7 @@ export default function ProjectsPanel({
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            users={users}
           />
         )}
 

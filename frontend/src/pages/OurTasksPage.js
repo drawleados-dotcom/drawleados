@@ -1445,6 +1445,34 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   };
 
 
+  // ERP tasks (erp_user_id set) belong to whichever ERP department/sub-
+  // department that role sits under. If the current user is on that
+  // department's (or sub-department's) Assign Access Team — real project
+  // team members, set from Projects > ERP > Departments — every task tagged
+  // to any role in it should show in My Tasks, not just ones assigned to
+  // them personally.
+  const myDeptAccessErpUserIds = useMemo(() => {
+    const ids = new Set();
+    const myId = user?.user_id;
+    if (!myId) return ids;
+    (projectsForTask || []).forEach(p => {
+      const erpUsers = p.erp_users || [];
+      (p.erp_departments || []).forEach(dept => {
+        if ((dept.assigned_user_ids || []).includes(myId)) {
+          erpUsers.filter(eu => eu.department_id === dept.id).forEach(eu => ids.add(eu.id));
+        }
+        (dept.sub_departments || []).forEach(sd => {
+          if ((sd.assigned_user_ids || []).includes(myId)) {
+            erpUsers
+              .filter(eu => eu.department_id === dept.id && eu.sub_department_id === sd.id)
+              .forEach(eu => ids.add(eu.id));
+          }
+        });
+      });
+    });
+    return ids;
+  }, [projectsForTask, user?.user_id]);
+
   // Single source of truth for task filtering. `tabCtx` lets us reuse the
   // predicate to compute counts for OTHER tabs without flipping `mainTab`
   // state (used by the tab badges — see myTabCount / teamTabCount below).
@@ -1459,10 +1487,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     // Main Tab filter - Assigned to Me vs Assign to Team
     if (tabCtx === 'assigned_to_me') {
-      // My Tasks = tasks assigned to me OR created by me (fix: was missing created_by)
+      // My Tasks = tasks assigned to me OR created by me (fix: was missing created_by),
+      // plus every ERP task under a department/sub-department I'm on the Assign
+      // Access Team for (see myDeptAccessErpUserIds above).
       const isMine = task.assigned_to === user?.user_id || task.created_by === user?.user_id;
-      if (!isMine) return false;
-      if (isHiddenProjectTaskForAssignee(task)) return false;
+      const hasDeptAccess = !isMine && task.erp_user_id && myDeptAccessErpUserIds.has(task.erp_user_id);
+      if (!isMine && !hasDeptAccess) return false;
+      if (isMine && isHiddenProjectTaskForAssignee(task)) return false;
     } else if (tabCtx === 'assign_to_team') {
       // Super Admin / Admin / Operation Head → see EVERY task in the org
       const role = (user?.role || '').toLowerCase().trim();
@@ -1532,7 +1563,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (filters.priority !== 'all' && (task.priority || 'medium') !== filters.priority) return false;
 
     return true;
-  }, [mainTab, filter, filters, user, myDesignation, isHiddenProjectTaskForAssignee, statusFilterBypassIds]);
+  }, [mainTab, filter, filters, user, myDesignation, isHiddenProjectTaskForAssignee, statusFilterBypassIds, myDeptAccessErpUserIds]);
 
   const filteredTasks = tasks.filter(t => taskPasses(t));
 
@@ -1675,7 +1706,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   };
 
   // Stats - based on main tab
-  const assignedToMeTasks = tasks.filter(t => t.assigned_to === user?.user_id && t.created_by !== user?.user_id && !isHiddenProjectTaskForAssignee(t));
+  const assignedToMeTasks = tasks.filter(t => {
+    const isAssignedToMe = t.assigned_to === user?.user_id;
+    const hasDeptAccess = !isAssignedToMe && t.erp_user_id && myDeptAccessErpUserIds.has(t.erp_user_id);
+    if (!isAssignedToMe && !hasDeptAccess) return false;
+    if (t.created_by === user?.user_id) return false;
+    if (isAssignedToMe && isHiddenProjectTaskForAssignee(t)) return false;
+    return true;
+  });
   const _role = (user?.role || '').toLowerCase();
   const _desg = (user?.designation || '').toLowerCase().trim();
   const _isPrivileged = _role === 'super_admin' || _role === 'admin' || _desg === 'operation head';

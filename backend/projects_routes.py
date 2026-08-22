@@ -133,38 +133,40 @@ async def _is_operation_head_or_admin(user, db) -> bool:
 
 
 async def _filter_erp_visibility(project: dict, user, db) -> dict:
-    """Departments/sub-departments can carry an `assigned_erp_user_ids` team
-    (ids into `project.erp_users`). A non-admin viewer only sees erp_users
-    whose own department — and sub-department, if any — either has no team
-    configured (open by default) or includes an erp_user role linked (via
-    that role's `linked_user_id`) to the viewer's own account. A viewer with
-    no linked erp_user role anywhere in this project is left unrestricted,
-    so turning this on never silently locks out people who haven't been
-    wired up to a role yet. Tasks tagged to a now-hidden erp_user are hidden
-    with it. Admins/Operation Head always see everything, unfiltered."""
+    """Departments/sub-departments can carry an `assigned_user_ids` team —
+    real user_ids, picked from the project's own Team members (Projects >
+    ERP > Departments > Assign Access Team). A non-admin viewer only sees
+    erp_users whose own department — and sub-department, if any — either
+    has no team configured (open by default) or includes the viewer's own
+    user_id. Tasks tagged to a now-hidden erp_user are hidden with it.
+    Admins/Operation Head always see everything, unfiltered."""
     if await _is_operation_head_or_admin(user, db):
         return project
 
-    erp_users = project.get("erp_users") or []
-    my_erp_ids = {eu.get("id") for eu in erp_users if eu.get("linked_user_id") == user.user_id}
-    if not my_erp_ids:
+    erp_departments = project.get("erp_departments") or []
+    has_any_restriction = any(
+        (d.get("assigned_user_ids") or []) or any((sd.get("assigned_user_ids") or []) for sd in (d.get("sub_departments") or []))
+        for d in erp_departments
+    )
+    if not has_any_restriction:
         return project
 
-    dept_by_id = {d.get("id"): d for d in (project.get("erp_departments") or [])}
+    erp_users = project.get("erp_users") or []
+    dept_by_id = {d.get("id"): d for d in erp_departments}
 
     def _accessible(team_ids):
-        return not team_ids or bool(my_erp_ids & set(team_ids))
+        return not team_ids or user.user_id in team_ids
 
     def _visible(eu: dict) -> bool:
         dept = dept_by_id.get(eu.get("department_id"))
         if not dept:
             return True
-        if not _accessible(dept.get("assigned_erp_user_ids") or []):
+        if not _accessible(dept.get("assigned_user_ids") or []):
             return False
         sub_id = eu.get("sub_department_id")
         if sub_id:
             sub = next((s for s in (dept.get("sub_departments") or []) if s.get("id") == sub_id), None)
-            if sub and not _accessible(sub.get("assigned_erp_user_ids") or []):
+            if sub and not _accessible(sub.get("assigned_user_ids") or []):
                 return False
         return True
 

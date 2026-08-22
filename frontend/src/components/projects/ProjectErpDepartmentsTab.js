@@ -27,6 +27,7 @@ export default function ProjectErpDepartmentsTab({
   textPrimary,
   textSecondary,
   borderColor,
+  users = [], // real login accounts, for resolving project.members into names in the Assign Access Team picker
 }) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('session_token') : null;
   const headers = { Authorization: `Bearer ${token}` };
@@ -35,6 +36,10 @@ export default function ProjectErpDepartmentsTab({
   const erpUsers = project?.erp_users || [];
   const usersInDept = (deptId) => erpUsers.filter(u => u.department_id === deptId);
   const usersInSubDept = (deptId, subDeptId) => erpUsers.filter(u => u.department_id === deptId && u.sub_department_id === subDeptId);
+  // The Assign Access Team picker offers the project's real Team members
+  // (Projects > Team tab) — not the ERP role hierarchy above — since real
+  // login accounts are what access control actually has to key off.
+  const projectMembers = (project?.members || []).map(uid => users.find(u => u.user_id === uid) || { user_id: uid, name: uid });
 
   const [expandedDeptId, setExpandedDeptId] = useState(null);
   // { mode: 'add' | 'edit', id, name }
@@ -173,7 +178,7 @@ export default function ProjectErpDepartmentsTab({
     if (!canEdit) return;
     const dept = erpDepartments.find(d => d.id === deptId);
     const target = subDeptId ? (dept?.sub_departments || []).find(sd => sd.id === subDeptId) : dept;
-    setTeamModal({ deptId, subDeptId, selectedIds: target?.assigned_erp_user_ids || [] });
+    setTeamModal({ deptId, subDeptId, selectedIds: target?.assigned_user_ids || [] });
   };
   const closeTeamModal = () => setTeamModal(null);
   const toggleTeamMember = (erpUserId) => {
@@ -189,11 +194,11 @@ export default function ProjectErpDepartmentsTab({
     const { deptId, subDeptId, selectedIds } = teamModal;
     const next = erpDepartments.map(d => {
       if (d.id !== deptId) return d;
-      if (!subDeptId) return { ...d, assigned_erp_user_ids: selectedIds };
+      if (!subDeptId) return { ...d, assigned_user_ids: selectedIds };
       return {
         ...d,
         sub_departments: (d.sub_departments || []).map(sd => (
-          sd.id === subDeptId ? { ...sd, assigned_erp_user_ids: selectedIds } : sd
+          sd.id === subDeptId ? { ...sd, assigned_user_ids: selectedIds } : sd
         )),
       };
     });
@@ -264,9 +269,9 @@ export default function ProjectErpDepartmentsTab({
                                 <Layers className="h-3 w-3" /> {subDepts.length}
                               </span>
                             )}
-                            {(d.assigned_erp_user_ids || []).length > 0 && (
+                            {(d.assigned_user_ids || []).length > 0 && (
                               <span className={`inline-flex items-center gap-1 text-[10px] font-normal px-1.5 py-0.5 rounded bg-[#6366f1]/10 text-[#6366f1]`} title="Access restricted to an assigned team">
-                                <ShieldCheck className="h-3 w-3" /> {d.assigned_erp_user_ids.length}
+                                <ShieldCheck className="h-3 w-3" /> {d.assigned_user_ids.length}
                               </span>
                             )}
                           </button>
@@ -331,9 +336,9 @@ export default function ProjectErpDepartmentsTab({
                                         <Layers className="h-3 w-3 text-[#6366f1]" />
                                         {sd.name}
                                         <span className={textSecondary}>({subMembers.length})</span>
-                                        {(sd.assigned_erp_user_ids || []).length > 0 && (
+                                        {(sd.assigned_user_ids || []).length > 0 && (
                                           <span className="inline-flex items-center gap-0.5 text-[#6366f1]" title="Access restricted to an assigned team">
-                                            <ShieldCheck className="h-3 w-3" />{sd.assigned_erp_user_ids.length}
+                                            <ShieldCheck className="h-3 w-3" />{sd.assigned_user_ids.length}
                                           </span>
                                         )}
                                         {canEdit && (
@@ -502,28 +507,23 @@ export default function ProjectErpDepartmentsTab({
                   <span className={`font-medium ${textPrimary}`}>{targetLabel}</span> — pick who can access this
                   {subDept ? ' sub-department' : ' department'}. Leave empty to keep it open to everyone (the default).
                 </p>
-                {erpUsers.length === 0 ? (
-                  <p className={`text-xs ${textSecondary}`}>No ERP users yet — add some from the Users tab first.</p>
+                {projectMembers.length === 0 ? (
+                  <p className={`text-xs ${textSecondary}`}>No project team members yet — add some from the Team tab first.</p>
                 ) : (
                   <div className="max-h-72 overflow-y-auto space-y-1">
-                    {erpUsers.map(eu => (
+                    {projectMembers.map(m => (
                       <label
-                        key={eu.id}
+                        key={m.user_id}
                         className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer border ${borderColor} ${bgSecondary}`}
-                        data-testid={`erp-team-option-${eu.id}`}
+                        data-testid={`erp-team-option-${m.user_id}`}
                       >
                         <input
                           type="checkbox"
-                          checked={teamModal.selectedIds.includes(eu.id)}
-                          onChange={() => toggleTeamMember(eu.id)}
+                          checked={teamModal.selectedIds.includes(m.user_id)}
+                          onChange={() => toggleTeamMember(m.user_id)}
                           className="h-4 w-4 accent-[#6366f1]"
                         />
-                        <span className={`text-sm ${textPrimary}`}>{eu.user_name || '—'}</span>
-                        {eu.linked_user_name ? (
-                          <span className={`text-[11px] ${textSecondary}`}>({eu.linked_user_name})</span>
-                        ) : (
-                          <span className="text-[11px] text-amber-500" title="This role isn't linked to a login account yet, from the Users tab — access rules can't apply to it until it is">not linked</span>
-                        )}
+                        <span className={`text-sm ${textPrimary}`}>{m.name || '—'}</span>
                       </label>
                     ))}
                   </div>
