@@ -2199,7 +2199,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           // Super Admin sees "Management" and "Operation" as two umbrella pills
           // instead of a flat department row — Operation nests every other
           // department as a second-row pill (see the block right below).
-          const useOpGrouping = isSuperAdmin && !!managementDept;
+          // My Tasks has no "Operation" pill — just the flat department row,
+          // same as everyone else sees there; the umbrella split is
+          // Assign to Team-only.
+          const useOpGrouping = isSuperAdmin && !!managementDept && mainTab === 'assign_to_team';
           const managementCount = (pendingByDept['management'] || 0) + (pendingByDept['all'] || 0);
           const operationCount = operationDepts.reduce((sum, d) => sum + (pendingByDept[d.dept_key] || 0), 0) + (pendingByDept['all'] || 0);
 
