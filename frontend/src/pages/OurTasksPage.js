@@ -37,15 +37,15 @@ const priorityColors = {
 
 // Solid dot color per priority — red/yellow/green — shown next to the task
 // name in the list so priority is visible without opening the task.
-// Whole-row wash per priority. Deliberately very faint - it has to read as a
-// tint behind normal text at a glance without fighting the status badges or
-// hurting contrast, so these are a few percent of the same red/amber/green as
-// the dots. Applied as an inline style rather than a Tailwind class because
-// the class name would be built at runtime and JIT would never emit it.
+// Whole-row wash per priority, paired with a solid left-edge bar (see
+// priorityDotColors below) so the tier reads even for someone who can't
+// distinguish the pale background tints. Applied as an inline style rather
+// than a Tailwind class because the class name would be built at runtime and
+// JIT would never emit it.
 const priorityRowColors = {
-  high:   { light: '#fef4f4', dark: 'rgba(239, 68, 68, 0.07)' },
-  medium: { light: '#fefbf0', dark: 'rgba(245, 158, 11, 0.07)' },
-  low:    { light: '#f2fdf7', dark: 'rgba(16, 185, 129, 0.07)' },
+  high:   { light: '#fee2e2', dark: 'rgba(239, 68, 68, 0.14)' },
+  medium: { light: '#fef3c7', dark: 'rgba(245, 158, 11, 0.14)' },
+  low:    { light: '#d1fae5', dark: 'rgba(16, 185, 129, 0.14)' },
 };
 
 const priorityDotColors = {
@@ -1593,10 +1593,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
         }
       }
     }
-    // Row order is always: incomplete tasks before completed ones → due date
-    // (earliest first, no due date last) → priority (urgent → medium → low)
-    // → start time as a final tie-break (direction follows the Start ↑/↓
-    // toggle; ties beyond that keep original order for stability).
+    // Row order is always: incomplete tasks before completed ones → priority
+    // (urgent → medium → low, as whole tiers — every High sits above every
+    // Medium, which sits above every Low) → due date (earliest first, no due
+    // date last) → start time as a final tie-break (direction follows the
+    // Start ↑/↓ toggle; ties beyond that keep original order for stability).
     const isDone = (t) => (t.status === 'completed' ? 1 : 0);
     const toMin = (t) => {
       const s = (t.start_time || '').trim();
@@ -1619,12 +1620,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       const adone = isDone(a.t);
       const bdone = isDone(b.t);
       if (adone !== bdone) return adone - bdone;
-      const ad = toDueTime(a.t);
-      const bd = toDueTime(b.t);
-      if (ad !== bd) return ad - bd;
       const ap = PRIORITY_RANK[a.t.priority] ?? 1;
       const bp = PRIORITY_RANK[b.t.priority] ?? 1;
       if (ap !== bp) return ap - bp;
+      const ad = toDueTime(a.t);
+      const bd = toDueTime(b.t);
+      if (ad !== bd) return ad - bd;
       if (sortMode === 'none') return a.i - b.i;
       const am = toMin(a.t);
       const bm = toMin(b.t);
@@ -2420,22 +2421,24 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   ) : displayTasks.map(task => (
                     <tr
                       key={task.task_id}
-                      className={`cursor-pointer transition-all ${isDark ? 'hover:brightness-125' : 'hover:brightness-95'}`}
+                      className={`cursor-pointer transition-all border-l-4 ${isDark ? 'hover:brightness-125' : 'hover:brightness-95'}`}
                       style={{
                         backgroundColor: (priorityRowColors[task.priority] || {})[isDark ? 'dark' : 'light']
                           || (isDark ? '#18181b' : '#ffffff'),
+                        borderLeftColor: priorityDotColors[task.priority] || priorityDotColors.medium,
                       }}
                       data-testid={`task-row-${task.task_id}`}
                       onClick={() => { setViewingTask(task); setShowTaskDetailModal(true); }}
                     >
                       <td className={`px-2 py-3`}>
                         <div className={`font-medium ${textPrimary} flex items-start gap-1.5`}>
-                          <span
-                            className="inline-block h-2 w-2 rounded-full flex-shrink-0 mt-1.5"
-                            style={{ backgroundColor: priorityDotColors[task.priority] || priorityDotColors.medium }}
-                            title={`Priority: ${task.priority === 'high' ? 'Urgent' : task.priority === 'low' ? 'Low' : 'Medium'}`}
-                            data-testid={`priority-dot-${task.task_id}`}
-                          />
+                          <Badge
+                            className={`text-[10px] px-1.5 py-0 h-4 shrink-0 mt-0.5 ${priorityColors[task.priority] || priorityColors.medium}`}
+                            title={`Priority: ${task.priority === 'high' ? 'High' : task.priority === 'low' ? 'Low' : 'Medium'}`}
+                            data-testid={`priority-badge-${task.task_id}`}
+                          >
+                            {task.priority === 'high' ? 'High' : task.priority === 'low' ? 'Low' : 'Med'}
+                          </Badge>
                           <span className="line-clamp-2" title={task.task_name}>
                             {truncateWords(task.task_name, 10)}
                           </span>
