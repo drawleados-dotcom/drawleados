@@ -83,6 +83,8 @@ async def list_department_categories(request: Request):
             "label": (doc.get("label") if doc else None) or d["label"],
             "categories": (doc.get("categories") if doc else []) or [],
             "sub_departments": (doc.get("sub_departments") if doc else []) or [],
+            "group": (doc.get("group") if doc else "") or "",
+            "assigned_user_ids": (doc.get("assigned_user_ids") if doc else []) or [],
             "is_builtin": True,
         })
     for doc in await _custom_dept_docs(db):
@@ -91,6 +93,8 @@ async def list_department_categories(request: Request):
             "label": doc.get("label") or doc["dept_key"],
             "categories": doc.get("categories") or [],
             "sub_departments": doc.get("sub_departments") or [],
+            "group": doc.get("group") or "",
+            "assigned_user_ids": doc.get("assigned_user_ids") or [],
             "is_builtin": False,
         })
     return result
@@ -235,6 +239,58 @@ async def rename_department(dept_key: str, payload: DepartmentRename, request: R
         upsert=True,
     )
     return {"dept_key": dept_key, "label": label}
+
+
+class DepartmentGroupPayload(BaseModel):
+    group: str = ""  # '' | 'technology' | 'marketing'
+
+
+@dept_categories_router.put("/{dept_key}/group")
+async def set_department_group(dept_key: str, payload: DepartmentGroupPayload, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    group = (payload.group or "").strip().lower()
+    if group not in ("", "technology", "marketing"):
+        raise HTTPException(status_code=400, detail="Group must be 'technology', 'marketing', or empty")
+    if not await _dept_key_exists(db, dept_key):
+        raise HTTPException(status_code=404, detail="Department not found")
+
+    await db.department_categories.update_one(
+        {"dept_key": dept_key},
+        {"$set": {
+            "dept_key": dept_key,
+            "group": group,
+            "updated_by": user.user_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"dept_key": dept_key, "group": group}
+
+
+class DepartmentTeamPayload(BaseModel):
+    user_ids: List[str] = []
+
+
+@dept_categories_router.put("/{dept_key}/team")
+async def set_department_team(dept_key: str, payload: DepartmentTeamPayload, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    if not await _dept_key_exists(db, dept_key):
+        raise HTTPException(status_code=404, detail="Department not found")
+    user_ids = list(dict.fromkeys(payload.user_ids or []))  # dedupe, preserve order
+
+    await db.department_categories.update_one(
+        {"dept_key": dept_key},
+        {"$set": {
+            "dept_key": dept_key,
+            "assigned_user_ids": user_ids,
+            "updated_by": user.user_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"dept_key": dept_key, "assigned_user_ids": user_ids}
 
 
 @dept_categories_router.delete("/{dept_key}")
