@@ -2020,31 +2020,38 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               </>
             )}
 
-            {/* Department filter — lists ONLY the departments this user's
-                designation actually covers (the same set the sub-tab pills
-                below render), so nobody can filter by a department whose
-                tasks they'd never be shown. Shares `filters.department` with
-                those pills, so picking one here highlights the matching pill
-                and vice versa. */}
-            <Select
-              value={filters.department}
-              onValueChange={(v) => {
-                setOpGroupFilter('all');
-                setMeetingsSubActive(false);
-                setFilters({ ...filters, department: v, subDepartment: 'all', category: 'all', project: 'all' });
-              }}
-            >
-              <SelectTrigger className={`h-9 w-[160px] ${bgSecondary} border ${borderColor}`} data-testid="filter-department">
-                <Building2 className="h-3.5 w-3.5 mr-1 opacity-60" />
-                <SelectValue placeholder="All Departments" />
-              </SelectTrigger>
-              <SelectContent className={bgCard}>
-                <SelectItem value="all">All Departments</SelectItem>
-                {visibleDeptCategoriesForBar.map(d => (
-                  <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {/* Department filter — Assign to Team only. My Tasks already
+                drives its department scope entirely from the sub-tab pills
+                below (flat pills, or Management's pinned sub-departments for
+                Super Admin), so a duplicate dropdown here served no purpose
+                there — worse, for Super Admin it was pinned and any other
+                pick would just get reverted right back. Lists ONLY the
+                departments this user's designation actually covers (the
+                same set the sub-tab pills render), so nobody can filter by
+                a department whose tasks they'd never be shown. Shares
+                `filters.department` with those pills, so picking one here
+                highlights the matching pill and vice versa. */}
+            {mainTab !== 'assigned_to_me' && (
+              <Select
+                value={filters.department}
+                onValueChange={(v) => {
+                  setOpGroupFilter('all');
+                  setMeetingsSubActive(false);
+                  setFilters({ ...filters, department: v, subDepartment: 'all', category: 'all', project: 'all' });
+                }}
+              >
+                <SelectTrigger className={`h-9 w-[160px] ${bgSecondary} border ${borderColor}`} data-testid="filter-department">
+                  <Building2 className="h-3.5 w-3.5 mr-1 opacity-60" />
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {visibleDeptCategoriesForBar.map(d => (
+                    <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
 
             {/* Project filter */}
             <Select value={filters.project} onValueChange={(v) => setFilters({...filters, project: v})}>
