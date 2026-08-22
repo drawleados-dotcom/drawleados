@@ -148,6 +148,71 @@ export default function ApprovalsPage({ embedded = false }) {
     bucketMatchesRole(t.approval_request?.approver_role)
   );
 
+  // Category/department pill filter for the Task Approval Requests table —
+  // mirrors the "All (33) / Website (15) / ..." filter bar used on the
+  // Projects tab (ProjectsPanel), scoped to whichever departments actually
+  // have a pending task approval right now.
+  const [taskDeptFilter, setTaskDeptFilter] = useState('all');
+  useEffect(() => {
+    setTaskDeptFilter('all');
+  }, [approverBucket]);
+
+  // The approval-request payload no longer carries its own `department`
+  // (that field was dropped from the "Send for Approval" popup) — the task's
+  // own `department` is always set at creation time, so that's the reliable
+  // source for the Website / Social Media / Meta Ads / SEO / ERP category.
+  const taskDept = (t) => (t.department || t.approval_request?.department || '').toLowerCase();
+
+  const taskApprovalDeptCounts = (() => {
+    const counts = {};
+    visibleTaskApprovals.forEach(t => {
+      const d = taskDept(t);
+      if (!d) return;
+      counts[d] = (counts[d] || 0) + 1;
+    });
+    return counts;
+  })();
+
+  const filteredTaskApprovals = taskDeptFilter === 'all'
+    ? visibleTaskApprovals
+    : visibleTaskApprovals.filter(t => taskDept(t) === taskDeptFilter);
+
+  // ---- Small formatting helpers for the Task Approval Requests table ----
+  const taskStatusColors = {
+    pending: 'bg-[#71717a]/20 text-[#71717a]',
+    in_progress: 'bg-[#3b82f6]/20 text-[#3b82f6]',
+    completed: 'bg-[#10b981]/20 text-[#10b981]',
+    on_hold: 'bg-[#f59e0b]/20 text-[#f59e0b]',
+  };
+  const formatDateShort = (dateStr) => {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const formatTimeOnlyShort = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+  const formatDurationShort = (seconds) => {
+    const s = Number(seconds) || 0;
+    const hrs = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = Math.floor(s % 60);
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  };
+  const getTaskStartEndShort = (task) => {
+    const sessions = task?.time_tracking?.sessions || [];
+    if (sessions.length === 0) return { start: null, end: null, running: false };
+    const first = sessions[0];
+    const last = sessions[sessions.length - 1];
+    return { start: first.start, end: last.end, running: !last.end };
+  };
+
   // Bucket badge counts (use base list so each tab shows real total)
   const bucketCounts = {
     pm: baseVisibleTaskApprovals.filter(t => (t.approval_request?.approver_role || '').toLowerCase() === 'pm').length,
@@ -704,60 +769,163 @@ export default function ApprovalsPage({ embedded = false }) {
                 Task Approval Requests
                 <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{visibleTaskApprovals.length}</Badge>
               </h3>
-              <div className="space-y-3">
-                {visibleTaskApprovals.map(task => {
-                  const req = task.approval_request || {};
-                  return (
-                    <div
-                      key={task.task_id}
-                      className={`${bgCard} border ${borderColor} rounded-lg p-4`}
-                      data-testid={`task-approval-${task.task_id}`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className={`font-semibold ${textPrimary}`}>{task.task_name}</h4>
-                            <Badge className="bg-[#f59e0b]/20 text-[#f59e0b]">{req.approver_role}</Badge>
-                            {req.department && (
-                              <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{req.department}</Badge>
-                            )}
-                          </div>
-                          <p className={`text-sm ${textSecondary} mt-1`}>
-                            Requested by <span className={textPrimary}>{req.requested_by_name || '—'}</span>
-                            {req.requested_at && (
-                              <> · {new Date(req.requested_at).toLocaleString()}</>
-                            )}
-                          </p>
-                          {req.note && (
-                            <p className={`text-sm ${textPrimary} mt-2 italic`}>&ldquo;{req.note}&rdquo;</p>
-                          )}
-                          {req.work_link && (
-                            <a
-                              href={req.work_link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-sm text-[#6366f1] hover:underline mt-2 inline-flex items-center gap-1"
-                              data-testid={`task-work-link-${task.task_id}`}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              View Work Link
-                            </a>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
+
+              {/* Category filter pills — All + one per department that has a pending request */}
+              <div className="flex flex-wrap gap-2 mb-4" data-testid="task-approval-dept-filter">
+                <button
+                  onClick={() => setTaskDeptFilter('all')}
+                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                    taskDeptFilter === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+                  }`}
+                  data-testid="task-approval-dept-filter-all"
+                >
+                  All ({visibleTaskApprovals.length})
+                </button>
+                {DEPARTMENTS.filter(d => d.id !== 'all' && taskApprovalDeptCounts[d.id] > 0).map(d => (
+                  <button
+                    key={d.id}
+                    onClick={() => setTaskDeptFilter(d.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                      taskDeptFilter === d.id ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:bg-[#6366f1]/20`
+                    }`}
+                    data-testid={`task-approval-dept-filter-${d.id}`}
+                  >
+                    {d.label} ({taskApprovalDeptCounts[d.id]})
+                  </button>
+                ))}
+              </div>
+
+              <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
+                <div className="overflow-x-auto">
+                  <table className="w-full table-fixed">
+                    <thead className={bgSecondary}>
+                      <tr>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[20%]`}>Task</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[8%]`}>Status</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[10%]`}>Category</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[14%]`}>Created / Assigned</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[9%]`}>Due Date</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[4%]`}>Link</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>Time</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>Start Time</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>End Time</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>Timer</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>View</th>
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
+                      {filteredTaskApprovals.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} className={`px-2 py-8 text-center ${textSecondary}`}>No approvals in this category</td>
+                        </tr>
+                      ) : filteredTaskApprovals.map(task => {
+                        const req = task.approval_request || {};
+                        const { start, end, running } = getTaskStartEndShort(task);
+                        return (
+                          <tr
+                            key={task.task_id}
+                            className={`${bgCard} hover:${bgSecondary} cursor-pointer transition-colors`}
                             onClick={() => { setDecisionTask(task); setDecisionRemarks(''); }}
-                            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
-                            data-testid={`task-view-${task.task_id}`}
+                            data-testid={`task-approval-${task.task_id}`}
                           >
-                            <Eye className="h-3 w-3 mr-1" /> View
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                            <td className="px-2 py-3">
+                              <div className={`font-medium ${textPrimary} line-clamp-2`} title={task.task_name}>{task.task_name}</div>
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                <Badge className="bg-[#f59e0b]/20 text-[#f59e0b] text-xs">{req.approver_role}</Badge>
+                              </div>
+                              {req.note && (
+                                <p className={`text-xs ${textSecondary} mt-1 italic line-clamp-2`}>&ldquo;{req.note}&rdquo;</p>
+                              )}
+                            </td>
+                            <td className="px-2 py-3">
+                              <Badge className={taskStatusColors[task.status] || taskStatusColors.pending}>
+                                {(task.status || 'pending').replace('_', ' ')}
+                              </Badge>
+                            </td>
+                            <td className="px-2 py-3 text-sm">
+                              {(task.category || taskDept(task)) ? (
+                                <div className="flex flex-col gap-1">
+                                  {task.category && (
+                                    <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs w-fit">{task.category}</Badge>
+                                  )}
+                                  {taskDept(task) && (
+                                    <span className={`text-xs ${textSecondary}`}>
+                                      {DEPARTMENTS.find(d => d.id === taskDept(task))?.label || task.department}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className={textSecondary}>—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-3 text-sm">
+                              <p className={textPrimary}>{req.requested_by_name || '—'}</p>
+                              {req.requested_at && (
+                                <p className={`text-xs ${textSecondary}`}>{new Date(req.requested_at).toLocaleString()}</p>
+                              )}
+                            </td>
+                            <td className="px-2 py-3 text-sm">
+                              {task.due_date ? (
+                                <span className={textPrimary}>{formatDateShort(task.due_date)}</span>
+                              ) : (
+                                <span className={textSecondary}>—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                              {(req.work_link || task.work_link) ? (
+                                <a
+                                  href={req.work_link || task.work_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[#3b82f6] hover:text-[#2563eb]"
+                                  data-testid={`task-work-link-${task.task_id}`}
+                                >
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              ) : (
+                                <span className={textSecondary}>—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-3 text-xs whitespace-nowrap">
+                              {formatDurationShort(task.time_tracking?.total_seconds || 0)}
+                            </td>
+                            <td className="px-2 py-3 text-xs whitespace-nowrap">
+                              {start ? formatTimeOnlyShort(start) : <span className={textSecondary}>—</span>}
+                            </td>
+                            <td className="px-2 py-3 text-xs whitespace-nowrap">
+                              {running ? (
+                                <span className="text-[#10b981] font-medium">Running</span>
+                              ) : end ? (
+                                formatTimeOnlyShort(end)
+                              ) : (
+                                <span className={textSecondary}>—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-3 text-xs whitespace-nowrap">
+                              {running ? (
+                                <span className="inline-flex items-center gap-1 text-[#10b981]">
+                                  <Clock className="h-3 w-3 animate-pulse" /> Running
+                                </span>
+                              ) : (
+                                <span className={textSecondary}>Stopped</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                onClick={() => { setDecisionTask(task); setDecisionRemarks(''); }}
+                                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                                data-testid={`task-view-${task.task_id}`}
+                              >
+                                <Eye className="h-3 w-3 mr-1" /> View
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
