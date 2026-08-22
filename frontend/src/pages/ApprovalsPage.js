@@ -567,8 +567,13 @@ export default function ApprovalsPage({ embedded = false }) {
 
   const content = (
       <div className={`flex flex-col h-full ${bgTertiary}`} data-testid="approvals-page">
-        {/* Header */}
+        {/* Header — hidden when embedded (Operations' own tab bar already
+            says "Approvals"); the filter row below still shows for the roles
+            that get it, and the container is skipped entirely when neither
+            half would render. */}
+        {(!embedded || !isHeadOfOperations) && (
         <div className={`px-6 py-4 border-b ${borderColor} ${bgCard}`}>
+          {!embedded && (
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
@@ -587,6 +592,7 @@ export default function ApprovalsPage({ embedded = false }) {
               <RefreshCw className="h-4 w-4" /> Refresh
             </Button>
           </div>
+          )}
           
           {/* Approval Queue toggle removed — all approvals route to Operations */}
           
@@ -627,6 +633,7 @@ export default function ApprovalsPage({ embedded = false }) {
           </div>
           )}
         </div>
+        )}
 
         {/* Department Checkboxes Selection */}
         {!isHeadOfOperations && (
@@ -727,6 +734,7 @@ export default function ApprovalsPage({ embedded = false }) {
         {/* Approvals List */}
         <div className="flex-1 overflow-auto p-6 space-y-6">
           {/* 3-way Approvals bucket sub-tabs: PM / Operations / HR */}
+          {!isHeadOfOperations && (
           <div className="flex items-center gap-2 flex-wrap" data-testid="approver-bucket-tabs">
             {(isHeadOfOperations ? [
               { id: 'operations', label: 'Operations Approvals', color: 'from-blue-500 to-indigo-600' },
@@ -760,15 +768,23 @@ export default function ApprovalsPage({ embedded = false }) {
               );
             })}
           </div>
+          )}
 
           {/* Task Approval Requests (from Operations > My Tasks) */}
           {visibleTaskApprovals.length > 0 && (
             <div>
-              <h3 className={`text-base font-semibold ${textPrimary} mb-3 flex items-center gap-2`}>
-                <CheckCircle2 className="h-4 w-4 text-[#6366f1]" />
-                Task Approval Requests
-                <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{visibleTaskApprovals.length}</Badge>
-              </h3>
+              {/* Refresh lives here now that the page header is gone, so the
+                  action isn't lost with the chrome that used to hold it. */}
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                  <CheckCircle2 className="h-4 w-4 text-[#6366f1]" />
+                  Task Approval Requests
+                  <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{visibleTaskApprovals.length}</Badge>
+                </h3>
+                <Button onClick={refreshVisibleApprovals} variant="outline" size="sm" className="gap-2" data-testid="approvals-refresh">
+                  <RefreshCw className="h-4 w-4" /> Refresh
+                </Button>
+              </div>
 
               {/* Category filter pills — All + one per department that has a pending request */}
               <div className="flex flex-wrap gap-2 mb-4" data-testid="task-approval-dept-filter">
@@ -800,10 +816,11 @@ export default function ApprovalsPage({ embedded = false }) {
                   <table className="w-full table-fixed">
                     <thead className={bgSecondary}>
                       <tr>
-                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[20%]`}>Task</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[4%]`}>S.No</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[17%]`}>Task</th>
                         <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[8%]`}>Status</th>
                         <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[10%]`}>Category</th>
-                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[14%]`}>Created / Assigned</th>
+                        <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[13%]`}>Created / Assigned</th>
                         <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[9%]`}>Due Date</th>
                         <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[4%]`}>Link</th>
                         <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>Time</th>
@@ -816,18 +833,19 @@ export default function ApprovalsPage({ embedded = false }) {
                     <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                       {filteredTaskApprovals.length === 0 ? (
                         <tr>
-                          <td colSpan={11} className={`px-2 py-8 text-center ${textSecondary}`}>No approvals in this category</td>
+                          <td colSpan={12} className={`px-2 py-8 text-center ${textSecondary}`}>No approvals in this category</td>
                         </tr>
-                      ) : filteredTaskApprovals.map(task => {
+                      ) : filteredTaskApprovals.map((task, idx) => {
                         const req = task.approval_request || {};
                         const { start, end, running } = getTaskStartEndShort(task);
                         return (
                           <tr
                             key={task.task_id}
-                            className={`${bgCard} hover:${bgSecondary} cursor-pointer transition-colors`}
+                            className={`${bgCard} cursor-pointer transition-all align-middle ${isDark ? 'hover:brightness-125' : 'hover:brightness-95'}`}
                             onClick={() => { setDecisionTask(task); setDecisionRemarks(''); }}
                             data-testid={`task-approval-${task.task_id}`}
                           >
+                            <td className={`px-2 py-3 text-sm tabular-nums ${textSecondary}`}>{idx + 1}</td>
                             <td className="px-2 py-3">
                               <div className={`font-medium ${textPrimary} line-clamp-2`} title={task.task_name}>{task.task_name}</div>
                               <div className="flex flex-wrap gap-1 mt-1">
