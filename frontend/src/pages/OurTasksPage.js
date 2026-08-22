@@ -783,6 +783,16 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
   };
 
+  // Once a task has been sent for approval it stops being the assignee's to
+  // change: Complete disappears (it's already on its way to an approver) and
+  // the pencil-edit is disabled, so the work can't be rewritten out from under
+  // the approver looking at it. A *rejected* request is deliberately NOT
+  // locked — that's the case where the assignee has to fix it and resend.
+  const isAwaitingOrApproved = (task) => {
+    const s = task?.approval_request?.status;
+    return s === 'pending' || s === 'approved';
+  };
+
   // Reconstruct a task's work/break timeline from its timer sessions. A break
   // isn't stored anywhere: it's simply the gap between one session ending and
   // the next one starting, which is exactly what pausing the timer leaves
@@ -2603,16 +2613,26 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             const canDelete = isSuperAdmin || isAssignee;
                             return (
                               <>
-                                {canFullEdit && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(e) => { e.stopPropagation(); openEditModal(task); }}
-                                    data-testid={`task-edit-${task.task_id}`}
-                                  >
-                                    <Edit2 className="h-4 w-4" />
-                                  </Button>
-                                )}
+                                {canFullEdit && (() => {
+                                  const locked = isAwaitingOrApproved(task);
+                                  return (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      disabled={locked}
+                                      className={locked ? 'opacity-40 cursor-not-allowed' : ''}
+                                      onClick={(e) => { e.stopPropagation(); if (!locked) openEditModal(task); }}
+                                      data-testid={`task-edit-${task.task_id}`}
+                                      title={locked
+                                        ? (task.approval_request?.status === 'approved'
+                                            ? 'Approved — this task can no longer be edited'
+                                            : 'Sent for approval — editing is locked until it is reviewed')
+                                        : 'Edit task'}
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </Button>
+                                  );
+                                })()}
                                 {canDelete && (
                                   <Button
                                     variant="ghost"
@@ -2627,7 +2647,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               </>
                             );
                           })()}
-                          {mainTab === 'assigned_to_me' && task.status !== 'completed' && task.approval_request?.status !== 'approved' && (
+                          {mainTab === 'assigned_to_me' && task.status !== 'completed' && !isAwaitingOrApproved(task) && (
                             <Button
                               size="sm"
                               className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
@@ -2638,37 +2658,33 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               <Check className="h-3 w-3 mr-1" /> Complete
                             </Button>
                           )}
-                          {mainTab === 'assigned_to_me' && (
-                            <Button
-                              size="sm"
+                          {/* Approval state — read-only. Sending for approval now
+                              happens through Complete → the time summary → Send to
+                              Approve, so there's no separate Approve button here;
+                              this is just the resulting state. */}
+                          {mainTab === 'assigned_to_me' && task.approval_request?.status && (
+                            <Badge
                               className={
-                                task.approval_request?.status === 'pending'
-                                  ? 'bg-[#f59e0b] hover:bg-[#d97706] text-white h-8 px-3'
-                                  : task.approval_request?.status === 'approved'
-                                    ? 'bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3'
-                                    : task.approval_request?.status === 'rejected'
-                                      ? 'bg-[#ef4444] hover:bg-[#dc2626] text-white h-8 px-3'
-                                      : 'bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 px-3'
+                                task.approval_request.status === 'pending'
+                                  ? 'bg-[#f59e0b]/20 text-[#f59e0b] h-8 px-3 flex items-center'
+                                  : task.approval_request.status === 'approved'
+                                    ? 'bg-[#10b981]/20 text-[#10b981] h-8 px-3 flex items-center'
+                                    : 'bg-[#ef4444]/20 text-[#ef4444] h-8 px-3 flex items-center'
                               }
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setApprovalTask(task);
-                                setApprovalDraft({
-                                  approver_role: task.approval_request?.approver_role || '',
-                                  note: '',
-                                  // Auto-fetch the existing work link from the task / previous request
-                                  work_link: task.approval_request?.work_link || task.work_link || '',
-                                });
-                              }}
-                              data-testid={`approve-btn-${task.task_id}`}
-                              title={task.approval_request?.status ? `Approval ${task.approval_request.status}` : 'Send for approval'}
+                              data-testid={`approval-state-${task.task_id}`}
+                              title={
+                                task.approval_request.status === 'pending'
+                                  ? 'Waiting on an approver'
+                                  : task.approval_request.status === 'approved'
+                                    ? 'Approved'
+                                    : 'Rejected — fix it and send again from Complete'
+                              }
                             >
                               <CheckCircle2 className="h-3 w-3 mr-1" />
-                              {task.approval_request?.status === 'pending' ? 'Pending'
-                                : task.approval_request?.status === 'approved' ? 'Approved'
-                                : task.approval_request?.status === 'rejected' ? 'Rejected'
-                                : 'Approve'}
-                            </Button>
+                              {task.approval_request.status === 'pending' ? 'Pending'
+                                : task.approval_request.status === 'approved' ? 'Approved'
+                                : 'Rejected'}
+                            </Badge>
                           )}
                           {REPORT_ENABLED_DEPARTMENTS.includes(task.department) && isReportCategory(task.category) && task.assigned_to === user?.user_id && (
                             <Button
