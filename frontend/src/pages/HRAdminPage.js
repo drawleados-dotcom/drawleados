@@ -6235,12 +6235,23 @@ function DesignationsDeptsTab({
   const [bniCfgMode, setBniCfgMode] = useState('create'); // 'create' | 'edit' — which designation state BniConfig modal writes to
   const [managementSubDepts, setManagementSubDepts] = useState([]);
   const [designationSearch, setDesignationSearch] = useState('');
+  const [designationDeptFilter, setDesignationDeptFilter] = useState('all');
+  const [designationSubDeptFilter, setDesignationSubDeptFilter] = useState('all');
+
+  const designationDeptFilterSubDepts = useMemo(() => {
+    if (designationDeptFilter === 'all') return [];
+    return departments.find(d => d.department_id === designationDeptFilter)?.sub_departments || [];
+  }, [departments, designationDeptFilter]);
 
   const filteredDesignations = useMemo(() => {
     const q = designationSearch.trim().toLowerCase();
-    if (!q) return designations;
-    return designations.filter(d => (d.title || '').toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q));
-  }, [designations, designationSearch]);
+    return designations.filter(d => {
+      if (q && !((d.title || '').toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q))) return false;
+      if (designationDeptFilter !== 'all' && d.department_id !== designationDeptFilter) return false;
+      if (designationSubDeptFilter !== 'all' && d.sub_department_id !== designationSubDeptFilter) return false;
+      return true;
+    });
+  }, [designations, designationSearch, designationDeptFilter, designationSubDeptFilter]);
 
   // Fetch the Management department's sub-departments (Sales, Marketing, ...)
   // once, so the Operations config modal can offer per-sub-department access.
@@ -6356,6 +6367,33 @@ function DesignationsDeptsTab({
                 className={`pl-10 ${bgSecondary} border ${borderColor} ${textPrimary}`}
               />
             </div>
+            <Select
+              value={designationDeptFilter}
+              onValueChange={(v) => { setDesignationDeptFilter(v); setDesignationSubDeptFilter('all'); }}
+            >
+              <SelectTrigger className={`w-[180px] ${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map(dept => (
+                  <SelectItem key={dept.department_id} value={dept.department_id}>{dept.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {designationDeptFilterSubDepts.length > 0 && (
+              <Select value={designationSubDeptFilter} onValueChange={setDesignationSubDeptFilter}>
+                <SelectTrigger className={`w-[180px] ${bgSecondary} border ${borderColor} ${textPrimary}`}>
+                  <SelectValue placeholder="Sub Department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sub Departments</SelectItem>
+                  {designationDeptFilterSubDepts.map(sd => (
+                    <SelectItem key={sd.sub_department_id} value={sd.sub_department_id}>{sd.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {!isViewOnly && (
               <Button onClick={() => setShowDesignationModal(true)} className="bg-[#6366f1] hover:bg-[#4f46e5]">
                 <Plus className="h-4 w-4 mr-2" />
@@ -6446,7 +6484,7 @@ function DesignationsDeptsTab({
                   <tr>
                     <td colSpan={6} className="p-8 text-center">
                       <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
-                      <p className={textSecondary}>{designationSearch ? 'No designations match your search' : 'No designations created yet'}</p>
+                      <p className={textSecondary}>{(designationSearch || designationDeptFilter !== 'all' || designationSubDeptFilter !== 'all') ? 'No designations match your filters' : 'No designations created yet'}</p>
                     </td>
                   </tr>
                 )}
