@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2, Search, Building2, FileText, Layers, LayoutGrid, Boxes, ShieldQuestion } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, Search, Building2, FileText, Layers, LayoutGrid, Boxes } from 'lucide-react';
 import { buildErpPrompt } from '../../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
 import ErpLocationPicker from './ErpLocationPicker';
@@ -243,7 +243,7 @@ export default function ProjectErpUsersTab({
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all | today | week | month | custom
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
-  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // all | todo | pending | approval | completed
+  const [taskStatusFilter, setTaskStatusFilter] = useState('todo'); // all | todo | pending | approval | completed — defaults to Todo
   const [taskLevelFilter, setTaskLevelFilter] = useState('all'); // all | user | page | sub_tab | ultra_sub_tab | ultra_tab
   const [taskTypeFilter, setTaskTypeFilter] = useState('all'); // all | one of ERP_TASK_TYPE_OPTIONS
 
@@ -965,14 +965,19 @@ export default function ProjectErpUsersTab({
           {summaryCard('Ultra Sub Tabs', ultraSubTabLevelCount, LayoutGrid, 'text-pink-400', taskLevelFilter === 'ultra_sub_tab', () => setTaskLevelFilter(taskLevelFilter === 'ultra_sub_tab' ? 'all' : 'ultra_sub_tab'))}
           {summaryCard('Ultra Tabs', ultraTabLevelCount, Boxes, 'text-emerald-400', taskLevelFilter === 'ultra_tab', () => setTaskLevelFilter(taskLevelFilter === 'ultra_tab' ? 'all' : 'ultra_tab'))}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {summaryCard('All', allTasksCount, ListChecks, 'text-[#6366f1]', taskStatusFilter === 'all', () => setTaskStatusFilter('all'))}
-          {summaryCard('Todo', todoTasksCount, ListTodo, 'text-amber-400', taskStatusFilter === 'todo', () => setTaskStatusFilter(taskStatusFilter === 'todo' ? 'all' : 'todo'))}
-          {summaryCard('Pending', pendingTasksCount, Clock, 'text-yellow-400', taskStatusFilter === 'pending', () => setTaskStatusFilter(taskStatusFilter === 'pending' ? 'all' : 'pending'))}
-          {summaryCard('Approval', approvalTasksCount, ShieldQuestion, 'text-orange-400', taskStatusFilter === 'approval', () => setTaskStatusFilter(taskStatusFilter === 'approval' ? 'all' : 'approval'))}
-          {summaryCard('Completed', completedTasksCount, CheckCircle2, 'text-emerald-400', taskStatusFilter === 'completed', () => setTaskStatusFilter(taskStatusFilter === 'completed' ? 'all' : 'completed'))}
-        </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={taskStatusFilter} onValueChange={setTaskStatusFilter}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[150px]`} data-testid="erp-task-status-filter">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All ({allTasksCount})</SelectItem>
+              <SelectItem value="todo">Todo ({todoTasksCount})</SelectItem>
+              <SelectItem value="pending">Pending ({pendingTasksCount})</SelectItem>
+              <SelectItem value="approval">Approval ({approvalTasksCount})</SelectItem>
+              <SelectItem value="completed">Completed ({completedTasksCount})</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={taskDateFilter} onValueChange={setTaskDateFilter}>
             <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[150px]`} data-testid="erp-task-date-filter">
               <SelectValue placeholder="All Time" />
