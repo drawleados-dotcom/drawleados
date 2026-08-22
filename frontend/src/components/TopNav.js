@@ -1,4 +1,5 @@
 import React, { useMemo, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -135,6 +136,22 @@ export default function TopNav() {
   // position of the first group member encountered, skip the rest.
   const renderedGroups = new Set();
 
+  // The dropdown panel is portaled to <body> and positioned with `fixed`
+  // (viewport coords from the trigger's own bounding rect) instead of being
+  // an absolutely-positioned descendant of <nav> — <nav> scrolls
+  // horizontally (overflow-x-auto), which per the CSS spec forces its
+  // overflow-y to a non-visible value too, clipping/back-grounding any
+  // absolutely-positioned child that pokes out below it. A portal sidesteps
+  // that clipping (and any z-index stacking-context fights) entirely.
+  const [openGroup, setOpenGroup] = useState(null);
+  const [groupMenuPos, setGroupMenuPos] = useState({ top: 0, left: 0 });
+  const openGroupMenu = (group, triggerEl) => {
+    const rect = triggerEl.getBoundingClientRect();
+    setGroupMenuPos({ top: rect.bottom, left: rect.left });
+    setOpenGroup(group);
+  };
+  const closeGroupMenu = () => setOpenGroup(null);
+
   return (
     <nav
       data-testid="top-nav"
@@ -150,7 +167,11 @@ export default function TopNav() {
           const groupItems = sortedVisible.filter((it) => it.group === group);
           const isGroupActive = groupItems.some((it) => location.pathname.startsWith(it.path));
           return (
-            <div key={`group-${group}`} className="relative group">
+            <div
+              key={`group-${group}`}
+              onMouseEnter={(e) => openGroupMenu(group, e.currentTarget)}
+              onMouseLeave={closeGroupMenu}
+            >
               <button
                 type="button"
                 data-testid={`top-nav-group-${group}`}
@@ -164,29 +185,36 @@ export default function TopNav() {
                 <TrendingUp className="h-4 w-4" />
                 Marketing
               </button>
-              <div
-                className={`absolute left-0 top-full z-50 hidden min-w-[180px] rounded-md border py-1 shadow-lg group-hover:block
-                  ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}
-              >
-                {groupItems.map((gi) => (
-                  <NavLink
-                    key={gi.key}
-                    to={gi.path}
-                    data-testid={`top-nav-${gi.key}`}
-                    className={({ isActive }) =>
-                      `flex items-center gap-2 px-3 py-2 text-sm transition-colors
-                       ${isActive
-                         ? 'bg-[#6366f1] text-white'
-                         : isDark
-                           ? 'text-[#a1a1aa] hover:bg-[#27272a] hover:text-[#fafafa]'
-                           : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`
-                    }
-                  >
-                    <gi.icon className="h-4 w-4" />
-                    {gi.label}
-                  </NavLink>
-                ))}
-              </div>
+              {openGroup === group && createPortal(
+                <div
+                  onMouseEnter={() => setOpenGroup(group)}
+                  onMouseLeave={closeGroupMenu}
+                  style={{ position: 'fixed', top: groupMenuPos.top, left: groupMenuPos.left, zIndex: 9999 }}
+                  className={`min-w-[180px] rounded-md border py-1 shadow-lg
+                    ${isDark ? 'bg-[#18181b] border-[#27272a]' : 'bg-white border-gray-200'}`}
+                >
+                  {groupItems.map((gi) => (
+                    <NavLink
+                      key={gi.key}
+                      to={gi.path}
+                      data-testid={`top-nav-${gi.key}`}
+                      onClick={closeGroupMenu}
+                      className={({ isActive }) =>
+                        `flex items-center gap-2 px-3 py-2 text-sm transition-colors
+                         ${isActive
+                           ? 'bg-[#6366f1] text-white'
+                           : isDark
+                             ? 'text-[#a1a1aa] hover:bg-[#27272a] hover:text-[#fafafa]'
+                             : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'}`
+                      }
+                    >
+                      <gi.icon className="h-4 w-4" />
+                      {gi.label}
+                    </NavLink>
+                  ))}
+                </div>,
+                document.body
+              )}
             </div>
           );
         }
