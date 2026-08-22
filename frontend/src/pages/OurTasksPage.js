@@ -2353,27 +2353,27 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               <table className="w-full table-fixed">
                 <thead className={bgSecondary}>
                   <tr>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[19%]`}>Task</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>Status</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[8%]`}>Category</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[11%]`}>Created / Assigned</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[9%]`}>Due Date</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[4%]`}>Link</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[5%]`}>Time</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>Start Time</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>End Time</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[10%]`}>Timer</th>
-                    <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[15%]`}>Actions</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[18%]`}>Task</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>Status</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>Category</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[11%]`}>Created / Assigned</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[8%]`}>Due Date</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[3%]`}>Link</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>Time</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>Start Time</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>End Time</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[8%]`}>Timer</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[21%]`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                   {loading ? (
                     <tr>
-                      <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>Loading...</td>
+                      <td colSpan={11} className={`px-2 py-8 text-center ${textSecondary}`}>Loading...</td>
                     </tr>
                   ) : displayTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className={`px-4 py-8 text-center ${textSecondary}`}>
+                      <td colSpan={11} className={`px-2 py-8 text-center ${textSecondary}`}>
                         <Briefcase className={`h-12 w-12 mx-auto mb-3 ${textSecondary}`} />
                         <p>No tasks found</p>
                         <p className="text-sm">
@@ -2389,7 +2389,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       className={`${bgCard} hover:${bgSecondary} cursor-pointer transition-colors`}
                       onClick={() => { setViewingTask(task); setShowTaskDetailModal(true); }}
                     >
-                      <td className={`px-4 py-3`}>
+                      <td className={`px-2 py-3`}>
                         <div className={`font-medium ${textPrimary} flex items-start gap-1.5`}>
                           <span
                             className="inline-block h-2 w-2 rounded-full flex-shrink-0 mt-1.5"
@@ -2421,12 +2421,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 py-3">
                         <Badge className={statusColors[task.status] || statusColors.pending}>
                           {task.status?.replace('_', ' ') || 'Pending'}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-sm" data-testid={`category-cell-${task.task_id}`}>
+                      <td className="px-2 py-3 text-sm" data-testid={`category-cell-${task.task_id}`}>
                         {task.category ? (
                           <div className="flex flex-col gap-1">
                             <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs w-fit">{task.category}</Badge>
@@ -2438,7 +2438,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           <span className={textSecondary}>—</span>
                         )}
                       </td>
-                      <td className={`px-4 py-3 text-sm`}>
+                      <td className={`px-2 py-3 text-sm`}>
                         <div className="space-y-1">
                           {/* Meeting group: collapsed row shows all assignees with a count badge.
                               View popup (eye icon) lets the user approve all in one shot. */}
@@ -2475,7 +2475,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           )}
                         </div>
                       </td>
-                      <td className={`px-4 py-3 text-sm`}>
+                      <td className={`px-2 py-3 text-sm`}>
                         {task.due_date ? (
                           <div>
                             <span className={`whitespace-nowrap ${new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'text-[#ef4444]' : textPrimary}`}>
@@ -2498,7 +2498,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           <span className={textSecondary}>-</span>
                         )}
                       </td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
                         {task.work_link ? (
                           <a 
                             href={task.work_link} 
@@ -2512,10 +2512,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           <span className={textSecondary}>-</span>
                         )}
                       </td>
-                      <td className={`px-4 py-3`}>
-                        <div className="flex items-center gap-2">
-                          <Timer className={`h-4 w-4 ${task.time_tracking?.status === 'running' ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
-                          <span className={`text-sm font-medium ${textPrimary}`}>
+                      <td className={`px-2 py-3`}>
+                        <div className="flex items-center gap-1 whitespace-nowrap">
+                          <Timer className={`h-3.5 w-3.5 flex-shrink-0 ${task.time_tracking?.status === 'running' ? 'text-[#10b981] animate-pulse' : textSecondary}`} />
+                          <span className={`text-xs font-medium ${textPrimary}`}>
                             {formatDuration(task.time_tracking?.total_seconds || 0)}
                           </span>
                         </div>
@@ -2523,7 +2523,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           <div className="text-xs text-[#10b981] mt-1">Running...</div>
                         )}
                       </td>
-                      <td className={`px-4 py-3 text-sm whitespace-nowrap`} data-testid={`start-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
+                      <td className={`px-2 py-3 text-sm whitespace-nowrap`} data-testid={`start-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           const { start } = getTaskStartEnd(task);
                           const isEditingRow = editingTimeRow === task.task_id;
@@ -2548,7 +2548,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           );
                         })()}
                       </td>
-                      <td className={`px-4 py-3 text-sm whitespace-nowrap`} data-testid={`end-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
+                      <td className={`px-2 py-3 text-sm whitespace-nowrap`} data-testid={`end-time-${task.task_id}`} onClick={(e) => e.stopPropagation()}>
                         {(() => {
                           const { end, running } = getTaskStartEnd(task);
                           const isEditingRow = editingTimeRow === task.task_id;
@@ -2576,11 +2576,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           );
                         })()}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-2 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         {getTimeTrackingButton(task, mainTab === 'assign_to_team')}
                       </td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1 flex-wrap">
+                      <td className="px-2 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1 flex-nowrap">
                           <Button 
                             variant="ghost" 
                             size="sm" 
