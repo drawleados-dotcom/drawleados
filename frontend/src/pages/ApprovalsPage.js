@@ -157,15 +157,49 @@ export default function ApprovalsPage({ embedded = false }) {
     setTaskDeptFilter('all');
   }, [approverBucket]);
 
+  // Date filter for the same table. Keyed on when the approval was REQUESTED
+  // (the timestamp under Created / Assigned), not the task's due date — this
+  // is an inbox, so "what landed here on the 22nd" is the useful question.
+  const [taskDateMode, setTaskDateMode] = useState('all'); // all | today | single | range
+  const [taskSingleDate, setTaskSingleDate] = useState('');
+  const [taskDateFrom, setTaskDateFrom] = useState('');
+  const [taskDateTo, setTaskDateTo] = useState('');
+
+  // Local calendar day, not UTC — an approval requested at 9pm IST must not
+  // count as the next day.
+  const localYmd = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const todayYmd = localYmd(new Date());
+
   // The approval-request payload no longer carries its own `department`
   // (that field was dropped from the "Send for Approval" popup) — the task's
   // own `department` is always set at creation time, so that's the reliable
   // source for the Website / Social Media / Meta Ads / SEO / ERP category.
   const taskDept = (t) => (t.department || t.approval_request?.department || '').toLowerCase();
 
+  // Date first, category second: the pill counts have to describe the set the
+  // date filter already allows, otherwise "All (91)" sits above three rows.
+  const dateVisibleTaskApprovals = visibleTaskApprovals.filter(t => {
+    if (taskDateMode === 'all') return true;
+    const d = localYmd(t.approval_request?.requested_at || t.created_at);
+    if (!d) return false;
+    if (taskDateMode === 'today') return d === todayYmd;
+    if (taskDateMode === 'single') return taskSingleDate ? d === taskSingleDate : true;
+    if (taskDateMode === 'range') {
+      if (taskDateFrom && d < taskDateFrom) return false;
+      if (taskDateTo && d > taskDateTo) return false;
+      return true;
+    }
+    return true;
+  });
+
   const taskApprovalDeptCounts = (() => {
     const counts = {};
-    visibleTaskApprovals.forEach(t => {
+    dateVisibleTaskApprovals.forEach(t => {
       const d = taskDept(t);
       if (!d) return;
       counts[d] = (counts[d] || 0) + 1;
@@ -174,8 +208,8 @@ export default function ApprovalsPage({ embedded = false }) {
   })();
 
   const filteredTaskApprovals = taskDeptFilter === 'all'
-    ? visibleTaskApprovals
-    : visibleTaskApprovals.filter(t => taskDept(t) === taskDeptFilter);
+    ? dateVisibleTaskApprovals
+    : dateVisibleTaskApprovals.filter(t => taskDept(t) === taskDeptFilter);
 
   // ---- Small formatting helpers for the Task Approval Requests table ----
   const taskStatusColors = {
@@ -779,7 +813,7 @@ export default function ApprovalsPage({ embedded = false }) {
                 <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
                   <CheckCircle2 className="h-4 w-4 text-[#6366f1]" />
                   Task Approval Requests
-                  <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{visibleTaskApprovals.length}</Badge>
+                  <Badge className="bg-[#6366f1]/20 text-[#6366f1] ml-2">{dateVisibleTaskApprovals.length}</Badge>
                 </h3>
                 <Button onClick={refreshVisibleApprovals} variant="outline" size="sm" className="gap-2" data-testid="approvals-refresh">
                   <RefreshCw className="h-4 w-4" /> Refresh
@@ -787,7 +821,7 @@ export default function ApprovalsPage({ embedded = false }) {
               </div>
 
               {/* Category filter pills — All + one per department that has a pending request */}
-              <div className="flex flex-wrap gap-2 mb-4" data-testid="task-approval-dept-filter">
+              <div className="flex flex-wrap items-center gap-2 mb-4" data-testid="task-approval-dept-filter">
                 <button
                   onClick={() => setTaskDeptFilter('all')}
                   className={`px-3 py-1.5 rounded-full text-sm transition-all ${
@@ -795,7 +829,7 @@ export default function ApprovalsPage({ embedded = false }) {
                   }`}
                   data-testid="task-approval-dept-filter-all"
                 >
-                  All ({visibleTaskApprovals.length})
+                  All ({dateVisibleTaskApprovals.length})
                 </button>
                 {DEPARTMENTS.filter(d => d.id !== 'all' && taskApprovalDeptCounts[d.id] > 0).map(d => (
                   <button
@@ -809,6 +843,61 @@ export default function ApprovalsPage({ embedded = false }) {
                     {d.label} ({taskApprovalDeptCounts[d.id]})
                   </button>
                 ))}
+
+                {/* Date filter — same row as the pills, pushed right, so every
+                    control that narrows this table sits together. */}
+                <div className="flex items-center gap-2 ml-auto" data-testid="task-approval-date-filter">
+                  <Calendar className={`h-4 w-4 ${textSecondary}`} />
+                  <select
+                    value={taskDateMode}
+                    onChange={(e) => setTaskDateMode(e.target.value)}
+                    className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                    title="Filters by the date the approval was requested"
+                    data-testid="task-approval-date-mode"
+                  >
+                    <option value="all">All Dates</option>
+                    <option value="today">Today</option>
+                    <option value="single">Single Date</option>
+                    <option value="range">Date Range</option>
+                  </select>
+
+                  {taskDateMode === 'single' && (
+                    <Input
+                      type="date"
+                      value={taskSingleDate}
+                      onChange={(e) => setTaskSingleDate(e.target.value)}
+                      className={`h-9 w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                      data-testid="task-approval-date-single"
+                    />
+                  )}
+                  {taskDateMode === 'range' && (
+                    <>
+                      <Input
+                        type="date"
+                        value={taskDateFrom}
+                        onChange={(e) => setTaskDateFrom(e.target.value)}
+                        className={`h-9 w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="task-approval-date-from"
+                      />
+                      <Input
+                        type="date"
+                        value={taskDateTo}
+                        onChange={(e) => setTaskDateTo(e.target.value)}
+                        className={`h-9 w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="task-approval-date-to"
+                      />
+                    </>
+                  )}
+                  {taskDateMode !== 'all' && (
+                    <button
+                      onClick={() => { setTaskDateMode('all'); setTaskSingleDate(''); setTaskDateFrom(''); setTaskDateTo(''); }}
+                      className={`text-xs ${textSecondary} hover:underline`}
+                      data-testid="task-approval-date-reset"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className={`rounded-xl border ${borderColor} ${bgCard} overflow-hidden`}>
@@ -833,7 +922,11 @@ export default function ApprovalsPage({ embedded = false }) {
                     <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
                       {filteredTaskApprovals.length === 0 ? (
                         <tr>
-                          <td colSpan={12} className={`px-2 py-8 text-center ${textSecondary}`}>No approvals in this category</td>
+                          <td colSpan={12} className={`px-2 py-8 text-center ${textSecondary}`}>
+                            {taskDateMode === 'all'
+                              ? 'No approvals in this category'
+                              : 'No approvals requested in the selected date range'}
+                          </td>
                         </tr>
                       ) : filteredTaskApprovals.map((task, idx) => {
                         const req = task.approval_request || {};
