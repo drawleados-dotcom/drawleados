@@ -37,6 +37,17 @@ const priorityColors = {
 
 // Solid dot color per priority — red/yellow/green — shown next to the task
 // name in the list so priority is visible without opening the task.
+// Whole-row wash per priority. Deliberately very faint - it has to read as a
+// tint behind normal text at a glance without fighting the status badges or
+// hurting contrast, so these are a few percent of the same red/amber/green as
+// the dots. Applied as an inline style rather than a Tailwind class because
+// the class name would be built at runtime and JIT would never emit it.
+const priorityRowColors = {
+  high:   { light: '#fef4f4', dark: 'rgba(239, 68, 68, 0.07)' },
+  medium: { light: '#fefbf0', dark: 'rgba(245, 158, 11, 0.07)' },
+  low:    { light: '#f2fdf7', dark: 'rgba(16, 185, 129, 0.07)' },
+};
+
 const priorityDotColors = {
   high: '#ef4444',
   medium: '#f59e0b',
@@ -205,7 +216,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [formData, setFormData] = useState({
     task_name: '',
     description: '',
-    priority: 'medium',
+    priority: '',
     type: '',          // empty → forces user to pick (required)
     assigned_to: '',
     due_date: new Date().toISOString().slice(0, 10),
@@ -540,6 +551,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Task name is required');
       return;
     }
+    if (!formData.priority) {
+      toast.error('Please pick a Priority for this task');
+      return;
+    }
     // Department is mandatory for every task — My Tasks and Assign to Team
     // alike — so every task is always traceable to a department. Meetings
     // (team/client) are the exception: they aren't project work and don't
@@ -612,6 +627,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     if (submitting) return;
     if (!formData.task_name.trim()) {
       toast.error('Task name is required');
+      return;
+    }
+    if (!formData.priority) {
+      toast.error('Please pick a Priority for this task');
       return;
     }
     if (!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase())) {
@@ -1228,7 +1247,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     setFormData({
       task_name: '',
       description: '',
-      priority: 'medium',
+      priority: '',
       type: '',
       assigned_to: '',
       due_date: new Date().toISOString().slice(0, 10),
@@ -1272,7 +1291,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     setFormData({
       task_name: task.task_name,
       description: task.description || '',
-      priority: task.priority,
+      priority: task.priority || '',
       type: task.type || 'general',
       assigned_to: task.assigned_to || '',
       due_date: task.due_date || '',
@@ -2399,9 +2418,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       </td>
                     </tr>
                   ) : displayTasks.map(task => (
-                    <tr 
-                      key={task.task_id} 
-                      className={`${bgCard} hover:${bgSecondary} cursor-pointer transition-colors`}
+                    <tr
+                      key={task.task_id}
+                      className={`cursor-pointer transition-all ${isDark ? 'hover:brightness-125' : 'hover:brightness-95'}`}
+                      style={{
+                        backgroundColor: (priorityRowColors[task.priority] || {})[isDark ? 'dark' : 'light']
+                          || (isDark ? '#18181b' : '#ffffff'),
+                      }}
+                      data-testid={`task-row-${task.task_id}`}
                       onClick={() => { setViewingTask(task); setShowTaskDetailModal(true); }}
                     >
                       <td className={`px-2 py-3`}>
@@ -2765,10 +2789,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className={textPrimary}>Priority</Label>
+                        <Label className={textPrimary}>Priority <span className="text-red-500">*</span></Label>
                         <Select value={formData.priority} onValueChange={(v) => setFormData(prev => ({ ...prev, priority: v }))}>
-                          <SelectTrigger className={`${bgSecondary} border ${borderColor}`}>
-                            <SelectValue />
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor}`} data-testid="create-task-priority">
+                            <SelectValue placeholder="Select priority…" />
                           </SelectTrigger>
                           <SelectContent className={bgCard}>
                             <SelectItem value="high">High</SelectItem>
