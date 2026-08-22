@@ -2106,15 +2106,6 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                 <SelectItem value="none">No sort</SelectItem>
               </SelectContent>
             </Select>
-
-            <Button
-              onClick={() => setShowCreateModal(true)}
-              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-9 flex-shrink-0"
-              data-testid="create-task-btn"
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
-              Create Task
-            </Button>
           </div>
         </div>
 
@@ -2226,6 +2217,18 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   </span>
                 )}
               </button>
+
+              {/* Create Task — sits right after Meetings so it's always
+                  visible with the department pills instead of trailing off
+                  the end of the (horizontally-scrolling) filter toolbar. */}
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-xl h-9 px-4"
+                data-testid="create-task-btn"
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                Create Task
+              </Button>
             </div>
           );
         })()}
@@ -2378,7 +2381,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               <table className="w-full table-fixed">
                 <thead className={bgSecondary}>
                   <tr>
-                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[18%]`}>Task</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[22%]`}>Task</th>
                     <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>Status</th>
                     <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[7%]`}>Category</th>
                     <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[11%]`}>Created / Assigned</th>
@@ -2388,7 +2391,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>Start Time</th>
                     <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[6%]`}>End Time</th>
                     <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[8%]`}>Timer</th>
-                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[21%]`}>Actions</th>
+                    <th className={`px-2 py-3 text-left text-xs font-medium ${textSecondary} uppercase whitespace-nowrap w-[17%]`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-[#27272a]' : 'divide-gray-200'}`}>
