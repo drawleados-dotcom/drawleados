@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2, Search } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2, Search, Building2, FileText, Layers, LayoutGrid, Boxes, ShieldQuestion } from 'lucide-react';
 import { buildErpPrompt } from '../../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
 import ErpLocationPicker from './ErpLocationPicker';
@@ -236,12 +236,16 @@ export default function ProjectErpUsersTab({
   const subDepartmentName = (deptId, subDeptId) => subDepartmentsOf(deptId).find(sd => sd.id === subDeptId)?.name || '';
   const tasks = project?.tasks || [];
 
-  // Summary-card date filter + click-to-filter status, both applied to every
-  // task list this tab renders (per-page Tasks badge + the expandable table).
+  // Summary-card filters, all applied to every task list this tab renders
+  // (per-page Tasks badge + the expandable table): date range, task status
+  // (All/Todo/Pending/Approval/Completed), hierarchy depth (Department/
+  // Users/Pages/Sub Tabs/Ultra Sub Tabs/Ultra Tabs), and task type.
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all | today | week | month | custom
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
-  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // all | pending | completed | todo_created | todo_assigned
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // all | todo | pending | approval | completed
+  const [taskLevelFilter, setTaskLevelFilter] = useState('all'); // all | user | page | sub_tab | ultra_sub_tab | ultra_tab
+  const [taskTypeFilter, setTaskTypeFilter] = useState('all'); // all | one of ERP_TASK_TYPE_OPTIONS
 
   const inTaskDateRange = (dueDateStr) => {
     if (taskDateFilter === 'all') return true;
@@ -274,16 +278,32 @@ export default function ProjectErpUsersTab({
     }
     return true;
   };
-  const isTodo = (t) => (t.status || 'pending') === 'pending' || t.status === 'in_progress';
+  // Todo = not started yet, Pending = started but not done, Approval =
+  // has an open approval_request regardless of its own status (mirrors the
+  // Approvals tab's own definition), Completed = done.
   const matchesStatusFilter = (t) => {
     if (taskStatusFilter === 'all') return true;
-    if (taskStatusFilter === 'pending') return t.status === 'pending';
+    if (taskStatusFilter === 'todo') return (t.status || 'pending') === 'pending';
+    if (taskStatusFilter === 'pending') return t.status === 'in_progress';
+    if (taskStatusFilter === 'approval') return t.approval_request?.status === 'pending';
     if (taskStatusFilter === 'completed') return t.status === 'completed';
-    if (taskStatusFilter === 'todo_created') return isTodo(t) && t.created_by === currentUser?.user_id;
-    if (taskStatusFilter === 'todo_assigned') return isTodo(t) && t.assigned_to === currentUser?.user_id;
     return true;
   };
-  const matchesTaskFilters = (t) => inTaskDateRange(t.due_date) && matchesStatusFilter(t);
+  // A task's depth is however far into Page > Sub Tab > Ultra Sub Tab >
+  // Ultra Tab it's tagged — "user" means tagged to a user but no page yet.
+  const matchesLevelFilter = (t) => {
+    if (taskLevelFilter === 'all') return true;
+    if (taskLevelFilter === 'user') return !t.erp_page_id;
+    if (taskLevelFilter === 'page') return !!t.erp_page_id && !t.erp_sub_tab_id;
+    if (taskLevelFilter === 'sub_tab') return !!t.erp_sub_tab_id && !t.erp_ultra_sub_tab_id;
+    if (taskLevelFilter === 'ultra_sub_tab') return !!t.erp_ultra_sub_tab_id && !t.erp_ultra_tab_id;
+    if (taskLevelFilter === 'ultra_tab') return !!t.erp_ultra_tab_id;
+    return true;
+  };
+  const matchesTypeFilter = (t) => taskTypeFilter === 'all' || t.erp_task_type === taskTypeFilter;
+  const matchesTaskFilters = (t) => (
+    inTaskDateRange(t.due_date) && matchesStatusFilter(t) && matchesLevelFilter(t) && matchesTypeFilter(t)
+  );
 
   // Each task shows in exactly one place — its most specific tagged level —
   // rather than bubbling up into every ancestor's list too. A task tagged
@@ -344,16 +364,30 @@ export default function ProjectErpUsersTab({
     .flatMap(u => (u.pages || []).map(pg => ({ ...pg, _userId: u.id })))
     .filter(pg => pageFilter === 'all' || pg.id === pageFilter);
 
-  // Summary-card counts — scoped to whatever Department/User/Page filters are
-  // active above, with just the date filter applied (the status cards below
-  // are themselves the click-to-narrow-by-status control, via taskStatusFilter).
-  const scopedPageIds = new Set(filteredPages.map(pg => pg.id));
-  const scopedDateFilteredTasks = tasks.filter(t => scopedPageIds.has(t.erp_page_id) && inTaskDateRange(t.due_date));
-  const totalTasksCount = scopedDateFilteredTasks.length;
-  const pendingTasksCount = scopedDateFilteredTasks.filter(t => t.status === 'pending').length;
-  const completedTasksCount = scopedDateFilteredTasks.filter(t => t.status === 'completed').length;
-  const todoCreatedCount = scopedDateFilteredTasks.filter(t => isTodo(t) && t.created_by === currentUser?.user_id).length;
-  const todoAssignedCount = scopedDateFilteredTasks.filter(t => isTodo(t) && t.assigned_to === currentUser?.user_id).length;
+  // Summary-card counts — scoped to whatever Department/User/Page dropdown
+  // filters are active above, plus date + task-type. Each row's own cards
+  // are computed WITHOUT that row's own filter dimension (so every bucket in
+  // the row stays visible to jump between) but WITH the other row's active
+  // filter — the same faceted-search pattern the dropdowns already use.
+  const scopedUserIds = new Set(filteredErpUsers.map(u => u.id));
+  const summaryBaseTasks = tasks.filter(t => (
+    scopedUserIds.has(t.erp_user_id) && inTaskDateRange(t.due_date) && matchesTypeFilter(t)
+  ));
+
+  const levelCardTasks = summaryBaseTasks.filter(matchesStatusFilter);
+  const deptLevelCount = levelCardTasks.length;
+  const userLevelCount = levelCardTasks.filter(t => !t.erp_page_id).length;
+  const pageLevelCount = levelCardTasks.filter(t => t.erp_page_id && !t.erp_sub_tab_id).length;
+  const subTabLevelCount = levelCardTasks.filter(t => t.erp_sub_tab_id && !t.erp_ultra_sub_tab_id).length;
+  const ultraSubTabLevelCount = levelCardTasks.filter(t => t.erp_ultra_sub_tab_id && !t.erp_ultra_tab_id).length;
+  const ultraTabLevelCount = levelCardTasks.filter(t => !!t.erp_ultra_tab_id).length;
+
+  const statusCardTasks = summaryBaseTasks.filter(matchesLevelFilter);
+  const allTasksCount = statusCardTasks.length;
+  const todoTasksCount = statusCardTasks.filter(t => (t.status || 'pending') === 'pending').length;
+  const pendingTasksCount = statusCardTasks.filter(t => t.status === 'in_progress').length;
+  const approvalTasksCount = statusCardTasks.filter(t => t.approval_request?.status === 'pending').length;
+  const completedTasksCount = statusCardTasks.filter(t => t.status === 'completed').length;
 
   const subTabOptions = filteredPages.flatMap(pg => (pg.sub_tabs || []).map(st => ({
     key: `${pg.id}::${st.id}`,
@@ -919,37 +953,23 @@ export default function ProjectErpUsersTab({
         </p>
       </div>
 
-      {/* Task summary cards — scoped to the Department/User/Page filters below, date-filterable */}
+      {/* Task summary cards — scoped to the Department/User/Page filters below,
+          date- and task-type-filterable. Two rows: hierarchy depth (how deep
+          tasks are tagged) and status. Every card is a toggle filter. */}
       <div className="space-y-2">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {summaryCard('Total Tasks', totalTasksCount, ListChecks, 'text-[#6366f1]', taskStatusFilter === 'all', () => setTaskStatusFilter('all'))}
-          <div className={`${bgCard} border ${(taskStatusFilter === 'todo_created' || taskStatusFilter === 'todo_assigned') ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : borderColor} rounded-lg p-3`} data-testid="erp-task-summary-to-do">
-            <div className="flex items-center justify-between">
-              <p className={`text-xs ${textSecondary}`}>To-do</p>
-              <ListTodo className="h-4 w-4 text-amber-400" />
-            </div>
-            <div className="flex items-center gap-3 mt-1">
-              <button
-                type="button"
-                onClick={() => setTaskStatusFilter(taskStatusFilter === 'todo_created' ? 'all' : 'todo_created')}
-                className={`text-left ${taskStatusFilter === 'todo_created' ? 'text-[#6366f1]' : textPrimary}`}
-                data-testid="erp-task-summary-todo-created"
-              >
-                <span className="text-xl font-bold">{todoCreatedCount}</span>
-                <span className={`text-[10px] block uppercase ${textSecondary}`}>Created</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTaskStatusFilter(taskStatusFilter === 'todo_assigned' ? 'all' : 'todo_assigned')}
-                className={`text-left ${taskStatusFilter === 'todo_assigned' ? 'text-[#6366f1]' : textPrimary}`}
-                data-testid="erp-task-summary-todo-assigned"
-              >
-                <span className="text-xl font-bold">{todoAssignedCount}</span>
-                <span className={`text-[10px] block uppercase ${textSecondary}`}>Assigned</span>
-              </button>
-            </div>
-          </div>
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+          {summaryCard('Department', deptLevelCount, Building2, 'text-[#6366f1]', taskLevelFilter === 'all', () => setTaskLevelFilter('all'))}
+          {summaryCard('Users', userLevelCount, UsersIcon, 'text-sky-400', taskLevelFilter === 'user', () => setTaskLevelFilter(taskLevelFilter === 'user' ? 'all' : 'user'))}
+          {summaryCard('Pages', pageLevelCount, FileText, 'text-violet-400', taskLevelFilter === 'page', () => setTaskLevelFilter(taskLevelFilter === 'page' ? 'all' : 'page'))}
+          {summaryCard('Sub Tabs', subTabLevelCount, Layers, 'text-amber-400', taskLevelFilter === 'sub_tab', () => setTaskLevelFilter(taskLevelFilter === 'sub_tab' ? 'all' : 'sub_tab'))}
+          {summaryCard('Ultra Sub Tabs', ultraSubTabLevelCount, LayoutGrid, 'text-pink-400', taskLevelFilter === 'ultra_sub_tab', () => setTaskLevelFilter(taskLevelFilter === 'ultra_sub_tab' ? 'all' : 'ultra_sub_tab'))}
+          {summaryCard('Ultra Tabs', ultraTabLevelCount, Boxes, 'text-emerald-400', taskLevelFilter === 'ultra_tab', () => setTaskLevelFilter(taskLevelFilter === 'ultra_tab' ? 'all' : 'ultra_tab'))}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {summaryCard('All', allTasksCount, ListChecks, 'text-[#6366f1]', taskStatusFilter === 'all', () => setTaskStatusFilter('all'))}
+          {summaryCard('Todo', todoTasksCount, ListTodo, 'text-amber-400', taskStatusFilter === 'todo', () => setTaskStatusFilter(taskStatusFilter === 'todo' ? 'all' : 'todo'))}
           {summaryCard('Pending', pendingTasksCount, Clock, 'text-yellow-400', taskStatusFilter === 'pending', () => setTaskStatusFilter(taskStatusFilter === 'pending' ? 'all' : 'pending'))}
+          {summaryCard('Approval', approvalTasksCount, ShieldQuestion, 'text-orange-400', taskStatusFilter === 'approval', () => setTaskStatusFilter(taskStatusFilter === 'approval' ? 'all' : 'approval'))}
           {summaryCard('Completed', completedTasksCount, CheckCircle2, 'text-emerald-400', taskStatusFilter === 'completed', () => setTaskStatusFilter(taskStatusFilter === 'completed' ? 'all' : 'completed'))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -984,10 +1004,19 @@ export default function ProjectErpUsersTab({
               />
             </>
           )}
-          {(taskDateFilter !== 'all' || taskStatusFilter !== 'all') && (
+          <Select value={taskTypeFilter} onValueChange={setTaskTypeFilter}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[170px]`} data-testid="erp-task-type-filter">
+              <SelectValue placeholder="All Task Types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Task Types</SelectItem>
+              {ERP_TASK_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {(taskDateFilter !== 'all' || taskStatusFilter !== 'all' || taskLevelFilter !== 'all' || taskTypeFilter !== 'all') && (
             <button
               type="button"
-              onClick={() => { setTaskDateFilter('all'); setTaskDateFrom(''); setTaskDateTo(''); setTaskStatusFilter('all'); }}
+              onClick={() => { setTaskDateFilter('all'); setTaskDateFrom(''); setTaskDateTo(''); setTaskStatusFilter('all'); setTaskLevelFilter('all'); setTaskTypeFilter('all'); }}
               className={`text-xs ${textSecondary} hover:${textPrimary} inline-flex items-center gap-1`}
               data-testid="erp-task-filter-clear"
             >
