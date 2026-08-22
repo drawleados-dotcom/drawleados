@@ -183,18 +183,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id, isHeadOfOperations]);
 
-  // Super Admin lands on the Management department by default (instead of
-  // the unfiltered "all" view spanning Management + Operation) so their most
-  // relevant task set is front and center right after a page load/refresh —
-  // fires once per login, doesn't fight a later manual switch to Operation.
+  // Super Admin's My Tasks is scoped to Management only — force the
+  // department filter to 'management' whenever it drifts (right after
+  // login, or after visiting Assign to Team and switching back), so My
+  // Tasks only ever shows Management's own sub-department tabs, never the
+  // other department tabs.
   useEffect(() => {
     if (!user) return;
     const role = (user.role || '').toLowerCase();
-    if (role === 'super_admin') {
-      setFilters(prev => (prev.department === 'all' ? { ...prev, department: 'management' } : prev));
+    if (role === 'super_admin' && mainTab === 'assigned_to_me' && filters.department !== 'management') {
+      setFilters(prev => ({ ...prev, department: 'management', subDepartment: 'all' }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id]);
+  }, [user?.user_id, mainTab, filters.department]);
 
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -405,10 +406,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     return visibleDeptCategories;
   }, [visibleDeptCategories, mainTab, user?.role]);
 
-  // Reset the Technology/Marketing scope whenever the main tab changes so
-  // it never bleeds stale state between My Tasks / Assign to Team.
+  // Reset the Technology/Marketing scope — and any department/sub-department
+  // drill-down — whenever the main tab changes, so Assign to Team always
+  // opens on the clean "All" default instead of carrying over a department
+  // (e.g. Management) picked while on a different tab, which would otherwise
+  // leave that department's sub-tab row showing with no matching pill above it.
   useEffect(() => {
     setOpGroupFilter('all');
+    setFilters(prev => ({ ...prev, department: 'all', subDepartment: 'all' }));
   }, [mainTab]);
 
   const usersById = useMemo(() => {
@@ -2310,10 +2315,58 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             );
           }
 
-          // My Tasks — flat department pill row, unchanged.
+          // Super Admin's My Tasks is scoped to Management only (the effect
+          // above pins filters.department to 'management' here) — skip the
+          // flat department row entirely and go straight to Management's
+          // own sub-department pills, rendered by the "Sub Department
+          // Sub-Tabs" block below.
+          if ((user?.role || '').toLowerCase() === 'super_admin') {
+            return (
+              <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
+                {/* Meetings sub-tab — distinct colored pill */}
+                <button
+                  onClick={() => setMeetingsSubActive(true)}
+                  data-testid="dept-subtab-meetings"
+                  className={`relative px-4 py-2 rounded-xl text-sm transition-all border-2 ${
+                    meetingsSubActive
+                      ? 'bg-[#ec4899] text-white border-transparent shadow-sm'
+                      : `${bgCard} text-[#ec4899] border-[#ec4899]/40 hover:bg-[#ec4899]/10`
+                  }`}
+                >
+                  <Video className="h-3.5 w-3.5 inline -mt-0.5 mr-1" />
+                  Meetings
+                  {meetingsCount > 0 && !meetingsSubActive && (
+                    <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ec4899] text-white text-[10px] font-bold px-1">
+                      {meetingsCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Create Task */}
+                <Button
+                  onClick={() => setShowCreateModal(true)}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-xl h-9 px-4"
+                  data-testid="create-task-btn"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Create Task
+                </Button>
+              </div>
+            );
+          }
+
+          // My Tasks (everyone else) — flat department pill row. Management
+          // sorts first so it stays a visible, easy-to-find tab instead of
+          // trailing behind every other department (it's a custom dept doc,
+          // so the backend always appends it after the built-in ones).
+          const myTasksDepts = [...visibleDeptCategoriesForBar].sort((a, b) => {
+            if (a.dept_key === 'management') return -1;
+            if (b.dept_key === 'management') return 1;
+            return 0;
+          });
           return (
             <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
-              {visibleDeptCategoriesForBar.map(d => {
+              {myTasksDepts.map(d => {
                 // A task marked "all" (Select All) counts toward every department's badge too.
                 const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
                 const isActive = filters.department === d.dept_key && !meetingsSubActive;
