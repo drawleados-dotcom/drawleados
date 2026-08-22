@@ -1876,6 +1876,17 @@ export default function ProjectsPanel({
               <option value="range">Date Range</option>
             </select>
 
+            {hasErpDept && (
+              <SearchableSelect
+                value={taskWorkflowFilter}
+                onChange={setTaskWorkflowFilter}
+                options={[{ value: 'all', label: 'All Workflows' }, ...(selectedProject.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))]}
+                searchPlaceholder="Search workflows..."
+                className={`h-9 w-[180px] px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm ml-auto`}
+                data-testid="project-filter-erp-workflow"
+              />
+            )}
+
             {taskDateFilter === 'single' && (
               <Input
                 type="date"
@@ -2010,14 +2021,6 @@ export default function ProjectsPanel({
                 <option value="all">All Ultra Tab</option>
                 {erpFilterUltraTabs.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
-              <SearchableSelect
-                value={taskWorkflowFilter}
-                onChange={setTaskWorkflowFilter}
-                options={[{ value: 'all', label: 'All Workflows' }, ...(selectedProject.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))]}
-                searchPlaceholder="Search workflows..."
-                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-                data-testid="project-filter-erp-workflow"
-              />
             </div>
           )}
           </div>
