@@ -122,6 +122,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [editingTimeRow, setEditingTimeRow] = useState(null); // task_id currently in row-edit mode (legacy, no longer used for inline)
   const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}} (legacy)
   const [editTimeModal, setEditTimeModal] = useState(null); // { task, sH, sM, sP, eH, eM, eP }
+  // Completion summary — clicking Complete first shows the task's worked/break
+  // timeline for a last look, and only the confirm button in it completes.
+  const [completeSummaryTask, setCompleteSummaryTask] = useState(null);
+  const [completingTask, setCompletingTask] = useState(false);
   // Approval request popup
   const [approvalTask, setApprovalTask] = useState(null); // task currently being submitted for approval
   const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', note: '', work_link: '' });
@@ -777,6 +781,76 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     } catch (error) {
       toast.error(error.response?.data?.detail || `Failed to ${action} timer`);
     }
+  };
+
+  // Reconstruct a task's work/break timeline from its timer sessions. A break
+  // isn't stored anywhere: it's simply the gap between one session ending and
+  // the next one starting, which is exactly what pausing the timer leaves
+  // behind. A session with no `end` is still running, so it's measured to now.
+  const buildTimeHistory = (task) => {
+    const sessions = (task?.time_tracking?.sessions || [])
+      .filter(s => s?.start)
+      .slice()
+      .sort((a, b) => new Date(a.start) - new Date(b.start));
+
+    const entries = [];
+    let workedSeconds = 0;
+    let breakSeconds = 0;
+
+    sessions.forEach((s, i) => {
+      const running = !s.end;
+      const seconds = running
+        ? Math.max(0, Math.round((Date.now() - new Date(s.start).getTime()) / 1000))
+        : Number(s.duration_seconds || 0);
+      workedSeconds += seconds;
+      entries.push({ kind: 'work', start: s.start, end: s.end, seconds, running });
+
+      const next = sessions[i + 1];
+      if (s.end && next?.start) {
+        const gap = Math.max(0, Math.round((new Date(next.start) - new Date(s.end)) / 1000));
+        if (gap > 0) {
+          breakSeconds += gap;
+          entries.push({ kind: 'break', start: s.end, end: next.start, seconds: gap });
+        }
+      }
+    });
+
+    const last = sessions[sessions.length - 1];
+    return {
+      entries,
+      workedSeconds,
+      breakSeconds,
+      start: sessions[0]?.start || null,
+      end: last && last.end ? last.end : null,
+      running: !!(last && !last.end),
+      breakCount: entries.filter(e => e.kind === 'break').length,
+    };
+  };
+
+  // Absolute clock time for the completion summary — date + time, IST.
+  const fmtStamp = (iso) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+    } catch { return '—'; }
+  };
+
+  const fmtClock = (iso) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    } catch { return '—'; }
+  };
+
+  // People paste whole bug reports in as the task title, which blows the row
+  // height out and pushes everything else off screen. The table shows the
+  // first 10 words; the full text is still in the tooltip and the detail popup.
+  const truncateWords = (text, limit = 10) => {
+    const words = String(text || '').trim().split(/\s+/);
+    if (words.length <= limit) return String(text || '');
+    return words.slice(0, limit).join(' ') + '...';
   };
 
   // Format seconds to readable time
@@ -1835,7 +1909,31 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
               </>
             )}
 
-            {/* Department filter is now rendered as sub-tabs below the toolbar */}
+            {/* Department filter — lists ONLY the departments this user's
+                designation actually covers (the same set the sub-tab pills
+                below render), so nobody can filter by a department whose
+                tasks they'd never be shown. Shares `filters.department` with
+                those pills, so picking one here highlights the matching pill
+                and vice versa. */}
+            <Select
+              value={filters.department}
+              onValueChange={(v) => {
+                setOpGroupActive(false);
+                setMeetingsSubActive(false);
+                setFilters({ ...filters, department: v, subDepartment: 'all', category: 'all', project: 'all' });
+              }}
+            >
+              <SelectTrigger className={`h-9 w-[160px] ${bgSecondary} border ${borderColor}`} data-testid="filter-department">
+                <Building2 className="h-3.5 w-3.5 mr-1 opacity-60" />
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent className={bgCard}>
+                <SelectItem value="all">All Departments</SelectItem>
+                {visibleDeptCategoriesForBar.map(d => (
+                  <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
             {/* Project filter */}
             <Select value={filters.project} onValueChange={(v) => setFilters({...filters, project: v})}>
@@ -2289,7 +2387,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             title={`Priority: ${task.priority === 'high' ? 'Urgent' : task.priority === 'low' ? 'Low' : 'Medium'}`}
                             data-testid={`priority-dot-${task.task_id}`}
                           />
-                          {task.task_name}
+                          <span className="line-clamp-2" title={task.task_name}>
+                            {truncateWords(task.task_name, 10)}
+                          </span>
                         </div>
                         {task.description && (
                           <div className={`text-xs ${textSecondary} truncate max-w-xs`}>{task.description}</div>
@@ -2531,9 +2631,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                             <Button
                               size="sm"
                               className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
-                              onClick={(e) => { e.stopPropagation(); handleStatusChange(task.task_id, 'completed'); }}
+                              onClick={(e) => { e.stopPropagation(); setCompleteSummaryTask(task); }}
                               data-testid={`complete-btn-${task.task_id}`}
-                              title="Mark this task complete yourself"
+                              title="Review this task's time, then mark it complete"
                             >
                               <Check className="h-3 w-3 mr-1" /> Complete
                             </Button>
@@ -3884,6 +3984,155 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             </Card>
           </div>
         )}
+
+        {/* Completion summary — opened by the Complete button. Shows where the
+            task's time actually went (project, start → end, every work stretch
+            and every break) before it's signed off, since completing is the
+            point where that record stops changing. */}
+        {completeSummaryTask && (() => {
+          const t = completeSummaryTask;
+          const h = buildTimeHistory(t);
+          const spanSeconds = h.start
+            ? Math.max(0, Math.round(((h.end ? new Date(h.end) : new Date()) - new Date(h.start)) / 1000))
+            : 0;
+          return (
+            <div
+              className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
+              onClick={() => !completingTask && setCompleteSummaryTask(null)}
+              data-testid="complete-summary-modal"
+            >
+              <div
+                className={`w-full max-w-lg ${bgCard} border ${borderColor} rounded-xl shadow-xl max-h-[90vh] flex flex-col`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className={`p-5 border-b ${borderColor} flex items-start justify-between gap-3`}>
+                  <div className="min-w-0">
+                    <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>
+                      {t.project_name || 'No project'}
+                    </p>
+                    <h3 className={`text-base font-semibold ${textPrimary} break-words`} data-testid="complete-summary-task-name">
+                      {t.task_name}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => !completingTask && setCompleteSummaryTask(null)}
+                    className={textSecondary}
+                    data-testid="complete-summary-close"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="p-5 space-y-4 overflow-y-auto">
+                  {/* Start → End */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`}>
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Started</p>
+                      <p className={`text-sm ${textPrimary}`} data-testid="complete-summary-start">{fmtStamp(h.start)}</p>
+                    </div>
+                    <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`}>
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Ended</p>
+                      <p className={`text-sm ${textPrimary}`} data-testid="complete-summary-end">
+                        {h.running ? 'Still running' : fmtStamp(h.end)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Totals */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`}>
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Worked</p>
+                      <p className="text-lg font-bold text-[#10b981]" data-testid="complete-summary-worked">
+                        {formatDuration(h.workedSeconds)}
+                      </p>
+                    </div>
+                    <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`}>
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Break</p>
+                      <p className="text-lg font-bold text-[#f59e0b]" data-testid="complete-summary-break">
+                        {formatDuration(h.breakSeconds)}
+                      </p>
+                    </div>
+                    <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-3`}>
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>Total Span</p>
+                      <p className={`text-lg font-bold ${textPrimary}`} data-testid="complete-summary-span">
+                        {formatDuration(spanSeconds)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Work / break history */}
+                  <div>
+                    <p className={`text-xs font-medium ${textSecondary} mb-2`}>
+                      Time History
+                      {h.breakCount > 0 && (
+                        <span className="ml-1">· {h.breakCount} break{h.breakCount === 1 ? '' : 's'}</span>
+                      )}
+                    </p>
+                    {h.entries.length === 0 ? (
+                      <div className={`rounded-lg border ${borderColor} ${bgSecondary} p-4 text-center`}>
+                        <p className={`text-xs ${textSecondary}`}>
+                          The timer was never started on this task, so there is no time history to show.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-56 overflow-y-auto" data-testid="complete-summary-history">
+                        {h.entries.map((e, idx) => (
+                          <div
+                            key={idx}
+                            className={`flex items-center justify-between gap-3 rounded-lg border ${borderColor} ${bgSecondary} px-3 py-2`}
+                            data-testid={`complete-summary-entry-${idx}`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {e.kind === 'work' ? (
+                                <Play className="h-3.5 w-3.5 text-[#10b981] flex-shrink-0" />
+                              ) : (
+                                <Pause className="h-3.5 w-3.5 text-[#f59e0b] flex-shrink-0" />
+                              )}
+                              <span className={`text-xs ${textPrimary}`}>
+                                {e.kind === 'work' ? 'Worked' : 'Break'}
+                              </span>
+                              <span className={`text-xs ${textSecondary} truncate`}>
+                                {fmtClock(e.start)} → {e.running ? 'now' : fmtClock(e.end)}
+                              </span>
+                            </div>
+                            <span className={`text-xs font-medium flex-shrink-0 ${e.kind === 'work' ? 'text-[#10b981]' : 'text-[#f59e0b]'}`}>
+                              {formatDuration(e.seconds)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={`p-5 border-t ${borderColor} flex justify-end gap-2`}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCompleteSummaryTask(null)}
+                    disabled={completingTask}
+                    data-testid="complete-summary-cancel"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="bg-[#10b981] hover:bg-[#059669] text-white"
+                    disabled={completingTask}
+                    onClick={async () => {
+                      setCompletingTask(true);
+                      await handleStatusChange(t.task_id, 'completed');
+                      setCompletingTask(false);
+                      setCompleteSummaryTask(null);
+                    }}
+                    data-testid="complete-summary-confirm"
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" />
+                    {completingTask ? 'Completing…' : 'Mark Complete'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Edit Time mini popup — clean Hours / Minutes / AM-PM inputs */}
         {editTimeModal && (
