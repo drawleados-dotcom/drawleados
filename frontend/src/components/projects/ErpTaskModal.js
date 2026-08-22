@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { SearchableSelect } from '../ui/searchable-select';
 import { ListChecks, X } from 'lucide-react';
 import { buildErpPrompt } from '../../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
@@ -45,6 +46,8 @@ export default function ErpTaskModal({
     assigned_to: currentUser?.user_id || '',
     due_date: new Date().toISOString().slice(0, 10),
     work_link: '',
+    workflow_id: '',
+    workflow_name: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -62,6 +65,8 @@ export default function ErpTaskModal({
       project_name: project.name,
       ...location,
       erp_task_type: draft.erp_task_type || '',
+      workflow_id: draft.workflow_id || null,
+      workflow_name: draft.workflow_name || null,
     };
     try {
       if (taskId) {
@@ -136,6 +141,22 @@ export default function ErpTaskModal({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div>
+            <p className={`text-xs font-medium ${textSecondary} mb-1`}>Workflow</p>
+            <SearchableSelect
+              value={draft.workflow_id}
+              onChange={(id) => {
+                const w = (project?.erp_workflow || []).find(x => x.id === id);
+                setDraft(d => ({ ...d, workflow_id: id, workflow_name: w?.name || '' }));
+              }}
+              options={(project?.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))}
+              placeholder="— No workflow —"
+              searchPlaceholder="Search workflows..."
+              emptyText="No workflows yet — add one from the Workflow tab"
+              className={`w-full h-9 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+              data-testid="erp-quicktask-form-workflow"
+            />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

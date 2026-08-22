@@ -54,6 +54,8 @@ class TaskCreate(BaseModel):
     erp_task_type: Optional[str] = None      # ERP dept only: New Module, New Feature, Correction
     sub_department_id: Optional[str] = None  # one of the selected department's sub_departments (e.g. Management)
     sub_department_name: Optional[str] = None
+    workflow_id: Optional[str] = None        # one of the project's erp_workflow rows
+    workflow_name: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     task_name: Optional[str] = None
@@ -88,6 +90,8 @@ class TaskUpdate(BaseModel):
     erp_task_type: Optional[str] = None
     sub_department_id: Optional[str] = None
     sub_department_name: Optional[str] = None
+    workflow_id: Optional[str] = None
+    workflow_name: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -315,6 +319,8 @@ async def create_task(task_data: TaskCreate, request: Request):
             "erp_task_type": task_data.erp_task_type,
             "sub_department_id": task_data.sub_department_id,
             "sub_department_name": task_data.sub_department_name,
+            "workflow_id": task_data.workflow_id,
+            "workflow_name": task_data.workflow_name,
             "created_by": user.user_id,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),

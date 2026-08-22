@@ -9,6 +9,7 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { SearchableSelect } from '../components/ui/searchable-select';
 import {
   Plus, Calendar, Clock, User, CheckCircle2, Circle, 
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
@@ -242,6 +243,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     erp_task_type: '',
     sub_department_id: '',
     sub_department_name: '',
+    workflow_id: '',
+    workflow_name: '',
   });
 
   const [projectsForTask, setProjectsForTask] = useState([]);
@@ -1273,6 +1276,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_task_type: '',
       sub_department_id: '',
       sub_department_name: '',
+      workflow_id: '',
+      workflow_name: '',
     });
     setShowCustomRecurrence(false);
   };
@@ -1317,6 +1322,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       erp_task_type: task.erp_task_type || '',
       sub_department_id: task.sub_department_id || '',
       sub_department_name: task.sub_department_name || '',
+      workflow_id: task.workflow_id || '',
+      workflow_name: task.workflow_name || '',
     });
     setEditingTask(task);
   };
@@ -2453,6 +2460,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               <Briefcase className="h-3 w-3 mr-1" />{task.project_name}
                             </Badge>
                           )}
+                          {task.workflow_id && task.workflow_name && (
+                            <Badge className="text-xs bg-[#ec4899]/20 text-[#ec4899] font-medium" data-testid={`task-workflow-badge-${task.task_id}`}>
+                              {task.workflow_name}
+                            </Badge>
+                          )}
                         </div>
                       </td>
                       <td className="px-2 py-3">
@@ -2976,7 +2988,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                           value={formData.project_id || 'none'}
                           onValueChange={(v) => {
                             if (v === 'none') {
-                              setFormData(prev => ({ ...prev, project_id: '', project_name: '', website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' }));
+                              setFormData(prev => ({ ...prev, project_id: '', project_name: '', website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '', workflow_id: '', workflow_name: '' }));
                             } else {
                               const proj = projectsForTask.find(p => p.project_id === v);
                               const projDepts = proj?.departments || [];
@@ -3005,6 +3017,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                                   erp_task_type: '',
                                   sub_department_id: deptUnchanged ? (prev.sub_department_id || defaultSubDept?.id || '') : (defaultSubDept?.id || ''),
                                   sub_department_name: deptUnchanged ? (prev.sub_department_name || defaultSubDept?.label || '') : (defaultSubDept?.label || ''),
+                                  workflow_id: '',
+                                  workflow_name: '',
                                 };
                               });
                             }
@@ -3059,6 +3073,26 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                         </Select>
                       </div>
                     </div>
+
+                    {formData.project_id && (
+                      <div>
+                        <Label className={textPrimary}>Workflow</Label>
+                        <SearchableSelect
+                          value={formData.workflow_id}
+                          onChange={(id) => {
+                            const proj = projectsForTask.find(p => p.project_id === formData.project_id);
+                            const w = (proj?.erp_workflow || []).find(x => x.id === id);
+                            setFormData(prev => ({ ...prev, workflow_id: id, workflow_name: w?.name || '' }));
+                          }}
+                          options={(projectsForTask.find(p => p.project_id === formData.project_id)?.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))}
+                          placeholder="— No workflow —"
+                          searchPlaceholder="Search workflows..."
+                          emptyText="No workflows yet for this project"
+                          className={`w-full h-9 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                          data-testid="create-task-workflow"
+                        />
+                      </div>
+                    )}
 
                     {getSelectableSubDepts(formData.department).length > 0 && (
                       <div>

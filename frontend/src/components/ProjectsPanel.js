@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -15,6 +15,7 @@ import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
 import ProjectErpDepartmentsTab from './projects/ProjectErpDepartmentsTab';
+import ProjectErpWorkflowTab from './projects/ProjectErpWorkflowTab';
 import ErpLocationPicker from './projects/ErpLocationPicker';
 import ErpTaskModal from './projects/ErpTaskModal';
 import ProjectScopesTab from './projects/ProjectScopesTab';
@@ -27,6 +28,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
+import { SearchableSelect } from './ui/searchable-select';
 import MeetingModal from './MeetingModal';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
@@ -172,6 +174,7 @@ export default function ProjectsPanel({
   const [taskErpUltraSubTabFilter, setTaskErpUltraSubTabFilter] = useState('all');
   const [taskErpUltraTabFilter, setTaskErpUltraTabFilter] = useState('all');
   const [taskErpTypeFilter, setTaskErpTypeFilter] = useState('all');
+  const [taskWorkflowFilter, setTaskWorkflowFilter] = useState('all');
 
   // Remember which project + inner tab was open so a hard refresh restores it
   // instead of dropping back to the bare project list.
@@ -1071,6 +1074,7 @@ export default function ProjectsPanel({
       if (taskErpUltraSubTabFilter !== 'all' && t.erp_ultra_sub_tab_id !== taskErpUltraSubTabFilter) return false;
       if (taskErpUltraTabFilter !== 'all' && t.erp_ultra_tab_id !== taskErpUltraTabFilter) return false;
       if (taskErpTypeFilter !== 'all' && t.erp_task_type !== taskErpTypeFilter) return false;
+      if (taskWorkflowFilter !== 'all' && t.workflow_id !== taskWorkflowFilter) return false;
       return true;
     };
     const matchesScopeFilters = (t) => matchesMemberAndDate(t) && matchesErpFilters(t);
@@ -1097,11 +1101,12 @@ export default function ProjectsPanel({
     const erpFilterUltraTabs = erpFilterSelectedUltraSubTab?.ultra_tabs || [];
     const hasErpDept = (selectedProject.departments || []).includes('erp');
     const erpFiltersActive = taskErpDeptFilter !== 'all' || taskErpUserFilter !== 'all' || taskErpPageFilter !== 'all'
-      || taskErpSubTabFilter !== 'all' || taskErpUltraSubTabFilter !== 'all' || taskErpUltraTabFilter !== 'all' || taskErpTypeFilter !== 'all';
+      || taskErpSubTabFilter !== 'all' || taskErpUltraSubTabFilter !== 'all' || taskErpUltraTabFilter !== 'all' || taskErpTypeFilter !== 'all'
+      || taskWorkflowFilter !== 'all';
     const resetErpTaskFilters = () => {
       setTaskErpDeptFilter('all'); setTaskErpUserFilter('all'); setTaskErpPageFilter('all');
       setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
-      setTaskErpTypeFilter('all');
+      setTaskErpTypeFilter('all'); setTaskWorkflowFilter('all');
     };
 
     const taskSummaryCard = (label, value, Icon, colorClass, active, onClick) => (
@@ -1521,6 +1526,7 @@ export default function ProjectsPanel({
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
             ...(isErpProject ? [{ id: 'erp_departments', label: 'Departments', icon: Building2 }] : []),
+            ...(isErpProject ? [{ id: 'erp_workflow', label: 'Workflow', icon: Workflow }] : []),
             ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
@@ -1673,6 +1679,20 @@ export default function ProjectsPanel({
 
         {projectInnerTab === 'erp_departments' && (
           <ProjectErpDepartmentsTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            canEdit={canManageProjects}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'erp_workflow' && (
+          <ProjectErpWorkflowTab
             project={selectedProject}
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
             canEdit={canManageProjects}
@@ -1990,6 +2010,14 @@ export default function ProjectsPanel({
                 <option value="all">All Ultra Tab</option>
                 {erpFilterUltraTabs.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
+              <SearchableSelect
+                value={taskWorkflowFilter}
+                onChange={setTaskWorkflowFilter}
+                options={[{ value: 'all', label: 'All Workflows' }, ...(selectedProject.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))]}
+                searchPlaceholder="Search workflows..."
+                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                data-testid="project-filter-erp-workflow"
+              />
             </div>
           )}
           </div>
@@ -2023,6 +2051,11 @@ export default function ProjectsPanel({
                         )}
                         {task.erp_task_type && (
                           <Badge className="bg-violet-500/20 text-violet-400 text-xs">{task.erp_task_type}</Badge>
+                        )}
+                        {task.workflow_id && task.workflow_name && (
+                          <Badge className="bg-[#ec4899]/20 text-[#ec4899] text-xs font-medium" data-testid={`task-workflow-badge-${task.task_id}`}>
+                            {task.workflow_name}
+                          </Badge>
                         )}
                       </div>
                       <p className={`text-xs ${textSecondary} mt-1`}>
