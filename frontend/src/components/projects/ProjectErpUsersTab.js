@@ -222,6 +222,8 @@ export default function ProjectErpUsersTab({
   const erpUsers = project?.erp_users || [];
   const erpDepartments = project?.erp_departments || [];
   const departmentName = (deptId) => erpDepartments.find(d => d.id === deptId)?.name || '';
+  const subDepartmentsOf = (deptId) => erpDepartments.find(d => d.id === deptId)?.sub_departments || [];
+  const subDepartmentName = (deptId, subDeptId) => subDepartmentsOf(deptId).find(sd => sd.id === subDeptId)?.name || '';
   const tasks = project?.tasks || [];
 
   // Summary-card date filter + click-to-filter status, both applied to every
@@ -276,11 +278,20 @@ export default function ProjectErpUsersTab({
   const tasksForPage = (pageId) => tasks.filter(t => t.erp_page_id === pageId && matchesTaskFilters(t));
 
   const [departmentFilter, setDepartmentFilter] = useState('all');
-  const visibleErpUsers = departmentFilter === 'all'
+  // Only meaningful once a single department is selected above — that
+  // department's own sub_departments list drives its options.
+  const [subDepartmentFilter, setSubDepartmentFilter] = useState('all');
+  const subDepartmentFilterOptions = subDepartmentsOf(departmentFilter);
+  const departmentFilteredUsers = departmentFilter === 'all'
     ? erpUsers
     : (departmentFilter === '_none'
       ? erpUsers.filter(u => !u.department_id)
       : erpUsers.filter(u => u.department_id === departmentFilter));
+  const visibleErpUsers = subDepartmentFilter === 'all'
+    ? departmentFilteredUsers
+    : (subDepartmentFilter === '_none'
+      ? departmentFilteredUsers.filter(u => !u.sub_department_id)
+      : departmentFilteredUsers.filter(u => u.sub_department_id === subDepartmentFilter));
 
   // Cascading jump-to filters: Departments -> Users -> Pages -> Sub Tabs -> Ultra Sub Tab -> Ultra Tab.
   // Each level's options are scoped by whatever's selected above it; picking a value at any
@@ -341,6 +352,12 @@ export default function ProjectErpUsersTab({
 
   const handleDepartmentFilterChange = (v) => {
     setDepartmentFilter(v);
+    setSubDepartmentFilter('all');
+    setUserFilter('all'); setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+  };
+  const handleSubDepartmentFilterChange = (v) => {
+    setSubDepartmentFilter(v);
     setUserFilter('all'); setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
     setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
   };
@@ -419,17 +436,18 @@ export default function ProjectErpUsersTab({
   };
 
   // ---- User CRUD ----
-  const openAddUser = () => { if (canEdit) setUserModal({ mode: 'add', name: '', department_id: '' }); };
-  const openRenameUser = (u) => { if (canEdit) setUserModal({ mode: 'edit', id: u.id, name: u.user_name, department_id: u.department_id || '' }); };
+  const openAddUser = () => { if (canEdit) setUserModal({ mode: 'add', name: '', department_id: '', sub_department_id: '' }); };
+  const openRenameUser = (u) => { if (canEdit) setUserModal({ mode: 'edit', id: u.id, name: u.user_name, department_id: u.department_id || '', sub_department_id: u.sub_department_id || '' }); };
   const closeUserModal = () => setUserModal(null);
 
   const saveUserModal = async () => {
     if (!userModal.name.trim()) { toast.error('User name is required'); return; }
     setSaving(true);
     const deptName = departmentName(userModal.department_id);
+    const subDeptName = subDepartmentName(userModal.department_id, userModal.sub_department_id);
     const next = userModal.mode === 'add'
-      ? [...erpUsers, { id: newId('eu'), user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, pages: [] }]
-      : erpUsers.map(u => (u.id === userModal.id ? { ...u, user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName } : u));
+      ? [...erpUsers, { id: newId('eu'), user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, sub_department_id: userModal.sub_department_id || '', sub_department_name: subDeptName, pages: [] }]
+      : erpUsers.map(u => (u.id === userModal.id ? { ...u, user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, sub_department_id: userModal.sub_department_id || '', sub_department_name: subDeptName } : u));
     const ok = await persistUsers(next);
     setSaving(false);
     if (ok) {
@@ -872,6 +890,18 @@ export default function ProjectErpUsersTab({
               <SelectItem value="_none">No Department</SelectItem>
             </SelectContent>
           </Select>
+          {subDepartmentFilterOptions.length > 0 && (
+            <Select value={subDepartmentFilter} onValueChange={handleSubDepartmentFilterChange}>
+              <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[170px]`} data-testid="erp-user-subdepartment-filter">
+                <SelectValue placeholder="All Sub Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sub Departments</SelectItem>
+                {subDepartmentFilterOptions.map(sd => <SelectItem key={sd.id} value={sd.id}>{sd.name}</SelectItem>)}
+                <SelectItem value="_none">No Sub Department</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
           <Select value={userFilter} onValueChange={handleUserFilterChange}>
             <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[150px]`} data-testid="erp-user-filter">
               <SelectValue placeholder="All Users" />
@@ -966,7 +996,12 @@ export default function ProjectErpUsersTab({
                             {u.user_name || '—'}
                           </button>
                         </td>
-                        <td className={`p-3 text-xs ${textSecondary}`}>{u.department_name || departmentName(u.department_id) || '—'}</td>
+                        <td className={`p-3 text-xs ${textSecondary}`}>
+                          {u.department_name || departmentName(u.department_id) || '—'}
+                          {u.sub_department_id && (
+                            <span className="opacity-70"> / {u.sub_department_name || subDepartmentName(u.department_id, u.sub_department_id)}</span>
+                          )}
+                        </td>
                         <td className={`p-3 text-xs ${textSecondary}`}>{pages.length}</td>
                         <td className="p-3 text-right">
                           <div className="inline-flex gap-1">
@@ -1549,7 +1584,7 @@ export default function ProjectErpUsersTab({
                 <p className={`text-xs font-medium ${textSecondary} mb-1`}>Department</p>
                 <Select
                   value={userModal.department_id || '_none'}
-                  onValueChange={(v) => setUserModal(m => ({ ...m, department_id: v === '_none' ? '' : v }))}
+                  onValueChange={(v) => setUserModal(m => ({ ...m, department_id: v === '_none' ? '' : v, sub_department_id: '' }))}
                 >
                   <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-user-form-department">
                     <SelectValue placeholder="— No department —" />
@@ -1563,6 +1598,23 @@ export default function ProjectErpUsersTab({
                   <p className={`text-[11px] ${textSecondary} mt-1`}>No departments yet — add one from the Departments tab.</p>
                 )}
               </div>
+              {subDepartmentsOf(userModal.department_id).length > 0 && (
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Sub Department</p>
+                  <Select
+                    value={userModal.sub_department_id || '_none'}
+                    onValueChange={(v) => setUserModal(m => ({ ...m, sub_department_id: v === '_none' ? '' : v }))}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-user-form-subdepartment">
+                      <SelectValue placeholder="— No sub department —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">— No sub department —</SelectItem>
+                      {subDepartmentsOf(userModal.department_id).map(sd => <SelectItem key={sd.id} value={sd.id}>{sd.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={closeUserModal}>Cancel</Button>
