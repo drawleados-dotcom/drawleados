@@ -897,7 +897,7 @@ export default function DepartmentsPanel({
                   <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="dept-rename-group">
                     <SelectValue placeholder="Select group" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="z-[80]">
                     <SelectItem value="none">No group</SelectItem>
                     {GROUPS.map(g => (
                       <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
