@@ -2609,6 +2609,14 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               </p>
                               <p className={`text-[10px] ${textSecondary}`}>by {task.created_by_name || '—'}</p>
                             </div>
+                          ) : filters.relation === 'assigned_to_me' && task.assigned_to === user?.user_id ? (
+                            // Relation filter is scoped to "Assigned to you" — show that badge even
+                            // for a task the viewer also created, so the column matches the filter
+                            // instead of always defaulting to "Created by you".
+                            <div className="flex flex-col items-start gap-1">
+                              <Badge className="bg-[#10b981]/20 text-[#10b981] text-xs whitespace-nowrap w-fit">Assigned to you</Badge>
+                              <p className={`text-xs ${textSecondary} truncate max-w-full`} title={task.assigned_by_name || task.created_by_name || 'Unknown'}>by {task.assigned_by_name || task.created_by_name || 'Unknown'}</p>
+                            </div>
                           ) : task.created_by === user?.user_id ? (
                             <div className="flex flex-col items-start gap-1">
                               <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs whitespace-nowrap w-fit">Created by you</Badge>
