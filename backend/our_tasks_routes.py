@@ -45,6 +45,12 @@ class TaskCreate(BaseModel):
     erp_user_name: Optional[str] = None
     erp_page_id: Optional[str] = None        # one of that user's pages
     erp_page_name: Optional[str] = None
+    erp_sub_tab_id: Optional[str] = None     # one of that page's sub tabs
+    erp_sub_tab_name: Optional[str] = None
+    erp_ultra_sub_tab_id: Optional[str] = None  # one of that sub tab's ultra sub tabs
+    erp_ultra_sub_tab_name: Optional[str] = None
+    erp_ultra_tab_id: Optional[str] = None   # one of that ultra sub tab's ultra tabs
+    erp_ultra_tab_name: Optional[str] = None
     erp_task_type: Optional[str] = None      # ERP dept only: New Module, New Feature, Correction
     sub_department_id: Optional[str] = None  # one of the selected department's sub_departments (e.g. Management)
     sub_department_name: Optional[str] = None
@@ -73,6 +79,12 @@ class TaskUpdate(BaseModel):
     erp_user_name: Optional[str] = None
     erp_page_id: Optional[str] = None
     erp_page_name: Optional[str] = None
+    erp_sub_tab_id: Optional[str] = None
+    erp_sub_tab_name: Optional[str] = None
+    erp_ultra_sub_tab_id: Optional[str] = None
+    erp_ultra_sub_tab_name: Optional[str] = None
+    erp_ultra_tab_id: Optional[str] = None
+    erp_ultra_tab_name: Optional[str] = None
     erp_task_type: Optional[str] = None
     sub_department_id: Optional[str] = None
     sub_department_name: Optional[str] = None
@@ -294,6 +306,12 @@ async def create_task(task_data: TaskCreate, request: Request):
             "erp_user_name": task_data.erp_user_name,
             "erp_page_id": task_data.erp_page_id,
             "erp_page_name": task_data.erp_page_name,
+            "erp_sub_tab_id": task_data.erp_sub_tab_id,
+            "erp_sub_tab_name": task_data.erp_sub_tab_name,
+            "erp_ultra_sub_tab_id": task_data.erp_ultra_sub_tab_id,
+            "erp_ultra_sub_tab_name": task_data.erp_ultra_sub_tab_name,
+            "erp_ultra_tab_id": task_data.erp_ultra_tab_id,
+            "erp_ultra_tab_name": task_data.erp_ultra_tab_name,
             "erp_task_type": task_data.erp_task_type,
             "sub_department_id": task_data.sub_department_id,
             "sub_department_name": task_data.sub_department_name,

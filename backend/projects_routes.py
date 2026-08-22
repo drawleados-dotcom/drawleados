@@ -122,6 +122,54 @@ async def _is_operation_head_or_admin(user, db) -> bool:
     return (desg_doc.get("operations_projects") or "none") == "edit"
 
 
+async def _filter_erp_visibility(project: dict, user, db) -> dict:
+    """Departments/sub-departments can carry an `assigned_erp_user_ids` team
+    (ids into `project.erp_users`). A non-admin viewer only sees erp_users
+    whose own department — and sub-department, if any — either has no team
+    configured (open by default) or includes an erp_user role linked (via
+    that role's `linked_user_id`) to the viewer's own account. A viewer with
+    no linked erp_user role anywhere in this project is left unrestricted,
+    so turning this on never silently locks out people who haven't been
+    wired up to a role yet. Tasks tagged to a now-hidden erp_user are hidden
+    with it. Admins/Operation Head always see everything, unfiltered."""
+    if await _is_operation_head_or_admin(user, db):
+        return project
+
+    erp_users = project.get("erp_users") or []
+    my_erp_ids = {eu.get("id") for eu in erp_users if eu.get("linked_user_id") == user.user_id}
+    if not my_erp_ids:
+        return project
+
+    dept_by_id = {d.get("id"): d for d in (project.get("erp_departments") or [])}
+
+    def _accessible(team_ids):
+        return not team_ids or bool(my_erp_ids & set(team_ids))
+
+    def _visible(eu: dict) -> bool:
+        dept = dept_by_id.get(eu.get("department_id"))
+        if not dept:
+            return True
+        if not _accessible(dept.get("assigned_erp_user_ids") or []):
+            return False
+        sub_id = eu.get("sub_department_id")
+        if sub_id:
+            sub = next((s for s in (dept.get("sub_departments") or []) if s.get("id") == sub_id), None)
+            if sub and not _accessible(sub.get("assigned_erp_user_ids") or []):
+                return False
+        return True
+
+    visible_erp_users = [eu for eu in erp_users if _visible(eu)]
+    visible_ids = {eu["id"] for eu in visible_erp_users}
+    project = dict(project)
+    project["erp_users"] = visible_erp_users
+    if project.get("tasks"):
+        project["tasks"] = [
+            t for t in project["tasks"]
+            if not t.get("erp_user_id") or t.get("erp_user_id") in visible_ids
+        ]
+    return project
+
+
 async def _can_view_project(user, db, project: dict) -> bool:
     """Same visibility rule as the project list: admins/ops see every project,
     everyone else only the ones they're a member of (or created)."""
@@ -235,12 +283,13 @@ async def create_project(payload: ProjectCreate, request: Request):
 @projects_router.get("/{project_id}")
 async def get_project(project_id: str, request: Request):
     from server import get_current_user, db
-    await get_current_user(request)
+    user = await get_current_user(request)
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     tasks = await db.our_tasks.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
     project["tasks"] = tasks
+    project = await _filter_erp_visibility(project, user, db)
     return project
 
 

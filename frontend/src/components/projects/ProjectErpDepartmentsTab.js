@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Plus, Trash2, Pencil, X, Building2, ChevronDown, ChevronRight, Users as UsersIcon, Layers } from 'lucide-react';
+import { Plus, Trash2, Pencil, X, Building2, ChevronDown, ChevronRight, Users as UsersIcon, Layers, ShieldCheck } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -41,6 +41,10 @@ export default function ProjectErpDepartmentsTab({
   const [deptModal, setDeptModal] = useState(null);
   // { mode: 'add' | 'edit', deptId, id, name }
   const [subDeptModal, setSubDeptModal] = useState(null);
+  // { deptId, subDeptId (null = department-level), selectedIds } — who's
+  // allowed to access this department/sub-department's ERP data. Empty
+  // selectedIds means "open to everyone" (no restriction applied).
+  const [teamModal, setTeamModal] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const persistDepartments = async (next) => {
@@ -160,6 +164,47 @@ export default function ProjectErpDepartmentsTab({
     if (ok) toast.success('Sub-department removed');
   };
 
+  // ---- Access team — who's allowed to see/edit this department or
+  // sub-department's ERP data. Picked from the project's own erp_users
+  // (ERP roles), each of which can optionally be linked to a real login
+  // account from the Users tab — that link is what the backend actually
+  // checks. An empty team leaves the department open to everyone. ----
+  const openTeamModal = (deptId, subDeptId = null) => {
+    if (!canEdit) return;
+    const dept = erpDepartments.find(d => d.id === deptId);
+    const target = subDeptId ? (dept?.sub_departments || []).find(sd => sd.id === subDeptId) : dept;
+    setTeamModal({ deptId, subDeptId, selectedIds: target?.assigned_erp_user_ids || [] });
+  };
+  const closeTeamModal = () => setTeamModal(null);
+  const toggleTeamMember = (erpUserId) => {
+    setTeamModal(m => ({
+      ...m,
+      selectedIds: m.selectedIds.includes(erpUserId)
+        ? m.selectedIds.filter(id => id !== erpUserId)
+        : [...m.selectedIds, erpUserId],
+    }));
+  };
+  const saveTeamModal = async () => {
+    setSaving(true);
+    const { deptId, subDeptId, selectedIds } = teamModal;
+    const next = erpDepartments.map(d => {
+      if (d.id !== deptId) return d;
+      if (!subDeptId) return { ...d, assigned_erp_user_ids: selectedIds };
+      return {
+        ...d,
+        sub_departments: (d.sub_departments || []).map(sd => (
+          sd.id === subDeptId ? { ...sd, assigned_erp_user_ids: selectedIds } : sd
+        )),
+      };
+    });
+    const ok = await persistDepartments(next);
+    setSaving(false);
+    if (ok) {
+      toast.success('Access team updated');
+      closeTeamModal();
+    }
+  };
+
   return (
     <div className="space-y-3" data-testid="project-erp-departments-tab">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -219,11 +264,21 @@ export default function ProjectErpDepartmentsTab({
                                 <Layers className="h-3 w-3" /> {subDepts.length}
                               </span>
                             )}
+                            {(d.assigned_erp_user_ids || []).length > 0 && (
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-normal px-1.5 py-0.5 rounded bg-[#6366f1]/10 text-[#6366f1]`} title="Access restricted to an assigned team">
+                                <ShieldCheck className="h-3 w-3" /> {d.assigned_erp_user_ids.length}
+                              </span>
+                            )}
                           </button>
                         </td>
                         <td className={`p-3 text-xs ${textSecondary}`}>{members.length}</td>
                         <td className="p-3 text-right">
                           <div className="inline-flex gap-1">
+                            {canEdit && (
+                              <button type="button" onClick={() => openTeamModal(d.id)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Assign access team" data-testid={`erp-dept-team-${d.id}`}>
+                                <ShieldCheck className="h-4 w-4" />
+                              </button>
+                            )}
                             {canEdit && (
                               <button type="button" onClick={() => openEditDept(d)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-dept-edit-${d.id}`}>
                                 <Pencil className="h-4 w-4" />
@@ -276,8 +331,16 @@ export default function ProjectErpDepartmentsTab({
                                         <Layers className="h-3 w-3 text-[#6366f1]" />
                                         {sd.name}
                                         <span className={textSecondary}>({subMembers.length})</span>
+                                        {(sd.assigned_erp_user_ids || []).length > 0 && (
+                                          <span className="inline-flex items-center gap-0.5 text-[#6366f1]" title="Access restricted to an assigned team">
+                                            <ShieldCheck className="h-3 w-3" />{sd.assigned_erp_user_ids.length}
+                                          </span>
+                                        )}
                                         {canEdit && (
                                           <span className="inline-flex items-center ml-1">
+                                            <button type="button" onClick={() => openTeamModal(d.id, sd.id)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Assign access team" data-testid={`erp-subdept-team-${sd.id}`}>
+                                              <ShieldCheck className="h-3 w-3" />
+                                            </button>
                                             <button type="button" onClick={() => openEditSubDept(d.id, sd)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-subdept-edit-${sd.id}`}>
                                               <Pencil className="h-3 w-3" />
                                             </button>
@@ -416,6 +479,72 @@ export default function ProjectErpDepartmentsTab({
           </div>
         </div>
       )}
+
+      {/* Assign access team popup — department- or sub-department-scoped */}
+      {teamModal && (() => {
+        const dept = erpDepartments.find(d => d.id === teamModal.deptId);
+        const subDept = teamModal.subDeptId ? (dept?.sub_departments || []).find(sd => sd.id === teamModal.subDeptId) : null;
+        const targetLabel = subDept ? `${dept?.name} → ${subDept.name}` : dept?.name;
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeTeamModal}>
+            <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
+              <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
+                <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                  <ShieldCheck className="h-4 w-4 text-[#6366f1]" />
+                  Assign Access Team
+                </h3>
+                <button onClick={closeTeamModal} className={textSecondary}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                <p className={`text-xs ${textSecondary}`}>
+                  <span className={`font-medium ${textPrimary}`}>{targetLabel}</span> — pick who can access this
+                  {subDept ? ' sub-department' : ' department'}. Leave empty to keep it open to everyone (the default).
+                </p>
+                {erpUsers.length === 0 ? (
+                  <p className={`text-xs ${textSecondary}`}>No ERP users yet — add some from the Users tab first.</p>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto space-y-1">
+                    {erpUsers.map(eu => (
+                      <label
+                        key={eu.id}
+                        className={`flex items-center gap-2.5 p-2 rounded-lg cursor-pointer border ${borderColor} ${bgSecondary}`}
+                        data-testid={`erp-team-option-${eu.id}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={teamModal.selectedIds.includes(eu.id)}
+                          onChange={() => toggleTeamMember(eu.id)}
+                          className="h-4 w-4 accent-[#6366f1]"
+                        />
+                        <span className={`text-sm ${textPrimary}`}>{eu.user_name || '—'}</span>
+                        {eu.linked_user_name ? (
+                          <span className={`text-[11px] ${textSecondary}`}>({eu.linked_user_name})</span>
+                        ) : (
+                          <span className="text-[11px] text-amber-500" title="This role isn't linked to a login account yet, from the Users tab — access rules can't apply to it until it is">not linked</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
+                <Button type="button" variant="outline" onClick={closeTeamModal}>Cancel</Button>
+                <Button
+                  type="button"
+                  onClick={saveTeamModal}
+                  disabled={saving}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                  data-testid="erp-team-form-save"
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2, Search } from 'lucide-react';
+import { buildErpPrompt } from '../../utils/erpPrompt';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -436,8 +437,8 @@ export default function ProjectErpUsersTab({
   };
 
   // ---- User CRUD ----
-  const openAddUser = () => { if (canEdit) setUserModal({ mode: 'add', name: '', department_id: '', sub_department_id: '' }); };
-  const openRenameUser = (u) => { if (canEdit) setUserModal({ mode: 'edit', id: u.id, name: u.user_name, department_id: u.department_id || '', sub_department_id: u.sub_department_id || '' }); };
+  const openAddUser = () => { if (canEdit) setUserModal({ mode: 'add', name: '', department_id: '', sub_department_id: '', linked_user_id: '' }); };
+  const openRenameUser = (u) => { if (canEdit) setUserModal({ mode: 'edit', id: u.id, name: u.user_name, department_id: u.department_id || '', sub_department_id: u.sub_department_id || '', linked_user_id: u.linked_user_id || '' }); };
   const closeUserModal = () => setUserModal(null);
 
   const saveUserModal = async () => {
@@ -445,9 +446,10 @@ export default function ProjectErpUsersTab({
     setSaving(true);
     const deptName = departmentName(userModal.department_id);
     const subDeptName = subDepartmentName(userModal.department_id, userModal.sub_department_id);
+    const linkedUser = (users || []).find(u => u.user_id === userModal.linked_user_id);
     const next = userModal.mode === 'add'
-      ? [...erpUsers, { id: newId('eu'), user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, sub_department_id: userModal.sub_department_id || '', sub_department_name: subDeptName, pages: [] }]
-      : erpUsers.map(u => (u.id === userModal.id ? { ...u, user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, sub_department_id: userModal.sub_department_id || '', sub_department_name: subDeptName } : u));
+      ? [...erpUsers, { id: newId('eu'), user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, sub_department_id: userModal.sub_department_id || '', sub_department_name: subDeptName, linked_user_id: userModal.linked_user_id || '', linked_user_name: linkedUser?.name || '', pages: [] }]
+      : erpUsers.map(u => (u.id === userModal.id ? { ...u, user_name: userModal.name.trim(), department_id: userModal.department_id || '', department_name: deptName, sub_department_id: userModal.sub_department_id || '', sub_department_name: subDeptName, linked_user_id: userModal.linked_user_id || '', linked_user_name: linkedUser?.name || '' } : u));
     const ok = await persistUsers(next);
     setSaving(false);
     if (ok) {
@@ -765,6 +767,90 @@ export default function ProjectErpUsersTab({
     onDragEnd: () => setDragUserId(null),
   });
 
+  // ---- Quick "Add Task" popup — reachable from every level of the hierarchy
+  // (User, Page, Sub Tab, Ultra Sub Tab, Ultra Tab) via the AddTaskButton
+  // below. Whichever level it's opened from pre-fills that level's id/name
+  // (and every ancestor's), so the created task carries the full ERP
+  // breadcrumb without the user having to re-pick anything already implied
+  // by where they clicked. Not gated by canEdit — logging a task is a much
+  // lower-risk action than editing the ERP structure itself, and any team
+  // member should be able to do it from here.
+  const [taskModal, setTaskModal] = useState(null);
+  const [savingTask, setSavingTask] = useState(false);
+
+  const openAddTask = (ctx) => {
+    setTaskModal({
+      userId: ctx.userId || '',
+      userName: ctx.userName || '',
+      pageId: ctx.pageId || '',
+      pageName: ctx.pageName || '',
+      subTabId: ctx.subTabId || '',
+      subTabName: ctx.subTabName || '',
+      ultraSubTabId: ctx.ultraSubTabId || '',
+      ultraSubTabName: ctx.ultraSubTabName || '',
+      ultraTabId: ctx.ultraTabId || '',
+      ultraTabName: ctx.ultraTabName || '',
+      draft: {
+        task_name: '',
+        priority: 'medium',
+        erp_task_type: '',
+        assigned_to: currentUser?.user_id || '',
+        due_date: new Date().toISOString().slice(0, 10),
+        work_link: '',
+      },
+    });
+  };
+  const closeTaskModal = () => setTaskModal(null);
+
+  const submitTaskModal = async () => {
+    if (!taskModal.draft.task_name.trim()) { toast.error('Task name is required'); return; }
+    setSavingTask(true);
+    try {
+      await axios.post(`${API}/api/our-tasks/tasks`, {
+        task_name: taskModal.draft.task_name.trim(),
+        priority: taskModal.draft.priority,
+        type: 'general',
+        assigned_to: taskModal.draft.assigned_to || currentUser?.user_id,
+        due_date: taskModal.draft.due_date || null,
+        work_link: taskModal.draft.work_link || '',
+        status: 'pending',
+        department: 'erp',
+        project_id: project.project_id,
+        project_name: project.name,
+        erp_user_id: taskModal.userId,
+        erp_user_name: taskModal.userName,
+        erp_page_id: taskModal.pageId,
+        erp_page_name: taskModal.pageName,
+        erp_sub_tab_id: taskModal.subTabId,
+        erp_sub_tab_name: taskModal.subTabName,
+        erp_ultra_sub_tab_id: taskModal.ultraSubTabId,
+        erp_ultra_sub_tab_name: taskModal.ultraSubTabName,
+        erp_ultra_tab_id: taskModal.ultraTabId,
+        erp_ultra_tab_name: taskModal.ultraTabName,
+        erp_task_type: taskModal.draft.erp_task_type || '',
+      }, { headers });
+      toast.success('Task added');
+      closeTaskModal();
+      onTasksChanged?.();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to add task');
+    } finally {
+      setSavingTask(false);
+    }
+  };
+
+  const AddTaskButton = ({ onClick, testId }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="p-1 text-[#6366f1] hover:opacity-80"
+      title="Add Task"
+      data-testid={testId}
+    >
+      <Plus className="h-4 w-4" />
+    </button>
+  );
+
   const summaryCard = (label, value, Icon, colorClass, active, onClick) => (
     <button
       type="button"
@@ -994,6 +1080,9 @@ export default function ProjectErpUsersTab({
                           >
                             {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             {u.user_name || '—'}
+                            {u.linked_user_name && (
+                              <span className={`text-[10px] font-normal ${textSecondary}`}>({u.linked_user_name})</span>
+                            )}
                           </button>
                         </td>
                         <td className={`p-3 text-xs ${textSecondary}`}>
@@ -1005,6 +1094,7 @@ export default function ProjectErpUsersTab({
                         <td className={`p-3 text-xs ${textSecondary}`}>{pages.length}</td>
                         <td className="p-3 text-right">
                           <div className="inline-flex gap-1">
+                            <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name })} testId={`erp-user-addtask-${u.id}`} />
                             {canEdit && (
                               <button type="button" onClick={() => openRenameUser(u)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-user-edit-${u.id}`}>
                                 <Pencil className="h-4 w-4" />
@@ -1126,6 +1216,7 @@ export default function ProjectErpUsersTab({
                                           </td>
                                           <td className="px-3 py-2 text-right">
                                             <div className="inline-flex gap-1">
+                                              <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name })} testId={`erp-page-addtask-${row.id}`} />
                                               <button type="button" onClick={() => openViewPage(u.id, row)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-page-view-${row.id}`}>
                                                 <Eye className="h-4 w-4" />
                                               </button>
@@ -1285,6 +1376,7 @@ export default function ProjectErpUsersTab({
                                                             </td>
                                                             <td className="px-3 py-2 text-right">
                                                               <div className="inline-flex gap-1">
+                                                                <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name })} testId={`erp-subtab-addtask-${st.id}`} />
                                                                 <button type="button" onClick={() => openViewSubTab(u.id, row.id, st)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-subtab-view-${st.id}`}>
                                                                   <Eye className="h-4 w-4" />
                                                                 </button>
@@ -1377,6 +1469,7 @@ export default function ProjectErpUsersTab({
                                                                               </td>
                                                                               <td className="px-3 py-2 text-right">
                                                                                 <div className="inline-flex gap-1">
+                                                                                  <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name, ultraSubTabId: ut.id, ultraSubTabName: ut.name })} testId={`erp-ultratab-addtask-${ut.id}`} />
                                                                                   <button type="button" onClick={() => openViewUltraTab(u.id, row.id, st.id, ut)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-view-${ut.id}`}>
                                                                                     <Eye className="h-4 w-4" />
                                                                                   </button>
@@ -1456,6 +1549,7 @@ export default function ProjectErpUsersTab({
                                                                                             </td>
                                                                                             <td className="px-3 py-2 text-right">
                                                                                               <div className="inline-flex gap-1">
+                                                                                                <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name, ultraSubTabId: ut.id, ultraSubTabName: ut.name, ultraTabId: it.id, ultraTabName: it.name })} testId={`erp-ultratab-item-addtask-${it.id}`} />
                                                                                                 <button type="button" onClick={() => openViewUltraTabItem(u.id, row.id, st.id, ut.id, it)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-item-view-${it.id}`}>
                                                                                                   <Eye className="h-4 w-4" />
                                                                                                 </button>
@@ -1615,6 +1709,24 @@ export default function ProjectErpUsersTab({
                   </Select>
                 </div>
               )}
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Login Account</p>
+                <Select
+                  value={userModal.linked_user_id || '_none'}
+                  onValueChange={(v) => setUserModal(m => ({ ...m, linked_user_id: v === '_none' ? '' : v }))}
+                >
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-user-form-linked-account">
+                    <SelectValue placeholder="— Not linked —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">— Not linked —</SelectItem>
+                    {(users || []).map(u => <SelectItem key={u.user_id} value={u.user_id}>{u.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className={`text-[11px] ${textSecondary} mt-1`}>
+                  Links this role to a real Drawlead OS login, so department/sub-department access restrictions apply to whoever's actually signed in as them.
+                </p>
+              </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={closeUserModal}>Cancel</Button>
@@ -1845,6 +1957,133 @@ export default function ProjectErpUsersTab({
         titleAdd="Add Ultra Tab"
         titleEdit="Edit Ultra Tab"
       />
+
+      {/* Quick "Add Task" popup — opened from a User/Page/Sub Tab/Ultra Sub Tab/Ultra
+          Tab row's Add Task button (see AddTaskButton above). z-40, not z-[70]: the
+          selects below portal to document.body at z-50 (ui/select.jsx). */}
+      {taskModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeTaskModal}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg`} onClick={(e) => e.stopPropagation()}>
+            <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
+              <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                <ListChecks className="h-4 w-4 text-[#6366f1]" /> Add Task
+              </h3>
+              <button onClick={closeTaskModal} className={textSecondary}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Task Name</p>
+                <Input
+                  value={taskModal.draft.task_name}
+                  onChange={(e) => setTaskModal(m => ({ ...m, draft: { ...m.draft, task_name: e.target.value } }))}
+                  placeholder="e.g. Fix validation on Save button"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="erp-quicktask-form-name"
+                  autoFocus
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Priority</p>
+                  <Select
+                    value={taskModal.draft.priority}
+                    onValueChange={(v) => setTaskModal(m => ({ ...m, draft: { ...m.draft, priority: v } }))}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-quicktask-form-priority">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Type</p>
+                  <Select
+                    value={taskModal.draft.erp_task_type || '_none'}
+                    onValueChange={(v) => setTaskModal(m => ({ ...m, draft: { ...m.draft, erp_task_type: v === '_none' ? '' : v } }))}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-quicktask-form-type">
+                      <SelectValue placeholder="— Select type —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">— Select type —</SelectItem>
+                      {PAGE_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
+                  <Select
+                    value={taskModal.draft.assigned_to || '_none'}
+                    onValueChange={(v) => setTaskModal(m => ({ ...m, draft: { ...m.draft, assigned_to: v === '_none' ? '' : v } }))}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-quicktask-form-assignee">
+                      <SelectValue placeholder="— Select —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(users || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Due Date</p>
+                  <Input
+                    type="date"
+                    value={taskModal.draft.due_date}
+                    onChange={(e) => setTaskModal(m => ({ ...m, draft: { ...m.draft, due_date: e.target.value } }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="erp-quicktask-form-due-date"
+                  />
+                </div>
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Work Link</p>
+                <Input
+                  value={taskModal.draft.work_link}
+                  onChange={(e) => setTaskModal(m => ({ ...m, draft: { ...m.draft, work_link: e.target.value } }))}
+                  placeholder="https://…"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="erp-quicktask-form-worklink"
+                />
+              </div>
+              {/* Live breadcrumb — shows exactly where in the hierarchy this task will be tagged */}
+              <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="erp-quicktask-prompt">
+                <p className={`text-xs font-medium ${textSecondary} mb-2`}>Prompt</p>
+                <p className={`text-sm ${textPrimary} break-words`}>
+                  {buildErpPrompt({
+                    projectName: project?.name,
+                    userName: taskModal.userName,
+                    pageName: taskModal.pageName,
+                    subTabName: taskModal.subTabName,
+                    ultraSubTabName: taskModal.ultraSubTabName,
+                    ultraTabName: taskModal.ultraTabName,
+                    taskName: taskModal.draft.task_name,
+                  })}
+                </p>
+              </div>
+            </div>
+            <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
+              <Button type="button" variant="outline" onClick={closeTaskModal}>Cancel</Button>
+              <Button
+                type="button"
+                onClick={submitTaskModal}
+                disabled={savingTask}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                data-testid="erp-quicktask-form-save"
+              >
+                {savingTask ? 'Adding…' : 'Add Task'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
