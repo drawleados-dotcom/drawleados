@@ -242,7 +242,7 @@ export default function ProjectErpUsersTab({
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all | today | week | month | custom
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
-  const [taskStatusFilter, setTaskStatusFilter] = useState('todo'); // all | todo | pending | approval | completed — defaults to Todo
+  const [taskStatusFilter, setTaskStatusFilter] = useState('todo'); // all | todo | progress | approval | completed — defaults to Todo
   const [taskLevelFilter, setTaskLevelFilter] = useState('all'); // all | user | page | sub_tab | ultra_sub_tab | ultra_tab
   const [taskTypeFilter, setTaskTypeFilter] = useState('all'); // all | one of ERP_TASK_TYPE_OPTIONS
 
@@ -277,15 +277,17 @@ export default function ProjectErpUsersTab({
     }
     return true;
   };
-  // Todo = not started yet, Pending = started but not done, Approval =
-  // has an open approval_request regardless of its own status (mirrors the
-  // Approvals tab's own definition), Completed = done.
+  // Todo = not started yet. Progress = timer started (running or paused).
+  // Approval = has an open approval_request regardless of its own status
+  // (mirrors the Approvals tab's own definition). Completed = finished OR
+  // its approval was approved — either is enough, so a task that skipped
+  // the approval flow doesn't fall through every bucket.
   const matchesStatusFilter = (t) => {
     if (taskStatusFilter === 'all') return true;
     if (taskStatusFilter === 'todo') return (t.status || 'pending') === 'pending';
-    if (taskStatusFilter === 'pending') return t.status === 'in_progress';
+    if (taskStatusFilter === 'progress') return t.status === 'in_progress';
     if (taskStatusFilter === 'approval') return t.approval_request?.status === 'pending';
-    if (taskStatusFilter === 'completed') return t.status === 'completed';
+    if (taskStatusFilter === 'completed') return t.status === 'completed' || t.approval_request?.status === 'approved';
     return true;
   };
   // A task's depth is however far into Page > Sub Tab > Ultra Sub Tab >
@@ -384,9 +386,9 @@ export default function ProjectErpUsersTab({
   const statusCardTasks = summaryBaseTasks.filter(matchesLevelFilter);
   const allTasksCount = statusCardTasks.length;
   const todoTasksCount = statusCardTasks.filter(t => (t.status || 'pending') === 'pending').length;
-  const pendingTasksCount = statusCardTasks.filter(t => t.status === 'in_progress').length;
+  const progressTasksCount = statusCardTasks.filter(t => t.status === 'in_progress').length;
   const approvalTasksCount = statusCardTasks.filter(t => t.approval_request?.status === 'pending').length;
-  const completedTasksCount = statusCardTasks.filter(t => t.status === 'completed').length;
+  const completedTasksCount = statusCardTasks.filter(t => t.status === 'completed' || t.approval_request?.status === 'approved').length;
 
   const subTabOptions = filteredPages.flatMap(pg => (pg.sub_tabs || []).map(st => ({
     key: `${pg.id}::${st.id}`,
@@ -939,7 +941,7 @@ export default function ProjectErpUsersTab({
             <SelectContent>
               <SelectItem value="all">All ({allTasksCount})</SelectItem>
               <SelectItem value="todo">Todo ({todoTasksCount})</SelectItem>
-              <SelectItem value="pending">Pending ({pendingTasksCount})</SelectItem>
+              <SelectItem value="progress">Progress ({progressTasksCount})</SelectItem>
               <SelectItem value="approval">Approval ({approvalTasksCount})</SelectItem>
               <SelectItem value="completed">Completed ({completedTasksCount})</SelectItem>
             </SelectContent>

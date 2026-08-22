@@ -111,6 +111,10 @@ export default function ProjectsPanel({
   // taskDraft form below, which only knows department/category tasks.
   const [viewOnlyTask, setViewOnlyTask] = useState(null);
   const [erpTaskModal, setErpTaskModal] = useState(null); // { taskId, location, draft } | null
+  // Manual timer controls + time-edit form inside the viewOnlyTask preview.
+  const [savingTime, setSavingTime] = useState(false);
+  const [timeEditOpen, setTimeEditOpen] = useState(false);
+  const [timeEditDraft, setTimeEditDraft] = useState({ date: '', start_time: '', end_time: '' });
   const [deptFilter, setDeptFilter] = useState('all');
 
   const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', project_type: 'onetime', departments: [], members: [] });
@@ -119,7 +123,7 @@ export default function ProjectsPanel({
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [deptStatuses, setDeptStatuses] = useState([]); // [{dept_key, label, statuses: [...]}]
   const [statusFilter, setStatusFilter] = useState('all'); // Project List View status sub-tab (only meaningful when deptFilter !== 'all')
-  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // all | todo | pending | approval | completed
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // all | todo | progress | approval | completed
   // Team management for selected project
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [teamDraft, setTeamDraft] = useState([]);
@@ -824,6 +828,60 @@ export default function ProjectsPanel({
     return `${secs}s`;
   };
 
+  // Timer start/pause/resume/finish for the task currently open in the
+  // viewOnlyTask preview. Both endpoints return the updated task, so the
+  // preview updates immediately without a full project reload (though we
+  // still refresh in the background to keep the task list's own state in sync).
+  const runTimeAction = async (action) => {
+    if (!viewOnlyTask) return;
+    setSavingTime(true);
+    try {
+      const res = await axios.post(`${API}/api/our-tasks/tasks/${viewOnlyTask.task_id}/time`, { action }, { headers });
+      setViewOnlyTask(res.data);
+      refreshSelectedProject();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update timer');
+    } finally {
+      setSavingTime(false);
+    }
+  };
+
+  const openTimeEdit = () => {
+    const sessions = viewOnlyTask?.time_tracking?.sessions || [];
+    const first = sessions[0];
+    const last = sessions[sessions.length - 1];
+    const toHHMM = (iso) => (iso ? new Date(iso).toISOString().slice(11, 16) : '');
+    setTimeEditDraft({
+      date: first?.start ? first.start.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      start_time: toHHMM(first?.start),
+      end_time: toHHMM(last?.end),
+    });
+    setTimeEditOpen(true);
+  };
+
+  const submitTimeEdit = async () => {
+    if (!timeEditDraft.start_time && !timeEditDraft.end_time) {
+      toast.error('Enter a start or end time');
+      return;
+    }
+    setSavingTime(true);
+    try {
+      const res = await axios.patch(`${API}/api/our-tasks/tasks/${viewOnlyTask.task_id}/time-edit`, {
+        date: timeEditDraft.date || undefined,
+        start_time: timeEditDraft.start_time || undefined,
+        end_time: timeEditDraft.end_time || undefined,
+      }, { headers });
+      setViewOnlyTask(res.data);
+      refreshSelectedProject();
+      setTimeEditOpen(false);
+      toast.success('Time updated');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update time');
+    } finally {
+      setSavingTime(false);
+    }
+  };
+
   // SEO Scope tab "Add Task" — defaults Department to SEO and Category to
   // whichever sub-tab (Research / On Page SEO / Off Page SEO) is active.
   const openAddTaskForSeoScope = (category) => {
@@ -949,14 +1007,18 @@ export default function ProjectsPanel({
       }
       return true;
     };
-    // Todo = not started, Pending = started but not done, Approval = has an
-    // open approval_request regardless of its own status, Completed = done.
+    // Todo = created/assigned but not started. Progress = timer started
+    // (running or paused) — this is where manual time entry/editing
+    // happens. Approval = has an open approval_request regardless of its
+    // own status. Completed = finished OR its approval was approved —
+    // either is enough on its own, so a task never falls through every
+    // bucket just because it skipped the approval flow.
     const matchesTaskStatus = (t) => {
       if (taskStatusFilter === 'all') return true;
       if (taskStatusFilter === 'todo') return (t.status || 'pending') === 'pending';
-      if (taskStatusFilter === 'pending') return t.status === 'in_progress';
+      if (taskStatusFilter === 'progress') return t.status === 'in_progress';
       if (taskStatusFilter === 'approval') return t.approval_request?.status === 'pending';
-      if (taskStatusFilter === 'completed') return t.status === 'completed';
+      if (taskStatusFilter === 'completed') return t.status === 'completed' || t.approval_request?.status === 'approved';
       return true;
     };
     // ERP hierarchy filters — a task carries its erp_* ids directly, so this
@@ -981,9 +1043,9 @@ export default function ProjectsPanel({
     const statusScopedTasks = projectTasks.filter(matchesScopeFilters);
     const allTasksCount = statusScopedTasks.length;
     const todoTasksCount = statusScopedTasks.filter(t => (t.status || 'pending') === 'pending').length;
-    const pendingTasksCount = statusScopedTasks.filter(t => t.status === 'in_progress').length;
+    const progressTasksCount = statusScopedTasks.filter(t => t.status === 'in_progress').length;
     const approvalTasksCount = statusScopedTasks.filter(t => t.approval_request?.status === 'pending').length;
-    const completedTasksCount = statusScopedTasks.filter(t => t.status === 'completed').length;
+    const completedTasksCount = statusScopedTasks.filter(t => t.status === 'completed' || t.approval_request?.status === 'approved').length;
 
     const filteredTasks = projectTasks.filter(t => matchesScopeFilters(t) && matchesTaskStatus(t));
 
@@ -1729,7 +1791,7 @@ export default function ProjectsPanel({
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-2" data-testid="project-task-summary-cards">
             {taskSummaryCard('All', allTasksCount, ListChecks, 'text-[#6366f1]', taskStatusFilter === 'all', () => setTaskStatusFilter('all'))}
             {taskSummaryCard('Todo', todoTasksCount, ListTodo, 'text-amber-400', taskStatusFilter === 'todo', () => setTaskStatusFilter(taskStatusFilter === 'todo' ? 'all' : 'todo'))}
-            {taskSummaryCard('Pending', pendingTasksCount, Clock, 'text-yellow-400', taskStatusFilter === 'pending', () => setTaskStatusFilter(taskStatusFilter === 'pending' ? 'all' : 'pending'))}
+            {taskSummaryCard('Progress', progressTasksCount, Clock, 'text-yellow-400', taskStatusFilter === 'progress', () => setTaskStatusFilter(taskStatusFilter === 'progress' ? 'all' : 'progress'))}
             {taskSummaryCard('Approval', approvalTasksCount, ShieldQuestion, 'text-orange-400', taskStatusFilter === 'approval', () => setTaskStatusFilter(taskStatusFilter === 'approval' ? 'all' : 'approval'))}
             {taskSummaryCard('Completed', completedTasksCount, CheckCircle2, 'text-emerald-400', taskStatusFilter === 'completed', () => setTaskStatusFilter(taskStatusFilter === 'completed' ? 'all' : 'completed'))}
           </div>
@@ -2567,17 +2629,24 @@ export default function ProjectsPanel({
                     </p>
                   </div>
                 )}
-                {/* Time Tracking — total time spent, live timer status, and a
-                    session-by-session timeline. Each session is one
+                {/* Time Tracking — total time spent, live timer status, a
+                    session-by-session timeline, and (for whoever can edit
+                    this task) Start/Pause/Resume/Finish controls plus a
+                    manual start/end time editor. Each session is one
                     start→pause/finish segment; pause count is approximated
                     as closed segments minus one if the timer finished (the
-                    backend doesn't tag which action closed each session). */}
+                    backend doesn't tag which action closed each session).
+                    Locked once finished or approved — the backend rejects
+                    time-edit at that point, so the editor hides instead of
+                    letting someone hit a submit error. */}
                 {(() => {
                   const tracking = viewOnlyTask.time_tracking || {};
                   const sessions = tracking.sessions || [];
-                  if (!sessions.length && !tracking.total_seconds) return null;
+                  const canTrack = canManageProjects && canEditProjectTask(viewOnlyTask);
+                  if (!sessions.length && !tracking.total_seconds && !canTrack) return null;
                   const closedCount = sessions.filter(s => s.end).length;
                   const pauseCount = Math.max(0, closedCount - (tracking.status === 'finished' ? 1 : 0));
+                  const locked = tracking.status === 'finished' || viewOnlyTask.approval_request?.status === 'approved';
                   return (
                     <div className={`p-3 rounded-lg ${bgSecondary}`} data-testid="project-task-time-tracking">
                       <div className="flex items-center justify-between mb-2">
@@ -2600,6 +2669,62 @@ export default function ProjectsPanel({
                         {sessions.length > 0 && ` · ${sessions.length} session${sessions.length === 1 ? '' : 's'}`}
                         {pauseCount > 0 && ` · paused ${pauseCount}×`}
                       </p>
+                      {canTrack && !locked && (
+                        <div className="flex flex-wrap items-center gap-2 mb-2" data-testid="project-task-timer-controls">
+                          {(!tracking.status || tracking.status === 'not_started') && (
+                            <Button size="sm" disabled={savingTime} onClick={() => runTimeAction('start')} className="bg-emerald-500 hover:bg-emerald-600 text-white h-8">
+                              <Play className="h-3.5 w-3.5 mr-1" /> Start
+                            </Button>
+                          )}
+                          {tracking.status === 'running' && (
+                            <>
+                              <Button size="sm" disabled={savingTime} onClick={() => runTimeAction('pause')} className="bg-amber-500 hover:bg-amber-600 text-white h-8">
+                                <Pause className="h-3.5 w-3.5 mr-1" /> Pause
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={savingTime} onClick={() => runTimeAction('finish')} className="h-8">
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Finish
+                              </Button>
+                            </>
+                          )}
+                          {tracking.status === 'paused' && (
+                            <>
+                              <Button size="sm" disabled={savingTime} onClick={() => runTimeAction('resume')} className="bg-emerald-500 hover:bg-emerald-600 text-white h-8">
+                                <Play className="h-3.5 w-3.5 mr-1" /> Resume
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={savingTime} onClick={() => runTimeAction('finish')} className="h-8">
+                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Finish
+                              </Button>
+                            </>
+                          )}
+                          <Button size="sm" variant="ghost" disabled={savingTime} onClick={() => (timeEditOpen ? setTimeEditOpen(false) : openTimeEdit())} className="h-8 text-xs">
+                            <Pencil className="h-3 w-3 mr-1" /> {timeEditOpen ? 'Cancel edit' : 'Edit time'}
+                          </Button>
+                        </div>
+                      )}
+                      {locked && canTrack && (
+                        <p className={`text-[11px] ${textSecondary} mb-2`}>Time is locked — finished or already approved.</p>
+                      )}
+                      {timeEditOpen && (
+                        <div className={`p-2.5 rounded-md mb-2 border border-dashed ${borderColor} space-y-2`} data-testid="project-task-time-edit-form">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <Label className={`text-[10px] ${textSecondary}`}>Date</Label>
+                              <Input type="date" value={timeEditDraft.date} onChange={(e) => setTimeEditDraft(d => ({ ...d, date: e.target.value }))} className="h-8 text-xs" />
+                            </div>
+                            <div>
+                              <Label className={`text-[10px] ${textSecondary}`}>Start</Label>
+                              <Input type="time" value={timeEditDraft.start_time} onChange={(e) => setTimeEditDraft(d => ({ ...d, start_time: e.target.value }))} className="h-8 text-xs" />
+                            </div>
+                            <div>
+                              <Label className={`text-[10px] ${textSecondary}`}>End</Label>
+                              <Input type="time" value={timeEditDraft.end_time} onChange={(e) => setTimeEditDraft(d => ({ ...d, end_time: e.target.value }))} className="h-8 text-xs" />
+                            </div>
+                          </div>
+                          <Button size="sm" disabled={savingTime} onClick={submitTimeEdit} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-8 w-full">
+                            Save time
+                          </Button>
+                        </div>
+                      )}
                       {sessions.length > 0 && (
                         <div className="space-y-1.5 max-h-40 overflow-y-auto pt-2 border-t border-dashed">
                           {sessions.map((session, idx) => (
