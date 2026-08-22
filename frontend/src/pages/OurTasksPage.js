@@ -2192,10 +2192,15 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           });
 
           if (mainTab === 'assign_to_team') {
+            // "All" here means all of Technology + Marketing, not every
+            // department — an ungrouped department (no group set yet, in
+            // Operations > Departments) doesn't show as a pill until it's
+            // assigned one.
+            const groupedDepts = visibleDeptCategoriesForBar.filter(d => d.group === 'technology' || d.group === 'marketing');
             const scopedDepts = opGroupFilter === 'all'
-              ? visibleDeptCategoriesForBar
-              : visibleDeptCategoriesForBar.filter(d => d.group === opGroupFilter);
-            const groupCount = (groupValue) => visibleDeptCategoriesForBar
+              ? groupedDepts
+              : groupedDepts.filter(d => d.group === opGroupFilter);
+            const groupCount = (groupValue) => groupedDepts
               .filter(d => groupValue === 'all' || d.group === groupValue)
               .reduce((sum, d) => sum + (pendingByDept[d.dept_key] || 0), 0) + (pendingByDept['all'] || 0);
 
