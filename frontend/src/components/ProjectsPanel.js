@@ -2741,6 +2741,69 @@ export default function ProjectsPanel({
                     </div>
                   );
                 })()}
+                {/* History — every lifecycle event (created, each start/pause/
+                    resume/finish, sent for approval, decided) merged into one
+                    chronological, horizontally-scrollable timeline, with the
+                    gap between consecutive events shown on the connector. */}
+                {(() => {
+                  const t = viewOnlyTask;
+                  const nameFor = (uid) => (uid ? (users.find(u => u.user_id === uid)?.name || uid) : null);
+                  const events = [];
+                  if (t.created_at) {
+                    events.push({ key: 'created', label: 'Created', time: t.created_at, by: t.created_by_name || nameFor(t.created_by), Icon: Plus, color: 'text-[#6366f1]' });
+                  }
+                  const sessions = t.time_tracking?.sessions || [];
+                  sessions.forEach((s, idx) => {
+                    if (s.start) {
+                      events.push({ key: `start-${idx}`, label: idx === 0 ? 'Started' : 'Resumed', time: s.start, by: nameFor(s.user_id), Icon: Play, color: 'text-emerald-500' });
+                    }
+                    if (s.end) {
+                      const isFinished = idx === sessions.length - 1 && t.time_tracking?.status === 'finished';
+                      events.push({ key: `end-${idx}`, label: isFinished ? 'Finished' : 'Paused', time: s.end, by: nameFor(s.user_id), Icon: isFinished ? CheckCircle2 : Pause, color: isFinished ? 'text-emerald-500' : 'text-amber-500' });
+                    }
+                  });
+                  const ar = t.approval_request;
+                  if (ar?.requested_at) {
+                    events.push({ key: 'approval-requested', label: `Sent for approval (${ar.approver_role || '—'})`, time: ar.requested_at, by: ar.requested_by_name || nameFor(ar.requested_by), Icon: ShieldQuestion, color: 'text-orange-500' });
+                  }
+                  if (ar?.decided_at) {
+                    const approved = ar.status === 'approved';
+                    events.push({ key: 'approval-decided', label: approved ? 'Approved' : ar.status === 'rejected' ? 'Rejected' : 'Decided', time: ar.decided_at, by: nameFor(ar.decided_by), Icon: approved ? CheckCircle2 : X, color: approved ? 'text-emerald-500' : 'text-red-500' });
+                  }
+                  events.sort((a, b) => new Date(a.time) - new Date(b.time));
+                  if (events.length === 0) return null;
+                  return (
+                    <div data-testid="project-task-history">
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary} mb-2`}>History</p>
+                      <div className="overflow-x-auto pb-1">
+                        <div className="flex items-start min-w-max">
+                          {events.map((ev, idx) => (
+                            <React.Fragment key={ev.key}>
+                              {idx > 0 && (
+                                <div className="flex flex-col items-center justify-center px-1.5 pt-3.5 min-w-[52px]">
+                                  <div className={`h-0.5 w-full ${isDark ? 'bg-[#3f3f46]' : 'bg-gray-300'}`} />
+                                  <span className={`text-[9px] ${textSecondary} mt-1 whitespace-nowrap`}>
+                                    {formatDuration(Math.max(0, Math.round((new Date(ev.time) - new Date(events[idx - 1].time)) / 1000)))}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex flex-col items-center text-center w-24 flex-shrink-0">
+                                <div className={`h-7 w-7 rounded-full flex items-center justify-center ${bgSecondary} border ${borderColor}`}>
+                                  <ev.Icon className={`h-3.5 w-3.5 ${ev.color}`} />
+                                </div>
+                                <p className={`text-[10px] font-medium mt-1 ${textPrimary} leading-tight`}>{ev.label}</p>
+                                <p className={`text-[9px] ${textSecondary}`}>
+                                  {new Date(ev.time).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                                {ev.by && <p className={`text-[9px] ${textSecondary} truncate w-full`} title={ev.by}>{ev.by}</p>}
+                              </div>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="flex justify-end gap-2 pt-2">
                   {canManageProjects && canEditProjectTask(viewOnlyTask) && (
                     <Button variant="outline" onClick={() => { const t = viewOnlyTask; setViewOnlyTask(null); handleEditTask(t); }}>
