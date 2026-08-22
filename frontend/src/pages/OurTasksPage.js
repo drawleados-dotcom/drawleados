@@ -123,9 +123,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   const [timeDrafts, setTimeDrafts] = useState({}); // {task_id: {start: 'HH:MM', end: 'HH:MM'}} (legacy)
   const [editTimeModal, setEditTimeModal] = useState(null); // { task, sH, sM, sP, eH, eM, eP }
   // Completion summary — clicking Complete first shows the task's worked/break
-  // timeline for a last look, and only the confirm button in it completes.
+  // timeline for a last look, then hands off to Send for Approval. Completing
+  // isn't self-serve: it goes through an approver.
   const [completeSummaryTask, setCompleteSummaryTask] = useState(null);
-  const [completingTask, setCompletingTask] = useState(false);
   // Approval request popup
   const [approvalTask, setApprovalTask] = useState(null); // task currently being submitted for approval
   const [approvalDraft, setApprovalDraft] = useState({ approver_role: '', note: '', work_link: '' });
@@ -477,7 +477,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Pause polling while the create/edit modal is open to avoid clobbering user input.
   useAutoRefresh(
     [loadTasks, loadUsers, loadProjectsAndCategories],
-    { enabled: !showCreateModal && !editingTask && !editTimeModal && !approvalTask }
+    { enabled: !showCreateModal && !editingTask && !editTimeModal && !approvalTask && !completeSummaryTask }
   );
 
   // Operations Summary loader (drives the 5 cards above the tabs)
@@ -2633,7 +2633,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                               className="bg-[#10b981] hover:bg-[#059669] text-white h-8 px-3"
                               onClick={(e) => { e.stopPropagation(); setCompleteSummaryTask(task); }}
                               data-testid={`complete-btn-${task.task_id}`}
-                              title="Review this task's time, then mark it complete"
+                              title="Review this task's time, then send it for approval"
                             >
                               <Check className="h-3 w-3 mr-1" /> Complete
                             </Button>
@@ -3987,8 +3987,8 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
         {/* Completion summary — opened by the Complete button. Shows where the
             task's time actually went (project, start → end, every work stretch
-            and every break) before it's signed off, since completing is the
-            point where that record stops changing. */}
+            and every break), then hands off to Send for Approval, seeded the
+            same way the row's own Approve button seeds it. */}
         {completeSummaryTask && (() => {
           const t = completeSummaryTask;
           const h = buildTimeHistory(t);
@@ -3998,7 +3998,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           return (
             <div
               className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4"
-              onClick={() => !completingTask && setCompleteSummaryTask(null)}
+              onClick={() => setCompleteSummaryTask(null)}
               data-testid="complete-summary-modal"
             >
               <div
@@ -4015,7 +4015,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     </h3>
                   </div>
                   <button
-                    onClick={() => !completingTask && setCompleteSummaryTask(null)}
+                    onClick={() => setCompleteSummaryTask(null)}
                     className={textSecondary}
                     data-testid="complete-summary-close"
                   >
@@ -4109,24 +4109,29 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                   <Button
                     variant="outline"
                     onClick={() => setCompleteSummaryTask(null)}
-                    disabled={completingTask}
                     data-testid="complete-summary-cancel"
                   >
                     Cancel
                   </Button>
                   <Button
-                    className="bg-[#10b981] hover:bg-[#059669] text-white"
-                    disabled={completingTask}
-                    onClick={async () => {
-                      setCompletingTask(true);
-                      await handleStatusChange(t.task_id, 'completed');
-                      setCompletingTask(false);
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    onClick={() => {
+                      // Hand straight over to the approval popup, seeded exactly
+                      // as the row's Approve button seeds it (existing approver
+                      // and work link carried across), then drop this one so the
+                      // two modals never stack.
                       setCompleteSummaryTask(null);
+                      setApprovalTask(t);
+                      setApprovalDraft({
+                        approver_role: t.approval_request?.approver_role || '',
+                        note: '',
+                        work_link: t.approval_request?.work_link || t.work_link || '',
+                      });
                     }}
-                    data-testid="complete-summary-confirm"
+                    data-testid="complete-summary-send-approval"
                   >
-                    <Check className="h-3.5 w-3.5 mr-1" />
-                    {completingTask ? 'Completing…' : 'Mark Complete'}
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                    Send to Approve
                   </Button>
                 </div>
               </div>
