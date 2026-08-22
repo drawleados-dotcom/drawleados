@@ -25,12 +25,9 @@ import useAutoRefresh from '../hooks/useAutoRefresh';
 import OperationsSummaryCards from '../components/operations/OperationsSummaryCards';
 import OperationsTabsBar from '../components/operations/OperationsTabsBar';
 import { buildErpPrompt } from '../utils/erpPrompt';
+import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
 
 const API = process.env.REACT_APP_BACKEND_URL;
-
-// Same 3 options as an ERP User's Page "Type" field (ProjectErpUsersTab) —
-// tags what kind of work a task tagged to an ERP User/Page actually is.
-const ERP_TASK_TYPE_OPTIONS = ['New Module', 'New Feature', 'Correction'];
 
 const priorityColors = {
   high: 'bg-[#ef4444]/20 text-[#ef4444] border-[#ef4444]',

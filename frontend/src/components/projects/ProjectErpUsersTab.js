@@ -7,6 +7,9 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, ListTodo, Clock, CheckCircle2, Search } from 'lucide-react';
 import { buildErpPrompt } from '../../utils/erpPrompt';
+import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
+import ErpLocationPicker from './ErpLocationPicker';
+import ErpTaskList, { ErpTaskCountBadge } from './ErpTaskList';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -220,6 +223,12 @@ export default function ProjectErpUsersTab({
 
   const assigneeName = (userId) => (users || []).find(u => u.user_id === userId)?.name || userId || '—';
 
+  // Only this project's own team, not every Drawlead OS user — same list
+  // "Manage Team" edits (project.members), resolved against the full user list.
+  const projectMembers = (project?.members || [])
+    .map(uid => (users || []).find(u => u.user_id === uid))
+    .filter(Boolean);
+
   const erpUsers = project?.erp_users || [];
   const erpDepartments = project?.erp_departments || [];
   const departmentName = (deptId) => erpDepartments.find(d => d.id === deptId)?.name || '';
@@ -276,7 +285,24 @@ export default function ProjectErpUsersTab({
   };
   const matchesTaskFilters = (t) => inTaskDateRange(t.due_date) && matchesStatusFilter(t);
 
-  const tasksForPage = (pageId) => tasks.filter(t => t.erp_page_id === pageId && matchesTaskFilters(t));
+  // Each task shows in exactly one place — its most specific tagged level —
+  // rather than bubbling up into every ancestor's list too. A task tagged
+  // all the way down to an Ultra Tab shows there, not redundantly under its
+  // Page or Sub Tab as well.
+  const tasksForPage = (pageId) => tasks.filter(t => t.erp_page_id === pageId && !t.erp_sub_tab_id && matchesTaskFilters(t));
+  const tasksForSubTab = (pageId, subTabId) => tasks.filter(t => (
+    t.erp_page_id === pageId && t.erp_sub_tab_id === subTabId && !t.erp_ultra_sub_tab_id && matchesTaskFilters(t)
+  ));
+  const tasksForUltraSubTab = (pageId, subTabId, ultraSubTabId) => tasks.filter(t => (
+    t.erp_page_id === pageId && t.erp_sub_tab_id === subTabId && t.erp_ultra_sub_tab_id === ultraSubTabId && !t.erp_ultra_tab_id && matchesTaskFilters(t)
+  ));
+  const tasksForUltraTab = (pageId, subTabId, ultraSubTabId, ultraTabId) => tasks.filter(t => (
+    t.erp_page_id === pageId && t.erp_sub_tab_id === subTabId && t.erp_ultra_sub_tab_id === ultraSubTabId && t.erp_ultra_tab_id === ultraTabId && matchesTaskFilters(t)
+  ));
+  // Every task tagged anywhere under a page, regardless of nesting depth —
+  // used only to guard "can this page be deleted", since deleting it would
+  // orphan tasks tagged to its sub tabs too, not just page-level ones.
+  const anyTasksUnderPage = (pageId) => tasks.filter(t => t.erp_page_id === pageId && matchesTaskFilters(t));
 
   const [departmentFilter, setDepartmentFilter] = useState('all');
   // Only meaningful once a single department is selected above — that
@@ -409,6 +435,12 @@ export default function ProjectErpUsersTab({
   const [expandedSubTabsPageId, setExpandedSubTabsPageId] = useState(null);
   const [expandedUltraTabsSubTabId, setExpandedUltraTabsSubTabId] = useState(null);
   const [expandedUltraTabItemsId, setExpandedUltraTabItemsId] = useState(null);
+  // Task-count badges (Sub Tab / Ultra Sub Tab / Ultra Tab) — Page already
+  // has its own expandedPageId for this; these are the equivalent one level
+  // down each, independent of the "show children" toggles above.
+  const [expandedSubTabTaskId, setExpandedSubTabTaskId] = useState(null);
+  const [expandedUltraSubTabTaskId, setExpandedUltraSubTabTaskId] = useState(null);
+  const [expandedUltraTabItemTaskId, setExpandedUltraTabItemTaskId] = useState(null);
   // { mode: 'add' | 'edit', name } — add/rename a User
   const [userModal, setUserModal] = useState(null);
   // { mode: 'add' | 'view', userId, page, editing } — add/view/edit a Page under a User
@@ -505,7 +537,7 @@ export default function ProjectErpUsersTab({
 
   const deletePage = async (userId, pageId) => {
     if (!canEdit) return;
-    if (tasksForPage(pageId).length > 0) {
+    if (anyTasksUnderPage(pageId).length > 0) {
       toast.error('Cannot delete a page that has tasks tagged to it');
       return;
     }
@@ -516,20 +548,14 @@ export default function ProjectErpUsersTab({
     if (ok) { toast.success('Page removed'); closePageModal(); }
   };
 
-  // Reassign a task to a different page within the same user, without leaving this table.
-  const moveTaskPage = async (task, userId, newPageId) => {
-    if (!canEdit || newPageId === (task.erp_page_id || 'others')) return;
-    const eu = erpUsers.find(x => x.id === userId);
-    const newPageName = newPageId === 'others' ? 'Others' : ((eu?.pages || []).find(p => p.id === newPageId)?.page_name || '');
+  const deleteTask = async (task) => {
+    if (!window.confirm(`Delete "${task.task_name}"? This cannot be undone.`)) return;
     try {
-      await axios.put(`${API}/api/our-tasks/tasks/${task.task_id}`, {
-        erp_page_id: newPageId,
-        erp_page_name: newPageName,
-      }, { headers });
-      toast.success('Task moved to another page');
+      await axios.delete(`${API}/api/our-tasks/tasks/${task.task_id}`, { headers });
+      toast.success('Task deleted');
       onTasksChanged?.();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to move task');
+      toast.error(e.response?.data?.detail || 'Failed to delete task');
     }
   };
 
@@ -767,29 +793,28 @@ export default function ProjectErpUsersTab({
     onDragEnd: () => setDragUserId(null),
   });
 
-  // ---- Quick "Add Task" popup — reachable from every level of the hierarchy
+  // ---- Add/Edit Task popup — reachable from every level of the hierarchy
   // (User, Page, Sub Tab, Ultra Sub Tab, Ultra Tab) via the AddTaskButton
-  // below. Whichever level it's opened from pre-fills that level's id/name
-  // (and every ancestor's), so the created task carries the full ERP
-  // breadcrumb without the user having to re-pick anything already implied
-  // by where they clicked. Not gated by canEdit — logging a task is a much
-  // lower-risk action than editing the ERP structure itself, and any team
-  // member should be able to do it from here.
+  // below, or via a task row's own Edit action. Whichever level it's opened
+  // from pre-fills that level's id/name (and every ancestor's) into
+  // `location`, using the same field names ErpLocationPicker reads/writes so
+  // the user can still adjust — or fully relocate an existing task to a
+  // different user/page/sub-tab — before saving. Not gated by canEdit —
+  // logging a task is a much lower-risk action than editing the ERP
+  // structure itself, and any team member should be able to do it from here.
   const [taskModal, setTaskModal] = useState(null);
   const [savingTask, setSavingTask] = useState(false);
 
   const openAddTask = (ctx) => {
     setTaskModal({
-      userId: ctx.userId || '',
-      userName: ctx.userName || '',
-      pageId: ctx.pageId || '',
-      pageName: ctx.pageName || '',
-      subTabId: ctx.subTabId || '',
-      subTabName: ctx.subTabName || '',
-      ultraSubTabId: ctx.ultraSubTabId || '',
-      ultraSubTabName: ctx.ultraSubTabName || '',
-      ultraTabId: ctx.ultraTabId || '',
-      ultraTabName: ctx.ultraTabName || '',
+      taskId: null,
+      location: {
+        erp_user_id: ctx.userId || '', erp_user_name: ctx.userName || '',
+        erp_page_id: ctx.pageId || '', erp_page_name: ctx.pageName || '',
+        erp_sub_tab_id: ctx.subTabId || '', erp_sub_tab_name: ctx.subTabName || '',
+        erp_ultra_sub_tab_id: ctx.ultraSubTabId || '', erp_ultra_sub_tab_name: ctx.ultraSubTabName || '',
+        erp_ultra_tab_id: ctx.ultraTabId || '', erp_ultra_tab_name: ctx.ultraTabName || '',
+      },
       draft: {
         task_name: '',
         priority: 'medium',
@@ -800,40 +825,57 @@ export default function ProjectErpUsersTab({
       },
     });
   };
+
+  const openEditTask = (task) => {
+    setTaskModal({
+      taskId: task.task_id,
+      location: {
+        erp_user_id: task.erp_user_id || '', erp_user_name: task.erp_user_name || '',
+        erp_page_id: task.erp_page_id || '', erp_page_name: task.erp_page_name || '',
+        erp_sub_tab_id: task.erp_sub_tab_id || '', erp_sub_tab_name: task.erp_sub_tab_name || '',
+        erp_ultra_sub_tab_id: task.erp_ultra_sub_tab_id || '', erp_ultra_sub_tab_name: task.erp_ultra_sub_tab_name || '',
+        erp_ultra_tab_id: task.erp_ultra_tab_id || '', erp_ultra_tab_name: task.erp_ultra_tab_name || '',
+      },
+      draft: {
+        task_name: task.task_name || '',
+        priority: task.priority || 'medium',
+        erp_task_type: task.erp_task_type || '',
+        assigned_to: task.assigned_to || currentUser?.user_id || '',
+        due_date: task.due_date || new Date().toISOString().slice(0, 10),
+        work_link: task.work_link || '',
+      },
+    });
+  };
+
   const closeTaskModal = () => setTaskModal(null);
 
   const submitTaskModal = async () => {
     if (!taskModal.draft.task_name.trim()) { toast.error('Task name is required'); return; }
     setSavingTask(true);
+    const payload = {
+      task_name: taskModal.draft.task_name.trim(),
+      priority: taskModal.draft.priority,
+      assigned_to: taskModal.draft.assigned_to || currentUser?.user_id,
+      due_date: taskModal.draft.due_date || null,
+      work_link: taskModal.draft.work_link || '',
+      department: 'erp',
+      project_id: project.project_id,
+      project_name: project.name,
+      ...taskModal.location,
+      erp_task_type: taskModal.draft.erp_task_type || '',
+    };
     try {
-      await axios.post(`${API}/api/our-tasks/tasks`, {
-        task_name: taskModal.draft.task_name.trim(),
-        priority: taskModal.draft.priority,
-        type: 'general',
-        assigned_to: taskModal.draft.assigned_to || currentUser?.user_id,
-        due_date: taskModal.draft.due_date || null,
-        work_link: taskModal.draft.work_link || '',
-        status: 'pending',
-        department: 'erp',
-        project_id: project.project_id,
-        project_name: project.name,
-        erp_user_id: taskModal.userId,
-        erp_user_name: taskModal.userName,
-        erp_page_id: taskModal.pageId,
-        erp_page_name: taskModal.pageName,
-        erp_sub_tab_id: taskModal.subTabId,
-        erp_sub_tab_name: taskModal.subTabName,
-        erp_ultra_sub_tab_id: taskModal.ultraSubTabId,
-        erp_ultra_sub_tab_name: taskModal.ultraSubTabName,
-        erp_ultra_tab_id: taskModal.ultraTabId,
-        erp_ultra_tab_name: taskModal.ultraTabName,
-        erp_task_type: taskModal.draft.erp_task_type || '',
-      }, { headers });
-      toast.success('Task added');
+      if (taskModal.taskId) {
+        await axios.put(`${API}/api/our-tasks/tasks/${taskModal.taskId}`, payload, { headers });
+        toast.success('Task updated');
+      } else {
+        await axios.post(`${API}/api/our-tasks/tasks`, { ...payload, type: 'general', status: 'pending' }, { headers });
+        toast.success('Task added');
+      }
       closeTaskModal();
       onTasksChanged?.();
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to add task');
+      toast.error(e.response?.data?.detail || 'Failed to save task');
     } finally {
       setSavingTask(false);
     }
@@ -1229,9 +1271,9 @@ export default function ProjectErpUsersTab({
                                                 <button
                                                   type="button"
                                                   onClick={() => deletePage(u.id, row.id)}
-                                                  disabled={pageTasks.length > 0}
-                                                  className={`p-1 ${pageTasks.length > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
-                                                  title={pageTasks.length > 0 ? 'Cannot delete: this page has tasks' : 'Delete'}
+                                                  disabled={anyTasksUnderPage(row.id).length > 0}
+                                                  className={`p-1 ${anyTasksUnderPage(row.id).length > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
+                                                  title={anyTasksUnderPage(row.id).length > 0 ? 'Cannot delete: this page has tasks' : 'Delete'}
                                                   data-testid={`erp-page-delete-${row.id}`}
                                                 >
                                                   <Trash2 className="h-4 w-4" />
@@ -1243,60 +1285,17 @@ export default function ProjectErpUsersTab({
                                         {isPageExpanded && (
                                           <tr className={`border-b ${borderColor}`} data-testid={`erp-page-tasks-row-${row.id}`}>
                                             <td colSpan={9} className="p-3">
-                                              {pageTasks.length === 0 ? (
-                                                <p className={`text-xs ${textSecondary}`}>No tasks tagged to this page yet.</p>
-                                              ) : (
-                                                <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
-                                                  <table className="w-full">
-                                                    <thead>
-                                                      <tr className={`border-b ${borderColor}`}>
-                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Name of the Task</th>
-                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Category</th>
-                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Date</th>
-                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Assign To</th>
-                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Delivery Time</th>
-                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
-                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-40`}>Move To Page</th>
-                                                      </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                      {pageTasks.map(t => (
-                                                        <tr key={t.task_id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`erp-task-row-${t.task_id}`}>
-                                                          <td className={`px-3 py-2 text-sm ${textPrimary}`}>{t.task_name}</td>
-                                                          <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.category || '—'}</td>
-                                                          <td className={`px-3 py-2 text-xs ${textSecondary}`}>
-                                                            {t.due_date ? new Date(t.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
-                                                          </td>
-                                                          <td className={`px-3 py-2 text-xs ${textSecondary}`}>{assigneeName(t.assigned_to)}</td>
-                                                          <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.all_day ? 'All day' : (t.due_time || '—')}</td>
-                                                          <td className="px-3 py-2">
-                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase ${textSecondary} border ${borderColor}`}>
-                                                              {(t.status || 'pending').replace('_', ' ')}
-                                                            </span>
-                                                          </td>
-                                                          <td className="px-3 py-2">
-                                                            {canEdit ? (
-                                                              <Select value={t.erp_page_id || 'others'} onValueChange={(v) => moveTaskPage(t, u.id, v)}>
-                                                                <SelectTrigger className={`h-7 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`erp-task-move-${t.task_id}`}>
-                                                                  <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                  {pages.map(pg => (
-                                                                    <SelectItem key={pg.id} value={pg.id}>{pg.page_name}</SelectItem>
-                                                                  ))}
-                                                                  <SelectItem value="others">Others</SelectItem>
-                                                                </SelectContent>
-                                                              </Select>
-                                                            ) : (
-                                                              <span className={`text-xs ${textSecondary}`}>{row.page_name}</span>
-                                                            )}
-                                                          </td>
-                                                        </tr>
-                                                      ))}
-                                                    </tbody>
-                                                  </table>
-                                                </div>
-                                              )}
+                                              <ErpTaskList
+                                                tasks={pageTasks}
+                                                onEdit={openEditTask}
+                                                onDelete={deleteTask}
+                                                assigneeName={assigneeName}
+                                                textPrimary={textPrimary}
+                                                textSecondary={textSecondary}
+                                                borderColor={borderColor}
+                                                bgCard={bgCard}
+                                                testPrefix="erp-task-row"
+                                              />
                                             </td>
                                           </tr>
                                         )}
@@ -1334,6 +1333,8 @@ export default function ProjectErpUsersTab({
                                                     {subTabs.map((st, stIdx) => {
                                                       const ultraTabs = st.ultra_sub_tabs || [];
                                                       const isUltraExpanded = expandedUltraTabsSubTabId === st.id;
+                                                      const subTabTasks = tasksForSubTab(row.id, st.id);
+                                                      const isSubTaskExpanded = expandedSubTabTaskId === st.id;
                                                       return (
                                                         <React.Fragment key={st.id}>
                                                           <tr
@@ -1375,7 +1376,14 @@ export default function ProjectErpUsersTab({
                                                               </span>
                                                             </td>
                                                             <td className="px-3 py-2 text-right">
-                                                              <div className="inline-flex gap-1">
+                                                              <div className="inline-flex items-center gap-1">
+                                                                <ErpTaskCountBadge
+                                                                  count={subTabTasks.length}
+                                                                  active={isSubTaskExpanded}
+                                                                  onClick={() => setExpandedSubTabTaskId(isSubTaskExpanded ? null : st.id)}
+                                                                  textSecondary={textSecondary}
+                                                                  testId={`erp-subtab-tasks-toggle-${st.id}`}
+                                                                />
                                                                 <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name })} testId={`erp-subtab-addtask-${st.id}`} />
                                                                 <button type="button" onClick={() => openViewSubTab(u.id, row.id, st)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-subtab-view-${st.id}`}>
                                                                   <Eye className="h-4 w-4" />
@@ -1393,6 +1401,23 @@ export default function ProjectErpUsersTab({
                                                               </div>
                                                             </td>
                                                           </tr>
+                                                          {isSubTaskExpanded && (
+                                                            <tr className={`border-b ${borderColor}`} data-testid={`erp-subtab-tasks-row-${st.id}`}>
+                                                              <td colSpan={7} className="p-3">
+                                                                <ErpTaskList
+                                                                  tasks={subTabTasks}
+                                                                  onEdit={openEditTask}
+                                                                  onDelete={deleteTask}
+                                                                  assigneeName={assigneeName}
+                                                                  textPrimary={textPrimary}
+                                                                  textSecondary={textSecondary}
+                                                                  borderColor={borderColor}
+                                                                  bgCard={bgCard}
+                                                                  testPrefix="erp-subtab-task-row"
+                                                                />
+                                                              </td>
+                                                            </tr>
+                                                          )}
                                                           {isUltraExpanded && (
                                                             <tr className={`border-b ${borderColor}`} data-testid={`erp-subtab-ultratabs-row-${st.id}`}>
                                                               <td colSpan={7} className="p-3">
@@ -1427,6 +1452,8 @@ export default function ProjectErpUsersTab({
                                                                       {ultraTabs.map((ut, utIdx) => {
                                                                         const ultraTabItems = ut.ultra_tabs || [];
                                                                         const isUltraTabItemsExpanded = expandedUltraTabItemsId === ut.id;
+                                                                        const ultraSubTabTasks = tasksForUltraSubTab(row.id, st.id, ut.id);
+                                                                        const isUltraSubTaskExpanded = expandedUltraSubTabTaskId === ut.id;
                                                                         return (
                                                                           <React.Fragment key={ut.id}>
                                                                             <tr
@@ -1468,7 +1495,14 @@ export default function ProjectErpUsersTab({
                                                                                 </span>
                                                                               </td>
                                                                               <td className="px-3 py-2 text-right">
-                                                                                <div className="inline-flex gap-1">
+                                                                                <div className="inline-flex items-center gap-1">
+                                                                                  <ErpTaskCountBadge
+                                                                                    count={ultraSubTabTasks.length}
+                                                                                    active={isUltraSubTaskExpanded}
+                                                                                    onClick={() => setExpandedUltraSubTabTaskId(isUltraSubTaskExpanded ? null : ut.id)}
+                                                                                    textSecondary={textSecondary}
+                                                                                    testId={`erp-ultratab-tasks-toggle-${ut.id}`}
+                                                                                  />
                                                                                   <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name, ultraSubTabId: ut.id, ultraSubTabName: ut.name })} testId={`erp-ultratab-addtask-${ut.id}`} />
                                                                                   <button type="button" onClick={() => openViewUltraTab(u.id, row.id, st.id, ut)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-view-${ut.id}`}>
                                                                                     <Eye className="h-4 w-4" />
@@ -1486,6 +1520,23 @@ export default function ProjectErpUsersTab({
                                                                                 </div>
                                                                               </td>
                                                                             </tr>
+                                                                            {isUltraSubTaskExpanded && (
+                                                                              <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-tasks-row-${ut.id}`}>
+                                                                                <td colSpan={7} className="p-3">
+                                                                                  <ErpTaskList
+                                                                                    tasks={ultraSubTabTasks}
+                                                                                    onEdit={openEditTask}
+                                                                                    onDelete={deleteTask}
+                                                                                    assigneeName={assigneeName}
+                                                                                    textPrimary={textPrimary}
+                                                                                    textSecondary={textSecondary}
+                                                                                    borderColor={borderColor}
+                                                                                    bgCard={bgCard}
+                                                                                    testPrefix="erp-ultratab-task-row"
+                                                                                  />
+                                                                                </td>
+                                                                              </tr>
+                                                                            )}
                                                                             {isUltraTabItemsExpanded && (
                                                                               <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-items-row-${ut.id}`}>
                                                                                 <td colSpan={7} className="p-3">
@@ -1517,9 +1568,12 @@ export default function ProjectErpUsersTab({
                                                                                         </tr>
                                                                                       </thead>
                                                                                       <tbody>
-                                                                                        {ultraTabItems.map((it, itIdx) => (
+                                                                                        {ultraTabItems.map((it, itIdx) => {
+                                                                                          const ultraTabTasks = tasksForUltraTab(row.id, st.id, ut.id, it.id);
+                                                                                          const isUltraTabTaskExpanded = expandedUltraTabItemTaskId === it.id;
+                                                                                          return (
+                                                                                          <React.Fragment key={it.id}>
                                                                                           <tr
-                                                                                            key={it.id}
                                                                                             className={`border-b ${borderColor} last:border-b-0 ${dragItem?.level === 'ultratabitem' && dragItem.index === itIdx && dragItem.key === `${u.id}::${row.id}::${st.id}::${ut.id}` ? 'opacity-40' : ''}`}
                                                                                             data-testid={`erp-ultratab-item-row-${it.id}`}
                                                                                             {...dragRowProps('ultratabitem', `${u.id}::${row.id}::${st.id}::${ut.id}`, itIdx, (from, to) => moveUltraTabItem(u.id, row.id, st.id, ut.id, from, to))}
@@ -1548,7 +1602,14 @@ export default function ProjectErpUsersTab({
                                                                                               </span>
                                                                                             </td>
                                                                                             <td className="px-3 py-2 text-right">
-                                                                                              <div className="inline-flex gap-1">
+                                                                                              <div className="inline-flex items-center gap-1">
+                                                                                                <ErpTaskCountBadge
+                                                                                                  count={ultraTabTasks.length}
+                                                                                                  active={isUltraTabTaskExpanded}
+                                                                                                  onClick={() => setExpandedUltraTabItemTaskId(isUltraTabTaskExpanded ? null : it.id)}
+                                                                                                  textSecondary={textSecondary}
+                                                                                                  testId={`erp-ultratab-item-tasks-toggle-${it.id}`}
+                                                                                                />
                                                                                                 <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name, ultraSubTabId: ut.id, ultraSubTabName: ut.name, ultraTabId: it.id, ultraTabName: it.name })} testId={`erp-ultratab-item-addtask-${it.id}`} />
                                                                                                 <button type="button" onClick={() => openViewUltraTabItem(u.id, row.id, st.id, ut.id, it)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-item-view-${it.id}`}>
                                                                                                   <Eye className="h-4 w-4" />
@@ -1566,7 +1627,26 @@ export default function ProjectErpUsersTab({
                                                                                               </div>
                                                                                             </td>
                                                                                           </tr>
-                                                                                        ))}
+                                                                                          {isUltraTabTaskExpanded && (
+                                                                                            <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-item-tasks-row-${it.id}`}>
+                                                                                              <td colSpan={7} className="p-3">
+                                                                                                <ErpTaskList
+                                                                                                  tasks={ultraTabTasks}
+                                                                                                  onEdit={openEditTask}
+                                                                                                  onDelete={deleteTask}
+                                                                                                  assigneeName={assigneeName}
+                                                                                                  textPrimary={textPrimary}
+                                                                                                  textSecondary={textSecondary}
+                                                                                                  borderColor={borderColor}
+                                                                                                  bgCard={bgCard}
+                                                                                                  testPrefix="erp-ultratab-item-task-row"
+                                                                                                />
+                                                                                              </td>
+                                                                                            </tr>
+                                                                                          )}
+                                                                                          </React.Fragment>
+                                                                                          );
+                                                                                        })}
                                                                                         {ultraTabItems.length === 0 && (
                                                                                           <tr>
                                                                                             <td colSpan={7} className={`p-4 text-center text-xs ${textSecondary}`}>
@@ -1856,7 +1936,7 @@ export default function ProjectErpUsersTab({
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-between gap-2`}>
               {pageModal.mode === 'view' && canEdit ? (
-                tasksForPage(pageModal.page.id).length > 0 ? (
+                anyTasksUnderPage(pageModal.page.id).length > 0 ? (
                   <span className={`text-sm ${textSecondary} inline-flex items-center gap-1`} title="Cannot delete: this page has tasks">
                     <Trash2 className="h-4 w-4" /> Delete
                   </span>
@@ -1958,15 +2038,15 @@ export default function ProjectErpUsersTab({
         titleEdit="Edit Ultra Tab"
       />
 
-      {/* Quick "Add Task" popup — opened from a User/Page/Sub Tab/Ultra Sub Tab/Ultra
-          Tab row's Add Task button (see AddTaskButton above). z-40, not z-[70]: the
+      {/* Add/Edit Task popup — opened from a row's Add Task button or its Edit
+          action (see AddTaskButton / ErpTaskList above). z-40, not z-[70]: the
           selects below portal to document.body at z-50 (ui/select.jsx). */}
       {taskModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeTaskModal}>
-          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg`} onClick={(e) => e.stopPropagation()}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
               <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
-                <ListChecks className="h-4 w-4 text-[#6366f1]" /> Add Task
+                <ListChecks className="h-4 w-4 text-[#6366f1]" /> {taskModal.taskId ? 'Edit Task' : 'Add Task'}
               </h3>
               <button onClick={closeTaskModal} className={textSecondary}>
                 <X className="h-5 w-5" />
@@ -2012,7 +2092,7 @@ export default function ProjectErpUsersTab({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_none">— Select type —</SelectItem>
-                      {PAGE_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      {ERP_TASK_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2028,7 +2108,7 @@ export default function ProjectErpUsersTab({
                       <SelectValue placeholder="— Select —" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(users || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+                      {projectMembers.map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2053,17 +2133,30 @@ export default function ProjectErpUsersTab({
                   data-testid="erp-quicktask-form-worklink"
                 />
               </div>
-              {/* Live breadcrumb — shows exactly where in the hierarchy this task will be tagged */}
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-2`}>Location {taskModal.taskId && <span className={textSecondary}>— change these to move the task</span>}</p>
+                <ErpLocationPicker
+                  project={project}
+                  value={taskModal.location}
+                  onChange={(next) => setTaskModal(m => ({ ...m, location: next }))}
+                  bgSecondary={bgSecondary}
+                  borderColor={borderColor}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  testPrefix="erp-quicktask-location"
+                />
+              </div>
+              {/* Live breadcrumb — shows exactly where in the hierarchy this task is tagged */}
               <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="erp-quicktask-prompt">
                 <p className={`text-xs font-medium ${textSecondary} mb-2`}>Prompt</p>
                 <p className={`text-sm ${textPrimary} break-words`}>
                   {buildErpPrompt({
                     projectName: project?.name,
-                    userName: taskModal.userName,
-                    pageName: taskModal.pageName,
-                    subTabName: taskModal.subTabName,
-                    ultraSubTabName: taskModal.ultraSubTabName,
-                    ultraTabName: taskModal.ultraTabName,
+                    userName: taskModal.location.erp_user_name,
+                    pageName: taskModal.location.erp_page_name,
+                    subTabName: taskModal.location.erp_sub_tab_name,
+                    ultraSubTabName: taskModal.location.erp_ultra_sub_tab_name,
+                    ultraTabName: taskModal.location.erp_ultra_tab_name,
                     taskName: taskModal.draft.task_name,
                   })}
                 </p>
@@ -2078,7 +2171,7 @@ export default function ProjectErpUsersTab({
                 className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
                 data-testid="erp-quicktask-form-save"
               >
-                {savingTask ? 'Adding…' : 'Add Task'}
+                {savingTask ? 'Saving…' : (taskModal.taskId ? 'Save Changes' : 'Add Task')}
               </Button>
             </div>
           </div>

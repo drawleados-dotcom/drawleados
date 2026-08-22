@@ -15,6 +15,7 @@ import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
 import ProjectErpDepartmentsTab from './projects/ProjectErpDepartmentsTab';
+import ErpLocationPicker from './projects/ErpLocationPicker';
 import ProjectScopesTab from './projects/ProjectScopesTab';
 import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
@@ -27,6 +28,8 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import MeetingModal from './MeetingModal';
 import useAutoRefresh from '../hooks/useAutoRefresh';
+import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
+import { buildErpPrompt } from '../utils/erpPrompt';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -41,9 +44,14 @@ const DEPARTMENTS = [
   { value: 'erp', label: 'ERP' },
 ];
 
-// Same 3 options as an ERP User's Page "Type" field (ProjectErpUsersTab) —
-// tags what kind of work a task tagged to an ERP User/Page actually is.
-const ERP_TASK_TYPE_OPTIONS = ['New Module', 'New Feature', 'Correction'];
+const emptyTaskDraft = {
+  task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '',
+  erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '',
+  erp_sub_tab_id: '', erp_sub_tab_name: '',
+  erp_ultra_sub_tab_id: '', erp_ultra_sub_tab_name: '',
+  erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+  erp_task_type: '',
+};
 
 export default function ProjectsPanel({
   isDark, textPrimary, textSecondary, bgCard, bgSecondary, borderColor, headers, onTaskCreated, currentUser,
@@ -88,11 +96,16 @@ export default function ProjectsPanel({
   const [savingHandover, setSavingHandover] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
+  // A task tagged to the ERP hierarchy (erp_user_id set) is read-only from
+  // this generic Tasks tab — it can only be edited from the ERP Users tab,
+  // where its full page/sub-tab context is visible. viewOnlyTask holds the
+  // task being looked at that way; showAddTask/editingTaskId stay unused for it.
+  const [viewOnlyTask, setViewOnlyTask] = useState(null);
   const [deptFilter, setDeptFilter] = useState('all');
 
   const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', project_type: 'onetime', departments: [], members: [] });
   const [clients, setClients] = useState([]);
-  const [taskDraft, setTaskDraft] = useState({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' });
+  const [taskDraft, setTaskDraft] = useState(emptyTaskDraft);
   const [deptCategories, setDeptCategories] = useState([]); // [{dept_key, label, categories: [...]}]
   const [deptStatuses, setDeptStatuses] = useState([]); // [{dept_key, label, statuses: [...]}]
   const [statusFilter, setStatusFilter] = useState('all'); // Project List View status sub-tab (only meaningful when deptFilter !== 'all')
@@ -628,7 +641,7 @@ export default function ProjectsPanel({
         await axios.post(`${API}/api/projects/${selectedProject.project_id}/tasks`, taskDraft, { headers });
         toast.success('Task added — appears in assignee\'s My Tasks');
       }
-      setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: '', category: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' });
+      setTaskDraft(emptyTaskDraft);
       setShowAddTask(false);
       setEditingTaskId(null);
       refreshSelectedProject();
@@ -639,7 +652,21 @@ export default function ProjectsPanel({
     }
   };
 
+  // Starts a fresh Add Task without closing the modal — lets someone add
+  // several tasks back to back from the same popup.
+  const handleAddAnotherTask = () => {
+    setEditingTaskId(null);
+    setTaskDraft(prev => ({ ...emptyTaskDraft, department: prev.department, category: '' }));
+  };
+
   const handleEditTask = (task) => {
+    // ERP-tagged tasks (erp_user_id set) are only editable from the ERP
+    // Users tab, which knows the full page/sub-tab context — here they're
+    // view-only so this generic list can't silently drop that context.
+    if (task.erp_user_id) {
+      setViewOnlyTask(task);
+      return;
+    }
     setEditingTaskId(task.task_id);
     setTaskDraft({
       task_name: task.task_name || '',
@@ -654,6 +681,12 @@ export default function ProjectsPanel({
       erp_user_name: task.erp_user_name || '',
       erp_page_id: task.erp_page_id || '',
       erp_page_name: task.erp_page_name || '',
+      erp_sub_tab_id: task.erp_sub_tab_id || '',
+      erp_sub_tab_name: task.erp_sub_tab_name || '',
+      erp_ultra_sub_tab_id: task.erp_ultra_sub_tab_id || '',
+      erp_ultra_sub_tab_name: task.erp_ultra_sub_tab_name || '',
+      erp_ultra_tab_id: task.erp_ultra_tab_id || '',
+      erp_ultra_tab_name: task.erp_ultra_tab_name || '',
       erp_task_type: task.erp_task_type || '',
     });
     setShowAddTask(true);
@@ -679,7 +712,7 @@ export default function ProjectsPanel({
   const openAddTaskForSeoScope = (category) => {
     const defaultCategory = category || deptCategories.find(d => d.dept_key === 'seo')?.categories?.[0] || '';
     setEditingTaskId(null);
-    setTaskDraft({ task_name: '', description: '', assigned_to: '', due_date: '', priority: 'medium', work_link: '', department: 'seo', category: defaultCategory, erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '' });
+    setTaskDraft({ ...emptyTaskDraft, department: 'seo', category: defaultCategory });
     setShowAddTask(true);
   };
 
@@ -2085,9 +2118,16 @@ export default function ProjectsPanel({
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => { setShowAddTask(false); setEditingTaskId(null); }}>
             <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
               <CardContent className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 className={`text-lg font-semibold ${textPrimary}`}>{editingTaskId ? 'Edit Task' : 'Add Task'} — {selectedProject.name}</h3>
-                  <button onClick={() => { setShowAddTask(false); setEditingTaskId(null); }} className={textSecondary}><X className="h-5 w-5" /></button>
+                  <div className="flex items-center gap-1">
+                    {editingTaskId && (
+                      <Button size="sm" variant="outline" onClick={handleAddAnotherTask} data-testid="project-task-add-another">
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Add New Task
+                      </Button>
+                    )}
+                    <button onClick={() => { setShowAddTask(false); setEditingTaskId(null); }} className={textSecondary}><X className="h-5 w-5" /></button>
+                  </div>
                 </div>
                 <div><Label className={textPrimary}>Task Name *</Label><Input value={taskDraft.task_name} onChange={(e) => setTaskDraft({ ...taskDraft, task_name: e.target.value })} placeholder="Task name" data-testid="project-task-name" /></div>
                 <div><Label className={textPrimary}>Description</Label><Input value={taskDraft.description} onChange={(e) => setTaskDraft({ ...taskDraft, description: e.target.value })} placeholder="Optional description" /></div>
@@ -2100,7 +2140,7 @@ export default function ProjectsPanel({
                     data-testid="project-task-assignee"
                   >
                     <option value="">— Select user —</option>
-                    {users.map(u => <option key={u.user_id} value={u.user_id}>{u.name} ({u.email})</option>)}
+                    {projectMembers.map(u => <option key={u.user_id} value={u.user_id}>{u.name}{u.email ? ` (${u.email})` : ''}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -2158,71 +2198,38 @@ export default function ProjectsPanel({
                     </select>
                   </div>
                 </div>
-                {/* ERP User → Page tagging — only when the project has the
-                    `erp` department. Pick one of the project's Users (from
-                    the Users tab), then one of that user's Pages. */}
+                {/* ERP tagging — only when the project has the `erp`
+                    department. Cascading picker down to whichever level in
+                    the project's ERP Users hierarchy this task belongs to. */}
                 {(selectedProject?.departments || []).includes('erp') && (
-                  <div className={`mt-2 border ${borderColor} rounded-lg p-3 space-y-2`} data-testid="task-erp-section">
+                  <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-[#6366f1]" />
                       <p className={`text-sm font-semibold ${textPrimary}`}>ERP Tagging</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <div>
-                        <Label className={`text-xs ${textSecondary}`}>User</Label>
-                        <select
-                          value={taskDraft.erp_user_id}
-                          onChange={(e) => {
-                            const eu = (selectedProject?.erp_users || []).find(u => u.id === e.target.value);
-                            setTaskDraft({ ...taskDraft, erp_user_id: e.target.value, erp_user_name: eu?.user_name || '', erp_page_id: '', erp_page_name: '' });
-                          }}
-                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary}`}
-                          data-testid="task-erp-user"
-                        >
-                          <option value="">— select user —</option>
-                          {(selectedProject?.erp_users || []).map(eu => (
-                            <option key={eu.id} value={eu.id}>{eu.user_name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <Label className={`text-xs ${textSecondary}`}>Page</Label>
-                        <select
-                          value={taskDraft.erp_page_id}
-                          onChange={(e) => {
-                            if (e.target.value === 'others') {
-                              setTaskDraft({ ...taskDraft, erp_page_id: 'others', erp_page_name: 'Others' });
-                              return;
-                            }
-                            const eu = (selectedProject?.erp_users || []).find(u => u.id === taskDraft.erp_user_id);
-                            const pg = (eu?.pages || []).find(p => p.id === e.target.value);
-                            setTaskDraft({ ...taskDraft, erp_page_id: e.target.value, erp_page_name: pg?.page_name || '' });
-                          }}
-                          disabled={!taskDraft.erp_user_id}
-                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary} disabled:opacity-50`}
-                          data-testid="task-erp-page"
-                        >
-                          <option value="">— select page —</option>
-                          {((selectedProject?.erp_users || []).find(u => u.id === taskDraft.erp_user_id)?.pages || []).map(pg => (
-                            <option key={pg.id} value={pg.id}>{pg.page_name}</option>
-                          ))}
-                          <option value="others">Others</option>
-                        </select>
-                      </div>
-                      <div>
-                        <Label className={`text-xs ${textSecondary}`}>Type</Label>
-                        <select
-                          value={taskDraft.erp_task_type || ''}
-                          onChange={(e) => setTaskDraft({ ...taskDraft, erp_task_type: e.target.value })}
-                          className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary}`}
-                          data-testid="task-erp-type"
-                        >
-                          <option value="">— select type —</option>
-                          {ERP_TASK_TYPE_OPTIONS.map(t => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                      </div>
+                    <ErpLocationPicker
+                      project={selectedProject}
+                      value={taskDraft}
+                      onChange={(next) => setTaskDraft({ ...taskDraft, ...next })}
+                      bgSecondary={bgSecondary}
+                      borderColor={borderColor}
+                      textPrimary={textPrimary}
+                      textSecondary={textSecondary}
+                      testPrefix="task-erp"
+                    />
+                    <div>
+                      <Label className={`text-xs ${textSecondary}`}>Type</Label>
+                      <select
+                        value={taskDraft.erp_task_type || ''}
+                        onChange={(e) => setTaskDraft({ ...taskDraft, erp_task_type: e.target.value })}
+                        className={`w-full h-9 px-2 rounded-md text-sm border ${borderColor} ${bgSecondary} ${textPrimary}`}
+                        data-testid="task-erp-type"
+                      >
+                        <option value="">— select type —</option>
+                        {ERP_TASK_TYPE_OPTIONS.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
                     </div>
                     <p className={`text-[10px] ${textSecondary} italic`}>
                       Missing a user or page? Open the <span className="text-[#a78bfa]">Users</span> tab to add them.
@@ -2234,6 +2241,60 @@ export default function ProjectsPanel({
                   <Button onClick={handleAddTask} className="bg-[#10b981] hover:bg-[#059669] text-white" data-testid="project-task-save">
                     <Check className="h-3 w-3 mr-1" /> {editingTaskId ? 'Update Task' : 'Add Task'}
                   </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* View-only popup for a task tagged to the ERP hierarchy — edit or
+            move it from the ERP Users tab instead, where its full
+            page/sub-tab context is visible. */}
+        {viewOnlyTask && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => setViewOnlyTask(null)}>
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className={`text-lg font-semibold ${textPrimary}`}>{viewOnlyTask.task_name}</h3>
+                  <button onClick={() => setViewOnlyTask(null)} className={textSecondary}><X className="h-5 w-5" /></button>
+                </div>
+                <p className={`text-xs ${textSecondary}`}>
+                  This task is tagged to the ERP Users tab — edit or move it from there.
+                </p>
+                {viewOnlyTask.description && <p className={`text-sm ${textPrimary}`}>{viewOnlyTask.description}</p>}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><p className={`text-xs ${textSecondary}`}>Assigned To</p><p className={textPrimary}>{users.find(u => u.user_id === viewOnlyTask.assigned_to)?.name || viewOnlyTask.assigned_to || '—'}</p></div>
+                  <div><p className={`text-xs ${textSecondary}`}>Due Date</p><p className={textPrimary}>{fmtDate(viewOnlyTask.due_date)}</p></div>
+                  <div><p className={`text-xs ${textSecondary}`}>Priority</p><p className={`capitalize ${textPrimary}`}>{viewOnlyTask.priority || 'medium'}</p></div>
+                  <div><p className={`text-xs ${textSecondary}`}>Status</p><p className={`capitalize ${textPrimary}`}>{(viewOnlyTask.status || 'pending').replace('_', ' ')}</p></div>
+                  {viewOnlyTask.erp_task_type && (
+                    <div><p className={`text-xs ${textSecondary}`}>Type</p><p className={textPrimary}>{viewOnlyTask.erp_task_type}</p></div>
+                  )}
+                </div>
+                {viewOnlyTask.work_link && (
+                  <a href={viewOnlyTask.work_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] text-sm hover:underline flex items-center gap-1">
+                    <ExternalLink className="h-3.5 w-3.5" /> {viewOnlyTask.work_link}
+                  </a>
+                )}
+                <div className={`p-3 rounded-lg ${bgSecondary}`}>
+                  <p className={`text-[11px] uppercase tracking-wide ${textSecondary} mb-1`}>ERP Location</p>
+                  <p className={`text-sm ${textPrimary} break-words`}>
+                    {buildErpPrompt({
+                      projectName: selectedProject.name,
+                      userName: viewOnlyTask.erp_user_name,
+                      pageName: viewOnlyTask.erp_page_name,
+                      subTabName: viewOnlyTask.erp_sub_tab_name,
+                      ultraSubTabName: viewOnlyTask.erp_ultra_sub_tab_name,
+                      ultraTabName: viewOnlyTask.erp_ultra_tab_name,
+                      taskName: viewOnlyTask.task_name,
+                    })}
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => { setProjectInnerTab('erp_users'); setViewOnlyTask(null); }}>
+                    Open in Users tab
+                  </Button>
+                  <Button variant="ghost" onClick={() => setViewOnlyTask(null)}>Close</Button>
                 </div>
               </CardContent>
             </Card>
