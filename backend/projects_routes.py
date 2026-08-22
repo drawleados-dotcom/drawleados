@@ -57,6 +57,15 @@ class DeleteProjectRequest(BaseModel):
     password: str
 
 
+class ProjectReorderItem(BaseModel):
+    project_id: str
+    order: int
+
+
+class ProjectReorderRequest(BaseModel):
+    projects: List[ProjectReorderItem]
+
+
 class RecordSplitAgainstInvoiceRequest(BaseModel):
     invoice_id: str
 
@@ -211,6 +220,26 @@ async def list_projects(request: Request):
         ]
     }
     projects = await db.projects.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+    # Lazy-backfill `order` for legacy docs that predate manual reordering —
+    # assigns it in the same created_at-desc sequence so the newest project
+    # keeps the smallest number (stays on top) the first time it's read.
+    missing_order = [p for p in projects if p.get("order") is None]
+    if missing_order:
+        top = await db.projects.find({"order": {"$ne": None}}).sort("order", 1).limit(1).to_list(1)
+        # Assign a block of values strictly below the current minimum, so
+        # backfilled legacy docs don't collide with or displace anything
+        # already manually ordered. `missing_order` is still created_at-desc
+        # (newest first) here, so counting up from the bottom of that block
+        # gives the newest legacy project the smallest number, i.e. top.
+        next_order = (top[0]["order"] - len(missing_order)) if top else 0
+        for p in missing_order:
+            p["order"] = next_order
+            await db.projects.update_one({"project_id": p["project_id"]}, {"$set": {"order": next_order}})
+            next_order += 1
+    for p in projects:
+        p.setdefault("is_pinned", False)
+
     # Batched task counts — single aggregation instead of 2*N count_documents.
     project_ids = [p.get("project_id") for p in projects if p.get("project_id")]
     counts_map: dict = {}
@@ -221,15 +250,24 @@ async def list_projects(request: Request):
                 "_id": "$project_id",
                 "total": {"$sum": 1},
                 "completed": {"$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}},
+                "pending_approval": {"$sum": {"$cond": [{"$eq": ["$approval_request.status", "pending"]}, 1, 0]}},
+                "approved": {"$sum": {"$cond": [{"$eq": ["$approval_request.status", "approved"]}, 1, 0]}},
             }},
         ]
         async for row in db.our_tasks.aggregate(pipeline):
-            counts_map[row["_id"]] = {"total": row.get("total", 0), "completed": row.get("completed", 0)}
+            counts_map[row["_id"]] = row
     for p in projects:
         pid = p.get("project_id")
         c = counts_map.get(pid, {})
         p["task_count"] = c.get("total", 0)
         p["completed_task_count"] = c.get("completed", 0)
+        p["pending_approval_task_count"] = c.get("pending_approval", 0)
+        p["approved_task_count"] = c.get("approved", 0)
+
+    # Pinned projects float to the top (by their own order rank), then
+    # everything else follows in manual order — replaces the old
+    # created_at-only ordering now that rows are user-orderable.
+    projects.sort(key=lambda p: (0 if p.get("is_pinned") else 1, p.get("order", 0)))
     return projects
 
 
@@ -256,6 +294,11 @@ async def create_project(payload: ProjectCreate, request: Request):
     if not client_doc:
         raise HTTPException(status_code=400, detail="Selected client does not exist")
 
+    # New projects land at the top of the unpinned group by default (matches
+    # the old "newest first" feel) — one below the current lowest order.
+    lowest = await db.projects.find({"is_pinned": {"$ne": True}}, {"order": 1}).sort("order", 1).limit(1).to_list(1)
+    next_order = (lowest[0].get("order", 0) - 1) if lowest else 0
+
     project = {
         "project_id": f"prj_{uuid.uuid4().hex[:12]}",
         "name": payload.name.strip(),
@@ -268,6 +311,8 @@ async def create_project(payload: ProjectCreate, request: Request):
         "departments": payload.departments or [],
         "status": payload.status or "active",
         "project_type": payload.project_type,
+        "is_pinned": False,
+        "order": next_order,
         "created_by": user.user_id,
         "created_by_name": user.name,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -278,6 +323,43 @@ async def create_project(payload: ProjectCreate, request: Request):
     await db.projects.insert_one(project)
     project.pop("_id", None)
     return project
+
+
+@projects_router.put("/reorder")
+async def reorder_projects(payload: ProjectReorderRequest, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can reorder projects")
+    for item in payload.projects:
+        await db.projects.update_one({"project_id": item.project_id}, {"$set": {"order": item.order}})
+    return {"message": "Projects reordered"}
+
+
+@projects_router.put("/{project_id}/pin")
+async def toggle_pin_project(project_id: str, request: Request):
+    from server import get_current_user, db
+    user = await get_current_user(request)
+    if not await _is_operation_head_or_admin(user, db):
+        raise HTTPException(status_code=403, detail="Only Super Admin / Admin / Operation Head can pin projects")
+
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if not project.get("is_pinned", False):
+        pinned_count = await db.projects.count_documents({"is_pinned": True})
+        if pinned_count >= 5:
+            raise HTTPException(status_code=400, detail="Maximum 5 projects can be pinned")
+        top = await db.projects.find({"is_pinned": True}, {"order": 1}).sort("order", -1).limit(1).to_list(1)
+        new_order = (top[0].get("order", 0) + 1) if top else 0
+        await db.projects.update_one({"project_id": project_id}, {"$set": {"is_pinned": True, "order": new_order}})
+    else:
+        bottom = await db.projects.find({"is_pinned": {"$ne": True}}, {"order": 1}).sort("order", -1).limit(1).to_list(1)
+        new_order = (bottom[0].get("order", 0) + 1) if bottom else 0
+        await db.projects.update_one({"project_id": project_id}, {"$set": {"is_pinned": False, "order": new_order}})
+
+    return await db.projects.find_one({"project_id": project_id}, {"_id": 0})
 
 
 @projects_router.get("/{project_id}")

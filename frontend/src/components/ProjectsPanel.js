@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -553,6 +553,78 @@ export default function ProjectsPanel({
       toast.error(e.response?.data?.detail || 'Failed to update project');
     }
   };
+
+  // Pinned projects always sort first (by their own order rank), then
+  // everything else follows in manual order. Applied after any optimistic
+  // local mutation (drag, pin toggle) so `projects` stays canonically
+  // ordered and the row list only ever needs to .filter(), never .sort().
+  const pinnedThenOrderSort = (a, b) => {
+    const ap = a.is_pinned ? 0 : 1;
+    const bp = b.is_pinned ? 0 : 1;
+    return ap !== bp ? ap - bp : (a.order ?? 0) - (b.order ?? 0);
+  };
+
+  const pinnedProjectCount = projects.filter(p => p.is_pinned).length;
+
+  const togglePinProject = async (project) => {
+    if (!canManageProjects) return;
+    try {
+      const res = await axios.put(`${API}/api/projects/${project.project_id}/pin`, {}, { headers });
+      setProjects(prev => prev.map(x => x.project_id === project.project_id ? { ...x, ...res.data } : x).sort(pinnedThenOrderSort));
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update pin');
+    }
+  };
+
+  // Plain HTML5 drag events rather than a DnD library — no new dependency
+  // needed, and it drops straight onto the existing rows. Indices are found
+  // in the full `projects` array (not the filtered/rendered subset) since a
+  // department/status filter can hide rows — same reasoning as the
+  // ERP Users tab's id-keyed reorder (ProjectErpUsersTab.js).
+  const reorderArray = (arr, fromIndex, toIndex) => {
+    const next = [...arr];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    return next;
+  };
+
+  const persistProjectOrder = async (reordered) => {
+    let pinnedSeq = 0;
+    let unpinnedSeq = 0;
+    const withOrder = reordered.map(p => ({ ...p, order: p.is_pinned ? pinnedSeq++ : unpinnedSeq++ }));
+    setProjects(withOrder);
+    try {
+      await axios.put(`${API}/api/projects/reorder`, {
+        projects: withOrder.map(p => ({ project_id: p.project_id, order: p.order })),
+      }, { headers });
+    } catch (e) {
+      toast.error('Failed to save order');
+      loadProjects();
+    }
+  };
+
+  const [dragProjectId, setDragProjectId] = useState(null);
+  const moveProject = (fromId, toId) => {
+    if (!canManageProjects || fromId === toId) return;
+    const fromIndex = projects.findIndex(p => p.project_id === fromId);
+    const toIndex = projects.findIndex(p => p.project_id === toId);
+    if (fromIndex === -1 || toIndex === -1) return;
+    // Dragging across the pinned/unpinned boundary is a no-op — the pin
+    // button is what moves a project between those two groups.
+    if (!!projects[fromIndex].is_pinned !== !!projects[toIndex].is_pinned) return;
+    persistProjectOrder(reorderArray(projects, fromIndex, toIndex));
+  };
+  const projectDragProps = (projectId) => (!canManageProjects ? {} : {
+    draggable: true,
+    onDragStart: (e) => { setDragProjectId(projectId); e.dataTransfer.effectAllowed = 'move'; },
+    onDragOver: (e) => { if (dragProjectId && dragProjectId !== projectId) e.preventDefault(); },
+    onDrop: (e) => {
+      e.preventDefault();
+      if (dragProjectId && dragProjectId !== projectId) moveProject(dragProjectId, projectId);
+      setDragProjectId(null);
+    },
+    onDragEnd: () => setDragProjectId(null),
+  });
 
   // Super Admin only — deleting a project requires re-entering their
   // password (verified server-side against the account's stored hash).
@@ -2847,6 +2919,7 @@ export default function ProjectsPanel({
             <table className="w-full text-sm">
               <thead className={`${bgSecondary} ${textSecondary} text-xs uppercase`}>
                 <tr>
+                  <th className="text-left px-2 py-3" aria-label="Reorder / Pin" />
                   <th className="text-left px-4 py-3">Project</th>
                   <th className="text-left px-4 py-3">Departments</th>
                   <th className="text-left px-4 py-3">Client</th>
@@ -2859,6 +2932,7 @@ export default function ProjectsPanel({
                   {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3">Handover Date</th>}
                   {statusFilter === 'Hand Over' && <th className="text-left px-4 py-3">Remarks</th>}
                   <th className="text-left px-4 py-3">Tasks</th>
+                  <th className="text-left px-4 py-3">Progress</th>
                   <th className="text-left px-4 py-3">Members</th>
                   {role === 'super_admin' && <th className="text-right px-4 py-3">Actions</th>}
                 </tr>
@@ -2867,24 +2941,10 @@ export default function ProjectsPanel({
                 {projects
                   .filter(p => deptFilter === 'all' || (p.departments || []).includes(deptFilter))
                   .filter(p => statusFilter === 'all' || (p.status || 'active') === statusFilter)
-                  .sort((a, b) => {
-                    // Row order follows the department's configured status
-                    // order (same sequence as the status filter pills above)
-                    // — e.g. Onboarded, then Developing, then... Only
-                    // meaningful once a specific department is selected,
-                    // since status vocabularies are defined per department.
-                    if (deptFilter === 'all') return 0;
-                    const order = deptStatuses.find(d => d.dept_key === deptFilter)?.statuses || [];
-                    const rank = (p) => {
-                      const idx = order.indexOf(p.status || 'active');
-                      return idx === -1 ? order.length : idx;
-                    };
-                    return rank(a) - rank(b);
-                  })
                   .map(p => (
                   <tr
                     key={p.project_id}
-                    className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors`}
+                    className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors ${p.is_pinned ? 'bg-amber-500/5' : ''}`}
                     onClick={async () => {
                       // Optimistic UI — show the project shell immediately, then hydrate with tasks.
                       // Website projects land on Pages, their own primary tab; everything
@@ -2899,6 +2959,23 @@ export default function ProjectsPanel({
                     }}
                     data-testid={`project-row-${p.project_id}`}
                   >
+                    <td className="px-2 py-3" onClick={(e) => e.stopPropagation()} {...projectDragProps(p.project_id)}>
+                      <div className="flex items-center gap-1">
+                        {canManageProjects && (
+                          <GripVertical className={`h-4 w-4 ${textSecondary} cursor-grab shrink-0`} />
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => togglePinProject(p)}
+                          disabled={!canManageProjects || (!p.is_pinned && pinnedProjectCount >= 5)}
+                          title={p.is_pinned ? 'Unpin project' : (pinnedProjectCount >= 5 ? 'Maximum 5 projects can be pinned' : 'Pin project')}
+                          className={`p-1 rounded ${p.is_pinned ? 'text-amber-500' : `${textSecondary} ${pinnedProjectCount >= 5 ? 'opacity-40 cursor-not-allowed' : 'hover:text-amber-500'}`}`}
+                          data-testid={`project-row-pin-${p.project_id}`}
+                        >
+                          {p.is_pinned ? <Pin className="h-4 w-4 fill-current" /> : <PinOff className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 max-w-[240px]">
                       <p className={`font-medium ${textPrimary} truncate`}>{p.name}</p>
                       <p className={`text-xs ${textSecondary} truncate`}>{p.description || 'No description'}</p>
@@ -2996,6 +3073,26 @@ export default function ProjectsPanel({
                       <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
                         <ListChecks className="h-3 w-3" />{p.task_count || 0}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 min-w-[180px]">
+                      {(() => {
+                        const total = p.task_count || 0;
+                        const approved = p.approved_task_count || 0;
+                        const pending = p.pending_approval_task_count || 0;
+                        const approvedPct = total ? (approved / total) * 100 : 0;
+                        const pendingPct = total ? (pending / total) * 100 : 0;
+                        return (
+                          <div className="flex flex-col gap-1">
+                            <div className={`w-full h-2 rounded-full overflow-hidden flex ${bgSecondary}`}>
+                              <div className="h-full bg-[#10b981]" style={{ width: `${approvedPct}%` }} />
+                              <div className="h-full bg-[#f59e0b]" style={{ width: `${pendingPct}%` }} />
+                            </div>
+                            <span className={`text-[11px] ${textSecondary}`}>
+                              {total === 0 ? 'No tasks' : `${approved}/${total} approved${pending ? ` · ${pending} pending` : ''}`}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`flex items-center gap-1 text-xs ${textSecondary}`}>
