@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -16,6 +16,7 @@ import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
 import ProjectErpDepartmentsTab from './projects/ProjectErpDepartmentsTab';
 import ErpLocationPicker from './projects/ErpLocationPicker';
+import ErpTaskModal from './projects/ErpTaskModal';
 import ProjectScopesTab from './projects/ProjectScopesTab';
 import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
@@ -70,11 +71,12 @@ export default function ProjectsPanel({
   const role = (currentUser?.role || '').toLowerCase();
   const canManageProjects = !viewOnly;
   const isAdminRole = role === 'super_admin' || role === 'admin';
-  // A task's Edit/Delete in the generic Tasks tab is only for whoever created it,
-  // or an admin/super_admin — narrower than canManageProjects, which just gates
-  // "not in view-only mode". ERP-tagged tasks are excluded entirely: they're only
-  // ever edited from the ERP Users tab, which has their full page/sub-tab context.
-  const canEditProjectTask = (task) => !task.erp_user_id && (isAdminRole || task.created_by === currentUser?.user_id);
+  // A task's Edit/Delete in the Tasks tab is only for whoever it's assigned
+  // to, or an admin/super_admin — narrower than canManageProjects, which
+  // just gates "not in view-only mode". ERP-tagged tasks (erp_user_id set)
+  // edit via the same shared ErpTaskModal the ERP Users tab uses, so they're
+  // no longer excluded here.
+  const canEditProjectTask = (task) => isAdminRole || task.assigned_to === currentUser?.user_id;
   // Content Calendar ignores admins'/super admins' own View/Edit self-toggle (that
   // toggle is a personal "look, don't touch" convenience, not a real restriction on
   // them) — falls back to the general viewOnly rule if the parent didn't pass one.
@@ -102,11 +104,13 @@ export default function ProjectsPanel({
   const [savingHandover, setSavingHandover] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
-  // A task tagged to the ERP hierarchy (erp_user_id set) is read-only from
-  // this generic Tasks tab — it can only be edited from the ERP Users tab,
-  // where its full page/sub-tab context is visible. viewOnlyTask holds the
-  // task being looked at that way; showAddTask/editingTaskId stay unused for it.
+  // viewOnlyTask holds the task currently shown in the read-only preview
+  // popup (task details + time-tracking timeline). Editing an ERP-hierarchy
+  // task (erp_user_id set) opens erpTaskModal — the shared ErpTaskModal,
+  // seeded with that task's existing location/draft — instead of the plain
+  // taskDraft form below, which only knows department/category tasks.
   const [viewOnlyTask, setViewOnlyTask] = useState(null);
+  const [erpTaskModal, setErpTaskModal] = useState(null); // { taskId, location, draft } | null
   const [deptFilter, setDeptFilter] = useState('all');
 
   const [projectDraft, setProjectDraft] = useState({ name: '', client_id: '', description: '', start_date: '', due_date: '', project_type: 'onetime', departments: [], members: [] });
@@ -676,11 +680,28 @@ export default function ProjectsPanel({
   };
 
   const handleEditTask = (task) => {
-    // ERP-tagged tasks (erp_user_id set) are only editable from the ERP
-    // Users tab, which knows the full page/sub-tab context — here they're
-    // view-only so this generic list can't silently drop that context.
+    // ERP-tagged tasks (erp_user_id set) edit through the same shared
+    // ErpTaskModal the ERP Users tab uses, seeded with this task's existing
+    // location — everything else uses the plain department/category form.
     if (task.erp_user_id) {
-      setViewOnlyTask(task);
+      setErpTaskModal({
+        taskId: task.task_id,
+        location: {
+          erp_user_id: task.erp_user_id, erp_user_name: task.erp_user_name,
+          erp_page_id: task.erp_page_id, erp_page_name: task.erp_page_name,
+          erp_sub_tab_id: task.erp_sub_tab_id, erp_sub_tab_name: task.erp_sub_tab_name,
+          erp_ultra_sub_tab_id: task.erp_ultra_sub_tab_id, erp_ultra_sub_tab_name: task.erp_ultra_sub_tab_name,
+          erp_ultra_tab_id: task.erp_ultra_tab_id, erp_ultra_tab_name: task.erp_ultra_tab_name,
+        },
+        draft: {
+          task_name: task.task_name || '',
+          priority: task.priority || 'medium',
+          erp_task_type: task.erp_task_type || '',
+          assigned_to: task.assigned_to || '',
+          due_date: task.due_date ? task.due_date.split('T')[0] : '',
+          work_link: task.work_link || '',
+        },
+      });
       return;
     }
     setEditingTaskId(task.task_id);
@@ -722,6 +743,14 @@ export default function ProjectsPanel({
   };
 
   const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString() : '—');
+  const formatDuration = (seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  };
 
   // SEO Scope tab "Add Task" — defaults Department to SEO and Category to
   // whichever sub-tab (Research / On Page SEO / Off Page SEO) is active.
@@ -2427,11 +2456,11 @@ export default function ProjectsPanel({
           </div>
         )}
 
-        {/* View popup — read-only for everyone. A task tagged to the ERP
-            hierarchy can only be edited/moved from the ERP Users tab (its
-            full page/sub-tab context lives there); any other task can be
-            edited from here too, via the button below, but only by whoever
-            created it or an admin/super_admin (see canEditProjectTask). */}
+        {/* View popup — details + time-tracking timeline for everyone. Edit
+            (via the button below) is limited to whoever the task is
+            assigned to, or an admin/super_admin (see canEditProjectTask).
+            ERP-tagged tasks open the shared ErpTaskModal; anything else
+            uses the plain department/category edit form. */}
         {viewOnlyTask && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70]" onClick={() => setViewOnlyTask(null)}>
             <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
@@ -2440,11 +2469,6 @@ export default function ProjectsPanel({
                   <h3 className={`text-lg font-semibold ${textPrimary}`}>{viewOnlyTask.task_name}</h3>
                   <button onClick={() => setViewOnlyTask(null)} className={textSecondary}><X className="h-5 w-5" /></button>
                 </div>
-                {viewOnlyTask.erp_user_id && (
-                  <p className={`text-xs ${textSecondary}`}>
-                    This task is tagged to the ERP Users tab — edit or move it from there.
-                  </p>
-                )}
                 {viewOnlyTask.description && <p className={`text-sm ${textPrimary}`}>{viewOnlyTask.description}</p>}
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div><p className={`text-xs ${textSecondary}`}>Assigned To</p><p className={textPrimary}>{users.find(u => u.user_id === viewOnlyTask.assigned_to)?.name || viewOnlyTask.assigned_to || '—'}</p></div>
@@ -2477,12 +2501,57 @@ export default function ProjectsPanel({
                     </p>
                   </div>
                 )}
+                {/* Time Tracking — total time spent, live timer status, and a
+                    session-by-session timeline. Each session is one
+                    start→pause/finish segment; pause count is approximated
+                    as closed segments minus one if the timer finished (the
+                    backend doesn't tag which action closed each session). */}
+                {(() => {
+                  const tracking = viewOnlyTask.time_tracking || {};
+                  const sessions = tracking.sessions || [];
+                  if (!sessions.length && !tracking.total_seconds) return null;
+                  const closedCount = sessions.filter(s => s.end).length;
+                  const pauseCount = Math.max(0, closedCount - (tracking.status === 'finished' ? 1 : 0));
+                  return (
+                    <div className={`p-3 rounded-lg ${bgSecondary}`} data-testid="project-task-time-tracking">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className={`text-[11px] uppercase tracking-wide ${textSecondary} flex items-center gap-1`}>
+                          <Timer className="h-3 w-3" /> Time Tracking
+                        </p>
+                        {tracking.status === 'running' && (
+                          <Badge className="bg-emerald-500/20 text-emerald-500 animate-pulse"><Play className="h-3 w-3 mr-1" /> Running</Badge>
+                        )}
+                        {tracking.status === 'paused' && (
+                          <Badge className="bg-amber-500/20 text-amber-500"><Pause className="h-3 w-3 mr-1" /> Paused</Badge>
+                        )}
+                        {tracking.status === 'finished' && (
+                          <Badge className="bg-emerald-500/20 text-emerald-500"><CheckCircle2 className="h-3 w-3 mr-1" /> Finished</Badge>
+                        )}
+                      </div>
+                      <p className={`text-2xl font-bold ${textPrimary}`}>{formatDuration(tracking.total_seconds || 0)}</p>
+                      <p className={`text-xs ${textSecondary} mb-2`}>
+                        Total time spent
+                        {sessions.length > 0 && ` · ${sessions.length} session${sessions.length === 1 ? '' : 's'}`}
+                        {pauseCount > 0 && ` · paused ${pauseCount}×`}
+                      </p>
+                      {sessions.length > 0 && (
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto pt-2 border-t border-dashed">
+                          {sessions.map((session, idx) => (
+                            <div key={idx} className={`flex items-center justify-between text-xs ${textSecondary} px-2 py-1.5 rounded ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+                              <span>
+                                {new Date(session.start).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                {session.end ? ` → ${new Date(session.end).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ' → running'}
+                              </span>
+                              <span className="font-medium text-[#6366f1]">{formatDuration(session.duration_seconds || 0)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="flex justify-end gap-2 pt-2">
-                  {viewOnlyTask.erp_user_id ? (
-                    <Button variant="outline" onClick={() => { setProjectInnerTab('erp_users'); setViewOnlyTask(null); }}>
-                      Open in Users tab
-                    </Button>
-                  ) : canManageProjects && canEditProjectTask(viewOnlyTask) && (
+                  {canManageProjects && canEditProjectTask(viewOnlyTask) && (
                     <Button variant="outline" onClick={() => { const t = viewOnlyTask; setViewOnlyTask(null); handleEditTask(t); }}>
                       <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
                     </Button>
@@ -2492,6 +2561,27 @@ export default function ProjectsPanel({
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* ERP-tagged task edit — the same shared modal ProjectErpUsersTab
+            uses, seeded with this task's existing location/draft. */}
+        {erpTaskModal && (
+          <ErpTaskModal
+            project={selectedProject}
+            projectMembers={projectMembers}
+            currentUser={currentUser}
+            headers={headers}
+            taskId={erpTaskModal.taskId}
+            initialLocation={erpTaskModal.location}
+            initialDraft={erpTaskModal.draft}
+            onClose={() => setErpTaskModal(null)}
+            onSaved={() => { refreshSelectedProject(); loadProjects(); }}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
         )}
 
         {/* Client Portal — ERP/Website projects, create/reset a client login + share message */}
@@ -2803,10 +2893,10 @@ export default function ProjectsPanel({
                     className={`border-t ${borderColor} cursor-pointer hover:bg-[#6366f1]/5 transition-colors`}
                     onClick={async () => {
                       // Optimistic UI — show the project shell immediately, then hydrate with tasks.
-                      // Website projects land on Pages, ERP projects land on Users — each
-                      // department's own primary tab; everything else lands on Tasks.
+                      // Website projects land on Pages, their own primary tab; everything
+                      // else — including ERP — lands on Tasks.
                       const deps = p.departments || [];
-                      setProjectInnerTab(deps.includes('website') ? 'pages' : (deps.includes('erp') ? 'erp_users' : 'tasks'));
+                      setProjectInnerTab(deps.includes('website') ? 'pages' : 'tasks');
                       setSelectedProject(p);
                       try {
                         const res = await axios.get(`${API}/api/projects/${p.project_id}`, { headers });
