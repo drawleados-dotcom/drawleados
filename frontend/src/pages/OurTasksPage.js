@@ -109,12 +109,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     awaiting_ceo: 0,
   });
   const [meetingsSubActive, setMeetingsSubActive] = useState(false); // when true → render Meetings panel inside My Tasks / Assign-to-Team
-  // Super-Admin-only "Operation" umbrella pill — when active, the dept sub-tabs
-  // bar nests every non-Management department as a second row (see visibleDeptCategoriesForBar).
-  const [opGroupActive, setOpGroupActive] = useState(false);
-  // Technology / Marketing scope within the Operation umbrella — narrows
-  // which of those departments show as pills below it. Sourced from each
-  // department's own `group` field (set in Operations > Departments).
+  // Technology / Marketing scope — Assign to Team-only. Narrows which
+  // departments show as pills below it. Sourced from each department's
+  // own `group` field (set in Operations > Departments).
   const [opGroupFilter, setOpGroupFilter] = useState('all');
   const [viewingTask, setViewingTask] = useState(null);
   const [showTaskDetailModal, setShowTaskDetailModal] = useState(false);
@@ -408,10 +405,9 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     return visibleDeptCategories;
   }, [visibleDeptCategories, mainTab, user?.role]);
 
-  // Reset the Operation umbrella grouping whenever the main tab changes so
+  // Reset the Technology/Marketing scope whenever the main tab changes so
   // it never bleeds stale state between My Tasks / Assign to Team.
   useEffect(() => {
-    setOpGroupActive(false);
     setOpGroupFilter('all');
   }, [mainTab]);
 
@@ -2005,7 +2001,6 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             <Select
               value={filters.department}
               onValueChange={(v) => {
-                setOpGroupActive(false);
                 setOpGroupFilter('all');
                 setMeetingsSubActive(false);
                 setFilters({ ...filters, department: v, subDepartment: 'all', category: 'all', project: 'all' });
@@ -2180,7 +2175,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           </div>
         </div>
 
-        {/* Department Sub-Tabs with red pending count badges */}
+        {/* Department Sub-Tabs with red pending count badges. Assign to Team
+            gets a Technology/Marketing scope row (sourced from each
+            department's own `group` field, set in Operations > Departments)
+            above the (now scoped) department pills — no more separate
+            Management/Operation pills. My Tasks keeps the flat department row. */}
         {(() => {
           const sourceTasks = mainTab === 'assigned_to_me'
             ? [...assignedToMeTasks, ...myOwnTasks]
@@ -2192,86 +2191,150 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             pendingByDept[d] = (pendingByDept[d] || 0) + 1;
           });
 
-          const role = (user?.role || '').toLowerCase();
-          const isSuperAdmin = role === 'super_admin';
-          const managementDept = visibleDeptCategoriesForBar.find(d => d.dept_key === 'management');
-          const operationDepts = visibleDeptCategoriesForBar.filter(d => d.dept_key !== 'management');
-          // Super Admin sees "Management" and "Operation" as two umbrella pills
-          // instead of a flat department row — Operation nests every other
-          // department as a second-row pill (see the block right below).
-          // My Tasks has no "Operation" pill — just the flat department row,
-          // same as everyone else sees there; the umbrella split is
-          // Assign to Team-only.
-          const useOpGrouping = isSuperAdmin && !!managementDept && mainTab === 'assign_to_team';
-          const managementCount = (pendingByDept['management'] || 0) + (pendingByDept['all'] || 0);
-          const operationCount = operationDepts.reduce((sum, d) => sum + (pendingByDept[d.dept_key] || 0), 0) + (pendingByDept['all'] || 0);
+          if (mainTab === 'assign_to_team') {
+            const scopedDepts = opGroupFilter === 'all'
+              ? visibleDeptCategoriesForBar
+              : visibleDeptCategoriesForBar.filter(d => d.group === opGroupFilter);
+            const groupCount = (groupValue) => visibleDeptCategoriesForBar
+              .filter(d => groupValue === 'all' || d.group === groupValue)
+              .reduce((sum, d) => sum + (pendingByDept[d.dept_key] || 0), 0) + (pendingByDept['all'] || 0);
 
-          return (
-            <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
-              {useOpGrouping ? (
-                <>
+            return (
+              <>
+                <div className="flex flex-wrap items-center gap-2" data-testid="assign-team-scope-tabs">
+                  {[{ value: 'all', label: 'All' }, { value: 'technology', label: 'Technology' }, { value: 'marketing', label: 'Marketing' }].map(g => {
+                    const count = groupCount(g.value);
+                    const isActive = opGroupFilter === g.value && !meetingsSubActive;
+                    return (
+                      <button
+                        key={g.value}
+                        onClick={() => {
+                          setOpGroupFilter(g.value);
+                          setMeetingsSubActive(false);
+                          setFilters({...filters, department: 'all', subDepartment: 'all', project: 'all', category: 'all'});
+                        }}
+                        data-testid={`assign-team-scope-${g.value}`}
+                        className={`relative px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                          isActive
+                            ? 'bg-[#111827] text-white border-transparent shadow-sm'
+                            : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#111827]/40`
+                        }`}
+                      >
+                        {g.label}
+                        {count > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]">
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {/* Meetings sub-tab — distinct colored pill */}
                   <button
-                    onClick={() => { setOpGroupActive(false); setOpGroupFilter('all'); setMeetingsSubActive(false); setFilters({...filters, department: 'management', subDepartment: 'all', project: 'all', category: 'all'}); }}
-                    data-testid="dept-subtab-management"
-                    className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
-                      filters.department === 'management' && !meetingsSubActive && !opGroupActive
-                        ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
-                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                    onClick={() => setMeetingsSubActive(true)}
+                    data-testid="dept-subtab-meetings"
+                    className={`relative px-4 py-2 rounded-xl text-sm transition-all border-2 ${
+                      meetingsSubActive
+                        ? 'bg-[#ec4899] text-white border-transparent shadow-sm'
+                        : `${bgCard} text-[#ec4899] border-[#ec4899]/40 hover:bg-[#ec4899]/10`
                     }`}
                   >
-                    {managementDept.label}
-                    {managementCount > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]">
-                        {managementCount}
+                    <Video className="h-3.5 w-3.5 inline -mt-0.5 mr-1" />
+                    Meetings
+                    {meetingsCount > 0 && !meetingsSubActive && (
+                      <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ec4899] text-white text-[10px] font-bold px-1">
+                        {meetingsCount}
                       </span>
                     )}
                   </button>
-                  <button
-                    onClick={() => { setOpGroupActive(true); setMeetingsSubActive(false); setFilters({...filters, department: 'all', subDepartment: 'all', project: 'all', category: 'all'}); }}
-                    data-testid="dept-subtab-operation"
-                    className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
-                      opGroupActive && !meetingsSubActive
-                        ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
-                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
-                    }`}
+
+                  <Button
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-xl h-9 px-4"
+                    data-testid="create-task-btn"
                   >
-                    Operation
-                    {operationCount > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]">
-                        {operationCount}
-                      </span>
-                    )}
-                  </button>
-                </>
-              ) : (
-                visibleDeptCategoriesForBar.map(d => {
-                  // A task marked "all" (Select All) counts toward every department's badge too.
-                  const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
-                  const isActive = filters.department === d.dept_key && !meetingsSubActive;
-                  return (
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Create Task
+                  </Button>
+                </div>
+
+                {/* Respective sub tabs — the departments in the selected scope */}
+                {!meetingsSubActive && (
+                  <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="opgroup-subtabs">
                     <button
-                      key={d.dept_key}
-                      onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: d.dept_key, subDepartment: 'all', project: 'all', category: 'all'}); }}
-                      data-testid={`dept-subtab-${d.dept_key}`}
-                      className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
-                        isActive
-                          ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
-                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                      onClick={() => setFilters({...filters, department: 'all', subDepartment: 'all'})}
+                      data-testid="opgroup-subtab-all"
+                      className={`px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                        filters.department === 'all'
+                          ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
                       }`}
                     >
-                      {d.label}
-                      {count > 0 && (
-                        <span
-                          className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]"
-                          data-testid={`dept-pending-${d.dept_key}`}
-                        >
-                          {count}
-                        </span>
-                      )}
+                      All
                     </button>
-                  );
-                })
-              )}
+                    {scopedDepts.map(d => {
+                      const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
+                      const isActive = filters.department === d.dept_key;
+                      return (
+                        <button
+                          key={d.dept_key}
+                          onClick={() => setFilters({...filters, department: d.dept_key, subDepartment: 'all'})}
+                          data-testid={`opgroup-subtab-${d.dept_key}`}
+                          className={`relative px-3 py-1.5 rounded-lg text-xs transition-all border ${
+                            isActive
+                              ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
+                              : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
+                          }`}
+                        >
+                          {d.label}
+                          {count > 0 && (
+                            <span
+                              className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1"
+                              data-testid={`opgroup-pending-${d.dept_key}`}
+                            >
+                              {count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          }
+
+          // My Tasks — flat department pill row, unchanged.
+          return (
+            <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
+              {visibleDeptCategoriesForBar.map(d => {
+                // A task marked "all" (Select All) counts toward every department's badge too.
+                const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
+                const isActive = filters.department === d.dept_key && !meetingsSubActive;
+                return (
+                  <button
+                    key={d.dept_key}
+                    onClick={() => { setMeetingsSubActive(false); setFilters({...filters, department: d.dept_key, subDepartment: 'all', project: 'all', category: 'all'}); }}
+                    data-testid={`dept-subtab-${d.dept_key}`}
+                    className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
+                      isActive
+                        ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                        : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                    }`}
+                  >
+                    {d.label}
+                    {count > 0 && (
+                      <span
+                        className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]"
+                        data-testid={`dept-pending-${d.dept_key}`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
 
               {/* Meetings sub-tab — distinct colored pill */}
               <button
@@ -2307,109 +2370,10 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
           );
         })()}
 
-        {/* Operation umbrella — Super Admin only. A Technology/Marketing scope
-            row (sourced from each department's own `group` field, set in
-            Operations > Departments) narrows which non-Management department
-            shows as a pill in the row beneath it. */}
-        {opGroupActive && !meetingsSubActive && (() => {
-          const operationDepts = visibleDeptCategoriesForBar.filter(d => d.dept_key !== 'management');
-          const scopedOperationDepts = opGroupFilter === 'all'
-            ? operationDepts
-            : operationDepts.filter(d => d.group === opGroupFilter);
-          const sourceTasks = mainTab === 'assigned_to_me'
-            ? [...assignedToMeTasks, ...myOwnTasks]
-            : assignedToTeamTasks;
-          const pendingByDept = {};
-          sourceTasks.forEach(t => {
-            if ((t.status || 'pending') !== 'pending') return;
-            const d = t.department || '_unassigned';
-            pendingByDept[d] = (pendingByDept[d] || 0) + 1;
-          });
-          const groupCount = (groupValue) => operationDepts
-            .filter(d => groupValue === 'all' || d.group === groupValue)
-            .reduce((sum, d) => sum + (pendingByDept[d.dept_key] || 0), 0) + (pendingByDept['all'] || 0);
-
-          return (
-            <>
-              <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="opgroup-scope-tabs">
-                {[{ value: 'all', label: 'All' }, { value: 'technology', label: 'Technology' }, { value: 'marketing', label: 'Marketing' }].map(g => {
-                  const count = groupCount(g.value);
-                  return (
-                    <button
-                      key={g.value}
-                      onClick={() => setOpGroupFilter(g.value)}
-                      data-testid={`opgroup-scope-${g.value}`}
-                      className={`relative px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                        opGroupFilter === g.value
-                          ? 'bg-[#111827] text-white border-transparent shadow-sm'
-                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#111827]/40`
-                      }`}
-                    >
-                      {g.label}
-                      {count > 0 && (
-                        <span className="ml-1.5 inline-flex items-center justify-center min-w-[16px] h-[16px] rounded-full bg-[#ef4444] text-white text-[9px] font-bold px-1">
-                          {count}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-                <Button
-                  onClick={() => setShowCreateModal(true)}
-                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-xl h-9 px-4 ml-auto"
-                  data-testid="opgroup-create-task-btn"
-                >
-                  <Plus className="h-4 w-4 mr-1.5" />
-                  Create Task
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 pl-4" data-testid="opgroup-subtabs">
-                <button
-                  onClick={() => setFilters({...filters, department: 'all', subDepartment: 'all'})}
-                  data-testid="opgroup-subtab-all"
-                  className={`px-3 py-1.5 rounded-lg text-xs transition-all border ${
-                    filters.department === 'all'
-                      ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
-                      : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
-                  }`}
-                >
-                  All Operation
-                </button>
-                {scopedOperationDepts.map(d => {
-                  const count = (pendingByDept[d.dept_key] || 0) + (pendingByDept['all'] || 0);
-                  const isActive = filters.department === d.dept_key;
-                  return (
-                    <button
-                      key={d.dept_key}
-                      onClick={() => setFilters({...filters, department: d.dept_key, subDepartment: 'all'})}
-                      data-testid={`opgroup-subtab-${d.dept_key}`}
-                      className={`relative px-3 py-1.5 rounded-lg text-xs transition-all border ${
-                        isActive
-                          ? 'bg-[#8b5cf6] text-white border-transparent shadow-sm'
-                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#8b5cf6]/40`
-                      }`}
-                    >
-                      {d.label}
-                      {count > 0 && (
-                        <span
-                          className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1"
-                          data-testid={`opgroup-pending-${d.dept_key}`}
-                        >
-                          {count}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          );
-        })()}
-
         {/* Sub Department Sub-Tabs — nested under a specific department that
             has them configured (e.g. Management), so clicking Management
             then a sub-department pill filters the list to just that one. */}
-        {!meetingsSubActive && !opGroupActive && filters.department !== 'all' && (() => {
+        {!meetingsSubActive && filters.department !== 'all' && (() => {
           const activeDept = visibleDeptCategoriesForBar.find(d => d.dept_key === filters.department);
           const subDepts = getSelectableSubDepts(filters.department);
           if (!activeDept || subDepts.length === 0) return null;
