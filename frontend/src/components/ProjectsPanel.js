@@ -1029,6 +1029,7 @@ export default function ProjectsPanel({
   if (selectedProject) {
     const projectTasks = selectedProject.tasks || [];
     const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterdayStr = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     // Member + date filters, shared by both the status summary cards below
     // (each card's own count is computed without the status filter itself,
     // so every bucket stays visible to jump between) and the task list.
@@ -1036,6 +1037,7 @@ export default function ProjectsPanel({
       if (taskMemberFilter !== 'all' && t.assigned_to !== taskMemberFilter) return false;
       const td = (t.due_date || t.created_at || '').slice(0, 10);
       if (taskDateFilter === 'today') return td === todayStr;
+      if (taskDateFilter === 'yesterday') return td === yesterdayStr;
       if (taskDateFilter === 'single') return taskSingleDate ? td === taskSingleDate : true;
       if (taskDateFilter === 'range') {
         if (taskDateFrom && td < taskDateFrom) return false;
@@ -1049,13 +1051,18 @@ export default function ProjectsPanel({
     // happens. Approval = has an open approval_request regardless of its
     // own status. Completed = finished OR its approval was approved —
     // either is enough on its own, so a task never falls through every
-    // bucket just because it skipped the approval flow.
+    // bucket just because it skipped the approval flow. An approved task
+    // is Completed FIRST — it must not also still count as Todo/Progress/
+    // Approval just because its own `status` field never got flipped to
+    // 'completed' (that used to double-count it into two buckets at once).
+    const isTaskCompleted = (t) => t.status === 'completed' || t.approval_request?.status === 'approved';
     const matchesTaskStatus = (t) => {
       if (taskStatusFilter === 'all') return true;
+      if (taskStatusFilter === 'completed') return isTaskCompleted(t);
+      if (isTaskCompleted(t)) return false;
       if (taskStatusFilter === 'todo') return (t.status || 'pending') === 'pending';
       if (taskStatusFilter === 'progress') return t.status === 'in_progress';
       if (taskStatusFilter === 'approval') return t.approval_request?.status === 'pending';
-      if (taskStatusFilter === 'completed') return t.status === 'completed' || t.approval_request?.status === 'approved';
       return true;
     };
     // ERP hierarchy filters — a task carries its erp_* ids directly, so this
@@ -1080,10 +1087,11 @@ export default function ProjectsPanel({
     const matchesScopeFilters = (t) => matchesMemberAndDate(t) && matchesErpFilters(t);
     const statusScopedTasks = projectTasks.filter(matchesScopeFilters);
     const allTasksCount = statusScopedTasks.length;
-    const todoTasksCount = statusScopedTasks.filter(t => (t.status || 'pending') === 'pending').length;
-    const progressTasksCount = statusScopedTasks.filter(t => t.status === 'in_progress').length;
-    const approvalTasksCount = statusScopedTasks.filter(t => t.approval_request?.status === 'pending').length;
-    const completedTasksCount = statusScopedTasks.filter(t => t.status === 'completed' || t.approval_request?.status === 'approved').length;
+    const completedTasksCount = statusScopedTasks.filter(isTaskCompleted).length;
+    const notCompletedTasks = statusScopedTasks.filter(t => !isTaskCompleted(t));
+    const todoTasksCount = notCompletedTasks.filter(t => (t.status || 'pending') === 'pending').length;
+    const progressTasksCount = notCompletedTasks.filter(t => t.status === 'in_progress').length;
+    const approvalTasksCount = notCompletedTasks.filter(t => t.approval_request?.status === 'pending').length;
 
     const filteredTasks = projectTasks.filter(t => matchesScopeFilters(t) && matchesTaskStatus(t));
 
@@ -1873,6 +1881,7 @@ export default function ProjectsPanel({
             >
               <option value="all">All Time</option>
               <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
               <option value="single">Single Date</option>
               <option value="range">Date Range</option>
             </select>
@@ -2041,10 +2050,14 @@ export default function ProjectsPanel({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-medium ${textPrimary}`}>{task.task_name}</span>
                         <Badge className={
-                          task.status === 'completed' ? 'bg-[#10b981]/20 text-[#10b981]' :
+                          isTaskCompleted(task) ? 'bg-[#10b981]/20 text-[#10b981]' :
                           task.status === 'in_progress' ? 'bg-[#3b82f6]/20 text-[#3b82f6]' :
                           'bg-[#71717a]/20 text-[#71717a]'
-                        }>{task.status?.replace('_', ' ') || 'pending'}</Badge>
+                        }>
+                          {/* An approved-but-not-flipped task shows Completed here too —
+                              otherwise the badge contradicts the bucket it's counted under. */}
+                          {isTaskCompleted(task) ? 'completed' : (task.status?.replace('_', ' ') || 'pending')}
+                        </Badge>
                         <Badge className={
                           task.priority === 'high' ? 'bg-[#ef4444]/20 text-[#ef4444] text-xs' :
                           task.priority === 'low' ? 'bg-[#10b981]/20 text-[#10b981] text-xs' :
