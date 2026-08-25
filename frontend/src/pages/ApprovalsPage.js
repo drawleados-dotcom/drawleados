@@ -1286,6 +1286,38 @@ export default function ApprovalsPage({ embedded = false }) {
                     Requested by <span className={textPrimary}>{decisionTask.approval_request?.requested_by_name}</span>
                     {decisionTask.approval_request?.department && ` · ${decisionTask.approval_request.department}`}
                   </p>
+
+                  {/* Created / Completed / Duration — "Completed" is when the
+                      assignee sent it for approval (requested_at), since that's
+                      the point their work on it was actually done. */}
+                  {(() => {
+                    const createdAt = decisionTask.created_at;
+                    const completedAt = decisionTask.approval_request?.requested_at;
+                    const durationSeconds = createdAt && completedAt
+                      ? Math.max(0, (new Date(completedAt) - new Date(createdAt)) / 1000)
+                      : null;
+                    return (
+                      <div className={`grid grid-cols-3 gap-3 mt-3 p-3 rounded-lg ${bgSecondary}`} data-testid="decision-timing">
+                        <div>
+                          <p className={`text-[10px] uppercase tracking-wide ${textSecondary}`}>Created</p>
+                          <p className={`text-xs font-medium ${textPrimary}`}>{formatDateShort(createdAt)}</p>
+                          <p className={`text-[10px] ${textSecondary}`}>{formatTimeOnlyShort(createdAt)}</p>
+                        </div>
+                        <div>
+                          <p className={`text-[10px] uppercase tracking-wide ${textSecondary}`}>Completed</p>
+                          <p className={`text-xs font-medium ${textPrimary}`}>{completedAt ? formatDateShort(completedAt) : '—'}</p>
+                          <p className={`text-[10px] ${textSecondary}`}>{completedAt ? formatTimeOnlyShort(completedAt) : ''}</p>
+                        </div>
+                        <div>
+                          <p className={`text-[10px] uppercase tracking-wide ${textSecondary}`}>Time Taken</p>
+                          <p className={`text-xs font-medium ${textPrimary}`}>
+                            {durationSeconds !== null ? formatDurationShort(durationSeconds) : '—'}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {decisionTask.approval_request?.note && (
                     <p className={`text-sm ${textPrimary} mt-2 italic`}>&ldquo;{decisionTask.approval_request.note}&rdquo;</p>
                   )}
