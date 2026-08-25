@@ -157,6 +157,13 @@ export default function ApprovalsPage({ embedded = false }) {
     setTaskDeptFilter('all');
   }, [approverBucket]);
 
+  // "All Team" filter for the same table — who requested the approval
+  // (Created / Assigned column), keyed on requested_by since names can repeat.
+  const [taskUserFilter, setTaskUserFilter] = useState('all');
+  useEffect(() => {
+    setTaskUserFilter('all');
+  }, [approverBucket]);
+
   // Date filter for the same table. Keyed on when the approval was REQUESTED
   // (the timestamp under Created / Assigned), not the task's due date — this
   // is an inbox, so "what landed here on the 22nd" is the useful question.
@@ -207,9 +214,31 @@ export default function ApprovalsPage({ embedded = false }) {
     return counts;
   })();
 
-  const filteredTaskApprovals = taskDeptFilter === 'all'
+  // Unique requesters for the "All Team" dropdown, scoped to what the date
+  // filter already allows (same reasoning as the dept pill counts above).
+  const taskApprovalRequesters = (() => {
+    const byId = new Map();
+    dateVisibleTaskApprovals.forEach(t => {
+      const req = t.approval_request || {};
+      const id = req.requested_by || req.requested_by_name;
+      if (!id) return;
+      if (!byId.has(id)) byId.set(id, req.requested_by_name || id);
+    });
+    return Array.from(byId.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  })();
+
+  const deptFilteredTaskApprovals = taskDeptFilter === 'all'
     ? dateVisibleTaskApprovals
     : dateVisibleTaskApprovals.filter(t => taskDept(t) === taskDeptFilter);
+
+  const filteredTaskApprovals = taskUserFilter === 'all'
+    ? deptFilteredTaskApprovals
+    : deptFilteredTaskApprovals.filter(t => {
+        const req = t.approval_request || {};
+        return (req.requested_by || req.requested_by_name) === taskUserFilter;
+      });
 
   // ---- Small formatting helpers for the Task Approval Requests table ----
   const taskStatusColors = {
@@ -844,9 +873,22 @@ export default function ApprovalsPage({ embedded = false }) {
                   </button>
                 ))}
 
-                {/* Date filter — same row as the pills, pushed right, so every
+                {/* Date + Team filters — same row as the pills, pushed right, so every
                     control that narrows this table sits together. */}
                 <div className="flex items-center gap-2 ml-auto" data-testid="task-approval-date-filter">
+                  <Select value={taskUserFilter} onValueChange={setTaskUserFilter}>
+                    <SelectTrigger className={`h-9 w-[160px] ${bgSecondary} border ${borderColor}`} data-testid="task-approval-user-filter">
+                      <Users className="h-3.5 w-3.5 mr-1 opacity-60" />
+                      <SelectValue placeholder="All Team" />
+                    </SelectTrigger>
+                    <SelectContent className={bgCard}>
+                      <SelectItem value="all">All Team</SelectItem>
+                      {taskApprovalRequesters.map(r => (
+                        <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
                   <Calendar className={`h-4 w-4 ${textSecondary}`} />
                   <select
                     value={taskDateMode}
