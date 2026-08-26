@@ -11,10 +11,10 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { SearchableSelect } from '../components/ui/searchable-select';
 import {
-  Plus, Calendar, Clock, User, CheckCircle2, Circle, 
+  Plus, Calendar, Clock, User, CheckCircle2, Circle,
   MoreHorizontal, Trash2, Edit2, X, AlertCircle, Briefcase, Building2,
   Play, Pause, Square, Timer, Eye, FileText, Tag, Users, Link, Filter, CalendarDays,
-  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3
+  Repeat, Video, ListChecks, ShieldCheck, Crown, Check, History, BarChart3, Pin, PinOff
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -109,6 +109,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     awaiting_ceo: 0,
   });
   const [meetingsSubActive, setMeetingsSubActive] = useState(false); // when true → render Meetings panel inside My Tasks / Assign-to-Team
+  // Whether the summary cards / filter toolbar / department pills stay pinned
+  // while the task list scrolls beneath them, or scroll away with everything
+  // else. Remembered across a refresh like the main tab.
+  const [stickyHeaderEnabled, setStickyHeaderEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('dl_our_tasks_sticky_header') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('dl_our_tasks_sticky_header', stickyHeaderEnabled ? 'on' : 'off'); } catch { /* ignore storage errors */ }
+  }, [stickyHeaderEnabled]);
   // Technology / Marketing scope — Assign to Team-only. Narrows which
   // departments show as pills below it. Sourced from each department's
   // own `group` field (set in Operations > Departments).
@@ -1936,7 +1949,7 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             opaque background is the page's own, so rows can't show through
             as they pass behind. */}
         {mainTab !== 'approvals' && mainTab !== 'projects' && mainTab !== 'departments' && mainTab !== 'meetings' && (
-        <div className={`sticky top-0 z-30 space-y-4 pb-3 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} data-testid="tasks-sticky-header">
+        <div className={`${stickyHeaderEnabled ? 'sticky top-0 z-30' : ''} space-y-4 pb-3 ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`} data-testid="tasks-sticky-header">
         {/* Operations Summary Cards — Feb 2026
             5 metrics: Worked Hours • To-Do • Pending • Awaiting Ops • Awaiting CEO.
             Now driven by `filterScopedSummary` so the numbers always reflect
@@ -2194,6 +2207,19 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
 
             <Button variant="ghost" size="sm" onClick={resetFilters} className="text-xs" data-testid="reset-filters">
               Reset
+            </Button>
+
+            {/* Toggle whether the summary cards / filters / dept pills stay pinned while the list scrolls */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setStickyHeaderEnabled(v => !v)}
+              className={`h-9 text-xs gap-1.5 flex-shrink-0 ${stickyHeaderEnabled ? 'border-[#6366f1] text-[#6366f1]' : `${bgSecondary} ${textSecondary} ${borderColor}`}`}
+              data-testid="toggle-sticky-header"
+              title={stickyHeaderEnabled ? 'Sticky is on — click to let this section scroll away' : 'Sticky is off — click to pin this section while the list scrolls'}
+            >
+              {stickyHeaderEnabled ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
+              {stickyHeaderEnabled ? 'Sticky On' : 'Sticky Off'}
             </Button>
 
             {/* Sort by Start Time — chronologically orders manually-entered timings */}
