@@ -8132,6 +8132,11 @@ function EnhancedApprovalsTab({
                       // Calculate hours difference
                       const hoursDiff = item.hours_difference || item.difference_hours || 0;
                       const isPositive = hoursDiff >= 0;
+                      // These thresholds (Early Login 1hr, Late Login 15min,
+                      // Early Logout 30min, Late Logout 10min) are all
+                      // minute-precision, so show the difference in minutes
+                      // rather than a rounded-to-1-decimal hour figure.
+                      const diffMinutes = Math.round(Math.abs(hoursDiff) * 60);
 
                       return (
                         <tr key={idx} className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/50' : 'hover:bg-gray-50'}`}>
@@ -8160,7 +8165,7 @@ function EnhancedApprovalsTab({
                           </td>
                           <td className="p-3">
                             <span className={`font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                              {isPositive ? '+' : ''}{typeof hoursDiff === 'number' ? hoursDiff.toFixed(1) : hoursDiff} hrs
+                              {isPositive ? '+' : '-'}{diffMinutes} min{diffMinutes === 1 ? '' : 's'}
                             </span>
                           </td>
                           <td className={`p-3 ${textSecondary} max-w-[200px] truncate`} title={item.reason}>
@@ -8795,25 +8800,44 @@ function EnhancedApprovalsTab({
                     </div>
                     <div className={`p-3 rounded-lg ${bgSecondary}`}>
                       <p className={`text-xs ${textSecondary} mb-1`}>Type</p>
-                      <Badge className={`${
-                        (selectedItem.type || '').toLowerCase().includes('early_login') ? 'bg-blue-500/20 text-blue-400' :
-                        (selectedItem.type || '').toLowerCase().includes('late_login') ? 'bg-orange-500/20 text-orange-400' :
-                        (selectedItem.type || '').toLowerCase().includes('early_logout') ? 'bg-red-500/20 text-red-400' :
-                        (selectedItem.type || '').toLowerCase().includes('late_logout') ? 'bg-green-500/20 text-green-400' :
-                        'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {selectedItem.type || 'Attendance'}
-                      </Badge>
+                      {(() => {
+                        // Same fallback the table uses — `type` is usually
+                        // unset, the real value lives on `approval_status`.
+                        // Without it this always fell through to the generic
+                        // "Attendance" label instead of e.g. "Early Logout".
+                        const rawType = (selectedItem.type || selectedItem.approval_status || '').toLowerCase();
+                        const typeMap = {
+                          early_login: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Early Login' },
+                          late_login: { bg: 'bg-orange-500/20', text: 'text-orange-400', label: 'Late Login' },
+                          early_logout: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Early Logout' },
+                          late_logout: { bg: 'bg-green-500/20', text: 'text-green-400', label: 'Late Logout' },
+                        };
+                        const match = Object.keys(typeMap).find(k => rawType.includes(k));
+                        const style = match ? typeMap[match] : { bg: 'bg-gray-500/20', text: 'text-gray-400', label: selectedItem.type || 'Attendance' };
+                        return <Badge className={`${style.bg} ${style.text}`}>{style.label}</Badge>;
+                      })()}
                     </div>
                     <div className={`p-3 rounded-lg ${bgSecondary}`}>
                       <p className={`text-xs ${textSecondary} mb-1`}>Time</p>
                       <p className={`font-medium ${textPrimary}`}>{selectedItem.time || selectedItem.clock_in || selectedItem.clock_out || '-'}</p>
                     </div>
                     <div className={`p-3 rounded-lg ${bgSecondary}`}>
-                      <p className={`text-xs ${textSecondary} mb-1`}>Hours Difference</p>
-                      <p className={`font-bold ${(selectedItem.hours_difference || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {(selectedItem.hours_difference || 0) >= 0 ? '+' : ''}{(selectedItem.hours_difference || selectedItem.difference_hours || 0).toFixed ? (selectedItem.hours_difference || selectedItem.difference_hours || 0).toFixed(1) : selectedItem.hours_difference || 0} hrs
-                      </p>
+                      <p className={`text-xs ${textSecondary} mb-1`}>Time Difference</p>
+                      {(() => {
+                        // Bug fix: this used to check `hours_difference` alone for the
+                        // sign/color, but that field is usually unset (the real value
+                        // lives on `difference_hours`, same as the table) — so it always
+                        // read as "0 >= 0" and showed +/green even on a negative diff,
+                        // producing "+-1.9 hrs". Resolve one value and reuse it for both.
+                        const diff = selectedItem.hours_difference || selectedItem.difference_hours || 0;
+                        const isPositive = diff >= 0;
+                        const mins = Math.round(Math.abs(diff) * 60);
+                        return (
+                          <p className={`font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                            {isPositive ? '+' : '-'}{mins} min{mins === 1 ? '' : 's'}
+                          </p>
+                        );
+                      })()}
                     </div>
                   </div>
                   
