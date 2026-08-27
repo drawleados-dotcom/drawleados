@@ -92,6 +92,8 @@ export default function ProjectsPanel({
   const [showClientPortalModal, setShowClientPortalModal] = useState(false);
   const [editingWeblink, setEditingWeblink] = useState(false);
   const [weblinkDraft, setWeblinkDraft] = useState('');
+  const [editingProposalLink, setEditingProposalLink] = useState(false);
+  const [proposalLinkDraft, setProposalLinkDraft] = useState('');
   const [showResetDeliveryModal, setShowResetDeliveryModal] = useState(false);
   const [resetDeliveryDraft, setResetDeliveryDraft] = useState({ new_due_date: '', reason: '' });
   const [savingResetDelivery, setSavingResetDelivery] = useState(false);
@@ -1463,6 +1465,65 @@ export default function ProjectsPanel({
                   <Pencil className="h-3 w-3 mr-1" />
                   {(selectedProject.departments || []).length === 0 ? 'Add' : 'Edit'}
                 </Button>
+              )}
+            </div>
+
+            {/* Proposal Link — same read-only-until-Edit pattern as Weblink above */}
+            <div className="flex items-center gap-2 flex-wrap pt-1" data-testid="project-proposal-link-row">
+              <Link2 className={`h-4 w-4 ${textSecondary}`} />
+              <span className={`text-sm ${textSecondary}`}>Proposal Link:</span>
+              {editingProposalLink ? (
+                <>
+                  <input
+                    type="text"
+                    value={proposalLinkDraft}
+                    onChange={(e) => setProposalLinkDraft(e.target.value)}
+                    placeholder="https://..."
+                    autoFocus
+                    className={`px-2 py-1 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm flex-1 min-w-[220px]`}
+                    data-testid="project-edit-proposal-link"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await updateProjectField('proposal_link', normalizeUrl(proposalLinkDraft));
+                      setEditingProposalLink(false);
+                    }}
+                    className="h-7 px-2 bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                    data-testid="project-proposal-link-save"
+                  >
+                    Save
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingProposalLink(false)} className="h-7 px-2">
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {selectedProject.proposal_link ? (
+                    <a
+                      href={normalizeUrl(selectedProject.proposal_link)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-[#6366f1] hover:underline"
+                    >
+                      {selectedProject.proposal_link}
+                    </a>
+                  ) : (
+                    <span className={`text-sm ${textSecondary}`}>—</span>
+                  )}
+                  {canManageProjects && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => { setProposalLinkDraft(selectedProject.proposal_link || ''); setEditingProposalLink(true); }}
+                      className="h-7 px-2"
+                      data-testid="project-proposal-link-edit-btn"
+                    >
+                      <Pencil className="h-3 w-3 mr-1" /> Edit
+                    </Button>
+                  )}
+                </>
               )}
             </div>
 
