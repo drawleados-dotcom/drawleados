@@ -1253,19 +1253,7 @@ export default function HRAdminPage() {
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  // Attendance approval time-difference display: plain minutes under an
-  // hour ("33 mins"), hours.minutes above it ("1.15 min" = 1h 15m). The
-  // sign isn't shown here — the Early/Late Login/Logout badge plus the
-  // red/green color already say which direction it is.
-  const formatAttendanceDiff = (hoursDiff) => {
-    const totalMinutes = Math.round(Math.abs(hoursDiff) * 60);
-    if (totalMinutes < 60) return `${totalMinutes} min${totalMinutes === 1 ? '' : 's'}`;
-    const hrs = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-    return `${hrs}.${String(mins).padStart(2, '0')} min`;
-  };
-
-  const filteredEmployees = employees.filter(emp => 
+  const filteredEmployees = employees.filter(emp =>
     emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     emp.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -7663,6 +7651,18 @@ function EnhancedApprovalsTab({
 }) {
   // HR Manager cannot approve/reject - view only
   const isViewOnly = !canEdit;
+
+  // Attendance approval time-difference display: plain minutes under an
+  // hour ("33 mins"), hours.minutes above it ("1.15 min" = 1h 15m). The
+  // sign isn't shown here — the Early/Late Login/Logout badge plus the
+  // red/green color already say which direction it is.
+  const formatAttendanceDiff = (hoursDiff) => {
+    const totalMinutes = Math.round(Math.abs(hoursDiff) * 60);
+    if (totalMinutes < 60) return `${totalMinutes} min${totalMinutes === 1 ? '' : 's'}`;
+    const hrs = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${hrs}.${String(mins).padStart(2, '0')} min`;
+  };
   const [activeSubTab, setActiveSubTab] = useState('attendance');
   const [dateFilter, setDateFilter] = useState('day');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
