@@ -1253,6 +1253,18 @@ export default function HRAdminPage() {
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
+  // Attendance approval time-difference display: plain minutes under an
+  // hour ("33 mins"), hours.minutes above it ("1.15 min" = 1h 15m). The
+  // sign isn't shown here — the Early/Late Login/Logout badge plus the
+  // red/green color already say which direction it is.
+  const formatAttendanceDiff = (hoursDiff) => {
+    const totalMinutes = Math.round(Math.abs(hoursDiff) * 60);
+    if (totalMinutes < 60) return `${totalMinutes} min${totalMinutes === 1 ? '' : 's'}`;
+    const hrs = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${hrs}.${String(mins).padStart(2, '0')} min`;
+  };
+
   const filteredEmployees = employees.filter(emp => 
     emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     emp.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -8132,11 +8144,6 @@ function EnhancedApprovalsTab({
                       // Calculate hours difference
                       const hoursDiff = item.hours_difference || item.difference_hours || 0;
                       const isPositive = hoursDiff >= 0;
-                      // These thresholds (Early Login 1hr, Late Login 15min,
-                      // Early Logout 30min, Late Logout 10min) are all
-                      // minute-precision, so show the difference in minutes
-                      // rather than a rounded-to-1-decimal hour figure.
-                      const diffMinutes = Math.round(Math.abs(hoursDiff) * 60);
 
                       return (
                         <tr key={idx} className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/50' : 'hover:bg-gray-50'}`}>
@@ -8165,7 +8172,7 @@ function EnhancedApprovalsTab({
                           </td>
                           <td className="p-3">
                             <span className={`font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                              {isPositive ? '+' : '-'}{diffMinutes} min{diffMinutes === 1 ? '' : 's'}
+                              {formatAttendanceDiff(hoursDiff)}
                             </span>
                           </td>
                           <td className={`p-3 ${textSecondary} max-w-[200px] truncate`} title={item.reason}>
@@ -8831,10 +8838,9 @@ function EnhancedApprovalsTab({
                         // producing "+-1.9 hrs". Resolve one value and reuse it for both.
                         const diff = selectedItem.hours_difference || selectedItem.difference_hours || 0;
                         const isPositive = diff >= 0;
-                        const mins = Math.round(Math.abs(diff) * 60);
                         return (
                           <p className={`font-bold ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                            {isPositive ? '+' : '-'}{mins} min{mins === 1 ? '' : 's'}
+                            {formatAttendanceDiff(diff)}
                           </p>
                         );
                       })()}
