@@ -3,15 +3,17 @@ import { Label } from '../ui/label';
 
 /**
  * Cascading Department -> User -> Page -> Sub Tab -> Ultra Sub Tab -> Ultra
- * Tab picker for tagging a task to an exact node in a project's ERP Users
- * hierarchy. Shared by the ERP Users tab's quick Add/Edit Task popup and the
- * Project's own Tasks tab, so both tag tasks the same way.
+ * Tab -> Ultra Tab Pro picker for tagging a task to an exact node in a
+ * project's ERP Users hierarchy. Shared by the ERP Users tab's quick
+ * Add/Edit Task popup and the Project's own Tasks tab, so both tag tasks
+ * the same way.
  *
  * `value` holds only the fields that actually get saved on the task
  * (erp_user_id/name, erp_page_id/name, erp_sub_tab_id/name,
- * erp_ultra_sub_tab_id/name, erp_ultra_tab_id/name). Department is a
- * local-only filter narrowing the User dropdown — an erp_user's
- * department_id, not something stored on the task itself.
+ * erp_ultra_sub_tab_id/name, erp_ultra_tab_id/name,
+ * erp_ultra_tab_pro_id/name). Department is a local-only filter narrowing
+ * the User dropdown — an erp_user's department_id, not something stored on
+ * the task itself.
  */
 export default function ErpLocationPicker({
   project, value, onChange,
@@ -34,6 +36,8 @@ export default function ErpLocationPicker({
   const ultraSubTabs = selectedSubTab?.ultra_sub_tabs || [];
   const selectedUltraSubTab = ultraSubTabs.find(ut => ut.id === value.erp_ultra_sub_tab_id);
   const ultraTabs = selectedUltraSubTab?.ultra_tabs || [];
+  const selectedUltraTab = ultraTabs.find(it => it.id === value.erp_ultra_tab_id);
+  const ultraTabPros = selectedUltraTab?.ultra_tab_pro || [];
 
   const set = (patch) => onChange({ ...value, ...patch });
 
@@ -65,6 +69,7 @@ export default function ErpLocationPicker({
               erp_sub_tab_id: '', erp_sub_tab_name: '',
               erp_ultra_sub_tab_id: '', erp_ultra_sub_tab_name: '',
               erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+              erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
             });
           }}
           className={selectClass}
@@ -87,6 +92,7 @@ export default function ErpLocationPicker({
               erp_sub_tab_id: '', erp_sub_tab_name: '',
               erp_ultra_sub_tab_id: '', erp_ultra_sub_tab_name: '',
               erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+              erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
             });
           }}
           className={selectClass}
@@ -108,6 +114,7 @@ export default function ErpLocationPicker({
               erp_sub_tab_id: e.target.value, erp_sub_tab_name: st?.name || '',
               erp_ultra_sub_tab_id: '', erp_ultra_sub_tab_name: '',
               erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+              erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
             });
           }}
           className={selectClass}
@@ -127,6 +134,7 @@ export default function ErpLocationPicker({
             set({
               erp_ultra_sub_tab_id: e.target.value, erp_ultra_sub_tab_name: ut?.name || '',
               erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+              erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
             });
           }}
           className={selectClass}
@@ -143,13 +151,32 @@ export default function ErpLocationPicker({
           disabled={ultraTabs.length === 0}
           onChange={(e) => {
             const it = ultraTabs.find(i => i.id === e.target.value);
-            set({ erp_ultra_tab_id: e.target.value, erp_ultra_tab_name: it?.name || '' });
+            set({
+              erp_ultra_tab_id: e.target.value, erp_ultra_tab_name: it?.name || '',
+              erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
+            });
           }}
           className={selectClass}
           data-testid={`${testPrefix}-ultratab`}
         >
           <option value="">— none —</option>
           {ultraTabs.map(it => <option key={it.id} value={it.id}>{it.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <Label className={`text-xs ${textSecondary}`}>Ultra Tab Pro</Label>
+        <select
+          value={value.erp_ultra_tab_pro_id || ''}
+          disabled={ultraTabPros.length === 0}
+          onChange={(e) => {
+            const pro = ultraTabPros.find(p => p.id === e.target.value);
+            set({ erp_ultra_tab_pro_id: e.target.value, erp_ultra_tab_pro_name: pro?.name || '' });
+          }}
+          className={selectClass}
+          data-testid={`${testPrefix}-ultratabpro`}
+        >
+          <option value="">— none —</option>
+          {ultraTabPros.map(pro => <option key={pro.id} value={pro.id}>{pro.name}</option>)}
         </select>
       </div>
     </div>

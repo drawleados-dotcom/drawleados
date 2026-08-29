@@ -318,7 +318,10 @@ export default function ProjectErpUsersTab({
     t.erp_page_id === pageId && t.erp_sub_tab_id === subTabId && t.erp_ultra_sub_tab_id === ultraSubTabId && !t.erp_ultra_tab_id && matchesTaskFilters(t)
   ));
   const tasksForUltraTab = (pageId, subTabId, ultraSubTabId, ultraTabId) => tasks.filter(t => (
-    t.erp_page_id === pageId && t.erp_sub_tab_id === subTabId && t.erp_ultra_sub_tab_id === ultraSubTabId && t.erp_ultra_tab_id === ultraTabId && matchesTaskFilters(t)
+    t.erp_page_id === pageId && t.erp_sub_tab_id === subTabId && t.erp_ultra_sub_tab_id === ultraSubTabId && t.erp_ultra_tab_id === ultraTabId && !t.erp_ultra_tab_pro_id && matchesTaskFilters(t)
+  ));
+  const tasksForUltraTabPro = (pageId, subTabId, ultraSubTabId, ultraTabId, ultraTabProId) => tasks.filter(t => (
+    t.erp_page_id === pageId && t.erp_sub_tab_id === subTabId && t.erp_ultra_sub_tab_id === ultraSubTabId && t.erp_ultra_tab_id === ultraTabId && t.erp_ultra_tab_pro_id === ultraTabProId && matchesTaskFilters(t)
   ));
   // Every task tagged anywhere under a page, regardless of nesting depth —
   // used only to guard "can this page be deleted", since deleting it would
@@ -486,12 +489,15 @@ export default function ProjectErpUsersTab({
   const [expandedSubTabsPageId, setExpandedSubTabsPageId] = useState(null);
   const [expandedUltraTabsSubTabId, setExpandedUltraTabsSubTabId] = useState(null);
   const [expandedUltraTabItemsId, setExpandedUltraTabItemsId] = useState(null);
-  // Task-count badges (Sub Tab / Ultra Sub Tab / Ultra Tab) — Page already
-  // has its own expandedPageId for this; these are the equivalent one level
-  // down each, independent of the "show children" toggles above.
+  const [expandedUltraTabProId, setExpandedUltraTabProId] = useState(null);
+  // Task-count badges (Sub Tab / Ultra Sub Tab / Ultra Tab / Ultra Tab Pro) —
+  // Page already has its own expandedPageId for this; these are the
+  // equivalent one level down each, independent of the "show children"
+  // toggles above.
   const [expandedSubTabTaskId, setExpandedSubTabTaskId] = useState(null);
   const [expandedUltraSubTabTaskId, setExpandedUltraSubTabTaskId] = useState(null);
   const [expandedUltraTabItemTaskId, setExpandedUltraTabItemTaskId] = useState(null);
+  const [expandedUltraTabProTaskId, setExpandedUltraTabProTaskId] = useState(null);
   // { mode: 'add' | 'edit', name } — add/rename a User
   const [userModal, setUserModal] = useState(null);
   // { mode: 'add' | 'view', userId, page, editing } — add/view/edit a Page under a User
@@ -502,6 +508,8 @@ export default function ProjectErpUsersTab({
   const [ultraTabModal, setUltraTabModal] = useState(null);
   // { mode: 'add' | 'view', userId, pageId, subTabId, ultraTabId, tab, editing } — add/view/edit an Ultra Tab under an Ultra Sub Tab
   const [ultraTabItemModal, setUltraTabItemModal] = useState(null);
+  // { mode: 'add' | 'view', userId, pageId, subTabId, ultraTabId, itemId, tab, editing } — add/view/edit an Ultra Tab Pro under an Ultra Tab
+  const [ultraTabProModal, setUltraTabProModal] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const persistUsers = async (nextUsers) => {
@@ -749,7 +757,60 @@ export default function ProjectErpUsersTab({
     if (ok) { toast.success('Ultra tab removed'); closeUltraTabItemModal(); }
   };
 
-  // ---- Drag-and-drop reordering (Pages / Sub Tabs / Ultra Sub Tab / Ultra Tab) ----
+  // ---- Ultra Tab Pro CRUD (nested under an Ultra Tab) ----
+  const mapUltraTabItem = (pages, pageId, subTabId, ultraTabId, updater) => pages.map(p => (
+    p.id !== pageId ? p : {
+      ...p,
+      sub_tabs: (p.sub_tabs || []).map(st => (
+        st.id !== subTabId ? st : {
+          ...st,
+          ultra_sub_tabs: (st.ultra_sub_tabs || []).map(ut => (
+            ut.id !== ultraTabId ? ut : { ...ut, ultra_tabs: (ut.ultra_tabs || []).map(updater) }
+          )),
+        }
+      )),
+    }
+  ));
+
+  const openAddUltraTabPro = (userId, pageId, subTabId, ultraTabId, itemId) => {
+    if (!canEdit) return;
+    setUltraTabProModal({ mode: 'add', userId, pageId, subTabId, ultraTabId, itemId, tab: emptyTab('utp'), editing: true });
+  };
+  const openViewUltraTabPro = (userId, pageId, subTabId, ultraTabId, itemId, tab) => setUltraTabProModal({ mode: 'view', userId, pageId, subTabId, ultraTabId, itemId, tab: { ...tab }, editing: false });
+  const openEditUltraTabPro = (userId, pageId, subTabId, ultraTabId, itemId, tab) => {
+    if (!canEdit) return;
+    setUltraTabProModal({ mode: 'view', userId, pageId, subTabId, ultraTabId, itemId, tab: { ...tab }, editing: true });
+  };
+  const closeUltraTabProModal = () => setUltraTabProModal(null);
+
+  const saveUltraTabProModal = async () => {
+    const draft = ultraTabProModal.tab;
+    if (!(draft.name || '').trim()) { toast.error('Ultra tab pro name is required'); return; }
+    setSaving(true);
+    const ok = await persistPages(ultraTabProModal.userId, pages => mapUltraTabItem(pages, ultraTabProModal.pageId, ultraTabProModal.subTabId, ultraTabProModal.ultraTabId, it => {
+      if (it.id !== ultraTabProModal.itemId) return it;
+      const pros = it.ultra_tab_pro || [];
+      const nextPros = ultraTabProModal.mode === 'add'
+        ? [...pros, { ...draft, name: draft.name.trim() }]
+        : pros.map(pro => (pro.id === draft.id ? { ...draft, name: draft.name.trim() } : pro));
+      return { ...it, ultra_tab_pro: nextPros };
+    }));
+    setSaving(false);
+    if (ok) {
+      toast.success(ultraTabProModal.mode === 'add' ? 'Ultra tab pro added' : 'Ultra tab pro updated');
+      closeUltraTabProModal();
+    }
+  };
+
+  const deleteUltraTabPro = async (userId, pageId, subTabId, ultraTabId, itemId, proId) => {
+    if (!canEdit) return;
+    const ok = await persistPages(userId, pages => mapUltraTabItem(pages, pageId, subTabId, ultraTabId, it => (
+      it.id === itemId ? { ...it, ultra_tab_pro: (it.ultra_tab_pro || []).filter(pro => pro.id !== proId) } : it
+    )));
+    if (ok) { toast.success('Ultra tab pro removed'); closeUltraTabProModal(); }
+  };
+
+  // ---- Drag-and-drop reordering (Pages / Sub Tabs / Ultra Sub Tab / Ultra Tab / Ultra Tab Pro) ----
   // Plain HTML5 drag events rather than a DnD library — no new dependency needed,
   // and it drops straight onto the existing rows without restructuring the table.
   const reorderArray = (arr, fromIndex, toIndex) => {
@@ -797,6 +858,12 @@ export default function ProjectErpUsersTab({
     if (!canEdit || fromIndex === toIndex) return;
     persistPages(userId, pages => mapUltraSubTab(pages, pageId, subTabId, ut => (
       ut.id === ultraTabId ? { ...ut, ultra_tabs: reorderArray(ut.ultra_tabs || [], fromIndex, toIndex) } : ut
+    )));
+  };
+  const moveUltraTabPro = (userId, pageId, subTabId, ultraTabId, itemId, fromIndex, toIndex) => {
+    if (!canEdit || fromIndex === toIndex) return;
+    persistPages(userId, pages => mapUltraTabItem(pages, pageId, subTabId, ultraTabId, it => (
+      it.id === itemId ? { ...it, ultra_tab_pro: reorderArray(it.ultra_tab_pro || [], fromIndex, toIndex) } : it
     )));
   };
 
@@ -864,6 +931,7 @@ export default function ProjectErpUsersTab({
         erp_sub_tab_id: ctx.subTabId || '', erp_sub_tab_name: ctx.subTabName || '',
         erp_ultra_sub_tab_id: ctx.ultraSubTabId || '', erp_ultra_sub_tab_name: ctx.ultraSubTabName || '',
         erp_ultra_tab_id: ctx.ultraTabId || '', erp_ultra_tab_name: ctx.ultraTabName || '',
+        erp_ultra_tab_pro_id: ctx.ultraTabProId || '', erp_ultra_tab_pro_name: ctx.ultraTabProName || '',
       },
       draft: {
         task_name: '',
@@ -885,6 +953,7 @@ export default function ProjectErpUsersTab({
         erp_sub_tab_id: task.erp_sub_tab_id || '', erp_sub_tab_name: task.erp_sub_tab_name || '',
         erp_ultra_sub_tab_id: task.erp_ultra_sub_tab_id || '', erp_ultra_sub_tab_name: task.erp_ultra_sub_tab_name || '',
         erp_ultra_tab_id: task.erp_ultra_tab_id || '', erp_ultra_tab_name: task.erp_ultra_tab_name || '',
+        erp_ultra_tab_pro_id: task.erp_ultra_tab_pro_id || '', erp_ultra_tab_pro_name: task.erp_ultra_tab_pro_name || '',
       },
       draft: {
         task_name: task.task_name || '',
@@ -1699,6 +1768,8 @@ export default function ProjectErpUsersTab({
                                                                                         {ultraTabItems.map((it, itIdx) => {
                                                                                           const ultraTabTasks = tasksForUltraTab(row.id, st.id, ut.id, it.id);
                                                                                           const isUltraTabTaskExpanded = expandedUltraTabItemTaskId === it.id;
+                                                                                          const ultraTabPros = it.ultra_tab_pro || [];
+                                                                                          const isUltraTabProExpanded = expandedUltraTabProId === it.id;
                                                                                           return (
                                                                                           <React.Fragment key={it.id}>
                                                                                           <tr
@@ -1707,7 +1778,17 @@ export default function ProjectErpUsersTab({
                                                                                             {...dragRowProps('ultratabitem', `${u.id}::${row.id}::${st.id}::${ut.id}`, itIdx, (from, to) => moveUltraTabItem(u.id, row.id, st.id, ut.id, from, to))}
                                                                                           >
                                                                                             <td className={`px-3 py-2 text-xs ${textSecondary}`}>{canEdit && <DragHandle />}{itIdx + 1}</td>
-                                                                                            <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>{it.name || '—'}</td>
+                                                                                            <td className="px-3 py-2">
+                                                                                              <button
+                                                                                                type="button"
+                                                                                                onClick={() => setExpandedUltraTabProId(isUltraTabProExpanded ? null : it.id)}
+                                                                                                className={`inline-flex items-center gap-1.5 text-sm font-medium ${textPrimary} hover:opacity-80`}
+                                                                                                data-testid={`erp-ultratab-item-toggle-${it.id}`}
+                                                                                              >
+                                                                                                {isUltraTabProExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                                                                                {it.name || '—'}
+                                                                                              </button>
+                                                                                            </td>
                                                                                             {['ui_link', 'content_link', 'page_link'].map((key) => (
                                                                                               <td key={key} className="px-3 py-2">
                                                                                                 {it[key] ? (
@@ -1769,6 +1850,124 @@ export default function ProjectErpUsersTab({
                                                                                                   bgCard={bgCard}
                                                                                                   testPrefix="erp-ultratab-item-task-row"
                                                                                                 />
+                                                                                              </td>
+                                                                                            </tr>
+                                                                                          )}
+                                                                                          {isUltraTabProExpanded && (
+                                                                                            <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-pro-section-${it.id}`}>
+                                                                                              <td colSpan={7} className="p-3">
+                                                                                                <div className="flex items-center justify-between mb-2">
+                                                                                                  <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Ultra Tab Pro</p>
+                                                                                                  {canEdit && (
+                                                                                                    <Button
+                                                                                                      type="button"
+                                                                                                      size="sm"
+                                                                                                      onClick={() => openAddUltraTabPro(u.id, row.id, st.id, ut.id, it.id)}
+                                                                                                      className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-7 text-xs"
+                                                                                                      data-testid={`erp-ultratab-pro-add-btn-${it.id}`}
+                                                                                                    >
+                                                                                                      <Plus className="h-3 w-3 mr-1" /> Add Ultra Tab Pro
+                                                                                                    </Button>
+                                                                                                  )}
+                                                                                                </div>
+                                                                                                <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
+                                                                                                  <table className="w-full">
+                                                                                                    <thead>
+                                                                                                      <tr className={`border-b ${borderColor}`}>
+                                                                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-10`}>S.No</th>
+                                                                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Ultra Tab Pro Name</th>
+                                                                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>UI Link</th>
+                                                                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Content Link</th>
+                                                                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Page Link</th>
+                                                                                                        <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                                                                                                        <th className={`text-right px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
+                                                                                                      </tr>
+                                                                                                    </thead>
+                                                                                                    <tbody>
+                                                                                                      {ultraTabPros.map((pro, proIdx) => {
+                                                                                                        const ultraTabProTasks = tasksForUltraTabPro(row.id, st.id, ut.id, it.id, pro.id);
+                                                                                                        const isUltraTabProTaskExpanded = expandedUltraTabProTaskId === pro.id;
+                                                                                                        return (
+                                                                                                          <React.Fragment key={pro.id}>
+                                                                                                            <tr
+                                                                                                              className={`border-b ${borderColor} last:border-b-0 ${dragItem?.level === 'ultratabpro' && dragItem.index === proIdx && dragItem.key === `${u.id}::${row.id}::${st.id}::${ut.id}::${it.id}` ? 'opacity-40' : ''}`}
+                                                                                                              data-testid={`erp-ultratab-pro-row-${pro.id}`}
+                                                                                                              {...dragRowProps('ultratabpro', `${u.id}::${row.id}::${st.id}::${ut.id}::${it.id}`, proIdx, (from, to) => moveUltraTabPro(u.id, row.id, st.id, ut.id, it.id, from, to))}
+                                                                                                            >
+                                                                                                              <td className={`px-3 py-2 text-xs ${textSecondary}`}>{canEdit && <DragHandle />}{proIdx + 1}</td>
+                                                                                                              <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>{pro.name || '—'}</td>
+                                                                                                              {['ui_link', 'content_link', 'page_link'].map((key) => (
+                                                                                                                <td key={key} className="px-3 py-2">
+                                                                                                                  {pro[key] ? (
+                                                                                                                    <a href={pro[key]} target="_blank" rel="noopener noreferrer" className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1">
+                                                                                                                      <ExternalLink className="h-3 w-3" /> Open
+                                                                                                                    </a>
+                                                                                                                  ) : (
+                                                                                                                    <span className={`text-xs ${textSecondary}`}>—</span>
+                                                                                                                  )}
+                                                                                                                </td>
+                                                                                                              ))}
+                                                                                                              <td className="px-3 py-2">
+                                                                                                                <span className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[pro.status] || STATUS_STYLE['To-Do']}`}>
+                                                                                                                  {pro.status || 'To-Do'}
+                                                                                                                </span>
+                                                                                                              </td>
+                                                                                                              <td className="px-3 py-2 text-right">
+                                                                                                                <div className="inline-flex items-center gap-1">
+                                                                                                                  <ErpTaskCountBadge
+                                                                                                                    count={ultraTabProTasks.length}
+                                                                                                                    active={isUltraTabProTaskExpanded}
+                                                                                                                    onClick={() => setExpandedUltraTabProTaskId(isUltraTabProTaskExpanded ? null : pro.id)}
+                                                                                                                    textSecondary={textSecondary}
+                                                                                                                    testId={`erp-ultratab-pro-tasks-toggle-${pro.id}`}
+                                                                                                                  />
+                                                                                                                  <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name, ultraSubTabId: ut.id, ultraSubTabName: ut.name, ultraTabId: it.id, ultraTabName: it.name, ultraTabProId: pro.id, ultraTabProName: pro.name })} testId={`erp-ultratab-pro-addtask-${pro.id}`} />
+                                                                                                                  <button type="button" onClick={() => openViewUltraTabPro(u.id, row.id, st.id, ut.id, it.id, pro)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-pro-view-${pro.id}`}>
+                                                                                                                    <Eye className="h-4 w-4" />
+                                                                                                                  </button>
+                                                                                                                  {canEdit && (
+                                                                                                                    <button type="button" onClick={() => openEditUltraTabPro(u.id, row.id, st.id, ut.id, it.id, pro)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`erp-ultratab-pro-edit-${pro.id}`}>
+                                                                                                                      <Pencil className="h-4 w-4" />
+                                                                                                                    </button>
+                                                                                                                  )}
+                                                                                                                  {canEdit && (
+                                                                                                                    <button type="button" onClick={() => deleteUltraTabPro(u.id, row.id, st.id, ut.id, it.id, pro.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-pro-delete-${pro.id}`}>
+                                                                                                                      <Trash2 className="h-4 w-4" />
+                                                                                                                    </button>
+                                                                                                                  )}
+                                                                                                                </div>
+                                                                                                              </td>
+                                                                                                            </tr>
+                                                                                                            {isUltraTabProTaskExpanded && (
+                                                                                                              <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-pro-tasks-row-${pro.id}`}>
+                                                                                                                <td colSpan={7} className="p-3">
+                                                                                                                  <ErpTaskList
+                                                                                                                    tasks={ultraTabProTasks}
+                                                                                                                    onEdit={openEditTask}
+                                                                                                                    onDelete={deleteTask}
+                                                                                                                    assigneeName={assigneeName}
+                                                                                                                    textPrimary={textPrimary}
+                                                                                                                    textSecondary={textSecondary}
+                                                                                                                    borderColor={borderColor}
+                                                                                                                    bgCard={bgCard}
+                                                                                                                    testPrefix="erp-ultratab-pro-task-row"
+                                                                                                                  />
+                                                                                                                </td>
+                                                                                                              </tr>
+                                                                                                            )}
+                                                                                                          </React.Fragment>
+                                                                                                        );
+                                                                                                      })}
+                                                                                                      {ultraTabPros.length === 0 && (
+                                                                                                        <tr>
+                                                                                                          <td colSpan={7} className={`p-4 text-center text-xs ${textSecondary}`}>
+                                                                                                            No ultra tab pro entries yet. {canEdit && <span>Click <span className="font-medium">Add Ultra Tab Pro</span> to add one.</span>}
+                                                                                                          </td>
+                                                                                                        </tr>
+                                                                                                      )}
+                                                                                                    </tbody>
+                                                                                                  </table>
+                                                                                                </div>
                                                                                               </td>
                                                                                             </tr>
                                                                                           )}
@@ -2165,6 +2364,25 @@ export default function ProjectErpUsersTab({
         testPrefix="erp-ultratab-item"
         titleAdd="Add Ultra Tab"
         titleEdit="Edit Ultra Tab"
+      />
+
+      {/* Add / View / Edit Ultra Tab Pro popup */}
+      <TabDetailModal
+        modal={ultraTabProModal}
+        setModal={setUltraTabProModal}
+        onClose={closeUltraTabProModal}
+        onSave={saveUltraTabProModal}
+        onDelete={() => deleteUltraTabPro(ultraTabProModal.userId, ultraTabProModal.pageId, ultraTabProModal.subTabId, ultraTabProModal.ultraTabId, ultraTabProModal.itemId, ultraTabProModal.tab.id)}
+        saving={saving}
+        canEdit={canEdit}
+        bgCard={bgCard}
+        bgSecondary={bgSecondary}
+        textPrimary={textPrimary}
+        textSecondary={textSecondary}
+        borderColor={borderColor}
+        testPrefix="erp-ultratab-pro"
+        titleAdd="Add Ultra Tab Pro"
+        titleEdit="Edit Ultra Tab Pro"
       />
 
       {taskModal && (

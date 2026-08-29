@@ -18,6 +18,7 @@ const emptyLocation = {
   erp_sub_tab_id: '', erp_sub_tab_name: '',
   erp_ultra_sub_tab_id: '', erp_ultra_sub_tab_name: '',
   erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+  erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
 };
 
 /**
@@ -218,6 +219,7 @@ export default function ErpTaskModal({
                 subTabName: location.erp_sub_tab_name,
                 ultraSubTabName: location.erp_ultra_sub_tab_name,
                 ultraTabName: location.erp_ultra_tab_name,
+                ultraTabProName: location.erp_ultra_tab_pro_name,
                 taskName: draft.task_name,
               })}
             </p>
