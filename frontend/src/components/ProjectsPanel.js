@@ -786,6 +786,7 @@ export default function ProjectsPanel({
           assigned_to: task.assigned_to || '',
           due_date: task.due_date ? task.due_date.split('T')[0] : '',
           work_link: task.work_link || '',
+          reference_image: task.reference_image || '',
         },
       });
       return;

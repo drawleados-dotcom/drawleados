@@ -980,6 +980,7 @@ export default function ProjectErpUsersTab({
         assigned_to: currentUser?.user_id || '',
         due_date: new Date().toISOString().slice(0, 10),
         work_link: '',
+        reference_image: '',
       },
     });
   };
@@ -1002,6 +1003,7 @@ export default function ProjectErpUsersTab({
         assigned_to: task.assigned_to || currentUser?.user_id || '',
         due_date: task.due_date || new Date().toISOString().slice(0, 10),
         work_link: task.work_link || '',
+        reference_image: task.reference_image || '',
       },
     });
   };

@@ -49,8 +49,34 @@ export default function ErpTaskModal({
     work_link: '',
     workflow_id: '',
     workflow_name: '',
+    reference_image: '',
   });
   const [saving, setSaving] = useState(false);
+
+  // Paste-a-screenshot support for the Reference Image field below — reads
+  // whatever image is on the clipboard (e.g. a Cmd+Shift+4 screenshot) and
+  // inlines it as a data URI, matching the only image-storage pattern this
+  // codebase already has (Settings > Company Profile's logo/signature
+  // uploaders) since there's no file-upload endpoint to send it to instead.
+  const handleImagePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error('Image is too large (max 5MB)');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => setDraft(d => ({ ...d, reference_image: reader.result }));
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+  };
 
   const submit = async () => {
     if (!draft.task_name.trim()) { toast.error('Task name is required'); return; }
@@ -68,6 +94,7 @@ export default function ErpTaskModal({
       erp_task_type: draft.erp_task_type || '',
       workflow_id: draft.workflow_id || null,
       workflow_name: draft.workflow_name || null,
+      reference_image: draft.reference_image || '',
     };
     try {
       if (taskId) {
@@ -194,6 +221,36 @@ export default function ErpTaskModal({
               className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
               data-testid="erp-quicktask-form-worklink"
             />
+          </div>
+          <div>
+            <p className={`text-xs font-medium ${textSecondary} mb-1`}>Reference Image</p>
+            {draft.reference_image ? (
+              <div className="relative inline-block">
+                <img
+                  src={draft.reference_image}
+                  alt="Reference"
+                  className={`max-h-40 rounded-md border ${borderColor}`}
+                  data-testid="erp-quicktask-form-refimage-preview"
+                />
+                <button
+                  type="button"
+                  onClick={() => setDraft(d => ({ ...d, reference_image: '' }))}
+                  className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
+                  data-testid="erp-quicktask-form-refimage-remove"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onPaste={handleImagePaste}
+                tabIndex={0}
+                className={`flex items-center justify-center h-20 rounded-md border border-dashed ${borderColor} ${bgSecondary} ${textSecondary} text-xs text-center px-3 cursor-text focus:outline-none focus:ring-1 focus:ring-[#6366f1]`}
+                data-testid="erp-quicktask-form-refimage-dropzone"
+              >
+                Click here, then paste a screenshot (Ctrl+V / Cmd+V)
+              </div>
+            )}
           </div>
           <div>
             <p className={`text-xs font-medium ${textSecondary} mb-2`}>Location {taskId && <span className={textSecondary}>— change these to move the task</span>}</p>
