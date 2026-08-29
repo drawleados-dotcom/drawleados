@@ -1195,7 +1195,8 @@ export default function ProjectErpUsersTab({
                                   {pages.map((row, pIdx) => {
                                     const pageTasks = tasksForPage(row.id);
                                     const isPageExpanded = expandedPageId === row.id;
-                                    const subTabs = row.sub_tabs || [];
+                                    const subTabs = (row.sub_tabs || [])
+                                      .filter(st => subTabFilter === 'all' || `${row.id}::${st.id}` === subTabFilter);
                                     const isSubTabsExpanded = expandedSubTabsPageId === row.id;
                                     return (
                                       <React.Fragment key={row.id}>
@@ -1333,7 +1334,8 @@ export default function ProjectErpUsersTab({
                                                   </thead>
                                                   <tbody>
                                                     {subTabs.map((st, stIdx) => {
-                                                      const ultraTabs = st.ultra_sub_tabs || [];
+                                                      const ultraTabs = (st.ultra_sub_tabs || [])
+                                                        .filter(ut => ultraSubTabFilter === 'all' || `${row.id}::${st.id}::${ut.id}` === ultraSubTabFilter);
                                                       const isUltraExpanded = expandedUltraTabsSubTabId === st.id;
                                                       const subTabTasks = tasksForSubTab(row.id, st.id);
                                                       const isSubTaskExpanded = expandedSubTabTaskId === st.id;
@@ -1452,7 +1454,8 @@ export default function ProjectErpUsersTab({
                                                                     </thead>
                                                                     <tbody>
                                                                       {ultraTabs.map((ut, utIdx) => {
-                                                                        const ultraTabItems = ut.ultra_tabs || [];
+                                                                        const ultraTabItems = (ut.ultra_tabs || [])
+                                                                          .filter(item => ultraTabFilter === 'all' || `${row.id}::${st.id}::${ut.id}::${item.id}` === ultraTabFilter);
                                                                         const isUltraTabItemsExpanded = expandedUltraTabItemsId === ut.id;
                                                                         const ultraSubTabTasks = tasksForUltraSubTab(row.id, st.id, ut.id);
                                                                         const isUltraSubTaskExpanded = expandedUltraSubTabTaskId === ut.id;
