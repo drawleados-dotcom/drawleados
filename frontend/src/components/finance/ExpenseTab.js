@@ -15,6 +15,7 @@ import ExpenseSplitTab from './ExpenseSplitTab';
 import MasterExpenseView from './MasterExpenseView';
 import BudgetView from './BudgetView';
 import PayrollTab from './PayrollTab';
+import CashInBankTab from './CashInBankTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
@@ -67,6 +68,7 @@ import {
   FolderOpen,
   Package,
   Scale,
+  Landmark,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import BanksTab from './BanksTab';
@@ -106,6 +108,7 @@ const PROJECT_TYPE_COLORS = {
 
 const DEFAULT_TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid, isDefault: true },
+  { id: 'cash_in_bank', label: 'Cash in Bank', icon: Landmark, isDefault: true },
   { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
@@ -2076,6 +2079,8 @@ const ExpenseTab = () => {
               )}
             </div>
           )}
+
+          {activeTab === 'cash_in_bank' && <CashInBankTab />}
 
           {/* Cashbook with Banks sub-tab */}
           {activeTab === 'cashbook' && (() => {

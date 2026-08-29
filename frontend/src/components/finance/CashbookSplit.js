@@ -192,16 +192,27 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
 
   const selectedPayslip = payablePayslips.find((p) => p.payslip_id === selectedPayslipId) || null;
 
-  // Loads balances (+ invoices, for income) for whichever cashbook the Add
-  // modal is currently targeting. Called on open, and again if the user
-  // switches the GST/Non-GST picker shown when viewing "All".
-  const loadContextFor = async (fgt, kind) => {
+  // Bank balances as of a given date — a bank with a Closing Balance
+  // checkpoint (Finance > Cash in Bank > Closing Balance) shows the
+  // reconciled balance (checkpoint + net movement since) once `asOfDate` is
+  // on/after that checkpoint, or the raw historical entry sum for a date
+  // before it. Split out from loadContextFor so changing just the date
+  // field doesn't also reset invoices/allocations already filled in.
+  const refreshBalances = async (fgt, asOfDate) => {
     try {
-      const r = await axios.get(`${API}/api/finance/banks/cashbook/balances?gst_type=${fgt}`, { headers });
+      const dateParam = asOfDate ? `&date=${asOfDate}` : '';
+      const r = await axios.get(`${API}/api/finance/banks/cashbook/balances?gst_type=${fgt}${dateParam}`, { headers });
       setBalances(r.data);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to load balances');
     }
+  };
+
+  // Loads balances (+ invoices, for income) for whichever cashbook the Add
+  // modal is currently targeting. Called on open, and again if the user
+  // switches the GST/Non-GST picker shown when viewing "All".
+  const loadContextFor = async (fgt, kind, asOfDate) => {
+    await refreshBalances(fgt, asOfDate);
     if (kind === 'credit') {
       // Load every invoice for this gst_type that is NOT fully paid.
       try {
@@ -221,7 +232,7 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
     setForm({ ...empty });
     const fgt = gstType === 'all' ? (formGstType || 'gst') : gstType;
     setFormGstType(fgt);
-    await loadContextFor(fgt, kind);
+    await loadContextFor(fgt, kind, empty.date);
     if (kind === 'debit') {
       // Load Expense Split categories to tag this expense against a budget bucket.
       let cats = [];
@@ -257,8 +268,17 @@ const CashbookSplit = ({ gstType: lockedGstType, autoOpenPayrollSignal }) => {
 
   const changeFormGstType = (fgt) => {
     setFormGstType(fgt);
-    loadContextFor(fgt, modal);
+    loadContextFor(fgt, modal, form.date);
   };
+
+  // Re-fetch just the balances (not invoices/allocations) whenever the date
+  // field changes, so the bank dropdown's balance always reflects the date
+  // this entry is being recorded against.
+  useEffect(() => {
+    if (!modal || !form.date) return;
+    refreshBalances(formGstType, form.date);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.date]);
 
   // Deep link from Master Expense's "Payroll" row (see MasterExpenseView /
   // ExpenseTab): each click bumps `autoOpenPayrollSignal` to a fresh value,

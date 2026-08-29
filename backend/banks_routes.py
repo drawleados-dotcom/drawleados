@@ -8,11 +8,20 @@ Used by:
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 banks_router = APIRouter(prefix="/finance/banks")
 db = None
+
+# IST — the office timezone. A bank's Closing Balance checkpoint is a
+# calendar date, so "today" for deciding whether it applies must mean today
+# in Chennai, not today in UTC.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _today_ist() -> str:
+    return datetime.now(IST).date().isoformat()
 
 
 def init_banks_db(database):
@@ -162,6 +171,67 @@ async def delete_bank(bank_id: str, request: Request):
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Bank not found")
     return {"message": "Bank removed"}
+
+
+# ============== CLOSING BALANCE ==============
+# A bank's Closing Balance is a manually-verified balance as of a specific
+# date — for when the cashbook doesn't have every historical transaction for
+# that bank captured, so summing entries alone would be wrong. Once set, it
+# becomes the baseline for any date on/after it: balance = closing amount +
+# net(credits − debits) of entries from that date onward. A query for a date
+# before the checkpoint ignores it and falls back to the raw entry sum,
+# since the checkpoint doesn't apply retroactively. See `_balance_for` below.
+
+class ClosingBalancePayload(BaseModel):
+    date: str      # "YYYY-MM-DD"
+    amount: float
+
+
+@banks_router.put("/{bank_id}/closing-balance")
+async def set_bank_closing_balance(bank_id: str, payload: ClosingBalancePayload, request: Request):
+    user = await _get_user(request)
+    bank = await db.finance_banks.find_one({"bank_id": bank_id, "is_deleted": {"$ne": True}})
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank not found")
+    if not payload.date:
+        raise HTTPException(status_code=400, detail="Date is required")
+    await db.finance_banks.update_one(
+        {"bank_id": bank_id},
+        {"$set": {
+            "closing_balance_date": payload.date,
+            "closing_balance_amount": float(payload.amount),
+            "closing_balance_set_by": user["user_id"],
+            "closing_balance_set_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }},
+    )
+    doc = await db.finance_banks.find_one({"bank_id": bank_id}, {"_id": 0})
+    return _serialize(doc)
+
+
+@banks_router.get("/closing-balances")
+async def list_closing_balances(request: Request, gst_type: Optional[str] = None):
+    """Every bank for the given GST bucket (or all, if omitted), each with
+    its Closing Balance checkpoint (if any) and its current running balance
+    computed with that checkpoint applied — powers Cash in Bank's own
+    Closing Balance list view."""
+    await _get_user(request)
+    query: dict = {"is_deleted": {"$ne": True}}
+    if gst_type in ("gst", "non_gst"):
+        query["gst_type"] = gst_type
+    banks = await db.finance_banks.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    out = []
+    for b in banks:
+        out.append({
+            "bank_id": b["bank_id"],
+            "label": b.get("account_holder") or b.get("bank_name") or "Bank",
+            "bank_name": b.get("bank_name") or "",
+            "gst_type": b.get("gst_type"),
+            "closing_balance_date": b.get("closing_balance_date"),
+            "closing_balance_amount": b.get("closing_balance_amount"),
+            "current_balance": await _balance_for(b.get("gst_type"), "bank", b["bank_id"]),
+        })
+    return out
 
 
 # ============== INVOICE COLLECT ==============
@@ -777,8 +847,10 @@ class GroupedExpensePayload(BaseModel):
     allocations: List[ExpenseAllocation]
 
 
-async def _balance_for(gst_type: str, source: str, bank_id: Optional[str] = None) -> float:
-    """Compute the available running balance for one source (Σ credits − Σ debits).
+async def _raw_balance_for(gst_type: str, source: str, bank_id: Optional[str] = None, as_of_date: Optional[str] = None, since_date: Optional[str] = None) -> float:
+    """Pure Σ credits − Σ debits over cashbook entries, optionally bounded to
+    a date range (both bounds inclusive). No Closing Balance awareness —
+    see `_balance_for` for that.
 
     Entries with payment_mode='ledger' are excluded — they are pure ledger
     records (e.g. AI Credits recorded as expense) that don't move money.
@@ -789,6 +861,13 @@ async def _balance_for(gst_type: str, source: str, bank_id: Optional[str] = None
         base["bank_id"] = bank_id
     else:
         base["payment_mode"] = source
+    date_filter = {}
+    if since_date:
+        date_filter["$gte"] = since_date
+    if as_of_date:
+        date_filter["$lte"] = as_of_date
+    if date_filter:
+        base["date"] = date_filter
     credits = 0.0
     debits = 0.0
     async for r in db.cashbook_entries.aggregate([
@@ -804,9 +883,34 @@ async def _balance_for(gst_type: str, source: str, bank_id: Optional[str] = None
     return credits - debits
 
 
+async def _balance_for(gst_type: str, source: str, bank_id: Optional[str] = None, as_of_date: Optional[str] = None) -> float:
+    """Running balance for one source, as of a given date (or unbounded/
+    "current" if omitted).
+
+    For a bank with a Closing Balance checkpoint (see the CLOSING BALANCE
+    section above): a query date on/after the checkpoint's date trusts the
+    checkpoint as the baseline and adds only the net movement from the
+    checkpoint date onward; a query date before it (or no checkpoint at all)
+    falls back to `_raw_balance_for`. Non-bank sources always use the raw sum.
+    """
+    if source != "bank" or not bank_id:
+        return await _raw_balance_for(gst_type, source, bank_id, as_of_date=as_of_date)
+
+    bank = await db.finance_banks.find_one({"bank_id": bank_id}, {"_id": 0, "closing_balance_date": 1, "closing_balance_amount": 1})
+    closing_date = (bank or {}).get("closing_balance_date")
+    closing_amount = (bank or {}).get("closing_balance_amount")
+    effective_date = as_of_date or _today_ist()
+
+    if closing_date and closing_amount is not None and effective_date >= closing_date:
+        net_since = await _raw_balance_for(gst_type, "bank", bank_id, as_of_date=effective_date, since_date=closing_date)
+        return float(closing_amount) + net_since
+    return await _raw_balance_for(gst_type, "bank", bank_id, as_of_date=as_of_date)
+
+
 @banks_router.get("/cashbook/balances")
-async def cashbook_balances(request: Request, gst_type: str):
-    """Return current running balance per source (cash, cheque, upi, each bank)."""
+async def cashbook_balances(request: Request, gst_type: str, date: Optional[str] = None):
+    """Return running balance per source (cash, cheque, upi, each bank), as
+    of `date` if given (banks only — see `_balance_for`), else current."""
     await _get_user(request)
     if gst_type not in ("gst", "non_gst"):
         raise HTTPException(status_code=400, detail="gst_type must be 'gst' or 'non_gst'")
@@ -825,7 +929,7 @@ async def cashbook_balances(request: Request, gst_type: str):
             "source": "bank",
             "bank_id": b["bank_id"],
             "label": b.get("account_holder") or b.get("bank_name") or "Bank",
-            "balance": await _balance_for(gst_type, "bank", b["bank_id"]),
+            "balance": await _balance_for(gst_type, "bank", b["bank_id"], as_of_date=date),
         })
     return out
 
