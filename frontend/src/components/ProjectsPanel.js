@@ -29,6 +29,7 @@ import { Label } from './ui/label';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { SearchableSelect } from './ui/searchable-select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import MeetingModal from './MeetingModal';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
@@ -1118,6 +1119,19 @@ export default function ProjectsPanel({
       setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
       setTaskErpTypeFilter('all'); setTaskWorkflowFilter('all');
     };
+    // Todo count shown next to each ERP filter option's label (e.g.
+    // "Dashboard (10)") — scoped by the same member/date filters as the
+    // task list itself, plus whichever ancestor level(s) are already fixed.
+    const erpOptionTodoCount = (fields) => projectTasks.filter((t) => {
+      if (!matchesMemberAndDate(t)) return false;
+      if ((t.status || 'pending') !== 'pending') return false;
+      return Object.entries(fields).every(([k, v]) => t[k] === v);
+    }).length;
+    const erpDeptTodoCount = (deptId) => projectTasks.filter((t) => {
+      if (!matchesMemberAndDate(t)) return false;
+      if ((t.status || 'pending') !== 'pending') return false;
+      return erpUsersForFilter.find((u) => u.id === t.erp_user_id)?.department_id === deptId;
+    }).length;
 
     const taskSummaryCard = (label, value, Icon, colorClass, active, onClick) => (
       <button
@@ -2018,80 +2032,106 @@ export default function ProjectsPanel({
                 <option value="all">All Task Types</option>
                 {ERP_TASK_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
-              <select
+              <Select
                 value={taskErpDeptFilter}
-                onChange={(e) => {
-                  setTaskErpDeptFilter(e.target.value);
+                onValueChange={(v) => {
+                  setTaskErpDeptFilter(v);
                   setTaskErpUserFilter('all'); setTaskErpPageFilter('all');
                   setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
                 }}
-                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-                data-testid="project-filter-erp-department"
               >
-                <option value="all">All Departments</option>
-                {(selectedProject.erp_departments || []).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              <select
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm`} data-testid="project-filter-erp-department">
+                  <SelectValue placeholder="All Departments" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Departments</SelectItem>
+                  {(selectedProject.erp_departments || []).map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name} ({erpDeptTodoCount(d.id)})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
                 value={taskErpUserFilter}
-                onChange={(e) => {
-                  setTaskErpUserFilter(e.target.value);
+                onValueChange={(v) => {
+                  setTaskErpUserFilter(v);
                   setTaskErpPageFilter('all'); setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
                 }}
-                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-                data-testid="project-filter-erp-user"
               >
-                <option value="all">All Users</option>
-                {erpFilterVisibleUsers.map(u => <option key={u.id} value={u.id}>{u.user_name}</option>)}
-              </select>
-              <select
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm`} data-testid="project-filter-erp-user">
+                  <SelectValue placeholder="All Users" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Users</SelectItem>
+                  {erpFilterVisibleUsers.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.user_name} ({erpOptionTodoCount({ erp_user_id: u.id })})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
                 value={taskErpPageFilter}
-                onChange={(e) => {
-                  setTaskErpPageFilter(e.target.value);
+                onValueChange={(v) => {
+                  setTaskErpPageFilter(v);
                   setTaskErpSubTabFilter('all'); setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
                 }}
                 disabled={erpFilterPages.length === 0}
-                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
-                data-testid="project-filter-erp-page"
               >
-                <option value="all">All Pages</option>
-                {erpFilterPages.map(p => <option key={p.id} value={p.id}>{p.page_name}</option>)}
-              </select>
-              <select
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm disabled:opacity-50`} data-testid="project-filter-erp-page">
+                  <SelectValue placeholder="All Pages" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Pages</SelectItem>
+                  {erpFilterPages.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.page_name} ({erpOptionTodoCount({ erp_user_id: taskErpUserFilter, erp_page_id: p.id })})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
                 value={taskErpSubTabFilter}
-                onChange={(e) => {
-                  setTaskErpSubTabFilter(e.target.value);
+                onValueChange={(v) => {
+                  setTaskErpSubTabFilter(v);
                   setTaskErpUltraSubTabFilter('all'); setTaskErpUltraTabFilter('all');
                 }}
                 disabled={erpFilterSubTabs.length === 0}
-                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
-                data-testid="project-filter-erp-subtab"
               >
-                <option value="all">All Sub Tabs</option>
-                {erpFilterSubTabs.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-              <select
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm disabled:opacity-50`} data-testid="project-filter-erp-subtab">
+                  <SelectValue placeholder="All Sub Tabs" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Sub Tabs</SelectItem>
+                  {erpFilterSubTabs.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({erpOptionTodoCount({ erp_user_id: taskErpUserFilter, erp_page_id: taskErpPageFilter, erp_sub_tab_id: s.id })})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
                 value={taskErpUltraSubTabFilter}
-                onChange={(e) => {
-                  setTaskErpUltraSubTabFilter(e.target.value);
+                onValueChange={(v) => {
+                  setTaskErpUltraSubTabFilter(v);
                   setTaskErpUltraTabFilter('all');
                 }}
                 disabled={erpFilterUltraSubTabs.length === 0}
-                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
-                data-testid="project-filter-erp-ultra-subtab"
               >
-                <option value="all">All Ultra Sub Tab</option>
-                {erpFilterUltraSubTabs.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-              <select
-                value={taskErpUltraTabFilter}
-                onChange={(e) => setTaskErpUltraTabFilter(e.target.value)}
-                disabled={erpFilterUltraTabs.length === 0}
-                className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm disabled:opacity-50`}
-                data-testid="project-filter-erp-ultra-tab"
-              >
-                <option value="all">All Ultra Tab</option>
-                {erpFilterUltraTabs.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm disabled:opacity-50`} data-testid="project-filter-erp-ultra-subtab">
+                  <SelectValue placeholder="All Ultra Sub Tab" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Ultra Sub Tab</SelectItem>
+                  {erpFilterUltraSubTabs.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name} ({erpOptionTodoCount({ erp_user_id: taskErpUserFilter, erp_page_id: taskErpPageFilter, erp_sub_tab_id: taskErpSubTabFilter, erp_ultra_sub_tab_id: u.id })})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={taskErpUltraTabFilter} onValueChange={setTaskErpUltraTabFilter} disabled={erpFilterUltraTabs.length === 0}>
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm disabled:opacity-50`} data-testid="project-filter-erp-ultra-tab">
+                  <SelectValue placeholder="All Ultra Tab" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Ultra Tab</SelectItem>
+                  {erpFilterUltraTabs.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.name} ({erpOptionTodoCount({ erp_user_id: taskErpUserFilter, erp_page_id: taskErpPageFilter, erp_sub_tab_id: taskErpSubTabFilter, erp_ultra_sub_tab_id: taskErpUltraSubTabFilter, erp_ultra_tab_id: u.id })})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
           </div>
