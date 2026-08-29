@@ -11,6 +11,20 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 const fmtMoney = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Categorical accent per card — identity only (bank name), never the
+// balance figure itself. Fixed order, cycled by row index, matching the
+// rotation already used for the ERP hierarchy summary cards elsewhere in
+// this app so the two stay visually consistent.
+const CARD_ACCENTS = [
+  { bg: 'bg-[#6366f1]/10', ring: 'ring-[#6366f1]/20', icon: 'text-[#6366f1]', iconBg: 'bg-[#6366f1]/15' },
+  { bg: 'bg-sky-400/10', ring: 'ring-sky-400/20', icon: 'text-sky-500', iconBg: 'bg-sky-400/15' },
+  { bg: 'bg-violet-400/10', ring: 'ring-violet-400/20', icon: 'text-violet-500', iconBg: 'bg-violet-400/15' },
+  { bg: 'bg-amber-400/10', ring: 'ring-amber-400/20', icon: 'text-amber-500', iconBg: 'bg-amber-400/15' },
+  { bg: 'bg-pink-400/10', ring: 'ring-pink-400/20', icon: 'text-pink-500', iconBg: 'bg-pink-400/15' },
+  { bg: 'bg-emerald-400/10', ring: 'ring-emerald-400/20', icon: 'text-emerald-500', iconBg: 'bg-emerald-400/15' },
+  { bg: 'bg-rose-400/10', ring: 'ring-rose-400/20', icon: 'text-rose-500', iconBg: 'bg-rose-400/15' },
+];
+
 /**
  * Each bank's current balance, with an optional Closing Balance checkpoint —
  * a manually-verified balance as of a specific date, for when the cashbook
@@ -127,22 +141,16 @@ const CashInBankTab = () => {
           <Landmark className="h-10 w-10 mx-auto mb-2 opacity-40" />
           No bank accounts yet — add one from Cashbook &gt; Banks.
         </div>
-      ) : (
+      ) : viewMode === 'closing_balance' ? (
         <div className={`${bgCard} border ${borderColor} rounded-lg overflow-x-auto`}>
           <table className="w-full text-sm">
             <thead className={`${bgInput} ${textSecondary} text-xs uppercase`}>
               <tr>
                 <th className="text-left px-4 py-3">Bank</th>
                 <th className="text-left px-4 py-3">GST Type</th>
-                {viewMode === 'closing_balance' ? (
-                  <>
-                    <th className="text-left px-4 py-3">Closing Balance Date</th>
-                    <th className="text-right px-4 py-3">Closing Balance Amount</th>
-                    <th className="text-right px-4 py-3">Actions</th>
-                  </>
-                ) : (
-                  <th className="text-right px-4 py-3">Balance</th>
-                )}
+                <th className="text-left px-4 py-3">Closing Balance Date</th>
+                <th className="text-right px-4 py-3">Closing Balance Amount</th>
+                <th className="text-right px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -153,28 +161,53 @@ const CashInBankTab = () => {
                     {b.bank_name && <div className={`text-xs ${textSecondary}`}>{b.bank_name}</div>}
                   </td>
                   <td className={`px-4 py-3 ${textSecondary} uppercase text-xs`}>{b.gst_type === 'non_gst' ? 'Non-GST' : 'GST'}</td>
-                  {viewMode === 'closing_balance' ? (
-                    <>
-                      <td className={`px-4 py-3 ${textSecondary}`}>{b.closing_balance_date || '—'}</td>
-                      <td className={`px-4 py-3 text-right ${textPrimary}`}>
-                        {b.closing_balance_amount != null ? fmtMoney(b.closing_balance_amount) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button size="sm" variant="outline" onClick={() => openModal(b)} data-testid={`cash-in-bank-add-closing-${b.bank_id}`}>
-                          <PiggyBank className="h-3.5 w-3.5 mr-1.5" />
-                          {b.closing_balance_date ? 'Edit' : 'Add'} Closing Balance
-                        </Button>
-                      </td>
-                    </>
-                  ) : (
-                    <td className={`px-4 py-3 text-right font-semibold ${(b.current_balance || 0) < 0 ? 'text-red-500' : textPrimary}`}>
-                      {fmtMoney(b.current_balance)}
-                    </td>
-                  )}
+                  <td className={`px-4 py-3 ${textSecondary}`}>{b.closing_balance_date || '—'}</td>
+                  <td className={`px-4 py-3 text-right ${textPrimary}`}>
+                    {b.closing_balance_amount != null ? fmtMoney(b.closing_balance_amount) : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button size="sm" variant="outline" onClick={() => openModal(b)} data-testid={`cash-in-bank-add-closing-${b.bank_id}`}>
+                      <PiggyBank className="h-3.5 w-3.5 mr-1.5" />
+                      {b.closing_balance_date ? 'Edit' : 'Add'} Closing Balance
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {banks.map((b, idx) => {
+            const accent = CARD_ACCENTS[idx % CARD_ACCENTS.length];
+            const negative = (b.current_balance || 0) < 0;
+            return (
+              <div
+                key={b.bank_id}
+                className={`${accent.bg} ${bgCard} border ${borderColor} ring-1 ${accent.ring} rounded-xl p-4`}
+                data-testid={`cash-in-bank-card-${b.bank_id}`}
+              >
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`h-9 w-9 rounded-lg ${accent.iconBg} flex items-center justify-center shrink-0`}>
+                      <Landmark className={`h-4.5 w-4.5 ${accent.icon}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className={`font-semibold ${textPrimary} truncate`}>{b.label}</div>
+                      {b.bank_name && <div className={`text-xs ${textSecondary} truncate`}>{b.bank_name}</div>}
+                    </div>
+                  </div>
+                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium uppercase ${accent.iconBg} ${accent.icon}`}>
+                    {b.gst_type === 'non_gst' ? 'Non-GST' : 'GST'}
+                  </span>
+                </div>
+                <div className={`text-xs ${textSecondary} mb-0.5`}>Balance</div>
+                <div className={`text-2xl font-bold ${negative ? 'text-red-500' : textPrimary}`}>
+                  {fmtMoney(b.current_balance)}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
