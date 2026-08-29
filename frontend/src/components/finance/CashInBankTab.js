@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Landmark, X, Loader2, PiggyBank, Save } from 'lucide-react';
+import { Landmark, X, Loader2, PiggyBank, Save, Wallet } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -24,6 +24,10 @@ const CARD_ACCENTS = [
   { bg: 'bg-emerald-400/10', ring: 'ring-emerald-400/20', icon: 'text-emerald-500', iconBg: 'bg-emerald-400/15' },
   { bg: 'bg-rose-400/10', ring: 'ring-rose-400/20', icon: 'text-rose-500', iconBg: 'bg-rose-400/15' },
 ];
+
+// Fixed display order for the "All" tab's cards — everything else (a bank
+// not in this list, e.g. a newly-added one) falls in after, in load order.
+const ALL_TAB_ORDER = ['Drawlead', 'Vinoth Kumar B', 'Vinoth Kumar', 'Swathi Lakshmi Babu', 'Latha Babu'];
 
 /**
  * Each bank's current balance, with an optional Closing Balance checkpoint —
@@ -68,6 +72,14 @@ const CashInBankTab = () => {
 
   const totalBalance = banks.reduce((sum, b) => sum + (b.current_balance || 0), 0);
 
+  const orderedBanks = viewMode === 'all'
+    ? [...banks].sort((a, b) => {
+        const ia = ALL_TAB_ORDER.indexOf(a.label);
+        const ib = ALL_TAB_ORDER.indexOf(b.label);
+        return (ia === -1 ? ALL_TAB_ORDER.length : ia) - (ib === -1 ? ALL_TAB_ORDER.length : ib);
+      })
+    : banks;
+
   const openModal = (bank) => setModal({
     bankId: bank.bank_id,
     label: bank.label,
@@ -110,12 +122,6 @@ const CashInBankTab = () => {
               : "Each bank's current balance, honoring its Closing Balance checkpoint if one is set."}
           </p>
         </div>
-        {viewMode !== 'closing_balance' && (
-          <div className={`${bgCard} border ${borderColor} rounded-lg px-4 py-2 text-right`}>
-            <div className={`text-xs ${textSecondary}`}>Total</div>
-            <div className={`text-lg font-bold ${textPrimary}`}>{fmtMoney(totalBalance)}</div>
-          </div>
-        )}
       </div>
 
       <div className={`flex items-center gap-1 border-b ${borderColor}`}>
@@ -178,7 +184,19 @@ const CashInBankTab = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {banks.map((b, idx) => {
+          <div className="bg-[#6366f1] rounded-xl p-4 shadow-sm" data-testid="cash-in-bank-total-card">
+            <div className="flex items-center gap-2.5 mb-3">
+              <div className="h-9 w-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                <Wallet className="h-4.5 w-4.5 text-white" />
+              </div>
+              <div className="font-semibold text-white">
+                {viewMode === 'gst' ? 'GST Total' : viewMode === 'non_gst' ? 'Non-GST Total' : 'Total Balance'}
+              </div>
+            </div>
+            <div className="text-xs text-white/70 mb-0.5">Balance</div>
+            <div className="text-2xl font-bold text-white">{fmtMoney(totalBalance)}</div>
+          </div>
+          {orderedBanks.map((b, idx) => {
             const accent = CARD_ACCENTS[idx % CARD_ACCENTS.length];
             const negative = (b.current_balance || 0) < 0;
             return (
