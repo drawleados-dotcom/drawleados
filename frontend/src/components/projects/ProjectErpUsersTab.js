@@ -5,7 +5,7 @@ import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, Search, Building2, FileText, Layers, LayoutGrid, Boxes } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, Search, Building2, FileText, Layers, LayoutGrid, Boxes, Sparkles } from 'lucide-react';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
 import ErpTaskList, { ErpTaskCountBadge } from './ErpTaskList';
 import ErpTaskModal from './ErpTaskModal';
@@ -243,7 +243,7 @@ export default function ProjectErpUsersTab({
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
   const [taskStatusFilter, setTaskStatusFilter] = useState('todo'); // all | todo | progress | approval | completed — defaults to Todo
-  const [taskLevelFilter, setTaskLevelFilter] = useState('all'); // all | user | page | sub_tab | ultra_sub_tab | ultra_tab
+  const [taskLevelFilter, setTaskLevelFilter] = useState('all'); // all | user | page | sub_tab | ultra_sub_tab | ultra_tab | ultra_tab_pro
   const [taskTypeFilter, setTaskTypeFilter] = useState('all'); // all | one of ERP_TASK_TYPE_OPTIONS
 
   const inTaskDateRange = (dueDateStr) => {
@@ -291,14 +291,16 @@ export default function ProjectErpUsersTab({
     return true;
   };
   // A task's depth is however far into Page > Sub Tab > Ultra Sub Tab >
-  // Ultra Tab it's tagged — "user" means tagged to a user but no page yet.
+  // Ultra Tab > Ultra Tab Pro it's tagged — "user" means tagged to a user
+  // but no page yet.
   const matchesLevelFilter = (t) => {
     if (taskLevelFilter === 'all') return true;
     if (taskLevelFilter === 'user') return !t.erp_page_id;
     if (taskLevelFilter === 'page') return !!t.erp_page_id && !t.erp_sub_tab_id;
     if (taskLevelFilter === 'sub_tab') return !!t.erp_sub_tab_id && !t.erp_ultra_sub_tab_id;
     if (taskLevelFilter === 'ultra_sub_tab') return !!t.erp_ultra_sub_tab_id && !t.erp_ultra_tab_id;
-    if (taskLevelFilter === 'ultra_tab') return !!t.erp_ultra_tab_id;
+    if (taskLevelFilter === 'ultra_tab') return !!t.erp_ultra_tab_id && !t.erp_ultra_tab_pro_id;
+    if (taskLevelFilter === 'ultra_tab_pro') return !!t.erp_ultra_tab_pro_id;
     return true;
   };
   const matchesTypeFilter = (t) => taskTypeFilter === 'all' || t.erp_task_type === taskTypeFilter;
@@ -344,7 +346,7 @@ export default function ProjectErpUsersTab({
       ? departmentFilteredUsers.filter(u => !u.sub_department_id)
       : departmentFilteredUsers.filter(u => u.sub_department_id === subDepartmentFilter));
 
-  // Cascading jump-to filters: Departments -> Users -> Pages -> Sub Tabs -> Ultra Sub Tab -> Ultra Tab.
+  // Cascading jump-to filters: Departments -> Users -> Pages -> Sub Tabs -> Ultra Sub Tab -> Ultra Tab -> Ultra Tab Pro.
   // Each level's options are scoped by whatever's selected above it; picking a value at any
   // level also expands the tree down to reveal that item, without needing to click every chevron.
   const [userFilter, setUserFilter] = useState('all');
@@ -352,6 +354,7 @@ export default function ProjectErpUsersTab({
   const [subTabFilter, setSubTabFilter] = useState('all');
   const [ultraSubTabFilter, setUltraSubTabFilter] = useState('all');
   const [ultraTabFilter, setUltraTabFilter] = useState('all');
+  const [ultraTabProFilter, setUltraTabProFilter] = useState('all');
   // Free-text search by user name, on top of the exact-match "All Users" dropdown.
   const [userSearchQuery, setUserSearchQuery] = useState('');
 
@@ -384,7 +387,8 @@ export default function ProjectErpUsersTab({
   const pageLevelCount = levelCardTasks.filter(t => t.erp_page_id && !t.erp_sub_tab_id).length;
   const subTabLevelCount = levelCardTasks.filter(t => t.erp_sub_tab_id && !t.erp_ultra_sub_tab_id).length;
   const ultraSubTabLevelCount = levelCardTasks.filter(t => t.erp_ultra_sub_tab_id && !t.erp_ultra_tab_id).length;
-  const ultraTabLevelCount = levelCardTasks.filter(t => !!t.erp_ultra_tab_id).length;
+  const ultraTabLevelCount = levelCardTasks.filter(t => t.erp_ultra_tab_id && !t.erp_ultra_tab_pro_id).length;
+  const ultraTabProLevelCount = levelCardTasks.filter(t => !!t.erp_ultra_tab_pro_id).length;
 
   const statusCardTasks = summaryBaseTasks.filter(matchesLevelFilter);
   const allTasksCount = statusCardTasks.length;
@@ -415,6 +419,14 @@ export default function ProjectErpUsersTab({
     userId: pg._userId, pageId: pg.id, subTabId: st.id, ultraSubTabId: ut.id, itemId: item.id,
   })));
 
+  const scopedUltraTabs = scopedUltraSubTabs.flatMap(({ pg, st, ut }) => (ut.ultra_tabs || []).map(it => ({ pg, st, ut, it })))
+    .filter(({ pg, st, ut, it }) => ultraTabFilter === 'all' || `${pg.id}::${st.id}::${ut.id}::${it.id}` === ultraTabFilter);
+  const ultraTabProOptions = scopedUltraTabs.flatMap(({ pg, st, ut, it }) => (it.ultra_tab_pro || []).map(pro => ({
+    key: `${pg.id}::${st.id}::${ut.id}::${it.id}::${pro.id}`,
+    label: `${it.name} → ${pro.name}`,
+    userId: pg._userId, pageId: pg.id, subTabId: st.id, ultraSubTabId: ut.id, itemId: it.id, proId: pro.id,
+  })));
+
   // When a specific Ultra Tab is picked, the whole Department -> User ->
   // Pages -> Sub Tabs -> Ultra Sub Tabs tree is beside the point — the user
   // just wants that one Ultra Tab row. This locates its full record (plus
@@ -431,49 +443,65 @@ export default function ProjectErpUsersTab({
     return null;
   })();
 
+  // Same idea, one level deeper — a specific Ultra Tab Pro picked collapses
+  // the tree to just that row. Takes precedence over selectedUltraTabItem
+  // (checked first in the render) since it's the more specific pick.
+  const selectedUltraTabProItem = ultraTabProFilter === 'all' ? null : (() => {
+    for (const { pg, st, ut, it } of scopedUltraTabs) {
+      const pro = (it.ultra_tab_pro || []).find((p) => `${pg.id}::${st.id}::${ut.id}::${it.id}::${p.id}` === ultraTabProFilter);
+      if (pro) {
+        const u = filteredErpUsers.find((x) => x.id === pg._userId);
+        if (u) return { u, row: pg, st, ut, it, pro };
+      }
+    }
+    return null;
+  })();
+
   const handleDepartmentFilterChange = (v) => {
     setDepartmentFilter(v);
     setSubDepartmentFilter('all');
-    setUserFilter('all'); setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
-    setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+    setUserFilter('all'); setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all'); setUltraTabProFilter('all');
+    setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null); setExpandedUltraTabProId(null);
   };
   const handleSubDepartmentFilterChange = (v) => {
     setSubDepartmentFilter(v);
-    setUserFilter('all'); setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
-    setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+    setUserFilter('all'); setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all'); setUltraTabProFilter('all');
+    setExpandedUserId(null); setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null); setExpandedUltraTabProId(null);
   };
   const handleUserFilterChange = (v) => {
     setUserFilter(v);
-    setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
+    setPageFilter('all'); setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all'); setUltraTabProFilter('all');
     setExpandedUserId(v === 'all' ? null : v);
-    setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+    setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null); setExpandedUltraTabProId(null);
   };
   const handlePageFilterChange = (v) => {
     setPageFilter(v);
-    setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all');
-    setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+    setSubTabFilter('all'); setUltraSubTabFilter('all'); setUltraTabFilter('all'); setUltraTabProFilter('all');
+    setExpandedSubTabsPageId(null); setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null); setExpandedUltraTabProId(null);
     if (v === 'all') return;
     const opt = pageOptions.find(o => o.key === v);
     if (opt) setExpandedUserId(opt.userId);
   };
   const handleSubTabFilterChange = (v) => {
     setSubTabFilter(v);
-    setUltraSubTabFilter('all'); setUltraTabFilter('all');
-    setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null);
+    setUltraSubTabFilter('all'); setUltraTabFilter('all'); setUltraTabProFilter('all');
+    setExpandedUltraTabsSubTabId(null); setExpandedUltraTabItemsId(null); setExpandedUltraTabProId(null);
     if (v === 'all') { setExpandedSubTabsPageId(null); return; }
     const opt = subTabOptions.find(o => o.key === v);
     if (opt) { setExpandedUserId(opt.userId); setExpandedSubTabsPageId(opt.pageId); }
   };
   const handleUltraSubTabFilterChange = (v) => {
     setUltraSubTabFilter(v);
-    setUltraTabFilter('all');
-    setExpandedUltraTabItemsId(null);
+    setUltraTabFilter('all'); setUltraTabProFilter('all');
+    setExpandedUltraTabItemsId(null); setExpandedUltraTabProId(null);
     if (v === 'all') { setExpandedUltraTabsSubTabId(null); return; }
     const opt = ultraSubTabOptions.find(o => o.key === v);
     if (opt) { setExpandedUserId(opt.userId); setExpandedSubTabsPageId(opt.pageId); setExpandedUltraTabsSubTabId(opt.subTabId); }
   };
   const handleUltraTabFilterChange = (v) => {
     setUltraTabFilter(v);
+    setUltraTabProFilter('all');
+    setExpandedUltraTabProId(null);
     if (v === 'all') { setExpandedUltraTabItemsId(null); return; }
     const opt = ultraTabOptions.find(o => o.key === v);
     if (opt) {
@@ -481,6 +509,18 @@ export default function ProjectErpUsersTab({
       setExpandedSubTabsPageId(opt.pageId);
       setExpandedUltraTabsSubTabId(opt.subTabId);
       setExpandedUltraTabItemsId(opt.ultraSubTabId);
+    }
+  };
+  const handleUltraTabProFilterChange = (v) => {
+    setUltraTabProFilter(v);
+    if (v === 'all') { setExpandedUltraTabProId(null); return; }
+    const opt = ultraTabProOptions.find(o => o.key === v);
+    if (opt) {
+      setExpandedUserId(opt.userId);
+      setExpandedSubTabsPageId(opt.pageId);
+      setExpandedUltraTabsSubTabId(opt.subTabId);
+      setExpandedUltraTabItemsId(opt.ultraSubTabId);
+      setExpandedUltraTabProId(opt.itemId);
     }
   };
 
@@ -1010,13 +1050,14 @@ export default function ProjectErpUsersTab({
           date- and task-type-filterable. Two rows: hierarchy depth (how deep
           tasks are tagged) and status. Every card is a toggle filter. */}
       <div className="space-y-2">
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
           {summaryCard('Department', deptLevelCount, Building2, 'text-[#6366f1]', taskLevelFilter === 'all', () => setTaskLevelFilter('all'))}
           {summaryCard('Users', userLevelCount, UsersIcon, 'text-sky-400', taskLevelFilter === 'user', () => setTaskLevelFilter(taskLevelFilter === 'user' ? 'all' : 'user'))}
           {summaryCard('Pages', pageLevelCount, FileText, 'text-violet-400', taskLevelFilter === 'page', () => setTaskLevelFilter(taskLevelFilter === 'page' ? 'all' : 'page'))}
           {summaryCard('Sub Tabs', subTabLevelCount, Layers, 'text-amber-400', taskLevelFilter === 'sub_tab', () => setTaskLevelFilter(taskLevelFilter === 'sub_tab' ? 'all' : 'sub_tab'))}
           {summaryCard('Ultra Sub Tabs', ultraSubTabLevelCount, LayoutGrid, 'text-pink-400', taskLevelFilter === 'ultra_sub_tab', () => setTaskLevelFilter(taskLevelFilter === 'ultra_sub_tab' ? 'all' : 'ultra_sub_tab'))}
           {summaryCard('Ultra Tabs', ultraTabLevelCount, Boxes, 'text-emerald-400', taskLevelFilter === 'ultra_tab', () => setTaskLevelFilter(taskLevelFilter === 'ultra_tab' ? 'all' : 'ultra_tab'))}
+          {summaryCard('Ultra Tab Pro', ultraTabProLevelCount, Sparkles, 'text-rose-400', taskLevelFilter === 'ultra_tab_pro', () => setTaskLevelFilter(taskLevelFilter === 'ultra_tab_pro' ? 'all' : 'ultra_tab_pro'))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Select value={taskStatusFilter} onValueChange={setTaskStatusFilter}>
@@ -1162,6 +1203,15 @@ export default function ProjectErpUsersTab({
               {ultraTabOptions.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={ultraTabProFilter} onValueChange={handleUltraTabProFilterChange} disabled={ultraTabProOptions.length === 0}>
+            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[170px]`} data-testid="erp-ultra-tab-pro-filter">
+              <SelectValue placeholder="All Ultra Tab Pro" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Ultra Tab Pro</SelectItem>
+              {ultraTabProOptions.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
           {canEdit && (
             <Button
               type="button"
@@ -1177,7 +1227,113 @@ export default function ProjectErpUsersTab({
 
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">
-        {selectedUltraTabItem ? (() => {
+        {selectedUltraTabProItem ? (() => {
+          const { u, row, st, ut, it, pro } = selectedUltraTabProItem;
+          const ultraTabProTasks = tasksForUltraTabPro(row.id, st.id, ut.id, it.id, pro.id);
+          const isUltraTabProTaskExpanded = expandedUltraTabProTaskId === pro.id;
+          return (
+            <div className="p-4" data-testid="erp-ultratab-pro-flat-view">
+              <div className={`text-xs ${textSecondary} mb-3`}>
+                <button
+                  type="button"
+                  onClick={() => handleUltraTabProFilterChange('all')}
+                  className="text-[#6366f1] hover:underline font-medium"
+                  data-testid="erp-ultratab-pro-back-to-full-view"
+                >
+                  ← Back to full view
+                </button>
+                <span className="mx-1.5">·</span>
+                {u.user_name || '—'} → {row.page_name} → {st.name} → {ut.name} → {it.name}
+              </div>
+              <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
+                <table className="w-full">
+                  <thead>
+                    <tr className={`border-b ${borderColor}`}>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-10`}>S.No</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Ultra Tab Pro Name</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>UI Link</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Content Link</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Page Link</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                      <th className={`text-right px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <React.Fragment key={pro.id}>
+                      <tr className={`border-b ${borderColor} last:border-b-0`} data-testid={`erp-ultratab-pro-row-${pro.id}`}>
+                        <td className={`px-3 py-2 text-xs ${textSecondary}`}>1</td>
+                        <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>{pro.name || '—'}</td>
+                        {['ui_link', 'content_link', 'page_link'].map((key) => (
+                          <td key={key} className="px-3 py-2">
+                            {pro[key] ? (
+                              <a
+                                href={pro[key]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
+                              >
+                                <ExternalLink className="h-3 w-3" /> Open
+                              </a>
+                            ) : (
+                              <span className={`text-xs ${textSecondary}`}>—</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[pro.status] || STATUS_STYLE['To-Do']}`}>
+                            {pro.status || 'To-Do'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <ErpTaskCountBadge
+                              count={ultraTabProTasks.length}
+                              active={isUltraTabProTaskExpanded}
+                              onClick={() => setExpandedUltraTabProTaskId(isUltraTabProTaskExpanded ? null : pro.id)}
+                              textSecondary={textSecondary}
+                              testId={`erp-ultratab-pro-tasks-toggle-${pro.id}`}
+                            />
+                            <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name, ultraSubTabId: ut.id, ultraSubTabName: ut.name, ultraTabId: it.id, ultraTabName: it.name, ultraTabProId: pro.id, ultraTabProName: pro.name })} testId={`erp-ultratab-pro-addtask-${pro.id}`} />
+                            <button type="button" onClick={() => openViewUltraTabPro(u.id, row.id, st.id, ut.id, it.id, pro)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-pro-view-${pro.id}`}>
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            {canEdit && (
+                              <button type="button" onClick={() => openEditUltraTabPro(u.id, row.id, st.id, ut.id, it.id, pro)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`erp-ultratab-pro-edit-${pro.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canEdit && (
+                              <button type="button" onClick={() => deleteUltraTabPro(u.id, row.id, st.id, ut.id, it.id, pro.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-pro-delete-${pro.id}`}>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {isUltraTabProTaskExpanded && (
+                        <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-pro-tasks-row-${pro.id}`}>
+                          <td colSpan={7} className="p-3">
+                            <ErpTaskList
+                              tasks={ultraTabProTasks}
+                              onEdit={openEditTask}
+                              onDelete={deleteTask}
+                              assigneeName={assigneeName}
+                              textPrimary={textPrimary}
+                              textSecondary={textSecondary}
+                              borderColor={borderColor}
+                              bgCard={bgCard}
+                              testPrefix="erp-ultratab-pro-task-row"
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })() : selectedUltraTabItem ? (() => {
           const { u, row, st, ut, it } = selectedUltraTabItem;
           const ultraTabTasks = tasksForUltraTab(row.id, st.id, ut.id, it.id);
           const isUltraTabTaskExpanded = expandedUltraTabItemTaskId === it.id;
