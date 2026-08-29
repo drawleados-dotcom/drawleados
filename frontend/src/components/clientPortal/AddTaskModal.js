@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
-import { X, Clock, ListChecks } from 'lucide-react';
-import ErpLocationPicker from '../projects/ErpLocationPicker';
+import { X, Clock, ListChecks, Mic, Pause, Play, Square, Trash2 } from 'lucide-react';
+import { SearchableSelect } from '../ui/searchable-select';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -28,17 +28,18 @@ const emptyState = {
   websitePageId: '',
   taskName: '', priority: 'medium',
   reference_image: '',
+  voice_note: '',
 };
 
 /** Client Portal's "Add New Task" popup — always pre-scoped to the client's
  * own project (never asked, unlike the internal Add Task flows), field
  * order per the client-facing brief: Date & Time (auto), User/Page tagging,
- * Task or Bug, Priority. `department` selects which tagging structure to
- * show: "erp" (the same Department -> User -> Page -> Sub Tab -> Ultra Sub
- * Tab -> Ultra Tab -> Ultra Tab Pro picker the internal Add Task popup
- * uses, via ErpLocationPicker) or "website" (a single flat Page picker,
- * from `pages`). No Assign To field — a client never picks who on the team
- * handles it. */
+ * Task or Bug, Voice Note, Reference Image, Priority. `department` selects
+ * which tagging structure to show: "erp" (a single searchable User picker,
+ * from `erpUsers` — deliberately simpler than the internal Add Task popup's
+ * full Department/Page/Sub Tab cascade, since a client only needs to say
+ * who it's for) or "website" (a single flat Page picker, from `pages`).
+ * No Assign To field — a client never picks who on the team handles it. */
 export default function AddTaskModal({ open, onClose, projectName, department = 'erp', erpUsers, erpDepartments, pages, sessionToken, onCreated }) {
   const [location, setLocation] = useState(emptyLocation);
   const [form, setForm] = useState(emptyState);
@@ -46,9 +47,47 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
   const [reportedAt] = useState(() => new Date());
 
   const isErp = department === 'erp';
-  const erpProject = { erp_users: erpUsers || [], erp_departments: erpDepartments || [] };
+  const userOptions = (erpUsers || []).map((u) => ({ value: u.id, label: u.user_name }));
 
   const selectedWebsitePage = (pages || []).find((p) => p.id === form.websitePageId);
+
+  // Voice Note recorder — Start/Pause/Resume/Stop, same data-URI storage
+  // pattern as Reference Image above (no upload endpoint to send it to).
+  const [recState, setRecState] = useState('idle'); // 'idle' | 'recording' | 'paused'
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const mediaStreamRef = useRef(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => setForm((f) => ({ ...f, voice_note: reader.result }));
+        reader.readAsDataURL(blob);
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecState('recording');
+    } catch (e) {
+      toast.error('Could not access the microphone');
+    }
+  };
+  const pauseRecording = () => { mediaRecorderRef.current?.pause(); setRecState('paused'); };
+  const resumeRecording = () => { mediaRecorderRef.current?.resume(); setRecState('recording'); };
+  const stopRecording = () => { mediaRecorderRef.current?.stop(); setRecState('idle'); };
+  const deleteVoiceNote = () => setForm((f) => ({ ...f, voice_note: '' }));
+
+  // If the modal closes (Cancel, backdrop) mid-recording, release the mic
+  // instead of leaving it "on" in the background.
+  useEffect(() => () => { mediaStreamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
   const handleImagePaste = (e) => {
     const items = e.clipboardData?.items;
@@ -81,6 +120,7 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
         priority: form.priority,
         department,
         reference_image: form.reference_image || null,
+        voice_note: form.voice_note || null,
       };
       if (isErp) {
         Object.assign(payload, location);
@@ -135,16 +175,19 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
 
           {isErp ? (
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-2">Where is this?</p>
-              <ErpLocationPicker
-                project={erpProject}
-                value={location}
-                onChange={setLocation}
-                bgSecondary="bg-white"
-                borderColor="border-gray-200"
-                textPrimary="text-gray-900"
-                textSecondary="text-gray-500"
-                testPrefix="client-portal-task-location"
+              <p className="text-xs font-medium text-gray-500 mb-1">Where is this?</p>
+              <SearchableSelect
+                value={location.erp_user_id}
+                onChange={(id) => {
+                  const u = (erpUsers || []).find((x) => x.id === id);
+                  setLocation({ ...emptyLocation, erp_user_id: id, erp_user_name: u?.user_name || '' });
+                }}
+                options={userOptions}
+                placeholder="— Select user —"
+                searchPlaceholder="Search users…"
+                emptyText="No users yet"
+                className={selectCls}
+                data-testid="client-portal-task-location-user"
               />
             </div>
           ) : (
@@ -201,6 +244,58 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
                 data-testid="client-portal-task-refimage-dropzone"
               >
                 Click here, then paste a screenshot (Ctrl+V / Cmd+V)
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">Voice Note</p>
+            {form.voice_note ? (
+              <div className="flex items-center gap-2">
+                <audio controls src={form.voice_note} className="h-9 flex-1" data-testid="client-portal-task-voicenote-player" />
+                <button
+                  type="button"
+                  onClick={deleteVoiceNote}
+                  className="p-1.5 rounded-full bg-red-500 hover:bg-red-600 text-white shrink-0"
+                  title="Delete voice note"
+                  data-testid="client-portal-task-voicenote-remove"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 h-11 px-3 rounded-lg border border-dashed border-gray-300 bg-gray-50">
+                {recState === 'idle' && (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="flex items-center gap-1.5 text-xs text-[#6366f1] hover:underline"
+                    data-testid="client-portal-task-voicenote-record"
+                  >
+                    <Mic className="h-4 w-4" /> Record a voice note
+                  </button>
+                )}
+                {recState !== 'idle' && (
+                  <>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+                      <span className={`h-2 w-2 rounded-full bg-red-500 ${recState === 'recording' ? 'animate-pulse' : ''}`} />
+                      {recState === 'recording' ? 'Recording…' : 'Paused'}
+                    </span>
+                    <div className="flex-1" />
+                    {recState === 'recording' ? (
+                      <button type="button" onClick={pauseRecording} className="p-1.5 rounded-full bg-white border border-gray-200 text-gray-900" title="Pause" data-testid="client-portal-task-voicenote-pause">
+                        <Pause className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <button type="button" onClick={resumeRecording} className="p-1.5 rounded-full bg-white border border-gray-200 text-gray-900" title="Resume" data-testid="client-portal-task-voicenote-resume">
+                        <Play className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button type="button" onClick={stopRecording} className="p-1.5 rounded-full bg-[#6366f1] hover:bg-[#4f46e5] text-white" title="Stop & Save" data-testid="client-portal-task-voicenote-stop">
+                      <Square className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

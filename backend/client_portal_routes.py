@@ -55,6 +55,7 @@ class ClientPortalTaskCreate(BaseModel):
     website_page_id: Optional[str] = None
     website_page_name: Optional[str] = None
     reference_image: Optional[str] = None  # data: URI of a pasted screenshot, if attached
+    voice_note: Optional[str] = None  # data: URI of a recorded voice note, if attached
 
 
 async def _get_client_session(request: Request) -> dict:
@@ -233,6 +234,7 @@ async def create_client_portal_task(payload: ClientPortalTaskCreate, request: Re
         "website_page_id": payload.website_page_id if payload.department == "website" else None,
         "website_page_name": payload.website_page_name if payload.department == "website" else None,
         "reference_image": payload.reference_image or None,
+        "voice_note": payload.voice_note or None,
         "work_link": None,
         "due_date": None,
         "due_time": None,
