@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { SearchableSelect } from '../ui/searchable-select';
-import { ListChecks, X } from 'lucide-react';
+import { ListChecks, X, Mic, Pause, Play, Square, Trash2 } from 'lucide-react';
 import { buildErpPrompt } from '../../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
 import ErpLocationPicker from './ErpLocationPicker';
@@ -50,8 +50,47 @@ export default function ErpTaskModal({
     workflow_id: '',
     workflow_name: '',
     reference_image: '',
+    voice_note: '',
   });
   const [saving, setSaving] = useState(false);
+
+  // Voice Note recorder — Start/Pause/Resume/Stop, same data-URI storage
+  // pattern as Reference Image above (no upload endpoint to send it to).
+  const [recState, setRecState] = useState('idle'); // 'idle' | 'recording' | 'paused'
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const mediaStreamRef = useRef(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => setDraft(d => ({ ...d, voice_note: reader.result }));
+        reader.readAsDataURL(blob);
+        mediaStreamRef.current?.getTracks().forEach(t => t.stop());
+        mediaStreamRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecState('recording');
+    } catch (e) {
+      toast.error('Could not access the microphone');
+    }
+  };
+  const pauseRecording = () => { mediaRecorderRef.current?.pause(); setRecState('paused'); };
+  const resumeRecording = () => { mediaRecorderRef.current?.resume(); setRecState('recording'); };
+  const stopRecording = () => { mediaRecorderRef.current?.stop(); setRecState('idle'); };
+  const deleteVoiceNote = () => setDraft(d => ({ ...d, voice_note: '' }));
+
+  // If the modal closes (Cancel, backdrop, Escape) mid-recording, release
+  // the mic instead of leaving it "on" in the background.
+  useEffect(() => () => { mediaStreamRef.current?.getTracks().forEach(t => t.stop()); }, []);
 
   // Paste-a-screenshot support for the Reference Image field below — reads
   // whatever image is on the clipboard (e.g. a Cmd+Shift+4 screenshot) and
@@ -95,6 +134,7 @@ export default function ErpTaskModal({
       workflow_id: draft.workflow_id || null,
       workflow_name: draft.workflow_name || null,
       reference_image: draft.reference_image || '',
+      voice_note: draft.voice_note || '',
     };
     try {
       if (taskId) {
@@ -249,6 +289,57 @@ export default function ErpTaskModal({
                 data-testid="erp-quicktask-form-refimage-dropzone"
               >
                 Click here, then paste a screenshot (Ctrl+V / Cmd+V)
+              </div>
+            )}
+          </div>
+          <div>
+            <p className={`text-xs font-medium ${textSecondary} mb-1`}>Voice Note</p>
+            {draft.voice_note ? (
+              <div className="flex items-center gap-2">
+                <audio controls src={draft.voice_note} className="h-9 flex-1" data-testid="erp-quicktask-form-voicenote-player" />
+                <button
+                  type="button"
+                  onClick={deleteVoiceNote}
+                  className="p-1.5 rounded-full bg-red-500 hover:bg-red-600 text-white shrink-0"
+                  title="Delete voice note"
+                  data-testid="erp-quicktask-form-voicenote-remove"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className={`flex items-center gap-2 h-11 px-3 rounded-md border border-dashed ${borderColor} ${bgSecondary}`}>
+                {recState === 'idle' && (
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="flex items-center gap-1.5 text-xs text-[#6366f1] hover:underline"
+                    data-testid="erp-quicktask-form-voicenote-record"
+                  >
+                    <Mic className="h-4 w-4" /> Record a voice note
+                  </button>
+                )}
+                {recState !== 'idle' && (
+                  <>
+                    <span className={`inline-flex items-center gap-1.5 text-xs ${textSecondary}`}>
+                      <span className={`h-2 w-2 rounded-full bg-red-500 ${recState === 'recording' ? 'animate-pulse' : ''}`} />
+                      {recState === 'recording' ? 'Recording…' : 'Paused'}
+                    </span>
+                    <div className="flex-1" />
+                    {recState === 'recording' ? (
+                      <button type="button" onClick={pauseRecording} className={`p-1.5 rounded-full ${bgCard} border ${borderColor} ${textPrimary}`} title="Pause" data-testid="erp-quicktask-form-voicenote-pause">
+                        <Pause className="h-3.5 w-3.5" />
+                      </button>
+                    ) : (
+                      <button type="button" onClick={resumeRecording} className={`p-1.5 rounded-full ${bgCard} border ${borderColor} ${textPrimary}`} title="Resume" data-testid="erp-quicktask-form-voicenote-resume">
+                        <Play className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <button type="button" onClick={stopRecording} className="p-1.5 rounded-full bg-[#6366f1] hover:bg-[#4f46e5] text-white" title="Stop & Save" data-testid="erp-quicktask-form-voicenote-stop">
+                      <Square className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

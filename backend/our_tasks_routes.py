@@ -59,6 +59,7 @@ class TaskCreate(BaseModel):
     workflow_id: Optional[str] = None        # one of the project's erp_workflow rows
     workflow_name: Optional[str] = None
     reference_image: Optional[str] = None    # data: URI of a pasted screenshot, if attached
+    voice_note: Optional[str] = None         # data: URI of a recorded voice note, if attached
 
 class TaskUpdate(BaseModel):
     task_name: Optional[str] = None
@@ -98,6 +99,7 @@ class TaskUpdate(BaseModel):
     workflow_id: Optional[str] = None
     workflow_name: Optional[str] = None
     reference_image: Optional[str] = None
+    voice_note: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -330,6 +332,7 @@ async def create_task(task_data: TaskCreate, request: Request):
             "workflow_id": task_data.workflow_id,
             "workflow_name": task_data.workflow_name,
             "reference_image": task_data.reference_image,
+            "voice_note": task_data.voice_note,
             "created_by": user.user_id,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),

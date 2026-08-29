@@ -981,6 +981,7 @@ export default function ProjectErpUsersTab({
         due_date: new Date().toISOString().slice(0, 10),
         work_link: '',
         reference_image: '',
+        voice_note: '',
       },
     });
   };
@@ -1004,6 +1005,7 @@ export default function ProjectErpUsersTab({
         due_date: task.due_date || new Date().toISOString().slice(0, 10),
         work_link: task.work_link || '',
         reference_image: task.reference_image || '',
+        voice_note: task.voice_note || '',
       },
     });
   };
