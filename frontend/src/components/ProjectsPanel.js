@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -116,6 +116,8 @@ export default function ProjectsPanel({
   // taskDraft form below, which only knows department/category tasks.
   const [viewOnlyTask, setViewOnlyTask] = useState(null);
   const [erpTaskModal, setErpTaskModal] = useState(null); // { taskId, location, draft } | null
+  // Brief "Copied!" feedback on the viewOnlyTask preview's copy-prompt button.
+  const [promptCopied, setPromptCopied] = useState(false);
   // Manual timer controls + time-edit form inside the viewOnlyTask preview.
   const [savingTime, setSavingTime] = useState(false);
   const [timeEditOpen, setTimeEditOpen] = useState(false);
@@ -837,6 +839,43 @@ export default function ProjectsPanel({
     if (hrs > 0) return `${hrs}h ${mins}m`;
     if (mins > 0) return `${mins}m ${secs}s`;
     return `${secs}s`;
+  };
+
+  // Copies the ERP prompt text and (if present) the task's reference image
+  // together as one clipboard write, so pasting into a chat/AI tool drops
+  // both in at once instead of needing two separate copy actions.
+  const handleCopyPromptAndImage = async (task) => {
+    const promptText = buildErpPrompt({
+      projectName: selectedProject.name,
+      userName: task.erp_user_name,
+      pageName: task.erp_page_name,
+      subTabName: task.erp_sub_tab_name,
+      ultraSubTabName: task.erp_ultra_sub_tab_name,
+      ultraTabName: task.erp_ultra_tab_name,
+      taskName: task.task_name,
+    });
+    try {
+      const items = { 'text/plain': new Blob([promptText], { type: 'text/plain' }) };
+      if (task.reference_image) {
+        const imgBlob = await (await fetch(task.reference_image)).blob();
+        items[imgBlob.type || 'image/png'] = imgBlob;
+      }
+      await navigator.clipboard.write([new ClipboardItem(items)]);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 1500);
+      toast.success(task.reference_image ? 'Prompt + image copied' : 'Prompt copied');
+    } catch {
+      // Some browsers can't clipboard-write an image alongside text — fall
+      // back to at least copying the prompt text.
+      try {
+        await navigator.clipboard.writeText(promptText);
+        setPromptCopied(true);
+        setTimeout(() => setPromptCopied(false), 1500);
+        toast.success('Prompt copied (this browser can\'t copy the image with it)');
+      } catch {
+        toast.error('Failed to copy');
+      }
+    }
   };
 
   // Timer start/pause/resume/finish for the task currently open in the
@@ -2812,7 +2851,19 @@ export default function ProjectsPanel({
                 )}
                 {viewOnlyTask.erp_user_id && (
                   <div className={`p-3 rounded-lg ${bgSecondary}`}>
-                    <p className={`text-[11px] uppercase tracking-wide ${textSecondary} mb-1`}>ERP Location</p>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className={`text-[11px] uppercase tracking-wide ${textSecondary}`}>ERP Location</p>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPromptAndImage(viewOnlyTask)}
+                        className="text-xs text-[#6366f1] hover:underline flex items-center gap-1"
+                        title="Copy prompt and reference image"
+                        data-testid="view-task-copy-prompt"
+                      >
+                        {promptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {promptCopied ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
                     <p className={`text-sm ${textPrimary} break-words`}>
                       {buildErpPrompt({
                         projectName: selectedProject.name,
@@ -2824,6 +2875,14 @@ export default function ProjectsPanel({
                         taskName: viewOnlyTask.task_name,
                       })}
                     </p>
+                    {viewOnlyTask.reference_image && (
+                      <img
+                        src={viewOnlyTask.reference_image}
+                        alt="Reference"
+                        className={`max-h-48 rounded-md border ${borderColor} mt-2`}
+                        data-testid="view-task-reference-image"
+                      />
+                    )}
                   </div>
                 )}
                 {/* Time Tracking — total time spent, live timer status, a
