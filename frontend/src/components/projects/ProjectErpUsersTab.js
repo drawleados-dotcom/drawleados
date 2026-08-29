@@ -412,6 +412,22 @@ export default function ProjectErpUsersTab({
     userId: pg._userId, pageId: pg.id, subTabId: st.id, ultraSubTabId: ut.id, itemId: item.id,
   })));
 
+  // When a specific Ultra Tab is picked, the whole Department -> User ->
+  // Pages -> Sub Tabs -> Ultra Sub Tabs tree is beside the point — the user
+  // just wants that one Ultra Tab row. This locates its full record (plus
+  // its ancestors, needed for the row's action handlers) so the render can
+  // swap the entire nested table for a single flat one.
+  const selectedUltraTabItem = ultraTabFilter === 'all' ? null : (() => {
+    for (const { pg, st, ut } of scopedUltraSubTabs) {
+      const it = (ut.ultra_tabs || []).find((item) => `${pg.id}::${st.id}::${ut.id}::${item.id}` === ultraTabFilter);
+      if (it) {
+        const u = filteredErpUsers.find((x) => x.id === pg._userId);
+        if (u) return { u, row: pg, st, ut, it };
+      }
+    }
+    return null;
+  })();
+
   const handleDepartmentFilterChange = (v) => {
     setDepartmentFilter(v);
     setSubDepartmentFilter('all');
@@ -1092,6 +1108,113 @@ export default function ProjectErpUsersTab({
 
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">
+        {selectedUltraTabItem ? (() => {
+          const { u, row, st, ut, it } = selectedUltraTabItem;
+          const ultraTabTasks = tasksForUltraTab(row.id, st.id, ut.id, it.id);
+          const isUltraTabTaskExpanded = expandedUltraTabItemTaskId === it.id;
+          return (
+            <div className="p-4" data-testid="erp-ultratab-item-flat-view">
+              <div className={`text-xs ${textSecondary} mb-3`}>
+                <button
+                  type="button"
+                  onClick={() => handleUltraTabFilterChange('all')}
+                  className="text-[#6366f1] hover:underline font-medium"
+                  data-testid="erp-ultratab-item-back-to-full-view"
+                >
+                  ← Back to full view
+                </button>
+                <span className="mx-1.5">·</span>
+                {u.user_name || '—'} → {row.page_name} → {st.name} → {ut.name}
+              </div>
+              <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
+                <table className="w-full">
+                  <thead>
+                    <tr className={`border-b ${borderColor}`}>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-10`}>S.No</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Ultra Tab Name</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>UI Link</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Content Link</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Page Link</th>
+                      <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                      <th className={`text-right px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <React.Fragment key={it.id}>
+                      <tr className={`border-b ${borderColor} last:border-b-0`} data-testid={`erp-ultratab-item-row-${it.id}`}>
+                        <td className={`px-3 py-2 text-xs ${textSecondary}`}>1</td>
+                        <td className={`px-3 py-2 text-sm font-medium ${textPrimary}`}>{it.name || '—'}</td>
+                        {['ui_link', 'content_link', 'page_link'].map((key) => (
+                          <td key={key} className="px-3 py-2">
+                            {it[key] ? (
+                              <a
+                                href={it[key]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
+                              >
+                                <ExternalLink className="h-3 w-3" /> Open
+                              </a>
+                            ) : (
+                              <span className={`text-xs ${textSecondary}`}>—</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[it.status] || STATUS_STYLE['To-Do']}`}>
+                            {it.status || 'To-Do'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="inline-flex items-center gap-1">
+                            <ErpTaskCountBadge
+                              count={ultraTabTasks.length}
+                              active={isUltraTabTaskExpanded}
+                              onClick={() => setExpandedUltraTabItemTaskId(isUltraTabTaskExpanded ? null : it.id)}
+                              textSecondary={textSecondary}
+                              testId={`erp-ultratab-item-tasks-toggle-${it.id}`}
+                            />
+                            <AddTaskButton onClick={() => openAddTask({ userId: u.id, userName: u.user_name, pageId: row.id, pageName: row.page_name, subTabId: st.id, subTabName: st.name, ultraSubTabId: ut.id, ultraSubTabName: ut.name, ultraTabId: it.id, ultraTabName: it.name })} testId={`erp-ultratab-item-addtask-${it.id}`} />
+                            <button type="button" onClick={() => openViewUltraTabItem(u.id, row.id, st.id, ut.id, it)} className={`p-1 ${textSecondary} hover:opacity-80`} title="View" data-testid={`erp-ultratab-item-view-${it.id}`}>
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            {canEdit && (
+                              <button type="button" onClick={() => openEditUltraTabItem(u.id, row.id, st.id, ut.id, it)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`erp-ultratab-item-edit-${it.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canEdit && (
+                              <button type="button" onClick={() => deleteUltraTabItem(u.id, row.id, st.id, ut.id, it.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`erp-ultratab-item-delete-${it.id}`}>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {isUltraTabTaskExpanded && (
+                        <tr className={`border-b ${borderColor}`} data-testid={`erp-ultratab-item-tasks-row-${it.id}`}>
+                          <td colSpan={7} className="p-3">
+                            <ErpTaskList
+                              tasks={ultraTabTasks}
+                              onEdit={openEditTask}
+                              onDelete={deleteTask}
+                              assigneeName={assigneeName}
+                              textPrimary={textPrimary}
+                              textSecondary={textSecondary}
+                              borderColor={borderColor}
+                              bgCard={bgCard}
+                              testPrefix="erp-ultratab-item-task-row"
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })() : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -1728,6 +1851,7 @@ export default function ProjectErpUsersTab({
               </tbody>
             </table>
           </div>
+        )}
         </CardContent>
       </Card>
 
