@@ -4,7 +4,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { LogOut, Calendar, ListChecks, Users as UsersIcon, User as UserIcon, ChevronDown, ChevronRight, Building2, Plus, Globe } from 'lucide-react';
+import { LogOut, Calendar, ListChecks, Users as UsersIcon, User as UserIcon, ChevronDown, ChevronRight, Building2, Plus, Globe, ListTodo, Clock, CheckCircle2, PauseCircle } from 'lucide-react';
 import AddTaskModal from '../components/clientPortal/AddTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -44,7 +44,8 @@ export default function ClientPortalViewPage() {
   const [showAddTask, setShowAddTask] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [userFilter, setUserFilter] = useState('all');
   const [collapsedUsers, setCollapsedUsers] = useState([]);
 
@@ -100,14 +101,79 @@ export default function ClientPortalViewPage() {
   const pages = project.pages || [];
   const allTasks = project.tasks || [];
 
-  const matchesFilters = (task) => {
-    if (statusFilter !== 'all' && (task.status || 'pending') !== statusFilter) return false;
-    if (dateFilter && (task.due_date || '').slice(0, 10) !== dateFilter) return false;
+  // Date-only match, kept separate from status so the summary cards below
+  // can count each status bucket within the current date window without
+  // the active status filter zeroing out every other bucket.
+  const matchesDate = (task) => {
+    if (!dateFrom && !dateTo) return true;
+    const d = (task.due_date || '').slice(0, 10);
+    if (!d) return false;
+    if (dateFrom && d < dateFrom) return false;
+    if (dateTo && d > dateTo) return false;
     return true;
   };
+  const matchesFilters = (task) => {
+    if (statusFilter !== 'all' && (task.status || 'pending') !== statusFilter) return false;
+    return matchesDate(task);
+  };
   const filteredTasks = allTasks.filter(matchesFilters);
+  const dateScopedTasks = allTasks.filter(matchesDate);
+  const statusCounts = {
+    all: dateScopedTasks.length,
+    pending: dateScopedTasks.filter((t) => (t.status || 'pending') === 'pending').length,
+    in_progress: dateScopedTasks.filter((t) => t.status === 'in_progress').length,
+    completed: dateScopedTasks.filter((t) => t.status === 'completed').length,
+    on_hold: dateScopedTasks.filter((t) => t.status === 'on_hold').length,
+  };
   const tasksForPage = (pageId) => allTasks.filter((t) => (t.erp_page_id === pageId || t.website_page_id === pageId) && matchesFilters(t));
   const visibleUsers = userFilter === 'all' ? erpUsers : erpUsers.filter((u) => u.id === userFilter);
+
+  const todayIso = () => new Date().toISOString().slice(0, 10);
+  const setToday = () => { const t = todayIso(); setDateFrom(t); setDateTo(t); };
+  const setThisWeek = () => {
+    const now = new Date();
+    const day = now.getDay(); // 0 = Sunday .. 6 = Saturday
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    setDateFrom(monday.toISOString().slice(0, 10));
+    setDateTo(sunday.toISOString().slice(0, 10));
+  };
+  const isToday = dateFrom === todayIso() && dateTo === todayIso();
+  const clearDates = () => { setDateFrom(''); setDateTo(''); };
+
+  const SUMMARY_CARDS = [
+    { key: 'all', label: 'All', icon: ListChecks, color: '#6366f1' },
+    { key: 'pending', label: 'Pending', icon: ListTodo, color: '#71717a' },
+    { key: 'in_progress', label: 'In Progress', icon: Clock, color: '#3b82f6' },
+    { key: 'completed', label: 'Completed', icon: CheckCircle2, color: '#10b981' },
+    { key: 'on_hold', label: 'On Hold', icon: PauseCircle, color: '#f59e0b' },
+  ];
+  const SummaryCards = () => (
+    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
+      {SUMMARY_CARDS.map((s) => {
+        const Icon = s.icon;
+        const active = statusFilter === s.key;
+        return (
+          <button
+            key={s.key}
+            type="button"
+            onClick={() => setStatusFilter(s.key)}
+            className={`text-left bg-white border rounded-xl p-3 transition-colors ${active ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : 'border-gray-200'}`}
+            data-testid={`client-portal-summary-${s.key}`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wide">{s.label}</span>
+              <Icon className="h-3.5 w-3.5" style={{ color: s.color }} />
+            </div>
+            <p className="text-lg font-bold text-gray-900">{statusCounts[s.key]}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
 
   const taskCard = (task) => (
     <div key={task.task_id} className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-testid={`client-portal-task-${task.task_id}`}>
@@ -137,15 +203,38 @@ export default function ClientPortalViewPage() {
           {erpUsers.map((u) => <option key={u.id} value={u.id}>{u.user_name}</option>)}
         </select>
       )}
+      <button
+        type="button"
+        onClick={setToday}
+        className={`text-sm font-medium rounded-lg border px-3 py-2 ${isToday ? 'bg-[#6366f1] text-white border-[#6366f1]' : 'bg-white text-gray-600 border-gray-200'}`}
+        data-testid="client-portal-date-today"
+      >
+        Today
+      </button>
+      <button
+        type="button"
+        onClick={setThisWeek}
+        className="text-sm font-medium rounded-lg border px-3 py-2 bg-white text-gray-600 border-gray-200"
+        data-testid="client-portal-date-this-week"
+      >
+        This Week
+      </button>
       <input
         type="date"
-        value={dateFilter}
-        onChange={(e) => setDateFilter(e.target.value)}
+        value={dateFrom}
+        onChange={(e) => setDateFrom(e.target.value)}
         className="text-sm rounded-lg border border-gray-200 bg-white text-gray-900 px-3 py-2"
-        data-testid="client-portal-date-filter"
+        data-testid="client-portal-date-from"
       />
-      {dateFilter && (
-        <button type="button" onClick={() => setDateFilter('')} className="text-xs text-gray-500 hover:text-gray-900">
+      <input
+        type="date"
+        value={dateTo}
+        onChange={(e) => setDateTo(e.target.value)}
+        className="text-sm rounded-lg border border-gray-200 bg-white text-gray-900 px-3 py-2"
+        data-testid="client-portal-date-to"
+      />
+      {(dateFrom || dateTo) && (
+        <button type="button" onClick={clearDates} className="text-xs text-gray-500 hover:text-gray-900">
           Clear date
         </button>
       )}
@@ -187,6 +276,7 @@ export default function ClientPortalViewPage() {
             <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
               <ListChecks className="h-4 w-4 text-[#6366f1]" /> Tasks ({filteredTasks.length})
             </h2>
+            <SummaryCards />
             <FilterBar showUserFilter={false} />
             <div className="space-y-2">
               {filteredTasks.length === 0 && <p className="text-sm text-gray-500">No tasks match these filters.</p>}
