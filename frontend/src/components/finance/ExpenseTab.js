@@ -66,10 +66,12 @@ import {
   Target as TargetIcon,
   FolderOpen,
   Package,
+  Scale,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import BanksTab from './BanksTab';
 import PipelineTab from './PipelineTab';
+import PnLTab from './PnLTab';
 import CashbookSplit from './CashbookSplit';
 import ProjectsTab from './ProjectsTab';
 
@@ -107,6 +109,7 @@ const DEFAULT_TABS = [
   { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
+  { id: 'pnl', label: 'P&L', icon: Scale, isDefault: true },
   { id: 'pipeline', label: 'Pipeline', icon: TargetIcon, isDefault: true },
 ];
 
@@ -2186,6 +2189,7 @@ const ExpenseTab = () => {
             );
           })()}
 
+          {activeTab === 'pnl' && <PnLTab />}
           {activeTab === 'pipeline' && <PipelineTab />}
           {tabs.find(t => t.id === activeTab && t.isCustom) && renderCustomTab(tabs.find(t => t.id === activeTab))}
         </>
