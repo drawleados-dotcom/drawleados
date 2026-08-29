@@ -90,7 +90,23 @@ export default function PayrollManagementTab({
   // Monthly Payroll tab — payslip viewer state (separate from the nested
   // EmployeePayrollDetail viewer so this works at the top level).
   const [monthlyViewPayslip, setMonthlyViewPayslip] = useState(null);
-  
+  // Attendance override form inside that viewer — lets HR correct
+  // Working Days / Present / Absent / Paid Leave on an already-generated
+  // payslip; pay recalculates server-side from these on save.
+  const [editingAttendance, setEditingAttendance] = useState(false);
+  const [attendanceForm, setAttendanceForm] = useState({ total_working_days: 0, days_present: 0, absent_days: 0, paid_leave: 0 });
+  const [savingAttendance, setSavingAttendance] = useState(false);
+  useEffect(() => {
+    if (!monthlyViewPayslip) return;
+    setAttendanceForm({
+      total_working_days: monthlyViewPayslip.attendance?.total_working_days ?? 0,
+      days_present: monthlyViewPayslip.attendance?.days_present ?? 0,
+      absent_days: monthlyViewPayslip.attendance?.absent_days ?? 0,
+      paid_leave: (monthlyViewPayslip.attendance?.casual_leaves ?? 0) + (monthlyViewPayslip.attendance?.sick_leaves ?? 0),
+    });
+    setEditingAttendance(false);
+  }, [monthlyViewPayslip?.payslip_id]);
+
   // Payroll Settings state
   const [payrollSettings, setPayrollSettings] = useState({
     pf_enabled: true,
@@ -184,6 +200,37 @@ export default function PayrollManagementTab({
     }
   };
   
+  // Save an attendance override for the payslip currently open in the
+  // Monthly Payroll viewer — separate endpoint from handleEditPayslip
+  // above, since /edit only allows remarks and blocks finalized payslips
+  // entirely, while this recalculates pay and is allowed up through
+  // "Generated" (blocked only once actually paid).
+  const handleSaveAttendanceOverride = async () => {
+    if (!monthlyViewPayslip) return;
+    setSavingAttendance(true);
+    try {
+      const res = await axios.put(
+        `${API}/api/hr/admin/payslip/${monthlyViewPayslip.payslip_id}/override-attendance`,
+        {
+          total_working_days: Number(attendanceForm.total_working_days),
+          days_present: Number(attendanceForm.days_present),
+          absent_days: Number(attendanceForm.absent_days),
+          paid_leave: Number(attendanceForm.paid_leave),
+        },
+        { headers }
+      );
+      setMonthlyViewPayslip(res.data);
+      setEditingAttendance(false);
+      toast.success('Attendance updated — pay recalculated');
+      onRefreshPayslips();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update attendance');
+      console.error(error);
+    } finally {
+      setSavingAttendance(false);
+    }
+  };
+
   // Regenerate Payslip
   const handleRegeneratePayslip = async (payslipId) => {
     try {
@@ -735,20 +782,77 @@ export default function PayrollManagementTab({
                 </div>
                 {monthlyViewPayslip.attendance && (
                   <div>
-                    <p className={`text-xs uppercase tracking-wide ${textSecondary} mb-2`}>Attendance</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {[
-                        { l: 'Working Days', v: monthlyViewPayslip.attendance?.total_working_days ?? '—' },
-                        { l: 'Present', v: monthlyViewPayslip.attendance?.days_present ?? '—', accent: '#10b981' },
-                        { l: 'Absent', v: monthlyViewPayslip.attendance?.absent_days ?? 0, accent: '#ef4444' },
-                        { l: 'Paid Leave', v: (monthlyViewPayslip.attendance?.casual_leaves ?? 0) + (monthlyViewPayslip.attendance?.sick_leaves ?? 0) },
-                      ].map((s) => (
-                        <div key={s.l} className={`p-2.5 rounded-lg ${bgSecondary} border ${borderColor} text-center`}>
-                          <p className={`text-[10px] uppercase ${textSecondary}`}>{s.l}</p>
-                          <p className="text-base font-bold mt-1" style={{ color: s.accent || undefined }}>{s.v}</p>
-                        </div>
-                      ))}
+                    <div className="flex items-center justify-between mb-2">
+                      <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>Attendance</p>
+                      {!editingAttendance && monthlyViewPayslip.status !== 'paid' && monthlyViewPayslip.status !== 'partially_paid' && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingAttendance(true)}
+                          className="text-xs text-[#6366f1] hover:underline flex items-center gap-1"
+                          data-testid="monthly-view-edit-attendance"
+                        >
+                          <Edit className="h-3 w-3" /> Edit
+                        </button>
+                      )}
                     </div>
+                    {editingAttendance ? (
+                      <>
+                        <div className="grid grid-cols-4 gap-2">
+                          {[
+                            { key: 'total_working_days', l: 'Working Days' },
+                            { key: 'days_present', l: 'Present' },
+                            { key: 'absent_days', l: 'Absent' },
+                            { key: 'paid_leave', l: 'Paid Leave' },
+                          ].map((f) => (
+                            <div key={f.key} className={`p-2.5 rounded-lg ${bgSecondary} border ${borderColor}`}>
+                              <p className={`text-[10px] uppercase ${textSecondary} mb-1`}>{f.l}</p>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={attendanceForm[f.key]}
+                                onChange={(e) => setAttendanceForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                                className="h-7 text-sm text-center px-1"
+                                data-testid={`monthly-view-edit-${f.key}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-end gap-2 mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingAttendance(false)}
+                            className={borderColor}
+                            data-testid="monthly-view-cancel-attendance"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleSaveAttendanceOverride}
+                            disabled={savingAttendance}
+                            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                            data-testid="monthly-view-save-attendance"
+                          >
+                            {savingAttendance ? 'Saving…' : 'Save & Recalculate'}
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { l: 'Working Days', v: monthlyViewPayslip.attendance?.total_working_days ?? '—' },
+                          { l: 'Present', v: monthlyViewPayslip.attendance?.days_present ?? '—', accent: '#10b981' },
+                          { l: 'Absent', v: monthlyViewPayslip.attendance?.absent_days ?? 0, accent: '#ef4444' },
+                          { l: 'Paid Leave', v: (monthlyViewPayslip.attendance?.casual_leaves ?? 0) + (monthlyViewPayslip.attendance?.sick_leaves ?? 0) },
+                        ].map((s) => (
+                          <div key={s.l} className={`p-2.5 rounded-lg ${bgSecondary} border ${borderColor} text-center`}>
+                            <p className={`text-[10px] uppercase ${textSecondary}`}>{s.l}</p>
+                            <p className="text-base font-bold mt-1" style={{ color: s.accent || undefined }}>{s.v}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div>

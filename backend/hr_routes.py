@@ -2377,7 +2377,88 @@ async def edit_payslip(payslip_id: str, request: Request, updates: dict):
         {"payslip_id": payslip_id},
         {"$set": update_data}
     )
-    
+
+    return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
+
+@hr_router.put("/admin/payslip/{payslip_id}/override-attendance")
+async def override_payslip_attendance(payslip_id: str, request: Request, updates: dict):
+    """Manually override a payslip's attendance counts (HR Admin only) and
+    recalculate pay from them.
+
+    Separate from /edit above: that one only allows remarks/comments/
+    adjustments and blocks any status past draft/review. This is exactly
+    for the case a mistake is usually caught in -- after the payslip has
+    already been Generated -- so it's allowed through every status except
+    paid / partially_paid, where money has actually moved."""
+    from server import get_current_user
+    user = await get_current_user(request)
+    payslip = await db.payslips.find_one({"payslip_id": payslip_id})
+    if not payslip:
+        raise HTTPException(status_code=404, detail="Payslip not found")
+
+    if payslip.get("status") in ["paid", "partially_paid"]:
+        raise HTTPException(status_code=400, detail="Cannot edit a payslip that has already been paid")
+
+    required_fields = ["total_working_days", "days_present", "absent_days", "paid_leave"]
+    if any(f not in updates for f in required_fields):
+        raise HTTPException(status_code=400, detail=f"Must provide: {', '.join(required_fields)}")
+    try:
+        total_working_days = float(updates["total_working_days"])
+        days_present = float(updates["days_present"])
+        absent_days = float(updates["absent_days"])
+        paid_leave = float(updates["paid_leave"])
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Attendance values must be numbers")
+    if any(v < 0 for v in (total_working_days, days_present, absent_days, paid_leave)):
+        raise HTTPException(status_code=400, detail="Attendance values cannot be negative")
+
+    # Same formula as _compute_payslip_doc (payroll_routes.py) — recomputed
+    # from the overridden counts rather than trusting a client-sent net
+    # pay, so a payslip's stored total always matches its own attendance.
+    base_salary = payslip.get("base_salary", 0)
+    per_day_salary = round(base_salary / total_working_days, 2) if total_working_days > 0 else 0
+    days_paid = days_present + paid_leave
+    earned_salary = round(per_day_salary * days_paid, 2)
+
+    deductions = dict(payslip.get("deductions", {}) or {})
+    pf_deduction = deductions.get("pf", 0)
+    professional_tax = deductions.get("professional_tax", 0)
+    lop_deduction = round(per_day_salary * absent_days, 2)
+    deductions["lop_deduction"] = lop_deduction
+    deductions["total_deductions"] = pf_deduction + professional_tax + lop_deduction
+    net_salary = round(earned_salary - pf_deduction - professional_tax, 2)
+
+    attendance = dict(payslip.get("attendance", {}) or {})
+    attendance.update({
+        "total_working_days": total_working_days,
+        "days_present": days_present,
+        "absent_days": absent_days,
+        # The viewer only exposes one combined "Paid Leave" field, so an
+        # override collapses casual+sick into casual_leaves and zeroes
+        # sick_leaves rather than guessing a split.
+        "casual_leaves": paid_leave,
+        "sick_leaves": 0,
+    })
+
+    calculation = dict(payslip.get("calculation", {}) or {})
+    calculation.update({
+        "per_day_salary": per_day_salary,
+        "days_paid": days_paid,
+        "earned_salary": earned_salary,
+    })
+
+    await db.payslips.update_one(
+        {"payslip_id": payslip_id},
+        {"$set": {
+            "attendance": attendance,
+            "calculation": calculation,
+            "deductions": deductions,
+            "net_salary": net_salary,
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": user.user_id,
+        }}
+    )
+
     return await db.payslips.find_one({"payslip_id": payslip_id}, {"_id": 0})
 
 @hr_router.post("/admin/payslip/{payslip_id}/regenerate")
