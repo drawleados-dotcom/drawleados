@@ -3,6 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { X, Clock, ListChecks } from 'lucide-react';
+import ErpLocationPicker from '../projects/ErpLocationPicker';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -14,32 +15,62 @@ const PRIORITY_OPTIONS = [
 
 const selectCls = 'w-full text-sm rounded-lg border border-gray-200 bg-white text-gray-900 px-3 py-2 disabled:opacity-50 disabled:cursor-not-allowed';
 
+const emptyLocation = {
+  erp_user_id: '', erp_user_name: '',
+  erp_page_id: '', erp_page_name: '',
+  erp_sub_tab_id: '', erp_sub_tab_name: '',
+  erp_ultra_sub_tab_id: '', erp_ultra_sub_tab_name: '',
+  erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+  erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
+};
+
 const emptyState = {
-  erpUserId: '', erpPageId: '', erpSubtabId: '', erpUltraSubtabId: '',
   websitePageId: '',
   taskName: '', priority: 'medium',
+  reference_image: '',
 };
 
 /** Client Portal's "Add New Task" popup — always pre-scoped to the client's
  * own project (never asked, unlike the internal Add Task flows), field
  * order per the client-facing brief: Date & Time (auto), User/Page tagging,
  * Task or Bug, Priority. `department` selects which tagging structure to
- * show: "erp" (User / Page / Sub Page / Super Sub Page, from `erpUsers`)
- * or "website" (a single flat Page picker, from `pages`). */
-export default function AddTaskModal({ open, onClose, projectName, department = 'erp', erpUsers, pages, sessionToken, onCreated }) {
+ * show: "erp" (the same Department -> User -> Page -> Sub Tab -> Ultra Sub
+ * Tab -> Ultra Tab -> Ultra Tab Pro picker the internal Add Task popup
+ * uses, via ErpLocationPicker) or "website" (a single flat Page picker,
+ * from `pages`). No Assign To field — a client never picks who on the team
+ * handles it. */
+export default function AddTaskModal({ open, onClose, projectName, department = 'erp', erpUsers, erpDepartments, pages, sessionToken, onCreated }) {
+  const [location, setLocation] = useState(emptyLocation);
   const [form, setForm] = useState(emptyState);
   const [submitting, setSubmitting] = useState(false);
   const [reportedAt] = useState(() => new Date());
 
   const isErp = department === 'erp';
+  const erpProject = { erp_users: erpUsers || [], erp_departments: erpDepartments || [] };
 
-  const selectedUser = (erpUsers || []).find((u) => u.id === form.erpUserId);
-  const selectedPage = (selectedUser?.pages || []).find((p) => p.id === form.erpPageId);
-  const selectedSubtab = (selectedPage?.sub_tabs || []).find((st) => st.id === form.erpSubtabId);
-  const selectedUltraSubtab = (selectedSubtab?.ultra_sub_tabs || []).find((ut) => ut.id === form.erpUltraSubtabId);
   const selectedWebsitePage = (pages || []).find((p) => p.id === form.websitePageId);
 
-  const handleClose = () => { setForm(emptyState); onClose(); };
+  const handleImagePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error('Image is too large (max 5MB)');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => setForm((f) => ({ ...f, reference_image: reader.result }));
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+  };
+
+  const handleClose = () => { setLocation(emptyLocation); setForm(emptyState); onClose(); };
 
   const submit = async () => {
     if (!form.taskName.trim()) { toast.error('Please describe the task or bug'); return; }
@@ -49,18 +80,10 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
         task_name: form.taskName.trim(),
         priority: form.priority,
         department,
+        reference_image: form.reference_image || null,
       };
       if (isErp) {
-        Object.assign(payload, {
-          erp_user_id: form.erpUserId || null,
-          erp_user_name: selectedUser?.user_name || null,
-          erp_page_id: form.erpPageId || null,
-          erp_page_name: selectedPage?.page_name || null,
-          erp_subtab_id: form.erpSubtabId || null,
-          erp_subtab_name: selectedSubtab?.name || null,
-          erp_ultra_subtab_id: form.erpUltraSubtabId || null,
-          erp_ultra_subtab_name: selectedUltraSubtab?.name || null,
-        });
+        Object.assign(payload, location);
       } else {
         Object.assign(payload, {
           website_page_id: form.websitePageId || null,
@@ -69,6 +92,7 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
       }
       await axios.post(`${API}/api/client-portal/tasks`, payload, { headers: { Authorization: `Bearer ${sessionToken}` } });
       toast.success('Task added');
+      setLocation(emptyLocation);
       setForm(emptyState);
       onCreated?.();
       onClose();
@@ -110,62 +134,19 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
           </div>
 
           {isErp ? (
-            <>
-              <div>
-                <p className="text-xs font-medium text-gray-500 mb-1">User</p>
-                <select
-                  value={form.erpUserId}
-                  onChange={(e) => setForm((f) => ({ ...f, erpUserId: e.target.value, erpPageId: '', erpSubtabId: '', erpUltraSubtabId: '' }))}
-                  className={selectCls}
-                  data-testid="client-portal-task-user"
-                >
-                  <option value="">— Select user —</option>
-                  {(erpUsers || []).map((u) => <option key={u.id} value={u.id}>{u.user_name}</option>)}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">Page</p>
-                  <select
-                    value={form.erpPageId}
-                    onChange={(e) => setForm((f) => ({ ...f, erpPageId: e.target.value, erpSubtabId: '', erpUltraSubtabId: '' }))}
-                    className={selectCls}
-                    disabled={!form.erpUserId}
-                    data-testid="client-portal-task-page"
-                  >
-                    <option value="">{form.erpUserId ? '— Select page —' : 'Pick a user first'}</option>
-                    {(selectedUser?.pages || []).map((p) => <option key={p.id} value={p.id}>{p.page_name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">Sub Page</p>
-                  <select
-                    value={form.erpSubtabId}
-                    onChange={(e) => setForm((f) => ({ ...f, erpSubtabId: e.target.value, erpUltraSubtabId: '' }))}
-                    className={selectCls}
-                    disabled={(selectedPage?.sub_tabs || []).length === 0}
-                    data-testid="client-portal-task-subpage"
-                  >
-                    <option value="">{(selectedPage?.sub_tabs || []).length ? '— Select sub page —' : 'No sub pages'}</option>
-                    {(selectedPage?.sub_tabs || []).map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">Super Sub Page</p>
-                  <select
-                    value={form.erpUltraSubtabId}
-                    onChange={(e) => setForm((f) => ({ ...f, erpUltraSubtabId: e.target.value }))}
-                    className={selectCls}
-                    disabled={(selectedSubtab?.ultra_sub_tabs || []).length === 0}
-                    data-testid="client-portal-task-supersubpage"
-                  >
-                    <option value="">{(selectedSubtab?.ultra_sub_tabs || []).length ? '— Select super sub page —' : 'No super sub pages'}</option>
-                    {(selectedSubtab?.ultra_sub_tabs || []).map((ut) => <option key={ut.id} value={ut.id}>{ut.name}</option>)}
-                  </select>
-                </div>
-              </div>
-            </>
+            <div>
+              <p className="text-xs font-medium text-gray-500 mb-2">Where is this?</p>
+              <ErpLocationPicker
+                project={erpProject}
+                value={location}
+                onChange={setLocation}
+                bgSecondary="bg-white"
+                borderColor="border-gray-200"
+                textPrimary="text-gray-900"
+                textSecondary="text-gray-500"
+                testPrefix="client-portal-task-location"
+              />
+            </div>
           ) : (
             <div>
               <p className="text-xs font-medium text-gray-500 mb-1">Page</p>
@@ -191,6 +172,37 @@ export default function AddTaskModal({ open, onClose, projectName, department = 
               className="w-full text-sm rounded-lg border border-gray-200 bg-white text-gray-900 px-3 py-2 resize-none"
               data-testid="client-portal-task-name"
             />
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-gray-500 mb-1">Reference Image</p>
+            {form.reference_image ? (
+              <div className="relative inline-block">
+                <img
+                  src={form.reference_image}
+                  alt="Reference"
+                  className="max-h-40 rounded-lg border border-gray-200"
+                  data-testid="client-portal-task-refimage-preview"
+                />
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, reference_image: '' }))}
+                  className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
+                  data-testid="client-portal-task-refimage-remove"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onPaste={handleImagePaste}
+                tabIndex={0}
+                className="flex items-center justify-center h-20 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-gray-500 text-xs text-center px-3 cursor-text focus:outline-none focus:ring-1 focus:ring-[#6366f1]"
+                data-testid="client-portal-task-refimage-dropzone"
+              >
+                Click here, then paste a screenshot (Ctrl+V / Cmd+V)
+              </div>
+            )}
           </div>
 
           <div>

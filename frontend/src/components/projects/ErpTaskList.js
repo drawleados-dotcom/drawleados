@@ -47,7 +47,18 @@ export default function ErpTaskList({
         <tbody>
           {tasks.map(t => (
             <tr key={t.task_id} className={`border-b ${borderColor} last:border-b-0`} data-testid={testPrefix ? `${testPrefix}-${t.task_id}` : undefined}>
-              <td className={`px-3 py-2 text-sm ${textPrimary}`}>{t.task_name}</td>
+              <td className={`px-3 py-2 text-sm ${textPrimary}`}>
+                {t.task_name}
+                {t.created_via === 'client_portal' && (
+                  <span
+                    className="ml-2 px-1.5 py-0.5 rounded text-[9px] font-medium uppercase bg-[#14b8a6]/15 text-[#14b8a6] align-middle"
+                    title="Reported by the client through the Client Portal"
+                    data-testid={`${testPrefix}-client-portal-${t.task_id}`}
+                  >
+                    Client Portal
+                  </span>
+                )}
+              </td>
               <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.category || '—'}</td>
               <td className={`px-3 py-2 text-xs ${textSecondary}`}>{fmtDate(t.due_date)}</td>
               <td className={`px-3 py-2 text-xs ${textSecondary}`}>{assigneeName(t.assigned_to)}</td>

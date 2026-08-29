@@ -40,12 +40,21 @@ class ClientPortalTaskCreate(BaseModel):
     erp_user_name: Optional[str] = None
     erp_page_id: Optional[str] = None
     erp_page_name: Optional[str] = None
-    erp_subtab_id: Optional[str] = None
-    erp_subtab_name: Optional[str] = None
-    erp_ultra_subtab_id: Optional[str] = None
-    erp_ultra_subtab_name: Optional[str] = None
+    # NOTE: field names below match our_tasks_routes.py's TaskCreate
+    # (erp_sub_tab_id, not erp_subtab_id) so a client-reported task is
+    # tagged the exact same way as an internally-created one — the internal
+    # ERP filters/counts everywhere key off these exact names.
+    erp_sub_tab_id: Optional[str] = None
+    erp_sub_tab_name: Optional[str] = None
+    erp_ultra_sub_tab_id: Optional[str] = None
+    erp_ultra_sub_tab_name: Optional[str] = None
+    erp_ultra_tab_id: Optional[str] = None
+    erp_ultra_tab_name: Optional[str] = None
+    erp_ultra_tab_pro_id: Optional[str] = None
+    erp_ultra_tab_pro_name: Optional[str] = None
     website_page_id: Optional[str] = None
     website_page_name: Optional[str] = None
+    reference_image: Optional[str] = None  # data: URI of a pasted screenshot, if attached
 
 
 async def _get_client_session(request: Request) -> dict:
@@ -96,14 +105,17 @@ async def get_client_project_view(request: Request):
          "created_at": 1, "erp_page_id": 1, "website_page_id": 1},
     ).sort("created_at", -1).to_list(500)
 
-    # Trimmed User -> Pages -> Sub Tabs -> Ultra Sub Tabs structure (same
-    # shape as the internal ERP Users tab) so the client sees work organized
-    # by who/what it's for, not just a flat task list, and can tag a new
-    # task down to Page / Sub Page / Super Sub Page when reporting one.
+    # Trimmed Department + User -> Pages -> Sub Tabs -> Ultra Sub Tabs ->
+    # Ultra Tabs -> Ultra Tab Pro structure — same shape (and same depth) as
+    # ErpLocationPicker.js, the internal ERP Users tab's location picker, so
+    # a client can tag a reported task down to the exact same node an
+    # internal task can be, and the client-facing picker component can be
+    # the identical ErpLocationPicker.
     erp_users = [
         {
             "id": u.get("id"),
             "user_name": u.get("user_name"),
+            "department_id": u.get("department_id"),
             "pages": [
                 {
                     "id": p.get("id"),
@@ -114,7 +126,21 @@ async def get_client_project_view(request: Request):
                             "id": st.get("id"),
                             "name": st.get("name"),
                             "ultra_sub_tabs": [
-                                {"id": ut.get("id"), "name": ut.get("name")}
+                                {
+                                    "id": ut.get("id"),
+                                    "name": ut.get("name"),
+                                    "ultra_tabs": [
+                                        {
+                                            "id": it.get("id"),
+                                            "name": it.get("name"),
+                                            "ultra_tab_pro": [
+                                                {"id": pro.get("id"), "name": pro.get("name")}
+                                                for pro in (it.get("ultra_tab_pro") or [])
+                                            ],
+                                        }
+                                        for it in (ut.get("ultra_tabs") or [])
+                                    ],
+                                }
                                 for ut in (st.get("ultra_sub_tabs") or [])
                             ],
                         }
@@ -125,6 +151,10 @@ async def get_client_project_view(request: Request):
             ],
         }
         for u in (project.get("erp_users") or [])
+    ]
+    erp_departments = [
+        {"id": d.get("id"), "name": d.get("name")}
+        for d in (project.get("erp_departments") or [])
     ]
 
     # Website department's flat Page list (no User grouping) — same trimmed
@@ -146,6 +176,7 @@ async def get_client_project_view(request: Request):
         "departments": project.get("departments") or [],
         "tasks": tasks,
         "erp_users": erp_users,
+        "erp_departments": erp_departments,
         "pages": pages,
     }
 
@@ -191,12 +222,17 @@ async def create_client_portal_task(payload: ClientPortalTaskCreate, request: Re
         "erp_user_name": payload.erp_user_name if payload.department == "erp" else None,
         "erp_page_id": payload.erp_page_id if payload.department == "erp" else None,
         "erp_page_name": payload.erp_page_name if payload.department == "erp" else None,
-        "erp_subtab_id": payload.erp_subtab_id if payload.department == "erp" else None,
-        "erp_subtab_name": payload.erp_subtab_name if payload.department == "erp" else None,
-        "erp_ultra_subtab_id": payload.erp_ultra_subtab_id if payload.department == "erp" else None,
-        "erp_ultra_subtab_name": payload.erp_ultra_subtab_name if payload.department == "erp" else None,
+        "erp_sub_tab_id": payload.erp_sub_tab_id if payload.department == "erp" else None,
+        "erp_sub_tab_name": payload.erp_sub_tab_name if payload.department == "erp" else None,
+        "erp_ultra_sub_tab_id": payload.erp_ultra_sub_tab_id if payload.department == "erp" else None,
+        "erp_ultra_sub_tab_name": payload.erp_ultra_sub_tab_name if payload.department == "erp" else None,
+        "erp_ultra_tab_id": payload.erp_ultra_tab_id if payload.department == "erp" else None,
+        "erp_ultra_tab_name": payload.erp_ultra_tab_name if payload.department == "erp" else None,
+        "erp_ultra_tab_pro_id": payload.erp_ultra_tab_pro_id if payload.department == "erp" else None,
+        "erp_ultra_tab_pro_name": payload.erp_ultra_tab_pro_name if payload.department == "erp" else None,
         "website_page_id": payload.website_page_id if payload.department == "website" else None,
         "website_page_name": payload.website_page_name if payload.department == "website" else None,
+        "reference_image": payload.reference_image or None,
         "work_link": None,
         "due_date": None,
         "due_time": None,

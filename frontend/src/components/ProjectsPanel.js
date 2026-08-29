@@ -789,6 +789,7 @@ export default function ProjectsPanel({
           due_date: task.due_date ? task.due_date.split('T')[0] : '',
           work_link: task.work_link || '',
           reference_image: task.reference_image || '',
+          voice_note: task.voice_note || '',
         },
       });
       return;
@@ -2226,6 +2227,15 @@ export default function ProjectsPanel({
                             {task.workflow_name}
                           </Badge>
                         )}
+                        {task.created_via === 'client_portal' && (
+                          <Badge
+                            className="bg-[#14b8a6]/20 text-[#14b8a6] text-xs font-medium"
+                            title="Reported by the client through the Client Portal"
+                            data-testid={`task-client-portal-badge-${task.task_id}`}
+                          >
+                            Client Portal
+                          </Badge>
+                        )}
                       </div>
                       <p className={`text-xs ${textSecondary} mt-1`}>
                         Assigned to <span className={textPrimary}>{user?.name || task.assigned_to}</span>
@@ -2830,7 +2840,18 @@ export default function ProjectsPanel({
             <Card className={`${bgCard} border ${borderColor} w-full max-w-lg mx-4`} onClick={(e) => e.stopPropagation()}>
               <CardContent className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className={`text-lg font-semibold ${textPrimary}`}>{viewOnlyTask.task_name}</h3>
+                  <h3 className={`text-lg font-semibold ${textPrimary} flex items-center gap-2`}>
+                    {viewOnlyTask.task_name}
+                    {viewOnlyTask.created_via === 'client_portal' && (
+                      <Badge
+                        className="bg-[#14b8a6]/20 text-[#14b8a6] text-xs font-medium"
+                        title="Reported by the client through the Client Portal"
+                        data-testid="view-task-client-portal-badge"
+                      >
+                        Client Portal
+                      </Badge>
+                    )}
+                  </h3>
                   <button onClick={() => setViewOnlyTask(null)} className={textSecondary}><X className="h-5 w-5" /></button>
                 </div>
                 {viewOnlyTask.description && <p className={`text-sm ${textPrimary}`}>{viewOnlyTask.description}</p>}
@@ -2881,6 +2902,14 @@ export default function ProjectsPanel({
                         alt="Reference"
                         className={`max-h-48 rounded-md border ${borderColor} mt-2`}
                         data-testid="view-task-reference-image"
+                      />
+                    )}
+                    {viewOnlyTask.voice_note && (
+                      <audio
+                        controls
+                        src={viewOnlyTask.voice_note}
+                        className="w-full h-9 mt-2"
+                        data-testid="view-task-voice-note"
                       />
                     )}
                   </div>

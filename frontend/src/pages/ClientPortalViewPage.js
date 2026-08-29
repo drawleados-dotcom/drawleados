@@ -331,6 +331,7 @@ export default function ClientPortalViewPage() {
         projectName={project.name}
         department={hasErp ? 'erp' : 'website'}
         erpUsers={erpUsers}
+        erpDepartments={project.erp_departments || []}
         pages={pages}
         sessionToken={sessionToken}
         onCreated={load}
