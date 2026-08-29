@@ -604,7 +604,12 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
         
         update_dict = {k: v for k, v in task_data.dict().items() if v is not None}
         update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
-        
+        if update_dict.get("status") == "completed":
+            # Free up storage: a pasted reference screenshot is only useful
+            # while the task is still being worked, not once it's done —
+            # overrides any reference_image this same request also sent.
+            update_dict["reference_image"] = None
+
         await db.our_tasks.update_one(
             {"task_id": task_id},
             {"$set": update_dict}
@@ -672,13 +677,18 @@ async def update_task_status(task_id: str, status_data: StatusUpdate, request: R
         task = await db.our_tasks.find_one({"task_id": task_id})
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
+        update_fields = {
+            "status": status_data.status,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        if status_data.status == "completed":
+            # Free up storage: a pasted reference screenshot is only useful
+            # while the task is still being worked, not once it's done.
+            update_fields["reference_image"] = None
         await db.our_tasks.update_one(
             {"task_id": task_id},
-            {"$set": {
-                "status": status_data.status,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
+            {"$set": update_fields}
         )
 
         # Bridge: mirror status to the linked meeting (completed↔completed, else scheduled).
@@ -783,10 +793,13 @@ async def time_tracking_action(task_id: str, action_data: TimeTrackingAction, re
             time_tracking["status"] = "finished"
             time_tracking.pop("current_session_start", None)
             
-            # Mark task as completed
+            # Mark task as completed. Also clears any pasted reference
+            # screenshot -- it's only useful while the task is still being
+            # worked, not once it's done (same as the other two places a
+            # task can be marked completed: update_task / update_task_status).
             await db.our_tasks.update_one(
                 {"task_id": task_id},
-                {"$set": {"status": "completed"}}
+                {"$set": {"status": "completed", "reference_image": None}}
             )
         
         await db.our_tasks.update_one(
