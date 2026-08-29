@@ -2141,11 +2141,22 @@ export default function ProjectsPanel({
               {projectTasks.length === 0 ? 'No tasks yet. Click "Add Task" to create one.' : 'No tasks match the current filters.'}
             </p>
           ) : (
-            filteredTasks.map(task => {
+            // High first, then Medium, then Low — a stable sort so tasks
+            // sharing a priority keep their existing relative order.
+            [...filteredTasks].sort((a, b) => {
+              const rank = { high: 0, medium: 1, low: 2 };
+              return (rank[a.priority] ?? 1) - (rank[b.priority] ?? 1);
+            }).map(task => {
               const user = users.find(u => u.user_id === task.assigned_to);
               const erpBreadcrumb = [task.erp_user_name, task.erp_page_name, task.erp_sub_tab_name, task.erp_ultra_sub_tab_name, task.erp_ultra_tab_name].filter(Boolean).join(' > ');
+              const priorityColor = task.priority === 'high' ? '#ef4444' : task.priority === 'low' ? '#10b981' : '#f59e0b';
               return (
-                <Card key={task.task_id} className={`${bgCard} border ${borderColor}`} data-testid={`project-task-${task.task_id}`}>
+                <Card
+                  key={task.task_id}
+                  className={`${bgCard} border ${borderColor}`}
+                  style={{ borderRightWidth: '4px', borderRightColor: priorityColor }}
+                  data-testid={`project-task-${task.task_id}`}
+                >
                   <CardContent className="p-4 flex items-center justify-between gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
