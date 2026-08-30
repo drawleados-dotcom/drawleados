@@ -822,7 +822,10 @@ export default function ProjectErpWorkflowTab({
                     <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-workflow-form-created-by">
                       <SelectValue placeholder="— Select —" />
                     </SelectTrigger>
-                    <SelectContent>
+                    {/* z-[80]: this modal's backdrop is z-[70], above the
+                        Select's default z-50 portal — without this the
+                        dropdown opened but rendered invisibly behind it. */}
+                    <SelectContent className="z-[80]">
                       <SelectItem value="_none">— Select —</SelectItem>
                       {projectMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
                     </SelectContent>
