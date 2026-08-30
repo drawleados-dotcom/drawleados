@@ -1074,6 +1074,7 @@ export default function ProjectsPanel({
     const projectTasks = selectedProject.tasks || [];
     const todayStr = new Date().toISOString().slice(0, 10);
     const yesterdayStr = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     // Member + date filters, shared by both the status summary cards below
     // (each card's own count is computed without the status filter itself,
     // so every bucket stays visible to jump between) and the task list.
@@ -1081,6 +1082,7 @@ export default function ProjectsPanel({
       if (taskMemberFilter !== 'all' && t.assigned_to !== taskMemberFilter) return false;
       const td = (t.due_date || t.created_at || '').slice(0, 10);
       if (taskDateFilter === 'today') return td === todayStr;
+      if (taskDateFilter === 'tomorrow') return td === tomorrowStr;
       if (taskDateFilter === 'yesterday') return td === yesterdayStr;
       if (taskDateFilter === 'single') return taskSingleDate ? td === taskSingleDate : true;
       if (taskDateFilter === 'range') {
@@ -1998,6 +2000,7 @@ export default function ProjectsPanel({
             >
               <option value="all">All Time</option>
               <option value="today">Today</option>
+              <option value="tomorrow">Tomorrow</option>
               <option value="yesterday">Yesterday</option>
               <option value="single">Single Date</option>
               <option value="range">Date Range</option>
@@ -2009,7 +2012,7 @@ export default function ProjectsPanel({
                 onChange={setTaskWorkflowFilter}
                 options={[{ value: 'all', label: 'All Workflows' }, ...(selectedProject.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))]}
                 searchPlaceholder="Search workflows..."
-                className={`h-9 w-[180px] px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm ml-auto`}
+                className={`h-9 w-[220px] px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm ml-auto`}
                 data-testid="project-filter-erp-workflow"
               />
             )}
