@@ -52,6 +52,8 @@ export default function ErpTaskModal({
     workflow_name: '',
     sub_workflow_id: '',
     sub_workflow_name: '',
+    sub_sub_workflow_id: '',
+    sub_sub_workflow_name: '',
     reference_image: '',
     voice_note: '',
   });
@@ -85,6 +87,8 @@ export default function ErpTaskModal({
     workflow_name: draft.workflow_name || null,
     sub_workflow_id: draft.sub_workflow_id || null,
     sub_workflow_name: draft.sub_workflow_name || null,
+    sub_sub_workflow_id: draft.sub_sub_workflow_id || null,
+    sub_sub_workflow_name: draft.sub_sub_workflow_name || null,
     reference_image: draft.reference_image || '',
     voice_note: draft.voice_note || '',
   });
@@ -298,10 +302,11 @@ export default function ErpTaskModal({
               value={draft.workflow_id}
               onChange={(id) => {
                 const w = (project?.erp_workflow || []).find(x => x.id === id);
-                // Sub Workflow always belongs to whichever Workflow is
-                // selected — clear it whenever Workflow changes so a stale
-                // sub-flow from a different workflow can never linger.
-                setDraft(d => ({ ...d, workflow_id: id, workflow_name: w?.name || '', sub_workflow_id: '', sub_workflow_name: '' }));
+                // Sub Workflow (and Sub Sub Workflow) always belong to
+                // whichever Workflow is selected — clear both whenever
+                // Workflow changes so a stale sub-flow from a different
+                // workflow can never linger.
+                setDraft(d => ({ ...d, workflow_id: id, workflow_name: w?.name || '', sub_workflow_id: '', sub_workflow_name: '', sub_sub_workflow_id: '', sub_sub_workflow_name: '' }));
               }}
               options={(project?.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))}
               placeholder="— No workflow —"
@@ -322,7 +327,9 @@ export default function ErpTaskModal({
                   value={draft.sub_workflow_id}
                   onChange={(id) => {
                     const sw = subWorkflows.find(x => x.id === id);
-                    setDraft(d => ({ ...d, sub_workflow_id: id, sub_workflow_name: sw?.name || '' }));
+                    // Sub Sub Workflow belongs to whichever Sub Workflow is
+                    // selected — clear it whenever Sub Workflow changes.
+                    setDraft(d => ({ ...d, sub_workflow_id: id, sub_workflow_name: sw?.name || '', sub_sub_workflow_id: '', sub_sub_workflow_name: '' }));
                   }}
                   options={subWorkflows.map(sw => ({ value: sw.id, label: sw.name }))}
                   placeholder="— No sub workflow —"
@@ -330,6 +337,31 @@ export default function ErpTaskModal({
                   emptyText="No sub workflows on this workflow"
                   className={`w-full h-9 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
                   data-testid="erp-quicktask-form-subworkflow"
+                />
+              </div>
+            );
+          })()}
+          {(() => {
+            const selectedWorkflow = (project?.erp_workflow || []).find(w => w.id === draft.workflow_id);
+            const subWorkflows = selectedWorkflow?.sub_workflows || [];
+            const selectedSubWorkflow = subWorkflows.find(sw => sw.id === draft.sub_workflow_id);
+            const subSubWorkflows = selectedSubWorkflow?.sub_sub_workflows || [];
+            if (subSubWorkflows.length === 0) return null;
+            return (
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Sub Sub Workflow</p>
+                <SearchableSelect
+                  value={draft.sub_sub_workflow_id}
+                  onChange={(id) => {
+                    const ssw = subSubWorkflows.find(x => x.id === id);
+                    setDraft(d => ({ ...d, sub_sub_workflow_id: id, sub_sub_workflow_name: ssw?.name || '' }));
+                  }}
+                  options={subSubWorkflows.map(ssw => ({ value: ssw.id, label: ssw.name }))}
+                  placeholder="— No sub sub workflow —"
+                  searchPlaceholder="Search sub sub workflows..."
+                  emptyText="No sub sub workflows on this sub workflow"
+                  className={`w-full h-9 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="erp-quicktask-form-subsubworkflow"
                 />
               </div>
             );

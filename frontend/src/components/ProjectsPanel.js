@@ -792,6 +792,8 @@ export default function ProjectsPanel({
           workflow_name: task.workflow_name || '',
           sub_workflow_id: task.sub_workflow_id || '',
           sub_workflow_name: task.sub_workflow_name || '',
+          sub_sub_workflow_id: task.sub_sub_workflow_id || '',
+          sub_sub_workflow_name: task.sub_sub_workflow_name || '',
           reference_image: task.reference_image || '',
           voice_note: task.voice_note || '',
         },
