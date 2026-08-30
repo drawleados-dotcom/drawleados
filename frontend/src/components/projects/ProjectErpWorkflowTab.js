@@ -475,7 +475,7 @@ export default function ProjectErpWorkflowTab({
                   return (
                     <React.Fragment key={w.id}>
                       <tr className={`border-b ${borderColor}`} data-testid={`erp-workflow-row-${w.id}`}>
-                        <td className={`p-3 text-xs ${textSecondary}`}>
+                        <td className={`p-3 text-left text-xs ${textSecondary}`}>
                           <div className="flex items-center gap-1.5">
                             {canEdit && (
                               <div className="flex flex-col">
@@ -504,7 +504,7 @@ export default function ProjectErpWorkflowTab({
                             <span>{idx + 1}</span>
                           </div>
                         </td>
-                        <td className={`p-3 text-sm font-medium ${textPrimary}`}>
+                        <td className={`p-3 text-left text-sm font-medium ${textPrimary}`}>
                           <button
                             type="button"
                             onClick={() => setExpandedWorkflowId(isExpanded ? null : w.id)}
@@ -521,19 +521,19 @@ export default function ProjectErpWorkflowTab({
                           </button>
                           {w.description && <p className={`text-xs font-normal ${textSecondary} mt-0.5 pl-5`}>{w.description}</p>}
                         </td>
-                        <td className={`p-3 text-xs ${textSecondary}`}>{creator?.name || '—'}</td>
-                        <td className={`p-3 text-xs ${textSecondary}`}>{w.date || '—'}</td>
-                        <td className="p-3" data-testid={`erp-workflow-startpoint-${w.id}`}>
+                        <td className={`p-3 text-left text-xs ${textSecondary}`}>{creator?.name || '—'}</td>
+                        <td className={`p-3 text-left text-xs ${textSecondary}`}>{w.date || '—'}</td>
+                        <td className="p-3 text-left" data-testid={`erp-workflow-startpoint-${w.id}`}>
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
                             <Flag className="h-3 w-3" /> {pointLabel(w.start_point)}
                           </span>
                         </td>
-                        <td className="p-3" data-testid={`erp-workflow-endpoint-${w.id}`}>
+                        <td className="p-3 text-left" data-testid={`erp-workflow-endpoint-${w.id}`}>
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-rose-500/30 bg-rose-500/10 text-rose-600">
                             <CheckCircle2 className="h-3 w-3" /> {pointLabel(w.end_point)}
                           </span>
                         </td>
-                        <td className="p-3">
+                        <td className="p-3 text-left">
                           <ErpTaskCountBadge
                             count={count}
                             active={isTasksExpanded}
