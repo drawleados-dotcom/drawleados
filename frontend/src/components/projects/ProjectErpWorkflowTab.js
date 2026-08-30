@@ -458,7 +458,11 @@ export default function ProjectErpWorkflowTab({
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Start Point</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>End Point</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Tasks</th>
-                  <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
+                  {/* Sticky: 3 action icons (Pin/Edit/Delete) plus the new
+                      reorder arrows in S.No made this table wide enough that
+                      Actions could scroll out of view on narrower windows —
+                      pin it to the visible edge instead of letting it hide. */}
+                  <th className={`sticky right-0 ${bgCard} text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -542,7 +546,7 @@ export default function ProjectErpWorkflowTab({
                             testId={`erp-workflow-tasks-toggle-${w.id}`}
                           />
                         </td>
-                        <td className="p-3 text-right">
+                        <td className={`sticky right-0 ${bgCard} p-3 text-right`}>
                           <div className="inline-flex gap-1">
                             {canEdit && (
                               <button
