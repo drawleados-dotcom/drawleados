@@ -4,7 +4,11 @@ import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Plus, Trash2, Pencil, X, Workflow as WorkflowIcon, ListChecks } from 'lucide-react';
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -26,6 +30,7 @@ export default function ProjectErpWorkflowTab({
   textPrimary,
   textSecondary,
   borderColor,
+  projectMembers = [],
 }) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('session_token') : null;
   const headers = { Authorization: `Bearer ${token}` };
@@ -53,17 +58,32 @@ export default function ProjectErpWorkflowTab({
     }
   };
 
-  const openAddWorkflow = () => { if (canEdit) setWorkflowModal({ mode: 'add', name: '' }); };
-  const openEditWorkflow = (w) => { if (canEdit) setWorkflowModal({ mode: 'edit', id: w.id, name: w.name }); };
+  const openAddWorkflow = () => {
+    if (!canEdit) return;
+    setWorkflowModal({ mode: 'add', name: '', description: '', created_by: '', date: todayIso() });
+  };
+  const openEditWorkflow = (w) => {
+    if (!canEdit) return;
+    setWorkflowModal({
+      mode: 'edit', id: w.id, name: w.name,
+      description: w.description || '', created_by: w.created_by || '', date: w.date || todayIso(),
+    });
+  };
   const closeWorkflowModal = () => setWorkflowModal(null);
 
   const saveWorkflowModal = async () => {
     if (!workflowModal.name.trim()) { toast.error('Workflow name is required'); return; }
     setSaving(true);
     const trimmed = workflowModal.name.trim();
+    const fields = {
+      name: trimmed,
+      description: workflowModal.description.trim(),
+      created_by: workflowModal.created_by || '',
+      date: workflowModal.date || todayIso(),
+    };
     const next = workflowModal.mode === 'add'
-      ? [...workflows, { id: newId('ewf'), name: trimmed }]
-      : workflows.map(w => (w.id === workflowModal.id ? { ...w, name: trimmed } : w));
+      ? [...workflows, { id: newId('ewf'), ...fields }]
+      : workflows.map(w => (w.id === workflowModal.id ? { ...w, ...fields } : w));
     const ok = await persistWorkflow(next);
     setSaving(false);
     if (ok) {
@@ -116,6 +136,8 @@ export default function ProjectErpWorkflowTab({
                 <tr className={`border-b ${borderColor}`}>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase w-12`}>S.No</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Workflow Name</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Created By</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Date</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Tasks</th>
                   <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
                 </tr>
@@ -123,10 +145,16 @@ export default function ProjectErpWorkflowTab({
               <tbody>
                 {workflows.map((w, idx) => {
                   const count = tasksInWorkflow(w.id).length;
+                  const creator = projectMembers.find(m => m.user_id === w.created_by);
                   return (
                     <tr key={w.id} className={`border-b ${borderColor}`} data-testid={`erp-workflow-row-${w.id}`}>
                       <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
-                      <td className={`p-3 text-sm font-medium ${textPrimary}`}>{w.name || '—'}</td>
+                      <td className={`p-3 text-sm font-medium ${textPrimary}`}>
+                        {w.name || '—'}
+                        {w.description && <p className={`text-xs font-normal ${textSecondary} mt-0.5`}>{w.description}</p>}
+                      </td>
+                      <td className={`p-3 text-xs ${textSecondary}`}>{creator?.name || '—'}</td>
+                      <td className={`p-3 text-xs ${textSecondary}`}>{w.date || '—'}</td>
                       <td className={`p-3 text-xs ${textSecondary}`}>
                         <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${bgSecondary}`}>
                           <ListChecks className="h-3 w-3" /> {count}
@@ -158,7 +186,7 @@ export default function ProjectErpWorkflowTab({
                 })}
                 {workflows.length === 0 && (
                   <tr>
-                    <td colSpan={4} className={`p-8 text-center text-xs ${textSecondary}`}>
+                    <td colSpan={6} className={`p-8 text-center text-xs ${textSecondary}`}>
                       No workflows yet. {canEdit && <span>Click <span className="font-medium">Create Workflow</span> to add one.</span>}
                     </td>
                   </tr>
@@ -172,7 +200,7 @@ export default function ProjectErpWorkflowTab({
       {/* Add / Rename Workflow popup */}
       {workflowModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeWorkflowModal}>
-          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
               <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
                 <WorkflowIcon className="h-4 w-4 text-[#6366f1]" />
@@ -182,16 +210,56 @@ export default function ProjectErpWorkflowTab({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-5">
-              <p className={`text-xs font-medium ${textSecondary} mb-1`}>Workflow Name</p>
-              <Input
-                value={workflowModal.name}
-                onChange={(e) => setWorkflowModal(m => ({ ...m, name: e.target.value }))}
-                placeholder="e.g. Onboarding Flow"
-                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                data-testid="erp-workflow-form-name"
-                autoFocus
-              />
+            <div className="p-5 space-y-4">
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Workflow Name</p>
+                <Input
+                  value={workflowModal.name}
+                  onChange={(e) => setWorkflowModal(m => ({ ...m, name: e.target.value }))}
+                  placeholder="e.g. Onboarding Flow"
+                  className={`h-12 text-base ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="erp-workflow-form-name"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Description</p>
+                <Textarea
+                  value={workflowModal.description}
+                  onChange={(e) => setWorkflowModal(m => ({ ...m, description: e.target.value }))}
+                  placeholder="What this workflow is for…"
+                  rows={3}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary} resize-none`}
+                  data-testid="erp-workflow-form-description"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Created By</p>
+                  <Select
+                    value={workflowModal.created_by || '_none'}
+                    onValueChange={(v) => setWorkflowModal(m => ({ ...m, created_by: v === '_none' ? '' : v }))}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-workflow-form-created-by">
+                      <SelectValue placeholder="— Select —" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">— Select —</SelectItem>
+                      {projectMembers.map(m => <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Date</p>
+                  <Input
+                    type="date"
+                    value={workflowModal.date}
+                    onChange={(e) => setWorkflowModal(m => ({ ...m, date: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="erp-workflow-form-date"
+                  />
+                </div>
+              </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={closeWorkflowModal}>Cancel</Button>

@@ -1827,6 +1827,7 @@ export default function ProjectsPanel({
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            projectMembers={projectMembers}
           />
         )}
 
