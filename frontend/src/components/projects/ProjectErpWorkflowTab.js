@@ -7,12 +7,31 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Plus, Trash2, Pencil, X, Workflow as WorkflowIcon, ListChecks } from 'lucide-react';
+import ErpLocationPicker from './ErpLocationPicker';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
 const newId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+
+const emptyPoint = {
+  erp_user_id: '', erp_user_name: '',
+  erp_page_id: '', erp_page_name: '',
+  erp_sub_tab_id: '', erp_sub_tab_name: '',
+  erp_ultra_sub_tab_id: '', erp_ultra_sub_tab_name: '',
+  erp_ultra_tab_id: '', erp_ultra_tab_name: '',
+  erp_ultra_tab_pro_id: '', erp_ultra_tab_pro_name: '',
+};
+
+// Short breadcrumb of whichever levels a Start/End point was tagged down
+// to — same fields ErpLocationPicker writes, just rendered flat for the
+// table column instead of as live dropdowns.
+const pointLabel = (p) => {
+  if (!p) return '—';
+  const parts = [p.erp_user_name, p.erp_page_name, p.erp_sub_tab_name, p.erp_ultra_sub_tab_name, p.erp_ultra_tab_name, p.erp_ultra_tab_pro_name].filter(Boolean);
+  return parts.length ? parts.join(' > ') : '—';
+};
 
 /**
  * ERP project's "Workflow" tab — a project-scoped list of named workflows
@@ -60,13 +79,18 @@ export default function ProjectErpWorkflowTab({
 
   const openAddWorkflow = () => {
     if (!canEdit) return;
-    setWorkflowModal({ mode: 'add', name: '', description: '', created_by: '', date: todayIso() });
+    setWorkflowModal({
+      mode: 'add', name: '', description: '', created_by: '', date: todayIso(),
+      start_point: { ...emptyPoint }, end_point: { ...emptyPoint },
+    });
   };
   const openEditWorkflow = (w) => {
     if (!canEdit) return;
     setWorkflowModal({
       mode: 'edit', id: w.id, name: w.name,
       description: w.description || '', created_by: w.created_by || '', date: w.date || todayIso(),
+      start_point: { ...emptyPoint, ...(w.start_point || {}) },
+      end_point: { ...emptyPoint, ...(w.end_point || {}) },
     });
   };
   const closeWorkflowModal = () => setWorkflowModal(null);
@@ -80,6 +104,8 @@ export default function ProjectErpWorkflowTab({
       description: workflowModal.description.trim(),
       created_by: workflowModal.created_by || '',
       date: workflowModal.date || todayIso(),
+      start_point: workflowModal.start_point,
+      end_point: workflowModal.end_point,
     };
     const next = workflowModal.mode === 'add'
       ? [...workflows, { id: newId('ewf'), ...fields }]
@@ -138,6 +164,8 @@ export default function ProjectErpWorkflowTab({
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Workflow Name</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Created By</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Date</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Start Point</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>End Point</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Tasks</th>
                   <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
                 </tr>
@@ -155,6 +183,8 @@ export default function ProjectErpWorkflowTab({
                       </td>
                       <td className={`p-3 text-xs ${textSecondary}`}>{creator?.name || '—'}</td>
                       <td className={`p-3 text-xs ${textSecondary}`}>{w.date || '—'}</td>
+                      <td className={`p-3 text-xs ${textSecondary}`} data-testid={`erp-workflow-startpoint-${w.id}`}>{pointLabel(w.start_point)}</td>
+                      <td className={`p-3 text-xs ${textSecondary}`} data-testid={`erp-workflow-endpoint-${w.id}`}>{pointLabel(w.end_point)}</td>
                       <td className={`p-3 text-xs ${textSecondary}`}>
                         <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${bgSecondary}`}>
                           <ListChecks className="h-3 w-3" /> {count}
@@ -186,7 +216,7 @@ export default function ProjectErpWorkflowTab({
                 })}
                 {workflows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className={`p-8 text-center text-xs ${textSecondary}`}>
+                    <td colSpan={8} className={`p-8 text-center text-xs ${textSecondary}`}>
                       No workflows yet. {canEdit && <span>Click <span className="font-medium">Create Workflow</span> to add one.</span>}
                     </td>
                   </tr>
@@ -200,7 +230,7 @@ export default function ProjectErpWorkflowTab({
       {/* Add / Rename Workflow popup */}
       {workflowModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeWorkflowModal}>
-          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
               <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
                 <WorkflowIcon className="h-4 w-4 text-[#6366f1]" />
@@ -259,6 +289,32 @@ export default function ProjectErpWorkflowTab({
                     data-testid="erp-workflow-form-date"
                   />
                 </div>
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-2`}>Start Point</p>
+                <ErpLocationPicker
+                  project={project}
+                  value={workflowModal.start_point}
+                  onChange={(loc) => setWorkflowModal(m => ({ ...m, start_point: loc }))}
+                  bgSecondary={bgSecondary}
+                  borderColor={borderColor}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  testPrefix="erp-workflow-startpoint"
+                />
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-2`}>End Point</p>
+                <ErpLocationPicker
+                  project={project}
+                  value={workflowModal.end_point}
+                  onChange={(loc) => setWorkflowModal(m => ({ ...m, end_point: loc }))}
+                  bgSecondary={bgSecondary}
+                  borderColor={borderColor}
+                  textPrimary={textPrimary}
+                  textSecondary={textSecondary}
+                  testPrefix="erp-workflow-endpoint"
+                />
               </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
