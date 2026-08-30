@@ -55,6 +55,86 @@ export default function ErpTaskModal({
   });
   const [saving, setSaving] = useState(false);
 
+  // Auto-save — once Task Name has any text, this is already a real task:
+  // edits (and Location/Priority/etc. changes) are debounce-saved in the
+  // background, and closing the popup any way (X, backdrop, Cancel) flushes
+  // whatever's pending instead of discarding it. `activeTaskId` starts as
+  // the `taskId` prop in Edit mode, or null in Add mode until the first
+  // auto-save creates the task and fills it in.
+  const [activeTaskId, setActiveTaskId] = useState(taskId);
+  const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const debounceRef = useRef(null);
+  const savingRef = useRef(false);
+  const pendingRef = useRef(false);
+  const skipFirstRef = useRef(true); // don't auto-save just from opening in Edit mode
+
+  const buildPayload = () => ({
+    task_name: draft.task_name.trim(),
+    priority: draft.priority,
+    assigned_to: draft.assigned_to || currentUser?.user_id,
+    due_date: draft.due_date || null,
+    work_link: draft.work_link || '',
+    department: 'erp',
+    project_id: project.project_id,
+    project_name: project.name,
+    ...location,
+    erp_task_type: draft.erp_task_type || '',
+    workflow_id: draft.workflow_id || null,
+    workflow_name: draft.workflow_name || null,
+    reference_image: draft.reference_image || '',
+    voice_note: draft.voice_note || '',
+  });
+
+  // Shared save core for both the debounce and an explicit Save click — the
+  // synchronous savingRef check (before any await) means two overlapping
+  // calls can never both POST and create a duplicate task; an overlapping
+  // call just marks pendingRef and the trailing retry (or the next debounce
+  // tick) picks up whatever changed since.
+  const doSave = async () => {
+    if (!draft.task_name.trim()) return;
+    if (savingRef.current) { pendingRef.current = true; return; }
+    savingRef.current = true;
+    setAutoSaveStatus('saving');
+    try {
+      if (activeTaskId) {
+        await axios.put(`${API}/api/our-tasks/tasks/${activeTaskId}`, buildPayload(), { headers });
+      } else {
+        const res = await axios.post(`${API}/api/our-tasks/tasks`, { ...buildPayload(), type: 'general', status: 'pending' }, { headers });
+        setActiveTaskId(res.data.task_id);
+      }
+      setAutoSaveStatus('saved');
+      onSaved?.();
+    } catch (e) {
+      setAutoSaveStatus('idle');
+      pendingRef.current = false;
+      throw e;
+    } finally {
+      savingRef.current = false;
+    }
+    if (pendingRef.current) { pendingRef.current = false; await doSave(); }
+  };
+
+  useEffect(() => {
+    if (skipFirstRef.current) { skipFirstRef.current = false; return; }
+    if (!draft.task_name.trim()) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      doSave().catch(() => toast.error('Failed to auto-save task'));
+    }, 900);
+    return () => clearTimeout(debounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, location]);
+
+  // X / backdrop / Cancel — flush whatever's pending (best-effort, doesn't
+  // block the close) instead of losing it.
+  const flushAndClose = () => {
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
+    if (draft.task_name.trim()) {
+      doSave().catch(() => toast.error('Failed to save task'));
+    }
+    onClose?.();
+  };
+
   // Task Name auto-grows with its content instead of scrolling sideways —
   // Enter/Shift+Enter both just insert a newline, same as any textarea.
   const taskNameRef = useRef(null);
@@ -130,32 +210,15 @@ export default function ErpTaskModal({
 
   const submit = async () => {
     if (!draft.task_name.trim()) { toast.error('Task name is required'); return; }
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     setSaving(true);
-    const payload = {
-      task_name: draft.task_name.trim(),
-      priority: draft.priority,
-      assigned_to: draft.assigned_to || currentUser?.user_id,
-      due_date: draft.due_date || null,
-      work_link: draft.work_link || '',
-      department: 'erp',
-      project_id: project.project_id,
-      project_name: project.name,
-      ...location,
-      erp_task_type: draft.erp_task_type || '',
-      workflow_id: draft.workflow_id || null,
-      workflow_name: draft.workflow_name || null,
-      reference_image: draft.reference_image || '',
-      voice_note: draft.voice_note || '',
-    };
+    // Let any in-flight auto-save finish first so this doesn't race it into
+    // creating a second task.
+    while (savingRef.current) { await new Promise(r => setTimeout(r, 150)); }
+    const wasCreate = !activeTaskId;
     try {
-      if (taskId) {
-        await axios.put(`${API}/api/our-tasks/tasks/${taskId}`, payload, { headers });
-        toast.success('Task updated');
-      } else {
-        await axios.post(`${API}/api/our-tasks/tasks`, { ...payload, type: 'general', status: 'pending' }, { headers });
-        toast.success('Task added');
-      }
-      onSaved?.();
+      await doSave();
+      toast.success(wasCreate ? 'Task added' : 'Task updated');
       onClose?.();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to save task');
@@ -166,13 +229,15 @@ export default function ErpTaskModal({
 
   return (
     // z-40, not z-[70]: the selects below portal to document.body at z-50 (ui/select.jsx).
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={flushAndClose}>
       <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
         <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
           <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
             <ListChecks className="h-4 w-4 text-[#6366f1]" /> {taskId ? 'Edit Task' : 'Add Task'}
+            {autoSaveStatus === 'saving' && <span className={`text-xs font-normal ${textSecondary}`}>· Saving…</span>}
+            {autoSaveStatus === 'saved' && <span className="text-xs font-normal text-[#10b981]">· Saved</span>}
           </h3>
-          <button onClick={onClose} className={textSecondary}>
+          <button onClick={flushAndClose} className={textSecondary} data-testid="erp-quicktask-form-close">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -387,7 +452,9 @@ export default function ErpTaskModal({
           </div>
         </div>
         <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={flushAndClose} data-testid="erp-quicktask-form-cancel">
+            {draft.task_name.trim() ? 'Close' : 'Cancel'}
+          </Button>
           <Button
             type="button"
             onClick={submit}
@@ -395,7 +462,7 @@ export default function ErpTaskModal({
             className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
             data-testid="erp-quicktask-form-save"
           >
-            {saving ? 'Saving…' : (taskId ? 'Save Changes' : 'Add Task')}
+            {saving ? 'Saving…' : (activeTaskId ? 'Save Changes' : 'Add Task')}
           </Button>
         </div>
       </div>
