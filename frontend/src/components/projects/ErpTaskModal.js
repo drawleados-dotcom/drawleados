@@ -3,6 +3,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { SearchableSelect } from '../ui/searchable-select';
 import { ListChecks, X, Mic, Pause, Play, Square, Trash2 } from 'lucide-react';
@@ -53,6 +54,16 @@ export default function ErpTaskModal({
     voice_note: '',
   });
   const [saving, setSaving] = useState(false);
+
+  // Task Name auto-grows with its content instead of scrolling sideways —
+  // Enter/Shift+Enter both just insert a newline, same as any textarea.
+  const taskNameRef = useRef(null);
+  useEffect(() => {
+    const el = taskNameRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft.task_name]);
 
   // Voice Note recorder — Start/Pause/Resume/Stop, same data-URI storage
   // pattern as Reference Image above (no upload endpoint to send it to).
@@ -168,11 +179,13 @@ export default function ErpTaskModal({
         <div className="p-5 space-y-4">
           <div>
             <p className={`text-xs font-medium ${textSecondary} mb-1`}>Task Name</p>
-            <Input
+            <Textarea
+              ref={taskNameRef}
               value={draft.task_name}
               onChange={(e) => setDraft(d => ({ ...d, task_name: e.target.value }))}
               placeholder="e.g. Fix validation on Save button"
-              className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              rows={1}
+              className={`${bgSecondary} border ${borderColor} ${textPrimary} min-h-[36px] py-2 resize-none overflow-hidden leading-normal`}
               data-testid="erp-quicktask-form-name"
               autoFocus
             />
