@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, X, Workflow as WorkflowIcon, ChevronDown, ChevronRight, Search, Flag, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Pencil, X, Workflow as WorkflowIcon, ChevronDown, ChevronUp, ChevronRight, Search, Flag, CheckCircle2, Pin } from 'lucide-react';
 import ErpLocationPicker from './ErpLocationPicker';
 import { ErpTaskCountBadge } from './ErpTaskList';
 
@@ -15,6 +15,10 @@ const todayIso = () => new Date().toISOString().slice(0, 10);
 const API = process.env.REACT_APP_BACKEND_URL;
 
 const newId = (prefix) => `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+
+// Pinned workflows always float to the top of the list — capped so
+// pinning doesn't just become a second unsorted list.
+const MAX_PINNED_WORKFLOWS = 5;
 
 const emptyPoint = {
   erp_user_id: '', erp_user_name: '',
@@ -207,6 +211,41 @@ export default function ProjectErpWorkflowTab({
     if (ok) toast.success('Workflow removed');
   };
 
+  // Pinned workflows are stable-sorted to the front so their relative
+  // order (among themselves, and among the unpinned rest) is preserved —
+  // moveWorkflow only ever swaps within one of these two tiers so a pinned
+  // row can never end up interleaved with unpinned ones.
+  const sortedWorkflows = [...workflows].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
+  const tierOf = (w) => sortedWorkflows.filter((x) => !!x.pinned === !!w.pinned);
+
+  const moveWorkflow = async (workflowId, direction) => {
+    if (!canEdit) return;
+    const w = workflows.find((x) => x.id === workflowId);
+    if (!w) return;
+    const tier = tierOf(w);
+    const idx = tier.findIndex((x) => x.id === workflowId);
+    const targetIdx = idx + direction;
+    if (targetIdx < 0 || targetIdx >= tier.length) return;
+    const newTier = [...tier];
+    [newTier[idx], newTier[targetIdx]] = [newTier[targetIdx], newTier[idx]];
+    const otherTier = sortedWorkflows.filter((x) => !!x.pinned !== !!w.pinned);
+    const next = w.pinned ? [...newTier, ...otherTier] : [...otherTier, ...newTier];
+    await persistWorkflow(next);
+  };
+
+  const togglePinWorkflow = async (workflowId) => {
+    if (!canEdit) return;
+    const w = workflows.find((x) => x.id === workflowId);
+    if (!w) return;
+    if (!w.pinned && workflows.filter((x) => x.pinned).length >= MAX_PINNED_WORKFLOWS) {
+      toast.error(`You can pin up to ${MAX_PINNED_WORKFLOWS} workflows — unpin one first.`);
+      return;
+    }
+    const next = workflows.map((x) => (x.id === workflowId ? { ...x, pinned: !x.pinned } : x));
+    const ok = await persistWorkflow(next);
+    if (ok) toast.success(w.pinned ? 'Workflow unpinned' : 'Workflow pinned to top');
+  };
+
   const openAddSubWorkflow = (workflowId) => {
     if (!canEdit) return;
     setSubWorkflowModal({ mode: 'add', workflowId, name: '' });
@@ -325,7 +364,7 @@ export default function ProjectErpWorkflowTab({
     setExpandedSubWorkflowId(v === 'all' ? null : v);
   };
 
-  const visibleWorkflows = workflows
+  const visibleWorkflows = sortedWorkflows
     .filter((w) => filterWorkflowId === 'all' || w.id === filterWorkflowId)
     .filter((w) => !workflowSearch.trim() || (w.name || '').toLowerCase().includes(workflowSearch.trim().toLowerCase()));
 
@@ -412,7 +451,7 @@ export default function ProjectErpWorkflowTab({
             <table className="w-full">
               <thead>
                 <tr className={`border-b ${borderColor}`}>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase w-12`}>S.No</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase w-16`}>S.No</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Workflow Name</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Created By</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Date</th>
@@ -429,10 +468,42 @@ export default function ProjectErpWorkflowTab({
                   const subWorkflows = w.sub_workflows || [];
                   const isExpanded = expandedWorkflowId === w.id;
                   const isTasksExpanded = expandedWorkflowTasksId === w.id;
+                  const tier = tierOf(w);
+                  const tierIdx = tier.findIndex((x) => x.id === w.id);
+                  const canMoveUp = tierIdx > 0;
+                  const canMoveDown = tierIdx < tier.length - 1;
                   return (
                     <React.Fragment key={w.id}>
                       <tr className={`border-b ${borderColor}`} data-testid={`erp-workflow-row-${w.id}`}>
-                        <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
+                        <td className={`p-3 text-xs ${textSecondary}`}>
+                          <div className="flex items-center gap-1.5">
+                            {canEdit && (
+                              <div className="flex flex-col">
+                                <button
+                                  type="button"
+                                  onClick={() => moveWorkflow(w.id, -1)}
+                                  disabled={!canMoveUp}
+                                  className={`${textSecondary} hover:opacity-70 disabled:opacity-20 disabled:cursor-not-allowed leading-none`}
+                                  title="Move up"
+                                  data-testid={`erp-workflow-moveup-${w.id}`}
+                                >
+                                  <ChevronUp className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveWorkflow(w.id, 1)}
+                                  disabled={!canMoveDown}
+                                  className={`${textSecondary} hover:opacity-70 disabled:opacity-20 disabled:cursor-not-allowed leading-none`}
+                                  title="Move down"
+                                  data-testid={`erp-workflow-movedown-${w.id}`}
+                                >
+                                  <ChevronDown className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
+                            <span>{idx + 1}</span>
+                          </div>
+                        </td>
                         <td className={`p-3 text-sm font-medium ${textPrimary}`}>
                           <button
                             type="button"
@@ -442,6 +513,11 @@ export default function ProjectErpWorkflowTab({
                           >
                             {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
                             {w.name || '—'}
+                            {w.pinned && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded px-1 py-0.5">
+                                <Pin className="h-2.5 w-2.5" /> Pinned
+                              </span>
+                            )}
                           </button>
                           {w.description && <p className={`text-xs font-normal ${textSecondary} mt-0.5 pl-5`}>{w.description}</p>}
                         </td>
@@ -468,6 +544,17 @@ export default function ProjectErpWorkflowTab({
                         </td>
                         <td className="p-3 text-right">
                           <div className="inline-flex gap-1">
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => togglePinWorkflow(w.id)}
+                                className={`p-1 hover:opacity-80 ${w.pinned ? 'text-amber-500' : textSecondary}`}
+                                title={w.pinned ? 'Unpin' : `Pin to top (max ${MAX_PINNED_WORKFLOWS})`}
+                                data-testid={`erp-workflow-pin-${w.id}`}
+                              >
+                                <Pin className={`h-4 w-4 ${w.pinned ? 'fill-amber-500' : ''}`} />
+                              </button>
+                            )}
                             {canEdit && (
                               <button type="button" onClick={() => openEditWorkflow(w)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-workflow-edit-${w.id}`}>
                                 <Pencil className="h-4 w-4" />
