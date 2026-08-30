@@ -1175,6 +1175,17 @@ export default function ProjectsPanel({
       if ((t.status || 'pending') !== 'pending') return false;
       return erpUsersForFilter.find((u) => u.id === t.erp_user_id)?.department_id === deptId;
     }).length;
+    const workflowTodoCount = (workflowId) => projectTasks.filter((t) => {
+      if (!matchesMemberAndDate(t)) return false;
+      if ((t.status || 'pending') !== 'pending') return false;
+      return t.workflow_id === workflowId;
+    }).length;
+    // Busiest-first — re-sorts on every Team Member / Date change since
+    // workflowTodoCount is scoped by those same filters. "All Workflows"
+    // stays pinned first regardless.
+    const workflowOptionsSorted = [...(selectedProject.erp_workflow || [])]
+      .map((w) => ({ ...w, _todoCount: workflowTodoCount(w.id) }))
+      .sort((a, b) => b._todoCount - a._todoCount);
 
     const taskSummaryCard = (label, value, Icon, colorClass, active, onClick) => (
       <button
@@ -2010,7 +2021,7 @@ export default function ProjectsPanel({
               <SearchableSelect
                 value={taskWorkflowFilter}
                 onChange={setTaskWorkflowFilter}
-                options={[{ value: 'all', label: 'All Workflows' }, ...(selectedProject.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))]}
+                options={[{ value: 'all', label: 'All Workflows' }, ...workflowOptionsSorted.map(w => ({ value: w.id, label: `${w.name} (${w._todoCount})` }))]}
                 searchPlaceholder="Search workflows..."
                 className={`h-9 flex-1 min-w-[220px] max-w-[480px] px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm ml-auto`}
                 data-testid="project-filter-erp-workflow"
