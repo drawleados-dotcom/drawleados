@@ -1874,7 +1874,9 @@ export default function ProjectsPanel({
           <ProjectErpWorkflowTab
             project={selectedProject}
             onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            onTasksChanged={() => { refreshSelectedProject(); loadProjects(); }}
             canEdit={canManageProjects}
+            currentUser={currentUser}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Plus, Trash2, Pencil, X, Workflow as WorkflowIcon, ChevronDown, ChevronUp, ChevronRight, Search, Flag, CheckCircle2, Pin } from 'lucide-react';
 import ErpLocationPicker from './ErpLocationPicker';
 import { ErpTaskCountBadge } from './ErpTaskList';
+import ErpTaskModal from './ErpTaskModal';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -92,7 +93,9 @@ const summaryCard = (label, value, bgCard, borderColor, textSecondary, textPrima
 export default function ProjectErpWorkflowTab({
   project,
   onProjectUpdated,
+  onTasksChanged,
   canEdit,
+  currentUser,
   isDark,
   bgCard,
   bgSecondary,
@@ -134,6 +137,45 @@ export default function ProjectErpWorkflowTab({
   const [expandedWorkflowTasksId, setExpandedWorkflowTasksId] = useState(null);
   const [expandedSubWorkflowTasksId, setExpandedSubWorkflowTasksId] = useState(null);
   const [expandedSubSubWorkflowTasksId, setExpandedSubSubWorkflowTasksId] = useState(null);
+
+  // Add Task, opened from any level's AddTaskButton below — pre-fills that
+  // level's workflow/sub-workflow/sub-sub-workflow id+name (and every
+  // ancestor's) into the shared ErpTaskModal, same pattern as the ERP Users
+  // tab's own openAddTask. Not gated by canEdit — logging a task is a much
+  // lower-risk action than editing the workflow structure itself.
+  const [taskModal, setTaskModal] = useState(null);
+
+  const openAddTask = (ctx) => {
+    setTaskModal({
+      task_name: '',
+      priority: 'medium',
+      erp_task_type: '',
+      assigned_to: currentUser?.user_id || '',
+      due_date: todayIso(),
+      work_link: '',
+      workflow_id: ctx.workflowId || '',
+      workflow_name: ctx.workflowName || '',
+      sub_workflow_id: ctx.subWorkflowId || '',
+      sub_workflow_name: ctx.subWorkflowName || '',
+      sub_sub_workflow_id: ctx.subSubWorkflowId || '',
+      sub_sub_workflow_name: ctx.subSubWorkflowName || '',
+      reference_image: '',
+      voice_note: '',
+    });
+  };
+  const closeTaskModal = () => setTaskModal(null);
+
+  const AddTaskButton = ({ onClick, testId }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="p-1 text-[#6366f1] hover:opacity-80"
+      title="Add Task"
+      data-testid={testId}
+    >
+      <Plus className="h-4 w-4" />
+    </button>
+  );
 
   // Cascading filter row, same shape as the Users tab's Department/User/
   // Page/... row — picking a level narrows the table to just that node
@@ -538,13 +580,19 @@ export default function ProjectErpWorkflowTab({
                           </span>
                         </td>
                         <td className="p-3 text-left">
-                          <ErpTaskCountBadge
-                            count={count}
-                            active={isTasksExpanded}
-                            onClick={() => setExpandedWorkflowTasksId(isTasksExpanded ? null : w.id)}
-                            textSecondary={textSecondary}
-                            testId={`erp-workflow-tasks-toggle-${w.id}`}
-                          />
+                          <div className="inline-flex items-center gap-1">
+                            <ErpTaskCountBadge
+                              count={count}
+                              active={isTasksExpanded}
+                              onClick={() => setExpandedWorkflowTasksId(isTasksExpanded ? null : w.id)}
+                              textSecondary={textSecondary}
+                              testId={`erp-workflow-tasks-toggle-${w.id}`}
+                            />
+                            <AddTaskButton
+                              onClick={() => openAddTask({ workflowId: w.id, workflowName: w.name })}
+                              testId={`erp-workflow-addtask-${w.id}`}
+                            />
+                          </div>
                         </td>
                         <td className={`sticky right-0 ${bgCard} p-3 text-right`}>
                           <div className="inline-flex gap-1">
@@ -644,6 +692,10 @@ export default function ProjectErpWorkflowTab({
                                               textSecondary={textSecondary}
                                               testId={`erp-subworkflow-tasks-toggle-${sw.id}`}
                                             />
+                                            <AddTaskButton
+                                              onClick={() => openAddTask({ workflowId: w.id, workflowName: w.name, subWorkflowId: sw.id, subWorkflowName: sw.name })}
+                                              testId={`erp-subworkflow-addtask-${sw.id}`}
+                                            />
                                             {canEdit && (
                                               <button type="button" onClick={() => openEditSubWorkflow(w.id, sw)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-subworkflow-edit-${sw.id}`}>
                                                 <Pencil className="h-3.5 w-3.5" />
@@ -714,6 +766,10 @@ export default function ProjectErpWorkflowTab({
                                                               onClick={() => setExpandedSubSubWorkflowTasksId(isSswTasksExpanded ? null : ssw.id)}
                                                               textSecondary={textSecondary}
                                                               testId={`erp-subsubworkflow-tasks-toggle-${ssw.id}`}
+                                                            />
+                                                            <AddTaskButton
+                                                              onClick={() => openAddTask({ workflowId: w.id, workflowName: w.name, subWorkflowId: sw.id, subWorkflowName: sw.name, subSubWorkflowId: ssw.id, subSubWorkflowName: ssw.name })}
+                                                              testId={`erp-subsubworkflow-addtask-${ssw.id}`}
                                                             />
                                                             {canEdit && (
                                                               <button type="button" onClick={() => openEditSubSubWorkflow(w.id, sw.id, ssw)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-subsubworkflow-edit-${ssw.id}`}>
@@ -967,6 +1023,24 @@ export default function ProjectErpWorkflowTab({
             </div>
           </div>
         </div>
+      )}
+
+      {taskModal && (
+        <ErpTaskModal
+          project={project}
+          projectMembers={projectMembers}
+          currentUser={currentUser}
+          headers={headers}
+          taskId={null}
+          initialDraft={taskModal}
+          onClose={closeTaskModal}
+          onSaved={onTasksChanged}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
       )}
     </div>
   );
