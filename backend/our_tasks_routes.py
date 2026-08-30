@@ -58,6 +58,8 @@ class TaskCreate(BaseModel):
     sub_department_name: Optional[str] = None
     workflow_id: Optional[str] = None        # one of the project's erp_workflow rows
     workflow_name: Optional[str] = None
+    sub_workflow_id: Optional[str] = None    # one of that workflow's own sub_workflows
+    sub_workflow_name: Optional[str] = None
     reference_image: Optional[str] = None    # data: URI of a pasted screenshot, if attached
     voice_note: Optional[str] = None         # data: URI of a recorded voice note, if attached
 
@@ -98,6 +100,8 @@ class TaskUpdate(BaseModel):
     sub_department_name: Optional[str] = None
     workflow_id: Optional[str] = None
     workflow_name: Optional[str] = None
+    sub_workflow_id: Optional[str] = None
+    sub_workflow_name: Optional[str] = None
     reference_image: Optional[str] = None
     voice_note: Optional[str] = None
 
@@ -331,6 +335,8 @@ async def create_task(task_data: TaskCreate, request: Request):
             "sub_department_name": task_data.sub_department_name,
             "workflow_id": task_data.workflow_id,
             "workflow_name": task_data.workflow_name,
+            "sub_workflow_id": task_data.sub_workflow_id,
+            "sub_workflow_name": task_data.sub_workflow_name,
             "reference_image": task_data.reference_image,
             "voice_note": task_data.voice_note,
             "created_by": user.user_id,

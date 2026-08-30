@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, X, Workflow as WorkflowIcon, ListChecks } from 'lucide-react';
+import { Plus, Trash2, Pencil, X, Workflow as WorkflowIcon, ListChecks, ChevronDown, ChevronRight, Search, Flag, CheckCircle2 } from 'lucide-react';
 import ErpLocationPicker from './ErpLocationPicker';
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -57,10 +57,24 @@ export default function ProjectErpWorkflowTab({
   const workflows = project?.erp_workflow || [];
   const tasks = project?.tasks || [];
   const tasksInWorkflow = (workflowId) => tasks.filter(t => t.workflow_id === workflowId);
+  const tasksInSubWorkflow = (subWorkflowId) => tasks.filter(t => t.sub_workflow_id === subWorkflowId);
 
   // { mode: 'add' | 'edit', id, name }
   const [workflowModal, setWorkflowModal] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // Sub Workflows — nested under a workflow row, expand to manage.
+  const [expandedWorkflowId, setExpandedWorkflowId] = useState(null);
+  // { mode: 'add' | 'edit', workflowId, id, name }
+  const [subWorkflowModal, setSubWorkflowModal] = useState(null);
+
+  // Task browser — search + Workflow/Sub Workflow filter, below the
+  // management table, so picking a workflow shows its tasks, summary
+  // counts, and Start/End Point right there instead of hunting elsewhere.
+  const [taskSearch, setTaskSearch] = useState('');
+  const [filterWorkflowId, setFilterWorkflowId] = useState('all');
+  const [filterSubWorkflowId, setFilterSubWorkflowId] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
 
   const persistWorkflow = async (next) => {
     try {
@@ -130,6 +144,70 @@ export default function ProjectErpWorkflowTab({
     if (ok) toast.success('Workflow removed');
   };
 
+  const openAddSubWorkflow = (workflowId) => {
+    if (!canEdit) return;
+    setSubWorkflowModal({ mode: 'add', workflowId, name: '' });
+  };
+  const openEditSubWorkflow = (workflowId, sw) => {
+    if (!canEdit) return;
+    setSubWorkflowModal({ mode: 'edit', workflowId, id: sw.id, name: sw.name });
+  };
+  const closeSubWorkflowModal = () => setSubWorkflowModal(null);
+
+  const saveSubWorkflowModal = async () => {
+    if (!subWorkflowModal.name.trim()) { toast.error('Sub workflow name is required'); return; }
+    setSaving(true);
+    const trimmed = subWorkflowModal.name.trim();
+    const next = workflows.map((w) => {
+      if (w.id !== subWorkflowModal.workflowId) return w;
+      const subs = w.sub_workflows || [];
+      const nextSubs = subWorkflowModal.mode === 'add'
+        ? [...subs, { id: newId('esw'), name: trimmed }]
+        : subs.map((sw) => (sw.id === subWorkflowModal.id ? { ...sw, name: trimmed } : sw));
+      return { ...w, sub_workflows: nextSubs };
+    });
+    const ok = await persistWorkflow(next);
+    setSaving(false);
+    if (ok) {
+      toast.success(subWorkflowModal.mode === 'add' ? 'Sub workflow added' : 'Sub workflow updated');
+      closeSubWorkflowModal();
+    }
+  };
+
+  const deleteSubWorkflow = async (workflowId, subWorkflowId) => {
+    if (!canEdit) return;
+    if (tasksInSubWorkflow(subWorkflowId).length > 0) {
+      toast.error('Cannot delete: tasks are tagged with this sub workflow. Untag them first.');
+      return;
+    }
+    if (!window.confirm('Remove this sub workflow?')) return;
+    const next = workflows.map((w) => (
+      w.id === workflowId ? { ...w, sub_workflows: (w.sub_workflows || []).filter((sw) => sw.id !== subWorkflowId) } : w
+    ));
+    const ok = await persistWorkflow(next);
+    if (ok) toast.success('Sub workflow removed');
+  };
+
+  // --- Task browser (search + Workflow/Sub Workflow filter) ---
+  const filterWorkflow = workflows.find((w) => w.id === filterWorkflowId);
+  const filterSubWorkflows = filterWorkflow?.sub_workflows || [];
+  const browserScopedTasks = tasks.filter((t) => {
+    if (filterWorkflowId !== 'all' && t.workflow_id !== filterWorkflowId) return false;
+    if (filterSubWorkflowId !== 'all' && t.sub_workflow_id !== filterSubWorkflowId) return false;
+    if (taskSearch.trim() && !(t.task_name || '').toLowerCase().includes(taskSearch.trim().toLowerCase())) return false;
+    return true;
+  });
+  const browserStatusCounts = {
+    all: browserScopedTasks.length,
+    pending: browserScopedTasks.filter((t) => (t.status || 'pending') === 'pending').length,
+    in_progress: browserScopedTasks.filter((t) => t.status === 'in_progress').length,
+    completed: browserScopedTasks.filter((t) => t.status === 'completed').length,
+  };
+  const browserFilteredTasks = filterStatus === 'all'
+    ? browserScopedTasks
+    : browserScopedTasks.filter((t) => (t.status || 'pending') === filterStatus);
+  const assigneeName = (uid) => projectMembers.find((m) => m.user_id === uid)?.name || uid || '—';
+
   return (
     <div className="space-y-3" data-testid="project-erp-workflow-tab">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -154,6 +232,122 @@ export default function ProjectErpWorkflowTab({
         )}
       </div>
 
+      {/* Task browser — search + Workflow/Sub Workflow filter, summary
+          cards, and the selected workflow's Start/End Point highlighted. */}
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className={`absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 ${textSecondary}`} />
+              <Input
+                value={taskSearch}
+                onChange={(e) => setTaskSearch(e.target.value)}
+                placeholder="Search tasks…"
+                className={`pl-8 h-9 ${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="erp-workflow-task-search"
+              />
+            </div>
+            <Select
+              value={filterWorkflowId}
+              onValueChange={(v) => { setFilterWorkflowId(v); setFilterSubWorkflowId('all'); }}
+            >
+              <SelectTrigger className={`w-[200px] h-9 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-workflow-filter-workflow">
+                <SelectValue placeholder="All Workflows" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Workflows</SelectItem>
+                {workflows.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {filterSubWorkflows.length > 0 && (
+              <Select value={filterSubWorkflowId} onValueChange={setFilterSubWorkflowId}>
+                <SelectTrigger className={`w-[200px] h-9 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-workflow-filter-subworkflow">
+                  <SelectValue placeholder="All Sub Workflows" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sub Workflows</SelectItem>
+                  {filterSubWorkflows.map((sw) => <SelectItem key={sw.id} value={sw.id}>{sw.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {filterWorkflow && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10" data-testid="erp-workflow-filter-startpoint">
+                <Flag className="h-4 w-4 text-emerald-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wide text-emerald-600">Start Point</p>
+                  <p className={`text-sm font-medium ${textPrimary} truncate`}>{pointLabel(filterWorkflow.start_point)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10" data-testid="erp-workflow-filter-endpoint">
+                <CheckCircle2 className="h-4 w-4 text-rose-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-wide text-rose-600">End Point</p>
+                  <p className={`text-sm font-medium ${textPrimary} truncate`}>{pointLabel(filterWorkflow.end_point)}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'pending', label: 'Pending' },
+              { key: 'in_progress', label: 'In Progress' },
+              { key: 'completed', label: 'Completed' },
+            ].map((s) => {
+              const active = filterStatus === s.key;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setFilterStatus(s.key)}
+                  className={`text-left rounded-lg border p-2.5 transition-colors ${active ? 'border-[#6366f1] ring-1 ring-[#6366f1]' : borderColor} ${bgSecondary}`}
+                  data-testid={`erp-workflow-summary-${s.key}`}
+                >
+                  <p className={`text-[10px] uppercase tracking-wide ${textSecondary}`}>{s.label}</p>
+                  <p className={`text-lg font-bold ${textPrimary}`}>{browserStatusCounts[s.key]}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className={`rounded-md border ${borderColor} overflow-x-auto`}>
+            <table className="w-full">
+              <thead>
+                <tr className={`border-b ${borderColor}`}>
+                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Task</th>
+                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Assigned To</th>
+                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Priority</th>
+                  <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {browserFilteredTasks.map((t) => (
+                  <tr key={t.task_id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`erp-workflow-task-row-${t.task_id}`}>
+                    <td className={`px-3 py-2 text-sm ${textPrimary}`}>{t.task_name}</td>
+                    <td className={`px-3 py-2 text-xs ${textSecondary}`}>{assigneeName(t.assigned_to)}</td>
+                    <td className={`px-3 py-2 text-xs ${textSecondary} capitalize`}>{t.priority || 'medium'}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase ${textSecondary} border ${borderColor}`}>
+                        {(t.status || 'pending').replace('_', ' ')}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {browserFilteredTasks.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className={`p-6 text-center text-xs ${textSecondary}`}>No tasks match these filters.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -174,44 +368,120 @@ export default function ProjectErpWorkflowTab({
                 {workflows.map((w, idx) => {
                   const count = tasksInWorkflow(w.id).length;
                   const creator = projectMembers.find(m => m.user_id === w.created_by);
+                  const subWorkflows = w.sub_workflows || [];
+                  const isExpanded = expandedWorkflowId === w.id;
                   return (
-                    <tr key={w.id} className={`border-b ${borderColor}`} data-testid={`erp-workflow-row-${w.id}`}>
-                      <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
-                      <td className={`p-3 text-sm font-medium ${textPrimary}`}>
-                        {w.name || '—'}
-                        {w.description && <p className={`text-xs font-normal ${textSecondary} mt-0.5`}>{w.description}</p>}
-                      </td>
-                      <td className={`p-3 text-xs ${textSecondary}`}>{creator?.name || '—'}</td>
-                      <td className={`p-3 text-xs ${textSecondary}`}>{w.date || '—'}</td>
-                      <td className={`p-3 text-xs ${textSecondary}`} data-testid={`erp-workflow-startpoint-${w.id}`}>{pointLabel(w.start_point)}</td>
-                      <td className={`p-3 text-xs ${textSecondary}`} data-testid={`erp-workflow-endpoint-${w.id}`}>{pointLabel(w.end_point)}</td>
-                      <td className={`p-3 text-xs ${textSecondary}`}>
-                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${bgSecondary}`}>
-                          <ListChecks className="h-3 w-3" /> {count}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="inline-flex gap-1">
-                          {canEdit && (
-                            <button type="button" onClick={() => openEditWorkflow(w)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-workflow-edit-${w.id}`}>
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                          )}
-                          {canEdit && (
-                            <button
-                              type="button"
-                              onClick={() => deleteWorkflow(w.id)}
-                              disabled={count > 0}
-                              className={`p-1 ${count > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
-                              title={count > 0 ? 'Cannot delete: tasks are tagged with this workflow' : 'Delete'}
-                              data-testid={`erp-workflow-delete-${w.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                    <React.Fragment key={w.id}>
+                      <tr className={`border-b ${borderColor}`} data-testid={`erp-workflow-row-${w.id}`}>
+                        <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
+                        <td className={`p-3 text-sm font-medium ${textPrimary}`}>
+                          <button
+                            type="button"
+                            onClick={() => setExpandedWorkflowId(isExpanded ? null : w.id)}
+                            className="inline-flex items-center gap-1.5 hover:opacity-80"
+                            data-testid={`erp-workflow-toggle-${w.id}`}
+                          >
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                            {w.name || '—'}
+                          </button>
+                          {w.description && <p className={`text-xs font-normal ${textSecondary} mt-0.5 pl-5`}>{w.description}</p>}
+                        </td>
+                        <td className={`p-3 text-xs ${textSecondary}`}>{creator?.name || '—'}</td>
+                        <td className={`p-3 text-xs ${textSecondary}`}>{w.date || '—'}</td>
+                        <td className="p-3" data-testid={`erp-workflow-startpoint-${w.id}`}>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-emerald-500/30 bg-emerald-500/10 text-emerald-600">
+                            <Flag className="h-3 w-3" /> {pointLabel(w.start_point)}
+                          </span>
+                        </td>
+                        <td className="p-3" data-testid={`erp-workflow-endpoint-${w.id}`}>
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium border border-rose-500/30 bg-rose-500/10 text-rose-600">
+                            <CheckCircle2 className="h-3 w-3" /> {pointLabel(w.end_point)}
+                          </span>
+                        </td>
+                        <td className={`p-3 text-xs ${textSecondary}`}>
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${bgSecondary}`}>
+                            <ListChecks className="h-3 w-3" /> {count}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="inline-flex gap-1">
+                            {canEdit && (
+                              <button type="button" onClick={() => openEditWorkflow(w)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-workflow-edit-${w.id}`}>
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                            )}
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => deleteWorkflow(w.id)}
+                                disabled={count > 0}
+                                className={`p-1 ${count > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
+                                title={count > 0 ? 'Cannot delete: tasks are tagged with this workflow' : 'Delete'}
+                                data-testid={`erp-workflow-delete-${w.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`erp-workflow-subworkflows-row-${w.id}`}>
+                          <td colSpan={8} className="p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sub Workflows</p>
+                              {canEdit && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => openAddSubWorkflow(w.id)}
+                                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-7 text-xs"
+                                  data-testid={`erp-subworkflow-add-btn-${w.id}`}
+                                >
+                                  <Plus className="h-3 w-3 mr-1" /> Add Sub Workflow
+                                </Button>
+                              )}
+                            </div>
+                            {subWorkflows.length === 0 ? (
+                              <p className={`text-xs ${textSecondary}`}>No sub workflows yet.</p>
+                            ) : (
+                              <div className={`rounded-md border ${borderColor} ${bgCard}`}>
+                                {subWorkflows.map((sw) => {
+                                  const swCount = tasksInSubWorkflow(sw.id).length;
+                                  return (
+                                    <div key={sw.id} className={`flex items-center justify-between px-3 py-2 border-b ${borderColor} last:border-b-0`} data-testid={`erp-subworkflow-row-${sw.id}`}>
+                                      <span className={`text-sm ${textPrimary}`}>{sw.name}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] ${bgSecondary} ${textSecondary}`}>
+                                          <ListChecks className="h-3 w-3" /> {swCount}
+                                        </span>
+                                        {canEdit && (
+                                          <button type="button" onClick={() => openEditSubWorkflow(w.id, sw)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`erp-subworkflow-edit-${sw.id}`}>
+                                            <Pencil className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                        {canEdit && (
+                                          <button
+                                            type="button"
+                                            onClick={() => deleteSubWorkflow(w.id, sw.id)}
+                                            disabled={swCount > 0}
+                                            className={`p-1 ${swCount > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
+                                            title={swCount > 0 ? 'Cannot delete: tasks are tagged with this sub workflow' : 'Delete'}
+                                            data-testid={`erp-subworkflow-delete-${sw.id}`}
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
                 {workflows.length === 0 && (
@@ -325,6 +595,46 @@ export default function ProjectErpWorkflowTab({
                 disabled={saving}
                 className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
                 data-testid="erp-workflow-form-save"
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Rename Sub Workflow popup */}
+      {subWorkflowModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={closeSubWorkflowModal}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
+            <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
+              <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                <WorkflowIcon className="h-4 w-4 text-[#6366f1]" />
+                {subWorkflowModal.mode === 'add' ? 'Add Sub Workflow' : 'Rename Sub Workflow'}
+              </h3>
+              <button onClick={closeSubWorkflowModal} className={textSecondary}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <p className={`text-xs font-medium ${textSecondary} mb-1`}>Sub Workflow Name</p>
+              <Input
+                value={subWorkflowModal.name}
+                onChange={(e) => setSubWorkflowModal(m => ({ ...m, name: e.target.value }))}
+                placeholder="e.g. Consultation"
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="erp-subworkflow-form-name"
+                autoFocus
+              />
+            </div>
+            <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
+              <Button type="button" variant="outline" onClick={closeSubWorkflowModal}>Cancel</Button>
+              <Button
+                type="button"
+                onClick={saveSubWorkflowModal}
+                disabled={saving}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                data-testid="erp-subworkflow-form-save"
               >
                 Save
               </Button>

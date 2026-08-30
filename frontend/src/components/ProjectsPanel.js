@@ -788,6 +788,10 @@ export default function ProjectsPanel({
           assigned_to: task.assigned_to || '',
           due_date: task.due_date ? task.due_date.split('T')[0] : '',
           work_link: task.work_link || '',
+          workflow_id: task.workflow_id || '',
+          workflow_name: task.workflow_name || '',
+          sub_workflow_id: task.sub_workflow_id || '',
+          sub_workflow_name: task.sub_workflow_name || '',
           reference_image: task.reference_image || '',
           voice_note: task.voice_note || '',
         },
@@ -1206,6 +1210,15 @@ export default function ProjectsPanel({
     const projectMembers = (selectedProject.members || [])
       .map(uid => users.find(u => u.user_id === uid) || { user_id: uid, name: uid });
 
+    // Overview progress bar — every task in the project, unfiltered by
+    // whatever the Tasks tab's own Team Member/Date/etc. filters are set
+    // to, since this sits above all the sub-tabs, not just Tasks.
+    const overviewTotal = projectTasks.length;
+    const overviewCompleted = projectTasks.filter(isTaskCompleted).length;
+    const overviewPendingApproval = projectTasks.filter(t => !isTaskCompleted(t) && t.approval_request?.status === 'pending').length;
+    const overviewCompletedPct = overviewTotal ? (overviewCompleted / overviewTotal) * 100 : 0;
+    const overviewPendingPct = overviewTotal ? (overviewPendingApproval / overviewTotal) * 100 : 0;
+
     return (
       <div className="space-y-4" data-testid="project-detail-view">
         {navTabsBar}
@@ -1325,6 +1338,21 @@ export default function ProjectsPanel({
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
+          </div>
+        </div>
+
+        <div className={`${bgCard} border ${borderColor} rounded-xl p-4`} data-testid="project-overview-progress">
+          <div className="flex items-center justify-between mb-2">
+            <p className={`text-sm font-medium ${textPrimary}`}>Project Progress</p>
+            <span className={`text-xs ${textSecondary}`}>
+              {overviewTotal === 0
+                ? 'No tasks yet'
+                : `${overviewCompleted}/${overviewTotal} completed${overviewPendingApproval ? ` · ${overviewPendingApproval} pending approval` : ''}`}
+            </span>
+          </div>
+          <div className={`w-full h-2.5 rounded-full overflow-hidden flex ${bgSecondary}`}>
+            <div className="h-full bg-[#10b981]" style={{ width: `${overviewCompletedPct}%` }} />
+            <div className="h-full bg-[#f59e0b]" style={{ width: `${overviewPendingPct}%` }} />
           </div>
         </div>
 

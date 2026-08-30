@@ -50,6 +50,8 @@ export default function ErpTaskModal({
     work_link: '',
     workflow_id: '',
     workflow_name: '',
+    sub_workflow_id: '',
+    sub_workflow_name: '',
     reference_image: '',
     voice_note: '',
   });
@@ -81,6 +83,8 @@ export default function ErpTaskModal({
     erp_task_type: draft.erp_task_type || '',
     workflow_id: draft.workflow_id || null,
     workflow_name: draft.workflow_name || null,
+    sub_workflow_id: draft.sub_workflow_id || null,
+    sub_workflow_name: draft.sub_workflow_name || null,
     reference_image: draft.reference_image || '',
     voice_note: draft.voice_note || '',
   });
@@ -294,7 +298,10 @@ export default function ErpTaskModal({
               value={draft.workflow_id}
               onChange={(id) => {
                 const w = (project?.erp_workflow || []).find(x => x.id === id);
-                setDraft(d => ({ ...d, workflow_id: id, workflow_name: w?.name || '' }));
+                // Sub Workflow always belongs to whichever Workflow is
+                // selected — clear it whenever Workflow changes so a stale
+                // sub-flow from a different workflow can never linger.
+                setDraft(d => ({ ...d, workflow_id: id, workflow_name: w?.name || '', sub_workflow_id: '', sub_workflow_name: '' }));
               }}
               options={(project?.erp_workflow || []).map(w => ({ value: w.id, label: w.name }))}
               placeholder="— No workflow —"
@@ -304,6 +311,29 @@ export default function ErpTaskModal({
               data-testid="erp-quicktask-form-workflow"
             />
           </div>
+          {(() => {
+            const selectedWorkflow = (project?.erp_workflow || []).find(w => w.id === draft.workflow_id);
+            const subWorkflows = selectedWorkflow?.sub_workflows || [];
+            if (subWorkflows.length === 0) return null;
+            return (
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Sub Workflow</p>
+                <SearchableSelect
+                  value={draft.sub_workflow_id}
+                  onChange={(id) => {
+                    const sw = subWorkflows.find(x => x.id === id);
+                    setDraft(d => ({ ...d, sub_workflow_id: id, sub_workflow_name: sw?.name || '' }));
+                  }}
+                  options={subWorkflows.map(sw => ({ value: sw.id, label: sw.name }))}
+                  placeholder="— No sub workflow —"
+                  searchPlaceholder="Search sub workflows..."
+                  emptyText="No sub workflows on this workflow"
+                  className={`w-full h-9 px-3 rounded-md border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+                  data-testid="erp-quicktask-form-subworkflow"
+                />
+              </div>
+            );
+          })()}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
