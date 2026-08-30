@@ -15,6 +15,8 @@ import ExpenseSplitTab from './ExpenseSplitTab';
 import MasterExpenseView from './MasterExpenseView';
 import BudgetView from './BudgetView';
 import PayrollTab from './PayrollTab';
+import ToolsSubscriptionTab from './ToolsSubscriptionTab';
+import VendorsTab from './VendorsTab';
 import CashInBankTab from './CashInBankTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
@@ -168,7 +170,7 @@ const ExpenseTab = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll
+  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll | tools_subscription | vendors
   const [cashbookSubTab, setCashbookSubTab] = useState('cashbook'); // cashbook | banks
   const [invoiceSubTab, setInvoiceSubTab] = useState('invoice');   // invoice | projects | clients
   const [dashboardSubTab, setDashboardSubTab] = useState('dashboard'); // dashboard | weekly | payment_schedule
@@ -2148,11 +2150,27 @@ const ExpenseTab = () => {
                   >
                     Payroll
                   </button>
+                  <button
+                    onClick={() => setExpenseSubTab('tools_subscription')}
+                    data-testid="expense-subtab-tools-subscription"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'tools_subscription' ? activeCls : idleCls}`}
+                  >
+                    Tools & Subscription
+                  </button>
+                  <button
+                    onClick={() => setExpenseSubTab('vendors')}
+                    data-testid="expense-subtab-vendors"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'vendors' ? activeCls : idleCls}`}
+                  >
+                    Vendors
+                  </button>
                 </div>
                 {expenseSubTab === 'categories' && <MasterExpenseView onAddPayrollExpense={jumpToPayrollExpense} />}
                 {expenseSubTab === 'split' && <ExpenseSplitTab />}
                 {expenseSubTab === 'budget' && <BudgetView />}
                 {expenseSubTab === 'payroll' && <PayrollTab />}
+                {expenseSubTab === 'tools_subscription' && <ToolsSubscriptionTab />}
+                {expenseSubTab === 'vendors' && <VendorsTab />}
               </div>
             );
           })()}

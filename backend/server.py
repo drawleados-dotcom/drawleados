@@ -65,6 +65,8 @@ from client_master_routes import client_master_router
 from menu_order_routes import menu_order_router, init_menu_order_db
 from banks_routes import banks_router, init_banks_db
 from expense_split_routes import expense_split_router
+from finance_subscriptions_routes import subscriptions_router, init_subscriptions_db
+from finance_vendors_routes import vendors_router, init_vendors_db
 from meta_reports_routes import meta_reports_router
 from dashboard_routes import dashboard_router
 
@@ -81,6 +83,8 @@ init_finance_db(db)
 init_clients_db(db)
 init_menu_order_db(db)
 init_banks_db(db)
+init_subscriptions_db(db)
+init_vendors_db(db)
 init_operations_db(db)
 init_hr_db(db)
 init_notion_db(db)
@@ -2947,6 +2951,8 @@ api_router.include_router(client_master_router)
 api_router.include_router(menu_order_router)
 api_router.include_router(banks_router)
 api_router.include_router(expense_split_router)
+api_router.include_router(subscriptions_router)
+api_router.include_router(vendors_router)
 api_router.include_router(operations_router)
 api_router.include_router(hr_router)
 api_router.include_router(notion_router)

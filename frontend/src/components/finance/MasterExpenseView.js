@@ -4,16 +4,23 @@
  *  - Dynamic sub-tabs sourced from Expense Split top categories
  *    (e.g. Overhead | Marketing | Investment | Profit | ...).
  *  - Each tab lists the sub-categories of that top + their spent ₹ for the month.
- *  - The "Overhead" tab has a special, auto-fetched "Payroll" pseudo-row
- *    that shows the total of CEO-approved payslips for the selected month.
+ *  - The "Overhead" tab has two special, auto-fetched pseudo-rows: "Payroll"
+ *    (CEO-approved payslip total) and "Tools & Subscription" (this month's
+ *    subscription dues, see finance_subscriptions_routes.py's /summary) —
+ *    each with a "Pay" action to settle an unpaid item without leaving this view.
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Layers, IndianRupee, Loader2, Users } from 'lucide-react';
+import { Layers, IndianRupee, Loader2, Users, Blocks } from 'lucide-react';
 import {
   Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
 } from '../ui/select';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '../ui/dialog';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -23,6 +30,14 @@ const fmt = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractio
 // creating it in Expense Split (e.g. "Pay roll", "Pay-Roll", "PAYROLL") —
 // must stay identical to the check in CashbookSplit.js.
 const isPayrollCategoryName = (name) => (name || '').toLowerCase().replace(/[^a-z]/g, '') === 'payroll';
+
+// Same idea for "Tools & Subscription" / "Tools and Subscription" / etc. —
+// hides a manually-created duplicate sub-category since the pinned row
+// already represents it.
+const isToolsSubCategoryName = (name) => {
+  const n = (name || '').toLowerCase().replace(/[^a-z]/g, '');
+  return n === 'toolssubscription' || n === 'toolsandsubscription' || n === 'toolsandsubscriptions';
+};
 
 // Pin Overhead/Marketing/Profit/Investment in that exact order; hide "Loss"
 // entirely. Anything else falls to the end.
@@ -50,6 +65,11 @@ const MasterExpenseView = ({ onAddPayrollExpense }) => {
   const [activeTopId, setActiveTopId] = useState(null);
   const [payrollApprovedTotal, setPayrollApprovedTotal] = useState(0);
   const [payrollPaidTotal, setPayrollPaidTotal] = useState(0);
+  const [subsSummary, setSubsSummary] = useState({ grand: 0, paid: 0, balance: 0, payable: [] });
+  const [payPicker, setPayPicker] = useState(false);
+  const [payingItem, setPayingItem] = useState(null); // { subscription_id, name, period_date, amount }
+  const [payAmount, setPayAmount] = useState('');
+  const [payingBusy, setPayingBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,9 +110,39 @@ const MasterExpenseView = ({ onAddPayrollExpense }) => {
       setPayrollApprovedTotal(0);
       setPayrollPaidTotal(0);
     }
+    // Pull this month's Tools & Subscription dues for the Overhead pseudo-row.
+    try {
+      const res = await axios.get(`${API}/api/finance/subscriptions/summary?month=${month}&year=${year}`, { headers });
+      setSubsSummary(res.data || { grand: 0, paid: 0, balance: 0, payable: [] });
+    } catch {
+      setSubsSummary({ grand: 0, paid: 0, balance: 0, payable: [] });
+    }
   }, [month, year, token]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
+
+  const openPayPicker = () => { setPayingItem(null); setPayAmount(''); setPayPicker(true); };
+  const closePayPicker = () => setPayPicker(false);
+  const pickPayItem = (item) => { setPayingItem(item); setPayAmount(String(item.amount)); };
+  const confirmSubscriptionPay = async () => {
+    if (!payingItem) return;
+    if (!payAmount || Number(payAmount) < 0) { toast.error('Enter a valid amount'); return; }
+    setPayingBusy(true);
+    try {
+      await axios.post(
+        `${API}/api/finance/subscriptions/${payingItem.subscription_id}/payments/${payingItem.period_date}/pay`,
+        { amount_paid: Number(payAmount) },
+        { headers },
+      );
+      toast.success(`Marked ${payingItem.name} as paid`);
+      setPayPicker(false);
+      await load();
+    } catch (e) {
+      toast.error('Failed to record payment');
+    } finally {
+      setPayingBusy(false);
+    }
+  };
 
   const activeTop = topCategories.find((c) => c.category_id === activeTopId);
   const isOverhead = (activeTop?.name || '').trim().toLowerCase() === 'overhead';
@@ -261,15 +311,44 @@ const MasterExpenseView = ({ onAddPayrollExpense }) => {
                   </div>
                 );
               })()}
+              {/* Special Tools & Subscription row for Overhead — mapped straight
+                  to the Tools & Subscription tab's data (see ToolsSubscriptionTab.js
+                  and finance_subscriptions_routes.py's /summary). */}
+              {isOverhead && (() => {
+                const { grand, paid, balance, payable } = subsSummary;
+                return (
+                  <div className="flex items-center gap-3 px-4 py-3" data-testid="master-overhead-tools-subscription-row">
+                    <Blocks className="h-4 w-4 text-violet-600 dark:text-[#a78bfa]" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">Tools & Subscription</p>
+                      <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa]">Subscription dues for {MONTHS[month-1]} {year}</p>
+                    </div>
+                    <Stat l="Grand" v={fmt(grand)} green={grand > 0} />
+                    <Stat l="Paid" v={fmt(paid)} />
+                    <Stat l="Balance" v={fmt(balance)} red={balance > 0} green={balance <= 0 && grand > 0} />
+                    {payable.length > 0 && (
+                      <button
+                        onClick={openPayPicker}
+                        data-testid="master-overhead-tools-subscription-pay-btn"
+                        title="Pick a tool/subscription with an unpaid amount this month and mark it paid"
+                        className="ml-1 shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-[#a78bfa]/15 text-violet-600 dark:text-[#a78bfa] hover:bg-[#a78bfa]/25 transition-colors"
+                      >
+                        Pay
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               {(activeTop?.sub_categories || []).length === 0 && !isOverhead && (
                 <div className="px-4 py-8 text-center text-xs text-gray-500 dark:text-[#71717a]">
                   No sub-categories for <b>{activeTop?.name}</b>. Add one from the Expense Split tab.
                 </div>
               )}
               {(activeTop?.sub_categories || [])
-                // Hide any manually-created "Payroll" sub when on Overhead since the
-                // pinned special row above already represents it.
-                .filter((s) => !(isOverhead && isPayrollCategoryName(s.name)))
+                // Hide any manually-created "Payroll" / "Tools & Subscription" sub
+                // when on Overhead since the pinned special rows above already
+                // represent them.
+                .filter((s) => !(isOverhead && (isPayrollCategoryName(s.name) || isToolsSubCategoryName(s.name))))
                 .map((s) => (
                 <div key={s.category_id} className="flex items-center gap-3 px-4 py-3" data-testid={`master-sub-${s.category_id}`}>
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
@@ -282,6 +361,55 @@ const MasterExpenseView = ({ onAddPayrollExpense }) => {
           )}
         </>
       )}
+
+      {/* Tools & Subscription "Pay" picker — pick a tool with an unpaid
+          amount this month, confirm the amount, mark it paid. */}
+      <Dialog open={payPicker} onOpenChange={(o) => !o && closePayPicker()}>
+        <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] max-w-md" data-testid="master-tools-subscription-pay-modal">
+          <DialogHeader>
+            <DialogTitle className="text-gray-900 dark:text-[#fafafa]">Pay a Tool / Subscription</DialogTitle>
+            <DialogDescription className="text-gray-600 dark:text-[#a1a1aa]">
+              Tools with an unpaid amount for {MONTHS[month-1]} {year}.
+            </DialogDescription>
+          </DialogHeader>
+          {!payingItem ? (
+            <div className="max-h-72 overflow-y-auto divide-y divide-gray-200 dark:divide-[#27272a] border border-gray-200 dark:border-[#27272a] rounded-lg">
+              {subsSummary.payable.map((item) => (
+                <button
+                  key={item.subscription_id}
+                  onClick={() => pickPayItem(item)}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-[#6366f1]/5 transition-colors"
+                  data-testid={`master-tools-subscription-pick-${item.subscription_id}`}
+                >
+                  <span className="text-sm text-gray-900 dark:text-[#fafafa]">{item.name}</span>
+                  <span className="text-sm font-semibold text-[#ef4444]">{fmt(item.amount)}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg bg-gray-50 dark:bg-[#0c0a09] border border-gray-200 dark:border-[#27272a]">
+                <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{payingItem.name}</p>
+                <p className="text-[10px] text-gray-600 dark:text-[#a1a1aa]">Unpaid amount: {fmt(payingItem.amount)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 dark:text-[#a1a1aa] mb-1">Amount</p>
+                <Input
+                  type="number" min="0" value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  data-testid="master-tools-subscription-pay-amount"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setPayingItem(null)} className="border-gray-200 dark:border-[#27272a]">Back</Button>
+                <Button onClick={confirmSubscriptionPay} disabled={payingBusy} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="master-tools-subscription-pay-confirm">
+                  {payingBusy ? 'Saving…' : 'Mark Paid'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
