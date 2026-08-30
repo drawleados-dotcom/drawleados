@@ -1267,7 +1267,18 @@ export default function ProjectsPanel({
             >
               <Video className="h-4 w-4" /> Schedule Meeting
             </Button>
-            <Button onClick={() => setShowAddTask(true)} className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}>
+            <Button
+              onClick={() => {
+                // ERP-department projects use the same compact ErpTaskModal
+                // the Users tab does, instead of the taller generic
+                // department/category form below — one popup, one height,
+                // everywhere a task gets created for an ERP project.
+                if (hasErpDept) setErpTaskModal({ taskId: null });
+                else setShowAddTask(true);
+              }}
+              className={`bg-[#6366f1] hover:bg-[#4f46e5] text-white ${!canManageProjects ? 'hidden' : ''}`}
+              data-testid="project-add-task-btn"
+            >
               <Plus className="h-4 w-4 mr-1" /> Add Task
             </Button>
             {/* Everything below is used far less often than the buttons above —
