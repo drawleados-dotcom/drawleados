@@ -17,6 +17,7 @@ import BudgetView from './BudgetView';
 import PayrollTab from './PayrollTab';
 import ToolsSubscriptionTab from './ToolsSubscriptionTab';
 import VendorsTab from './VendorsTab';
+import ExpenseForecastTab from './ExpenseForecastTab';
 import CashInBankTab from './CashInBankTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
@@ -170,7 +171,7 @@ const ExpenseTab = () => {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState({});
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll | tools_subscription | vendors
+  const [expenseSubTab, setExpenseSubTab] = useState('categories'); // categories | split | budget | payroll | tools_subscription | vendors | forecasting
   const [cashbookSubTab, setCashbookSubTab] = useState('cashbook'); // cashbook | banks
   const [invoiceSubTab, setInvoiceSubTab] = useState('invoice');   // invoice | projects | clients
   const [dashboardSubTab, setDashboardSubTab] = useState('dashboard'); // dashboard | weekly | payment_schedule
@@ -2164,6 +2165,13 @@ const ExpenseTab = () => {
                   >
                     Vendors
                   </button>
+                  <button
+                    onClick={() => setExpenseSubTab('forecasting')}
+                    data-testid="expense-subtab-forecasting"
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${expenseSubTab === 'forecasting' ? activeCls : idleCls}`}
+                  >
+                    Forecasting
+                  </button>
                 </div>
                 {expenseSubTab === 'categories' && <MasterExpenseView onAddPayrollExpense={jumpToPayrollExpense} />}
                 {expenseSubTab === 'split' && <ExpenseSplitTab />}
@@ -2171,6 +2179,7 @@ const ExpenseTab = () => {
                 {expenseSubTab === 'payroll' && <PayrollTab />}
                 {expenseSubTab === 'tools_subscription' && <ToolsSubscriptionTab />}
                 {expenseSubTab === 'vendors' && <VendorsTab />}
+                {expenseSubTab === 'forecasting' && <ExpenseForecastTab />}
               </div>
             );
           })()}
