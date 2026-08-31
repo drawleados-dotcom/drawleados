@@ -11,7 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { CalendarClock, Plus, Trash2, X, Loader2 } from 'lucide-react';
+import { CalendarClock, Plus, Trash2, X, Loader2, Pencil } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -37,6 +37,9 @@ const ExpenseForecastTab = () => {
   const [rows, setRows] = useState([emptyRow()]);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null); // { forecast_id } | null
+
+  const [editingItem, setEditingItem] = useState(null); // { forecast_id, item_id, name, amount, remarks } | null
+  const [editSaving, setEditSaving] = useState(false);
 
   const [filterDate, setFilterDate] = useState('');
   const [filterMonth, setFilterMonth] = useState(''); // "YYYY-MM"
@@ -117,6 +120,31 @@ const ExpenseForecastTab = () => {
       await load();
     } catch (e) {
       toast.error('Failed to delete row');
+    }
+  };
+
+  const openEditItem = (forecastId, item) => {
+    setEditingItem({ forecast_id: forecastId, item_id: item.item_id, name: item.name, amount: String(item.amount), remarks: item.remarks || '' });
+  };
+  const closeEditItem = () => setEditingItem(null);
+
+  const saveEditItem = async () => {
+    if (!editingItem) return;
+    if (!editingItem.name.trim()) { toast.error('Name is required'); return; }
+    setEditSaving(true);
+    try {
+      await axios.put(
+        `${API}/api/finance/expense-forecast/${editingItem.forecast_id}/items/${editingItem.item_id}`,
+        { name: editingItem.name.trim(), amount: Number(editingItem.amount) || 0, remarks: editingItem.remarks.trim() },
+        { headers },
+      );
+      toast.success('Updated');
+      setEditingItem(null);
+      await load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -213,6 +241,15 @@ const ExpenseForecastTab = () => {
                       {it.remarks && <p className="text-[11px] text-gray-500 dark:text-[#71717a] truncate">{it.remarks}</p>}
                     </div>
                     <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{fmt(it.amount)}</p>
+                    <button
+                      type="button"
+                      onClick={() => openEditItem(d.forecast_id, it)}
+                      className="p-1 text-gray-400 hover:text-[#6366f1]"
+                      title="Edit row"
+                      data-testid={`forecast-item-edit-${it.item_id}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => deleteItem(d.forecast_id, it.item_id)}
@@ -319,6 +356,50 @@ const ExpenseForecastTab = () => {
             <Button variant="outline" onClick={() => setConfirmDelete(null)} className="border-gray-200 dark:border-[#27272a]">Cancel</Button>
             <Button onClick={deleteDay} className="bg-red-500 hover:bg-red-600 text-white" data-testid="forecast-delete-confirm">Delete</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit a single row */}
+      <Dialog open={!!editingItem} onOpenChange={(o) => !o && closeEditItem()}>
+        <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] max-w-sm" data-testid="forecast-edit-modal">
+          <DialogHeader>
+            <DialogTitle className="text-gray-900 dark:text-[#fafafa]">Edit Expense</DialogTitle>
+          </DialogHeader>
+          {editingItem && (
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Expense Name</Label>
+                <Input
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem((it) => ({ ...it, name: e.target.value }))}
+                  data-testid="forecast-edit-name"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Amount</Label>
+                <Input
+                  type="number" min="0"
+                  value={editingItem.amount}
+                  onChange={(e) => setEditingItem((it) => ({ ...it, amount: e.target.value }))}
+                  data-testid="forecast-edit-amount"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Remarks</Label>
+                <Input
+                  value={editingItem.remarks}
+                  onChange={(e) => setEditingItem((it) => ({ ...it, remarks: e.target.value }))}
+                  data-testid="forecast-edit-remarks"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={closeEditItem} className="border-gray-200 dark:border-[#27272a]">Cancel</Button>
+                <Button onClick={saveEditItem} disabled={editSaving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="forecast-edit-save">
+                  {editSaving ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

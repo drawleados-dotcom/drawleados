@@ -51,6 +51,12 @@ class AddForecastPayload(BaseModel):
     items: List[ForecastItemIn]
 
 
+class UpdateForecastItemPayload(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[float] = Field(default=None, ge=0)
+    remarks: Optional[str] = None
+
+
 @expense_forecast_router.get("")
 async def list_forecast_days(request: Request):
     await _get_user(request)
@@ -99,6 +105,33 @@ async def delete_forecast_day(forecast_id: str, request: Request):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"message": "Deleted"}
+
+
+@expense_forecast_router.put("/{forecast_id}/items/{item_id}")
+async def update_forecast_item(forecast_id: str, item_id: str, payload: UpdateForecastItemPayload, request: Request):
+    await _get_user(request)
+    day = await db.finance_expense_forecast.find_one({"forecast_id": forecast_id})
+    if not day:
+        raise HTTPException(status_code=404, detail="Not found")
+    items = day.get("items", [])
+    target = next((i for i in items if i["item_id"] == item_id), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name is required")
+        target["name"] = name
+    if payload.amount is not None:
+        target["amount"] = payload.amount
+    if payload.remarks is not None:
+        target["remarks"] = payload.remarks.strip()
+    await db.finance_expense_forecast.update_one(
+        {"forecast_id": forecast_id},
+        {"$set": {"items": items, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    doc = await db.finance_expense_forecast.find_one({"forecast_id": forecast_id}, {"_id": 0})
+    return doc
 
 
 @expense_forecast_router.delete("/{forecast_id}/items/{item_id}")
