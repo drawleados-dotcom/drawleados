@@ -33,13 +33,11 @@ const ExpenseForecastTab = () => {
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingForecastId, setEditingForecastId] = useState(null); // null = Add mode, else editing that day's card
   const [modalDate, setModalDate] = useState(todayIso());
   const [rows, setRows] = useState([emptyRow()]);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null); // { forecast_id } | null
-
-  const [editingItem, setEditingItem] = useState(null); // { forecast_id, item_id, name, amount, remarks } | null
-  const [editSaving, setEditSaving] = useState(false);
 
   const [filterDate, setFilterDate] = useState('');
   const [filterMonth, setFilterMonth] = useState(''); // "YYYY-MM"
@@ -71,11 +69,18 @@ const ExpenseForecastTab = () => {
   const filteredTotal = visibleDays.reduce((s, d) => s + dayTotal(d), 0);
 
   const openAdd = () => {
+    setEditingForecastId(null);
     setModalDate(todayIso());
     setRows([emptyRow()]);
     setModalOpen(true);
   };
-  const closeModal = () => setModalOpen(false);
+  const openEditDay = (d) => {
+    setEditingForecastId(d.forecast_id);
+    setModalDate(d.date);
+    setRows((d.items || []).map((it) => ({ name: it.name, amount: String(it.amount), remarks: it.remarks || '' })));
+    setModalOpen(true);
+  };
+  const closeModal = () => { setModalOpen(false); setEditingForecastId(null); };
 
   const updateRow = (idx, patch) => setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   const addRow = () => setRows((rs) => [...rs, emptyRow()]);
@@ -88,12 +93,15 @@ const ExpenseForecastTab = () => {
     if (validRows.length === 0) { toast.error('Add at least one expense row'); return; }
     setSaving(true);
     try {
-      await axios.post(`${API}/api/finance/expense-forecast`, {
-        date: modalDate,
-        items: validRows.map((r) => ({ name: r.name.trim(), amount: Number(r.amount) || 0, remarks: r.remarks.trim() })),
-      }, { headers });
-      toast.success('Expense forecast saved');
-      setModalOpen(false);
+      const items = validRows.map((r) => ({ name: r.name.trim(), amount: Number(r.amount) || 0, remarks: r.remarks.trim() }));
+      if (editingForecastId) {
+        await axios.put(`${API}/api/finance/expense-forecast/${editingForecastId}`, { items }, { headers });
+        toast.success('Day updated');
+      } else {
+        await axios.post(`${API}/api/finance/expense-forecast`, { date: modalDate, items }, { headers });
+        toast.success('Expense forecast saved');
+      }
+      closeModal();
       await load();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to save');
@@ -120,31 +128,6 @@ const ExpenseForecastTab = () => {
       await load();
     } catch (e) {
       toast.error('Failed to delete row');
-    }
-  };
-
-  const openEditItem = (forecastId, item) => {
-    setEditingItem({ forecast_id: forecastId, item_id: item.item_id, name: item.name, amount: String(item.amount), remarks: item.remarks || '' });
-  };
-  const closeEditItem = () => setEditingItem(null);
-
-  const saveEditItem = async () => {
-    if (!editingItem) return;
-    if (!editingItem.name.trim()) { toast.error('Name is required'); return; }
-    setEditSaving(true);
-    try {
-      await axios.put(
-        `${API}/api/finance/expense-forecast/${editingItem.forecast_id}/items/${editingItem.item_id}`,
-        { name: editingItem.name.trim(), amount: Number(editingItem.amount) || 0, remarks: editingItem.remarks.trim() },
-        { headers },
-      );
-      toast.success('Updated');
-      setEditingItem(null);
-      await load();
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to update');
-    } finally {
-      setEditSaving(false);
     }
   };
 
@@ -224,6 +207,15 @@ const ExpenseForecastTab = () => {
                   </div>
                   <button
                     type="button"
+                    onClick={() => openEditDay(d)}
+                    className="p-1.5 text-gray-400 hover:text-[#6366f1]"
+                    title="Edit this day's plan"
+                    data-testid={`forecast-day-edit-${d.forecast_id}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setConfirmDelete({ forecast_id: d.forecast_id })}
                     className="p-1.5 text-red-500 hover:text-red-600"
                     title="Delete this day"
@@ -243,15 +235,6 @@ const ExpenseForecastTab = () => {
                     <p className="text-sm font-medium text-gray-900 dark:text-[#fafafa]">{fmt(it.amount)}</p>
                     <button
                       type="button"
-                      onClick={() => openEditItem(d.forecast_id, it)}
-                      className="p-1 text-gray-400 hover:text-[#6366f1]"
-                      title="Edit row"
-                      data-testid={`forecast-item-edit-${it.item_id}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => deleteItem(d.forecast_id, it.item_id)}
                       className="p-1 text-gray-400 hover:text-red-500"
                       title="Remove row"
@@ -267,13 +250,15 @@ const ExpenseForecastTab = () => {
         </div>
       )}
 
-      {/* Add Expense modal */}
+      {/* Add / Edit Expense modal — editing a day reuses this same multi-row
+          form, pre-filled from that day's items; the date stays fixed since
+          editing corrects a day's entries rather than moving them. */}
       <Dialog open={modalOpen} onOpenChange={(o) => !o && closeModal()}>
         <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] max-w-lg" data-testid="forecast-add-modal">
           <DialogHeader>
-            <DialogTitle className="text-gray-900 dark:text-[#fafafa]">Add Expense</DialogTitle>
+            <DialogTitle className="text-gray-900 dark:text-[#fafafa]">{editingForecastId ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
             <DialogDescription className="text-gray-600 dark:text-[#a1a1aa]">
-              Plan one or more expenses for a date.
+              {editingForecastId ? "Edit this day's planned expenses." : 'Plan one or more expenses for a date.'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -283,6 +268,7 @@ const ExpenseForecastTab = () => {
                 type="date"
                 value={modalDate}
                 onChange={(e) => setModalDate(e.target.value)}
+                disabled={!!editingForecastId}
                 data-testid="forecast-form-date"
               />
               {modalDate && <p className="text-[11px] text-gray-500 dark:text-[#71717a] mt-1">{dayName(modalDate)}</p>}
@@ -336,7 +322,7 @@ const ExpenseForecastTab = () => {
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={closeModal} className="border-gray-200 dark:border-[#27272a]">Cancel</Button>
               <Button onClick={save} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="forecast-form-save">
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? 'Saving…' : editingForecastId ? 'Save Changes' : 'Save'}
               </Button>
             </div>
           </div>
@@ -356,50 +342,6 @@ const ExpenseForecastTab = () => {
             <Button variant="outline" onClick={() => setConfirmDelete(null)} className="border-gray-200 dark:border-[#27272a]">Cancel</Button>
             <Button onClick={deleteDay} className="bg-red-500 hover:bg-red-600 text-white" data-testid="forecast-delete-confirm">Delete</Button>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit a single row */}
-      <Dialog open={!!editingItem} onOpenChange={(o) => !o && closeEditItem()}>
-        <DialogContent className="bg-white dark:bg-[#18181b] border border-gray-200 dark:border-[#27272a] max-w-sm" data-testid="forecast-edit-modal">
-          <DialogHeader>
-            <DialogTitle className="text-gray-900 dark:text-[#fafafa]">Edit Expense</DialogTitle>
-          </DialogHeader>
-          {editingItem && (
-            <div className="space-y-3">
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Expense Name</Label>
-                <Input
-                  value={editingItem.name}
-                  onChange={(e) => setEditingItem((it) => ({ ...it, name: e.target.value }))}
-                  data-testid="forecast-edit-name"
-                />
-              </div>
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Amount</Label>
-                <Input
-                  type="number" min="0"
-                  value={editingItem.amount}
-                  onChange={(e) => setEditingItem((it) => ({ ...it, amount: e.target.value }))}
-                  data-testid="forecast-edit-amount"
-                />
-              </div>
-              <div>
-                <Label className="text-xs text-gray-600 dark:text-[#a1a1aa]">Remarks</Label>
-                <Input
-                  value={editingItem.remarks}
-                  onChange={(e) => setEditingItem((it) => ({ ...it, remarks: e.target.value }))}
-                  data-testid="forecast-edit-remarks"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={closeEditItem} className="border-gray-200 dark:border-[#27272a]">Cancel</Button>
-                <Button onClick={saveEditItem} disabled={editSaving} className="bg-[#6366f1] hover:bg-[#4f46e5] text-white" data-testid="forecast-edit-save">
-                  {editSaving ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>
