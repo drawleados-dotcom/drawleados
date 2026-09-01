@@ -1287,6 +1287,35 @@ export default function ApprovalsPage({ embedded = false }) {
                     {decisionTask.approval_request?.department && ` · ${decisionTask.approval_request.department}`}
                   </p>
 
+                  {/* Full task context — department, project, category, status
+                      — the same fields the table columns show, so the popup
+                      doesn't leave the approver guessing what they're deciding on. */}
+                  {(() => {
+                    const dept = DEPARTMENTS.find(d => d.id === taskDept(decisionTask))?.label || decisionTask.department;
+                    const fields = [
+                      { label: 'Department', value: dept },
+                      { label: 'Category', value: decisionTask.category },
+                      { label: 'Project', value: decisionTask.project_name },
+                      { label: 'Sub-Department', value: decisionTask.sub_department_name },
+                    ].filter(f => f.value);
+                    if (fields.length === 0) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1.5 mt-2" data-testid="decision-task-details">
+                        {fields.map(f => (
+                          <Badge key={f.label} className="bg-[#6366f1]/15 text-[#6366f1] text-xs font-normal">
+                            {f.label}: {f.value}
+                          </Badge>
+                        ))}
+                        <Badge className={taskStatusColors[decisionTask.status] || taskStatusColors.pending}>
+                          {(decisionTask.status || 'pending').replace('_', ' ')}
+                        </Badge>
+                      </div>
+                    );
+                  })()}
+                  {decisionTask.description && (
+                    <p className={`text-sm ${textSecondary} mt-2`}>{decisionTask.description}</p>
+                  )}
+
                   {/* Created / Completed / Duration — "Completed" is when the
                       assignee sent it for approval (requested_at), since that's
                       the point their work on it was actually done. */}
