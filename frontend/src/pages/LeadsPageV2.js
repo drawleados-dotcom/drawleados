@@ -77,8 +77,8 @@ const LeadsPageV2 = () => {
   const [stats, setStats] = useState({ total: 0, by_stage: {} });
   const [sheetsConfig, setSheetsConfig] = useState(null);
   // New: separate Prospect & Lead sheet configs
-  const [prospectCfg, setProspectCfg] = useState(null);
-  const [leadCfg, setLeadCfg] = useState(null);
+  const [prospectCfgs, setProspectCfgs] = useState([]);
+  const [leadCfgs, setLeadCfgs] = useState([]);
   const [showProspectSheetModal, setShowProspectSheetModal] = useState(false);
   const [showLeadSheetModal, setShowLeadSheetModal] = useState(false);
   const { user: currentUser, isAdmin } = useAuth();
@@ -226,8 +226,8 @@ const LeadsPageV2 = () => {
     // Also load the new dual-sheet (Prospect/Lead) configs
     try {
       const res2 = await axios.get(`${API}/api/sheets/configs`, { headers });
-      setProspectCfg(res2.data?.prospect || null);
-      setLeadCfg(res2.data?.lead || null);
+      setProspectCfgs(res2.data?.prospect || []);
+      setLeadCfgs(res2.data?.lead || []);
     } catch (e) { /* ignore */ }
   }, []);
 
@@ -670,10 +670,9 @@ const LeadsPageV2 = () => {
   const syncSheets = async () => {
     setSyncing(true);
     try {
-      // Sync both connected sheets (Prospect + Lead) in parallel.
-      const tasks = [];
-      if (prospectCfg?.sheet_id) tasks.push(axios.post(`${API}/api/sheets/sync/prospect`, {}, { headers }));
-      if (leadCfg?.sheet_id)     tasks.push(axios.post(`${API}/api/sheets/sync/lead`, {}, { headers }));
+      // Sync every connected sheet (Prospect + Lead, however many of each) in parallel.
+      const allCfgs = [...prospectCfgs, ...leadCfgs].filter((c) => c?.sheet_id);
+      const tasks = allCfgs.map((c) => axios.post(`${API}/api/sheets/sync/${c.config_id}`, {}, { headers }));
       if (tasks.length === 0) {
         toast.error('No Google Sheet connected — open Lead Sheet / Prospect Sheet first.');
         return;
@@ -1012,7 +1011,7 @@ const LeadsPageV2 = () => {
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Prospect Sheet
-                {prospectCfg?.sheet_id && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">Connected</Badge>}
+                {prospectCfgs.length > 0 && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">{prospectCfgs.length}</Badge>}
               </Button>
               <Button
                 onClick={() => setShowLeadSheetModal(true)}
@@ -1022,13 +1021,13 @@ const LeadsPageV2 = () => {
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Lead Sheet
-                {leadCfg?.sheet_id && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">Connected</Badge>}
+                {leadCfgs.length > 0 && <Badge className="bg-[#10b981]/20 text-[#10b981] text-[10px] ml-1">{leadCfgs.length}</Badge>}
               </Button>
 
               {/* Sync Sheets — pulls latest rows from any connected sheet */}
               <Button
                 onClick={syncSheets}
-                disabled={syncing || (!prospectCfg?.sheet_id && !leadCfg?.sheet_id)}
+                disabled={syncing || (prospectCfgs.length === 0 && leadCfgs.length === 0)}
                 variant="outline"
                 className={`${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary} gap-2`}
                 data-testid="leads-sync-btn"

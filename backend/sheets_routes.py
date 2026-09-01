@@ -347,6 +347,10 @@ async def delete_oauth_config(request: Request):
 
 
 # ---------- Sheet config CRUD ----------
+# Originally one sheet per (user_id, sheet_type). Now a type can hold many
+# sheets (e.g. a Meta Ads sheet and a separate WhatsApp sheet both feeding
+# "lead") — each gets its own config_id, and CRUD/preview/sync/rows are all
+# addressed by config_id instead of sheet_type.
 class SheetConfig(BaseModel):
     sheet_type: str  # 'prospect' | 'lead'
     name: Optional[str] = ""
@@ -354,20 +358,56 @@ class SheetConfig(BaseModel):
     source_type: Optional[str] = "website"  # meta | whatsapp | website | walk_in | referral | link | other
 
 
+class SheetConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    sheet_url: Optional[str] = None
+    source_type: Optional[str] = None
+
+
+async def _backfill_config_id(db, doc: dict) -> dict:
+    """Configs saved before multi-sheet support have no config_id — assign
+    one lazily on first read (instead of a migration script), and tag that
+    same config_id onto any leads already synced from it so the new
+    config_id-scoped dedup in sync_sheet() doesn't treat them as new rows
+    the next time this sheet syncs."""
+    if doc.get("config_id"):
+        return doc
+    config_id = f"shcfg_{uuid.uuid4().hex[:12]}"
+    await db.leads_sheet_configs.update_one(
+        {"user_id": doc["user_id"], "sheet_type": doc["sheet_type"], "config_id": {"$exists": False}},
+        {"$set": {"config_id": config_id, "created_at": doc.get("updated_at") or datetime.now(timezone.utc)}},
+    )
+    # Re-fetch rather than trust the locally-generated id — if a concurrent
+    # request (e.g. two tabs loading at once) won the update above, this
+    # picks up whichever config_id actually got persisted so the leads_v2
+    # backfill below never disagrees with what's really stored.
+    fresh = await db.leads_sheet_configs.find_one(
+        {"user_id": doc["user_id"], "sheet_type": doc["sheet_type"]}, {"_id": 0, "config_id": 1}
+    )
+    config_id = (fresh or {}).get("config_id") or config_id
+    await db.leads_v2.update_many(
+        {"imported_from_sheet": doc["sheet_type"], "created_by": doc["user_id"], "imported_from_config_id": {"$exists": False}},
+        {"$set": {"imported_from_config_id": config_id}},
+    )
+    doc["config_id"] = config_id
+    return doc
+
+
 @sheets_router.get("/sheets/configs")
 async def list_configs(request: Request):
     from server import db, get_current_user
     user = await get_current_user(request)
-    docs = await db.leads_sheet_configs.find({"user_id": user.user_id}, {"_id": 0}).to_list(20)
-    by_type = {d.get("sheet_type"): d for d in docs}
+    docs = await db.leads_sheet_configs.find({"user_id": user.user_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    docs = [await _backfill_config_id(db, d) for d in docs]
     return {
-        "prospect": by_type.get("prospect"),
-        "lead": by_type.get("lead"),
+        "prospect": [d for d in docs if d.get("sheet_type") == "prospect"],
+        "lead": [d for d in docs if d.get("sheet_type") == "lead"],
     }
 
 
 @sheets_router.post("/sheets/config")
 async def save_config(payload: SheetConfig, request: Request):
+    """Always adds a new sheet connection — use PUT .../{config_id} to edit one in place."""
     from server import db, get_current_user
     user = await get_current_user(request)
     if payload.sheet_type not in SHEET_TYPES:
@@ -375,7 +415,9 @@ async def save_config(payload: SheetConfig, request: Request):
     sheet_id = _extract_sheet_id(payload.sheet_url)
     if not sheet_id:
         raise HTTPException(status_code=400, detail="Could not parse a Google Sheet ID from that URL")
+    now = datetime.now(timezone.utc)
     doc = {
+        "config_id": f"shcfg_{uuid.uuid4().hex[:12]}",
         "user_id": user.user_id,
         "sheet_type": payload.sheet_type,
         "name": (payload.name or "").strip(),
@@ -384,28 +426,44 @@ async def save_config(payload: SheetConfig, request: Request):
         "source_type": payload.source_type or "website",
         "last_synced_at": None,
         "last_synced_count": 0,
-        "updated_at": datetime.now(timezone.utc),
+        "created_at": now,
+        "updated_at": now,
     }
-    await db.leads_sheet_configs.update_one(
-        {"user_id": user.user_id, "sheet_type": payload.sheet_type},
-        {"$set": doc},
-        upsert=True,
-    )
-    saved = await db.leads_sheet_configs.find_one(
-        {"user_id": user.user_id, "sheet_type": payload.sheet_type},
-        {"_id": 0},
-    )
-    return saved
+    await db.leads_sheet_configs.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
 
 
-@sheets_router.delete("/sheets/config/{sheet_type}")
-async def delete_config(sheet_type: str, request: Request):
+@sheets_router.put("/sheets/config/{config_id}")
+async def update_config(config_id: str, payload: SheetConfigUpdate, request: Request):
     from server import db, get_current_user
     user = await get_current_user(request)
-    if sheet_type not in SHEET_TYPES:
-        raise HTTPException(status_code=400, detail="sheet_type must be 'prospect' or 'lead'")
-    await db.leads_sheet_configs.delete_one({"user_id": user.user_id, "sheet_type": sheet_type})
-    await db.leads_sheet_rows.delete_many({"user_id": user.user_id, "sheet_type": sheet_type})
+    cfg = await db.leads_sheet_configs.find_one({"config_id": config_id, "user_id": user.user_id})
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    updates = {"updated_at": datetime.now(timezone.utc)}
+    if payload.name is not None:
+        updates["name"] = payload.name.strip()
+    if payload.sheet_url is not None:
+        sheet_id = _extract_sheet_id(payload.sheet_url)
+        if not sheet_id:
+            raise HTTPException(status_code=400, detail="Could not parse a Google Sheet ID from that URL")
+        updates["sheet_url"] = payload.sheet_url
+        updates["sheet_id"] = sheet_id
+    if payload.source_type is not None:
+        updates["source_type"] = payload.source_type
+    await db.leads_sheet_configs.update_one({"config_id": config_id}, {"$set": updates})
+    return await db.leads_sheet_configs.find_one({"config_id": config_id}, {"_id": 0})
+
+
+@sheets_router.delete("/sheets/config/{config_id}")
+async def delete_config(config_id: str, request: Request):
+    from server import db, get_current_user
+    user = await get_current_user(request)
+    res = await db.leads_sheet_configs.delete_one({"config_id": config_id, "user_id": user.user_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    await db.leads_sheet_rows.delete_many({"config_id": config_id})
     return {"message": "Removed"}
 
 
@@ -424,15 +482,13 @@ def _read_sheet_rows(creds: Credentials, sheet_id: str, range_: str = "A1:ZZ5000
     return result.get("values", [])
 
 
-@sheets_router.get("/sheets/preview/{sheet_type}")
-async def preview_sheet(sheet_type: str, request: Request):
+@sheets_router.get("/sheets/preview/{config_id}")
+async def preview_sheet(config_id: str, request: Request):
     from server import db, get_current_user
     user = await get_current_user(request)
-    if sheet_type not in SHEET_TYPES:
-        raise HTTPException(status_code=400, detail="sheet_type must be 'prospect' or 'lead'")
-    cfg = await db.leads_sheet_configs.find_one({"user_id": user.user_id, "sheet_type": sheet_type})
+    cfg = await db.leads_sheet_configs.find_one({"config_id": config_id, "user_id": user.user_id})
     if not cfg:
-        raise HTTPException(status_code=404, detail="No sheet configured for this type")
+        raise HTTPException(status_code=404, detail="Sheet not found")
     creds = await _get_creds(db, user.user_id)
     rows = await asyncio.to_thread(_read_sheet_rows, creds, cfg["sheet_id"])
     if not rows:
@@ -446,16 +502,15 @@ async def preview_sheet(sheet_type: str, request: Request):
     }
 
 
-@sheets_router.post("/sheets/sync/{sheet_type}")
-async def sync_sheet(sheet_type: str, request: Request):
+@sheets_router.post("/sheets/sync/{config_id}")
+async def sync_sheet(config_id: str, request: Request):
     """Read every row from the connected sheet, store snapshot + push into leads_v2 under matching stage."""
     from server import db, get_current_user
     user = await get_current_user(request)
-    if sheet_type not in SHEET_TYPES:
-        raise HTTPException(status_code=400, detail="sheet_type must be 'prospect' or 'lead'")
-    cfg = await db.leads_sheet_configs.find_one({"user_id": user.user_id, "sheet_type": sheet_type})
+    cfg = await db.leads_sheet_configs.find_one({"config_id": config_id, "user_id": user.user_id})
     if not cfg:
-        raise HTTPException(status_code=404, detail="No sheet configured for this type")
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    sheet_type = cfg["sheet_type"]
     creds = await _get_creds(db, user.user_id)
     rows = await asyncio.to_thread(_read_sheet_rows, creds, cfg["sheet_id"])
     if not rows:
@@ -463,10 +518,13 @@ async def sync_sheet(sheet_type: str, request: Request):
     headers_arr = [h.strip() for h in rows[0]]
     body_rows = rows[1:]
 
-    # Replace previous snapshot of raw rows
-    await db.leads_sheet_rows.delete_many({"user_id": user.user_id, "sheet_type": sheet_type})
+    # Replace previous snapshot of raw rows for THIS sheet only — scoped by
+    # config_id, not sheet_type, so re-syncing one sheet never wipes another
+    # sheet of the same type.
+    await db.leads_sheet_rows.delete_many({"config_id": config_id})
 
-    # Find matching stage_id for this sheet type ('lead' or 'prospect')
+    # Find matching stage_id for this sheet type ('lead' or 'prospect') —
+    # shared across every sheet of that type, same as before.
     stage = await db.lead_stages.find_one(
         {"name": {"$regex": f"^{sheet_type}$", "$options": "i"}, "is_deleted": {"$ne": True}},
         {"_id": 0, "stage_id": 1, "name": 1},
@@ -484,8 +542,10 @@ async def sync_sheet(sheet_type: str, request: Request):
     #      existed, so they don't suddenly duplicate on the next sync.
     #   3. phone (last 10 digits, country-code/formatting agnostic) — same
     #      backward-compat reasoning, for phone-only rows from before.
+    # Scoped by config_id (this exact sheet) rather than sheet_type, so a
+    # second sheet of the same type never claims another sheet's leads.
     existing = await db.leads_v2.find(
-        {"imported_from_sheet": sheet_type, "created_by": user.user_id, "is_deleted": {"$ne": True}},
+        {"imported_from_config_id": config_id, "created_by": user.user_id, "is_deleted": {"$ne": True}},
         {"_id": 0, "lead_id": 1, "email": 1, "phone": 1, "sheet_row_index": 1},
     ).to_list(10000)
 
@@ -528,6 +588,7 @@ async def sync_sheet(sheet_type: str, request: Request):
         sheet_docs.append({
             "row_id": row_id,
             "user_id": user.user_id,
+            "config_id": config_id,
             "sheet_type": sheet_type,
             "source_type": cfg.get("source_type") or "website",
             "data": record,
@@ -576,6 +637,7 @@ async def sync_sheet(sheet_type: str, request: Request):
             "lead_owner": user.user_id,
             "notes": str(notes).strip(),
             "imported_from_sheet": sheet_type,
+            "imported_from_config_id": config_id,
             "sheet_row_id": row_id,
             "sheet_row_index": row_index,
             "custom_fields": {k: v for k, v in record.items() if k.lower() not in mapped_cols},
@@ -609,7 +671,7 @@ async def sync_sheet(sheet_type: str, request: Request):
 
     total_synced = inserted + updated
     await db.leads_sheet_configs.update_one(
-        {"user_id": user.user_id, "sheet_type": sheet_type},
+        {"config_id": config_id},
         {"$set": {"last_synced_at": now, "last_synced_count": total_synced}},
     )
     return {
@@ -623,12 +685,12 @@ async def sync_sheet(sheet_type: str, request: Request):
     }
 
 
-@sheets_router.get("/sheets/rows/{sheet_type}")
-async def list_rows(sheet_type: str, request: Request, limit: int = 100):
+@sheets_router.get("/sheets/rows/{config_id}")
+async def list_rows(config_id: str, request: Request, limit: int = 100):
     from server import db, get_current_user
     user = await get_current_user(request)
     docs = await db.leads_sheet_rows.find(
-        {"user_id": user.user_id, "sheet_type": sheet_type},
+        {"user_id": user.user_id, "config_id": config_id},
         {"_id": 0},
     ).sort("imported_at", -1).to_list(limit)
     return docs
