@@ -133,8 +133,16 @@ async def _get_creds(db, user_id: str) -> Credentials:
                         "expires_at": creds.expiry.replace(tzinfo=timezone.utc) if creds.expiry else None,
                     }},
                 )
-            except Exception as e:
-                raise HTTPException(status_code=401, detail=f"Token refresh failed: {e}. Reconnect Google.")
+            except Exception:
+                # The stored token is dead (revoked, or — most commonly — the
+                # OAuth consent screen is still in Google Cloud Console's
+                # "Testing" publishing status, which hard-expires refresh
+                # tokens after 7 days no matter what). Clear it so /sheets/status
+                # stops reporting "connected" for a token that doesn't work —
+                # otherwise the UI shows a misleading green checkmark and the
+                # user has to Disconnect before they can Connect again.
+                await db.google_sheets_tokens.delete_many({"user_id": user_id})
+                raise HTTPException(status_code=401, detail="Google Sheets connection expired or was revoked. Click Connect Google to reconnect.")
     return creds
 
 

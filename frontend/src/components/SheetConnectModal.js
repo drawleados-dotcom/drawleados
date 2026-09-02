@@ -165,7 +165,13 @@ export default function SheetConnectModal({
       toast.success(`Synced ${r.data.synced} rows`);
       await refreshStatus();
       onSaved && onSaved();
-    } catch (e) { toast.error(e.response?.data?.detail || 'Sync failed'); }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Sync failed');
+      // A 401 here means the backend already cleared the dead token — pull
+      // fresh status so the button switches to "Connect Google" right away
+      // instead of still showing "connected" until the modal reopens.
+      if (e.response?.status === 401) await refreshStatus();
+    }
     finally { setSyncingId(null); }
   };
 
