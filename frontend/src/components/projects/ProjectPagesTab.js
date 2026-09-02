@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks } from 'lucide-react';
+import PageTaskModal from './PageTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -29,6 +30,7 @@ const taskStatusStyle = (status) => TASK_STATUS_STYLE[status || 'pending'] || 'b
 const isToDo = (status) => (status || 'pending') === 'pending' || status === 'in_progress';
 
 const newPageId = () => `pg_${Math.random().toString(36).slice(2, 10)}`;
+const newSectionId = () => `sec_${Math.random().toString(36).slice(2, 10)}`;
 const emptyPage = () => ({
   id: newPageId(),
   page_name: '',
@@ -59,8 +61,11 @@ const LinkField = ({ label, value, textSecondary, textPrimary }) => (
 export default function ProjectPagesTab({
   project,
   onProjectUpdated,
+  onTasksChanged,
   canEdit,
+  currentUser,
   users,
+  projectMembers = [],
   isDark,
   bgCard,
   bgSecondary,
@@ -76,6 +81,7 @@ export default function ProjectPagesTab({
   const pages = project?.pages || [];
   const tasks = project?.tasks || [];
   const tasksForPage = (pageId) => tasks.filter(t => t.website_page_id === pageId);
+  const tasksForSection = (sectionId) => tasks.filter(t => t.page_section_id === sectionId);
 
   // modal state: { mode: 'add' | 'view', page, editing } or null
   const [modal, setModal] = useState(null);
@@ -86,6 +92,79 @@ export default function ProjectPagesTab({
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
+
+  // Sections nested under each page — a separate expand toggle from the
+  // page-tasks one above (only one page's sections open at a time, same
+  // as the ERP Workflow tab's single-expanded-id pattern).
+  const [expandedSectionsPageId, setExpandedSectionsPageId] = useState(null);
+  const [expandedSectionTasksId, setExpandedSectionTasksId] = useState(null);
+  // { mode: 'add' | 'edit', pageId, id, name }
+  const [sectionModal, setSectionModal] = useState(null);
+
+  const openAddSection = (pageId) => {
+    if (!canEdit) return;
+    setSectionModal({ mode: 'add', pageId, name: '' });
+  };
+  const openEditSection = (pageId, section) => {
+    if (!canEdit) return;
+    setSectionModal({ mode: 'edit', pageId, id: section.id, name: section.name });
+  };
+  const closeSectionModal = () => setSectionModal(null);
+
+  const saveSectionModal = async () => {
+    if (!sectionModal.name.trim()) { toast.error('Section name is required'); return; }
+    setSaving(true);
+    const trimmed = sectionModal.name.trim();
+    const next = pages.map((p) => {
+      if (p.id !== sectionModal.pageId) return p;
+      const sections = p.sections || [];
+      const nextSections = sectionModal.mode === 'add'
+        ? [...sections, { id: newSectionId(), name: trimmed }]
+        : sections.map((s) => (s.id === sectionModal.id ? { ...s, name: trimmed } : s));
+      return { ...p, sections: nextSections };
+    });
+    const ok = await persist(next);
+    setSaving(false);
+    if (ok) {
+      toast.success(sectionModal.mode === 'add' ? 'Section added' : 'Section updated');
+      closeSectionModal();
+    }
+  };
+
+  const deleteSection = async (pageId, sectionId) => {
+    if (!canEdit) return;
+    if (tasksForSection(sectionId).length > 0) {
+      toast.error('Cannot delete: tasks are tagged with this section. Untag them first.');
+      return;
+    }
+    if (!window.confirm('Remove this section?')) return;
+    const next = pages.map((p) => (
+      p.id === pageId ? { ...p, sections: (p.sections || []).filter((s) => s.id !== sectionId) } : p
+    ));
+    const ok = await persist(next);
+    if (ok) toast.success('Section removed');
+  };
+
+  // Add Task, opened from the Pages tab's own per-row AddTaskButton (below)
+  // — pre-fills that page's (and, if opened from a section row, that
+  // section's) id+name into the shared PageTaskModal. Not gated by canEdit
+  // — logging a task is a much lower-risk action than editing the page
+  // structure itself.
+  const [taskModal, setTaskModal] = useState(null);
+  const openAddTask = (ctx) => setTaskModal(ctx);
+  const closeTaskModal = () => setTaskModal(null);
+
+  const AddTaskButton = ({ onClick, testId }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="p-1 text-[#6366f1] hover:opacity-80"
+      title="Add Task"
+      data-testid={testId}
+    >
+      <Plus className="h-4 w-4" />
+    </button>
+  );
 
   // Summary cards + click-to-filter — only tasks actually tagged to a page
   // count here (tasks without website_page_id live elsewhere in the project).
@@ -224,11 +303,23 @@ export default function ProjectPagesTab({
                 {pages.map((row, idx) => {
                   const pageTasks = tasksForPage(row.id);
                   const isExpanded = expandedPageIds.has(row.id);
+                  const sections = row.sections || [];
+                  const isSectionsExpanded = expandedSectionsPageId === row.id;
                   return (
                   <React.Fragment key={row.id}>
                   <tr className={`border-b ${borderColor}`} data-testid={`page-row-${row.id}`}>
                     <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
-                    <td className={`p-3 text-sm font-medium ${textPrimary}`}>{row.page_name || '—'}</td>
+                    <td className={`p-3 text-sm font-medium ${textPrimary}`}>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedSectionsPageId(isSectionsExpanded ? null : row.id)}
+                        className="inline-flex items-center gap-1.5 hover:opacity-80"
+                        data-testid={`page-sections-toggle-${row.id}`}
+                      >
+                        {isSectionsExpanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />}
+                        {row.page_name || '—'}
+                      </button>
+                    </td>
                     {['ui_link', 'content_link', 'page_link'].map((key) => (
                       <td key={key} className="p-3">
                         {row[key] ? (
@@ -251,16 +342,22 @@ export default function ProjectPagesTab({
                       </span>
                     </td>
                     <td className="p-3">
-                      <button
-                        type="button"
-                        onClick={() => togglePage(row.id)}
-                        className={`inline-flex items-center gap-1 text-xs ${textSecondary} hover:opacity-80`}
-                        data-testid={`page-tasks-toggle-${row.id}`}
-                      >
-                        {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                        <ListChecks className="h-3.5 w-3.5" />
-                        {pageTasks.length}
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => togglePage(row.id)}
+                          className={`inline-flex items-center gap-1 text-xs ${textSecondary} hover:opacity-80`}
+                          data-testid={`page-tasks-toggle-${row.id}`}
+                        >
+                          {isExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                          <ListChecks className="h-3.5 w-3.5" />
+                          {pageTasks.length}
+                        </button>
+                        <AddTaskButton
+                          onClick={() => openAddTask({ pageId: row.id, pageName: row.page_name })}
+                          testId={`page-addtask-${row.id}`}
+                        />
+                      </div>
                     </td>
                     <td className="p-3 text-right">
                       <div className="inline-flex gap-1">
@@ -323,6 +420,113 @@ export default function ProjectPagesTab({
                     </tr>
                     );
                   })()}
+                  {isSectionsExpanded && (
+                    <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`page-sections-row-${row.id}`}>
+                      <td colSpan={8} className="p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sections</p>
+                          {canEdit && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => openAddSection(row.id)}
+                              className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-7 text-xs"
+                              data-testid={`page-section-add-btn-${row.id}`}
+                            >
+                              <Plus className="h-3 w-3 mr-1" /> Add Section
+                            </Button>
+                          )}
+                        </div>
+                        {sections.length === 0 ? (
+                          <p className={`text-xs ${textSecondary}`}>No sections yet.</p>
+                        ) : (
+                          <div className={`rounded-md border ${borderColor} ${bgCard}`}>
+                            {sections.map((sec) => {
+                              const secTasks = tasksForSection(sec.id);
+                              const isSecTasksExpanded = expandedSectionTasksId === sec.id;
+                              return (
+                                <div key={sec.id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`page-section-row-${sec.id}`}>
+                                  <div className="flex items-center justify-between px-3 py-2">
+                                    <span className={`text-sm ${textPrimary}`}>{sec.name}</span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setExpandedSectionTasksId(isSecTasksExpanded ? null : sec.id)}
+                                        className={`inline-flex items-center gap-1 text-xs ${textSecondary} hover:opacity-80`}
+                                        data-testid={`page-section-tasks-toggle-${sec.id}`}
+                                      >
+                                        <ListChecks className="h-3.5 w-3.5" />
+                                        {secTasks.length}
+                                      </button>
+                                      <AddTaskButton
+                                        onClick={() => openAddTask({ pageId: row.id, pageName: row.page_name, sectionId: sec.id, sectionName: sec.name })}
+                                        testId={`page-section-addtask-${sec.id}`}
+                                      />
+                                      {canEdit && (
+                                        <button type="button" onClick={() => openEditSection(row.id, sec)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`page-section-edit-${sec.id}`}>
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                      )}
+                                      {canEdit && (
+                                        <button
+                                          type="button"
+                                          onClick={() => deleteSection(row.id, sec.id)}
+                                          disabled={secTasks.length > 0}
+                                          className={`p-1 ${secTasks.length > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
+                                          title={secTasks.length > 0 ? 'Cannot delete: tasks are tagged with this section' : 'Delete'}
+                                          data-testid={`page-section-delete-${sec.id}`}
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {isSecTasksExpanded && (
+                                    <div className="px-3 pb-3">
+                                      {secTasks.length === 0 ? (
+                                        <p className={`text-xs ${textSecondary}`}>No tasks tagged to this section yet.</p>
+                                      ) : (
+                                        <div className={`overflow-x-auto rounded-md border ${borderColor} ${bgCard}`}>
+                                          <table className="w-full">
+                                            <thead>
+                                              <tr className={`border-b ${borderColor}`}>
+                                                <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Name of the Task</th>
+                                                <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Category</th>
+                                                <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Date</th>
+                                                <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Assign To</th>
+                                                <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {secTasks.map(t => (
+                                                <tr key={t.task_id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`page-section-task-row-${t.task_id}`}>
+                                                  <td className={`px-3 py-2 text-sm ${textPrimary}`}>{t.task_name}</td>
+                                                  <td className={`px-3 py-2 text-xs ${textSecondary}`}>{t.category || '—'}</td>
+                                                  <td className={`px-3 py-2 text-xs ${textSecondary}`}>
+                                                    {t.due_date ? new Date(t.due_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                                  </td>
+                                                  <td className={`px-3 py-2 text-xs ${textSecondary}`}>{userName(t.assigned_to)}</td>
+                                                  <td className="px-3 py-2">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase border ${taskStatusStyle(t.status)}`}>
+                                                      {(t.status || 'pending').replace('_', ' ')}
+                                                    </span>
+                                                  </td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                   </React.Fragment>
                   );
                 })}
@@ -467,6 +671,67 @@ export default function ProjectPagesTab({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Add / Rename Section popup — z-40 like the Add/View/Edit popup
+          above, no competing Select portal here to worry about either way. */}
+      {sectionModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeSectionModal}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
+            <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
+              <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
+                <Globe className="h-4 w-4 text-[#6366f1]" />
+                {sectionModal.mode === 'add' ? 'Add Section' : 'Rename Section'}
+              </h3>
+              <button onClick={closeSectionModal} className={textSecondary}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-5">
+              <p className={`text-xs font-medium ${textSecondary} mb-1`}>Section Name</p>
+              <Input
+                value={sectionModal.name}
+                onChange={(e) => setSectionModal(m => ({ ...m, name: e.target.value }))}
+                placeholder="e.g. Hero"
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="page-section-form-name"
+                autoFocus
+              />
+            </div>
+            <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
+              <Button type="button" variant="outline" onClick={closeSectionModal}>Cancel</Button>
+              <Button
+                type="button"
+                onClick={saveSectionModal}
+                disabled={saving}
+                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
+                data-testid="page-section-form-save"
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {taskModal && (
+        <PageTaskModal
+          project={project}
+          projectMembers={projectMembers}
+          currentUser={currentUser}
+          headers={headers}
+          pageId={taskModal.pageId}
+          pageName={taskModal.pageName}
+          sectionId={taskModal.sectionId}
+          sectionName={taskModal.sectionName}
+          onClose={closeTaskModal}
+          onSaved={onTasksChanged}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+        />
       )}
     </div>
   );
