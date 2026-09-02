@@ -33,6 +33,7 @@ export default function PageTaskModal({
     description: '',
     due_date: '',
     category: '',
+    priority: 'medium',
     assigned_to: currentUser?.user_id || '',
   });
   // Task Type select shows one of the fixed options, or "Other" — the
@@ -53,6 +54,7 @@ export default function PageTaskModal({
     description: draft.description || '',
     due_date: draft.due_date || null,
     category: draft.category || '',
+    priority: draft.priority,
     assigned_to: draft.assigned_to || currentUser?.user_id,
     department: 'website',
     project_id: project.project_id,
@@ -178,6 +180,22 @@ export default function PageTaskModal({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
+              <p className={`text-xs font-medium ${textSecondary} mb-1`}>Priority</p>
+              <Select
+                value={draft.priority}
+                onValueChange={(v) => setDraft(d => ({ ...d, priority: v }))}
+              >
+                <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-quicktask-form-priority">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <p className={`text-xs font-medium ${textSecondary} mb-1`}>Deadline</p>
               <Input
                 type="date"
@@ -187,20 +205,20 @@ export default function PageTaskModal({
                 data-testid="page-quicktask-form-deadline"
               />
             </div>
-            <div>
-              <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
-              <Select
-                value={draft.assigned_to || '_none'}
-                onValueChange={(v) => setDraft(d => ({ ...d, assigned_to: v === '_none' ? '' : v }))}
-              >
-                <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-quicktask-form-assignee">
-                  <SelectValue placeholder="— Select —" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+          </div>
+          <div>
+            <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
+            <Select
+              value={draft.assigned_to || '_none'}
+              onValueChange={(v) => setDraft(d => ({ ...d, assigned_to: v === '_none' ? '' : v }))}
+            >
+              <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-quicktask-form-assignee">
+                <SelectValue placeholder="— Select —" />
+              </SelectTrigger>
+              <SelectContent>
+                {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <p className={`text-xs font-medium ${textSecondary} mb-1`}>Task Type</p>
