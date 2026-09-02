@@ -1230,7 +1230,22 @@ export default function ProjectsPanel({
             <button onClick={() => setSelectedProject(null)} className={`text-sm ${textSecondary} hover:underline mb-1`}>
               ← Back to Projects
             </button>
-            <h2 className={`text-2xl font-bold ${textPrimary}`}>{selectedProject.name}</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className={`text-2xl font-bold ${textPrimary}`}>{selectedProject.name}</h2>
+              {selectedProject.start_date && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-600 border border-emerald-500/30" data-testid="project-header-start-badge">
+                  Start: {fmtDate(selectedProject.start_date)}
+                </span>
+              )}
+              {selectedProject.due_date && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${isOverdue(selectedProject.due_date) ? 'bg-red-500/15 text-red-500 border-red-500/30' : 'bg-amber-500/15 text-amber-600 border-amber-500/30'}`}
+                  data-testid="project-header-due-badge"
+                >
+                  Due: {fmtDate(selectedProject.due_date)}
+                </span>
+              )}
+            </div>
             <p className={textSecondary}>{selectedProject.description}</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
