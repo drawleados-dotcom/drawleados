@@ -36,6 +36,7 @@ import MeetingModal from './MeetingModal';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 import { ERP_TASK_TYPE_OPTIONS } from '../utils/erpTaskTypes';
 import { buildErpPrompt } from '../utils/erpPrompt';
+import { PAGE_TASK_TYPE_OPTIONS } from './projects/PageTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -182,6 +183,10 @@ export default function ProjectsPanel({
   const [taskErpUltraTabFilter, setTaskErpUltraTabFilter] = useState('all');
   const [taskErpTypeFilter, setTaskErpTypeFilter] = useState('all');
   const [taskWorkflowFilter, setTaskWorkflowFilter] = useState('all');
+  const [taskWebsitePageFilter, setTaskWebsitePageFilter] = useState('all');
+  const [taskWebsiteSubPageFilter, setTaskWebsiteSubPageFilter] = useState('all');
+  const [taskWebsiteSectionFilter, setTaskWebsiteSectionFilter] = useState('all');
+  const [taskWebsiteTypeFilter, setTaskWebsiteTypeFilter] = useState('all');
 
   // Remember which project + inner tab was open so a hard refresh restores it
   // instead of dropping back to the bare project list.
@@ -1138,7 +1143,31 @@ export default function ProjectsPanel({
       if (taskWorkflowFilter !== 'all' && t.workflow_id !== taskWorkflowFilter) return false;
       return true;
     };
-    const matchesScopeFilters = (t) => matchesMemberAndDate(t) && matchesErpFilters(t);
+    // Website hierarchy filters — unlike ERP, a task only carries
+    // website_page_id + page_section_id (no sub-page id of its own, since
+    // section ids are already globally unique whether they live directly on
+    // a page or nested under one of its sub pages). Resolving "which sub
+    // page is this task's section under" means walking the page tree once
+    // into a lookup instead of reading a field straight off the task.
+    const websitePagesForFilter = selectedProject.pages || [];
+    const sectionLocationMap = {};
+    websitePagesForFilter.forEach((p) => {
+      (p.sections || []).forEach((s) => { sectionLocationMap[s.id] = { pageId: p.id, subPageId: null }; });
+      (p.sub_pages || []).forEach((sp) => {
+        (sp.sections || []).forEach((s) => { sectionLocationMap[s.id] = { pageId: p.id, subPageId: sp.id }; });
+      });
+    });
+    const matchesWebsiteFilters = (t) => {
+      if (taskWebsitePageFilter !== 'all' && t.website_page_id !== taskWebsitePageFilter) return false;
+      if (taskWebsiteSubPageFilter !== 'all') {
+        const loc = sectionLocationMap[t.page_section_id];
+        if (!loc || loc.subPageId !== taskWebsiteSubPageFilter) return false;
+      }
+      if (taskWebsiteSectionFilter !== 'all' && t.page_section_id !== taskWebsiteSectionFilter) return false;
+      if (taskWebsiteTypeFilter !== 'all' && t.category !== taskWebsiteTypeFilter) return false;
+      return true;
+    };
+    const matchesScopeFilters = (t) => matchesMemberAndDate(t) && matchesErpFilters(t) && matchesWebsiteFilters(t);
     const statusScopedTasks = projectTasks.filter(matchesScopeFilters);
     const allTasksCount = statusScopedTasks.length;
     const completedTasksCount = statusScopedTasks.filter(isTaskCompleted).length;
@@ -1194,6 +1223,47 @@ export default function ProjectsPanel({
     const workflowOptionsSorted = [...(selectedProject.erp_workflow || [])]
       .map((w) => ({ ...w, _todoCount: workflowTodoCount(w.id) }))
       .sort((a, b) => b._todoCount - a._todoCount);
+
+    // Cascading option lists for the Website filter selects below — same
+    // "only ever show what's already scoped by the ancestor picked above"
+    // shape as the ERP ones.
+    const hasWebsiteDept = (selectedProject.departments || []).includes('website');
+    const websiteFilterSelectedPage = websitePagesForFilter.find(p => p.id === taskWebsitePageFilter);
+    const websiteFilterSubPages = websiteFilterSelectedPage?.sub_pages || [];
+    const websiteFilterSelectedSubPage = websiteFilterSubPages.find(sp => sp.id === taskWebsiteSubPageFilter);
+    // "All Sub Pages" shows every section under the picked page, whether it
+    // sits directly on the page or nested under one of its sub pages.
+    const websiteFilterSections = taskWebsiteSubPageFilter !== 'all'
+      ? (websiteFilterSelectedSubPage?.sections || [])
+      : [...(websiteFilterSelectedPage?.sections || []), ...websiteFilterSubPages.flatMap(sp => sp.sections || [])];
+    const websiteFiltersActive = taskWebsitePageFilter !== 'all' || taskWebsiteSubPageFilter !== 'all'
+      || taskWebsiteSectionFilter !== 'all' || taskWebsiteTypeFilter !== 'all';
+    const resetWebsiteTaskFilters = () => {
+      setTaskWebsitePageFilter('all'); setTaskWebsiteSubPageFilter('all');
+      setTaskWebsiteSectionFilter('all'); setTaskWebsiteTypeFilter('all');
+    };
+    // Todo count shown next to each Website filter option's label (e.g.
+    // "Corrections (9)") — same member/date scoping as the ERP counts above.
+    const websitePageTodoCount = (pageId) => projectTasks.filter((t) => {
+      if (!matchesMemberAndDate(t)) return false;
+      if ((t.status || 'pending') !== 'pending') return false;
+      return t.website_page_id === pageId;
+    }).length;
+    const websiteSubPageTodoCount = (subPageId) => projectTasks.filter((t) => {
+      if (!matchesMemberAndDate(t)) return false;
+      if ((t.status || 'pending') !== 'pending') return false;
+      return sectionLocationMap[t.page_section_id]?.subPageId === subPageId;
+    }).length;
+    const websiteSectionTodoCount = (sectionId) => projectTasks.filter((t) => {
+      if (!matchesMemberAndDate(t)) return false;
+      if ((t.status || 'pending') !== 'pending') return false;
+      return t.page_section_id === sectionId;
+    }).length;
+    const websiteTypeTodoCount = (type) => projectTasks.filter((t) => {
+      if (!matchesMemberAndDate(t)) return false;
+      if ((t.status || 'pending') !== 'pending') return false;
+      return t.category === type;
+    }).length;
 
     const taskSummaryCard = (label, value, Icon, colorClass, active, onClick) => (
       <button
@@ -2147,7 +2217,7 @@ export default function ProjectsPanel({
               </>
             )}
 
-            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all' || taskStatusFilter !== 'all' || erpFiltersActive) && (
+            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all' || taskStatusFilter !== 'all' || erpFiltersActive || websiteFiltersActive) && (
               <button
                 onClick={() => {
                   setTaskMemberFilter('all');
@@ -2157,6 +2227,7 @@ export default function ProjectsPanel({
                   setTaskDateTo('');
                   setTaskStatusFilter('all');
                   resetErpTaskFilters();
+                  resetWebsiteTaskFilters();
                 }}
                 className={`text-xs ${textSecondary} hover:underline`}
                 data-testid="project-filter-reset"
@@ -2276,6 +2347,74 @@ export default function ProjectsPanel({
                   <SelectItem value="all">All Ultra Tab</SelectItem>
                   {erpFilterUltraTabs.map(u => (
                     <SelectItem key={u.id} value={u.id}>{u.name} ({erpOptionTodoCount({ erp_user_id: taskErpUserFilter, erp_page_id: taskErpPageFilter, erp_sub_tab_id: taskErpSubTabFilter, erp_ultra_sub_tab_id: taskErpUltraSubTabFilter, erp_ultra_tab_id: u.id })})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Website hierarchy + Task Type filters — only when the project
+              has a `website` department to tag tasks against. */}
+          {hasWebsiteDept && (
+            <div className="flex flex-wrap items-center gap-2 mb-2" data-testid="project-task-website-filters">
+              <Select
+                value={taskWebsiteTypeFilter}
+                onValueChange={setTaskWebsiteTypeFilter}
+              >
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm`} data-testid="project-filter-website-task-type">
+                  <SelectValue placeholder="All Task Types" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Task Types</SelectItem>
+                  {PAGE_TASK_TYPE_OPTIONS.map(t => (
+                    <SelectItem key={t} value={t}>{t} ({websiteTypeTodoCount(t)})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={taskWebsitePageFilter}
+                onValueChange={(v) => {
+                  setTaskWebsitePageFilter(v);
+                  setTaskWebsiteSubPageFilter('all'); setTaskWebsiteSectionFilter('all');
+                }}
+              >
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm`} data-testid="project-filter-website-page">
+                  <SelectValue placeholder="All Pages" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Pages</SelectItem>
+                  {websitePagesForFilter.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.page_name} ({websitePageTodoCount(p.id)})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={taskWebsiteSubPageFilter}
+                onValueChange={(v) => { setTaskWebsiteSubPageFilter(v); setTaskWebsiteSectionFilter('all'); }}
+                disabled={websiteFilterSubPages.length === 0}
+              >
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm disabled:opacity-50`} data-testid="project-filter-website-subpage">
+                  <SelectValue placeholder="All Sub Pages" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Sub Pages</SelectItem>
+                  {websiteFilterSubPages.map(sp => (
+                    <SelectItem key={sp.id} value={sp.id}>{sp.name} ({websiteSubPageTodoCount(sp.id)})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={taskWebsiteSectionFilter}
+                onValueChange={setTaskWebsiteSectionFilter}
+                disabled={websiteFilterSections.length === 0}
+              >
+                <SelectTrigger className={`h-9 w-[170px] ${bgSecondary} border ${borderColor} ${textPrimary} text-sm disabled:opacity-50`} data-testid="project-filter-website-section">
+                  <SelectValue placeholder="All Sections" />
+                </SelectTrigger>
+                <SelectContent className={bgCard}>
+                  <SelectItem value="all">All Sections</SelectItem>
+                  {websiteFilterSections.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name} ({websiteSectionTodoCount(s.id)})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
