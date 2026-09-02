@@ -12,23 +12,26 @@ const API = process.env.REACT_APP_BACKEND_URL;
 export const PAGE_TASK_TYPE_OPTIONS = ['New Design', 'Corrections', 'Responsive', 'Testing', 'Feature', 'Redesign', 'Other'];
 
 /**
- * Add popup for a task tagged to a website project's Page (and, optionally,
- * one of that page's Sections) — opened from the Pages tab's per-row Add
- * Task button, pre-filled with that page/section's id+name. Same auto-save
- * architecture as the ERP Users tab's ErpTaskModal (debounced PUT/POST as
- * you type, flushed on close) but with this domain's own field set instead
- * of ERP's location/workflow fields: Description and a fixed Task Type
- * list (stored in the existing free-text `category` field, which the Pages
- * tab's task list already displays — a custom "Other" type is just typed
- * straight into `category` too, so no separate field is needed for it).
+ * Add/Edit popup for a task tagged to a website project's Page (and,
+ * optionally, one of that page's Sections) — opened from the Pages tab's
+ * per-row Add Task button (blank, pre-filled with that page/section's
+ * id+name) or a task row's own Edit action (`taskId` + `initialDraft` set,
+ * pre-filled from the existing task). Same auto-save architecture as the
+ * ERP Users tab's ErpTaskModal (debounced PUT/POST as you type, flushed on
+ * close) but with this domain's own field set instead of ERP's location/
+ * workflow fields: Description and a fixed Task Type list (stored in the
+ * existing free-text `category` field, which the Pages tab's task list
+ * already displays — a custom "Other" type is just typed straight into
+ * `category` too, so no separate field is needed for it).
  */
 export default function PageTaskModal({
   project, projectMembers, currentUser, headers,
+  taskId = null, initialDraft,
   pageId, pageName, sectionId, sectionName,
   onClose, onSaved,
   bgCard, bgSecondary, textPrimary, textSecondary, borderColor,
 }) {
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState(initialDraft || {
     task_name: '',
     description: '',
     due_date: '',
@@ -39,11 +42,16 @@ export default function PageTaskModal({
   // Task Type select shows one of the fixed options, or "Other" — the
   // custom text (when "Other" is picked) is what actually lands in
   // draft.category, so this is purely local UI state to drive the select.
-  const [taskTypeChoice, setTaskTypeChoice] = useState('');
-  const [otherText, setOtherText] = useState('');
+  const initialCategory = initialDraft?.category || '';
+  const [taskTypeChoice, setTaskTypeChoice] = useState(
+    !initialCategory ? '' : (PAGE_TASK_TYPE_OPTIONS.includes(initialCategory) ? initialCategory : 'Other')
+  );
+  const [otherText, setOtherText] = useState(
+    !initialCategory || PAGE_TASK_TYPE_OPTIONS.includes(initialCategory) ? '' : initialCategory
+  );
   const [saving, setSaving] = useState(false);
 
-  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [activeTaskId, setActiveTaskId] = useState(taskId);
   const [autoSaveStatus, setAutoSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
   const debounceRef = useRef(null);
   const savingRef = useRef(false);
@@ -140,7 +148,7 @@ export default function PageTaskModal({
       <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
         <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
           <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
-            <ListChecks className="h-4 w-4 text-[#6366f1]" /> Add Task
+            <ListChecks className="h-4 w-4 text-[#6366f1]" /> {taskId ? 'Edit Task' : 'Add Task'}
             {autoSaveStatus === 'saving' && <span className={`text-xs font-normal ${textSecondary}`}>· Saving…</span>}
             {autoSaveStatus === 'saved' && <span className="text-xs font-normal text-[#10b981]">· Saved</span>}
           </h3>

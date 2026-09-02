@@ -406,6 +406,35 @@ export default function ProjectPagesTab({
   const openAddTask = (ctx) => setTaskModal(ctx);
   const closeTaskModal = () => setTaskModal(null);
 
+  const openEditTask = (task) => {
+    setTaskModal({
+      taskId: task.task_id,
+      pageId: task.website_page_id,
+      pageName: task.website_page_name,
+      sectionId: task.page_section_id || null,
+      sectionName: task.page_section_name || null,
+      initialDraft: {
+        task_name: task.task_name || '',
+        description: task.description || '',
+        due_date: task.due_date || '',
+        category: task.category || '',
+        priority: task.priority || 'medium',
+        assigned_to: task.assigned_to || '',
+      },
+    });
+  };
+
+  const deleteTask = async (task) => {
+    if (!window.confirm(`Delete "${task.task_name}"? This cannot be undone.`)) return;
+    try {
+      await axios.delete(`${API}/api/our-tasks/tasks/${task.task_id}`, { headers });
+      toast.success('Task deleted');
+      onTasksChanged?.();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to delete task');
+    }
+  };
+
   const AddTaskButton = ({ onClick, testId }) => (
     <button
       type="button"
@@ -495,6 +524,7 @@ export default function ProjectPagesTab({
                               <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Date</th>
                               <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Assign To</th>
                               <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                              <th className={`text-right px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Actions</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -510,6 +540,16 @@ export default function ProjectPagesTab({
                                   <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase border ${taskStatusStyle(t.status)}`}>
                                     {(t.status || 'pending').replace('_', ' ')}
                                   </span>
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  <div className="inline-flex gap-1">
+                                    <button type="button" onClick={() => openEditTask(t)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`page-section-task-edit-${t.task_id}`}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button type="button" onClick={() => deleteTask(t)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`page-section-task-delete-${t.task_id}`}>
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
                                 </td>
                               </tr>
                             ))}
@@ -800,6 +840,7 @@ export default function ProjectPagesTab({
                                   <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Assign To</th>
                                   <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Delivery Time</th>
                                   <th className={`text-left px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Status</th>
+                                  <th className={`text-right px-3 py-2 text-[10px] font-medium ${textSecondary} uppercase`}>Actions</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -816,6 +857,16 @@ export default function ProjectPagesTab({
                                       <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase border ${taskStatusStyle(t.status)}`}>
                                         {(t.status || 'pending').replace('_', ' ')}
                                       </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-right">
+                                      <div className="inline-flex gap-1">
+                                        <button type="button" onClick={() => openEditTask(t)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`page-task-edit-${t.task_id}`}>
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </button>
+                                        <button type="button" onClick={() => deleteTask(t)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`page-task-delete-${t.task_id}`}>
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 ))}
@@ -1450,6 +1501,8 @@ export default function ProjectPagesTab({
           projectMembers={projectMembers}
           currentUser={currentUser}
           headers={headers}
+          taskId={taskModal.taskId}
+          initialDraft={taskModal.initialDraft}
           pageId={taskModal.pageId}
           pageName={taskModal.pageName}
           sectionId={taskModal.sectionId}
