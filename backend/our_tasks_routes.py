@@ -66,6 +66,8 @@ class TaskCreate(BaseModel):
     sub_sub_workflow_name: Optional[str] = None
     reference_image: Optional[str] = None    # data: URI of a pasted screenshot, if attached
     voice_note: Optional[str] = None         # data: URI of a recorded voice note, if attached
+    design_file: Optional[str] = None        # data: URI of an uploaded design file (Section's Design tab)
+    design_file_name: Optional[str] = None   # original filename, for display/download
 
 class TaskUpdate(BaseModel):
     task_name: Optional[str] = None
@@ -112,6 +114,8 @@ class TaskUpdate(BaseModel):
     sub_sub_workflow_name: Optional[str] = None
     reference_image: Optional[str] = None
     voice_note: Optional[str] = None
+    design_file: Optional[str] = None
+    design_file_name: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -351,6 +355,8 @@ async def create_task(task_data: TaskCreate, request: Request):
             "sub_sub_workflow_name": task_data.sub_sub_workflow_name,
             "reference_image": task_data.reference_image,
             "voice_note": task_data.voice_note,
+            "design_file": task_data.design_file,
+            "design_file_name": task_data.design_file_name,
             "created_by": user.user_id,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),

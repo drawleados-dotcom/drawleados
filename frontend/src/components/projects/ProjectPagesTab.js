@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
@@ -6,7 +6,8 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks, Layers } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks, Layers, Upload, FileText } from 'lucide-react';
 import PageTaskModal from './PageTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -33,6 +34,24 @@ const isToDo = (status) => (status || 'pending') === 'pending' || status === 'in
 const newPageId = () => `pg_${Math.random().toString(36).slice(2, 10)}`;
 const newSubPageId = () => `subpg_${Math.random().toString(36).slice(2, 10)}`;
 const newSectionId = () => `sec_${Math.random().toString(36).slice(2, 10)}`;
+
+// A section's build-out is tracked as one task per workflow stage — each
+// tab in the section modal below edits one of these, and saving creates or
+// updates the matching task (tagged to the section via page_section_id,
+// category = the stage name) rather than storing this on the section itself.
+const STAGE_DEFS = [
+  { key: 'content', category: 'Content' },
+  { key: 'design', category: 'Design' },
+  { key: 'development', category: 'Development' },
+  { key: 'testing', category: 'Testing' },
+];
+const emptyStageTask = () => ({ task_id: null, text: '', link: '', assigned_to: '', due_date: '' });
+const emptyStages = () => ({
+  content: emptyStageTask(),
+  design: { ...emptyStageTask(), reference_image: '', design_file: '', design_file_name: '' },
+  development: emptyStageTask(),
+  testing: emptyStageTask(),
+});
 const emptyPage = () => ({
   id: newPageId(),
   page_name: '',
@@ -113,6 +132,16 @@ export default function ProjectPagesTab({
   // work, so there's nothing to pick.
   const [sectionModal, setSectionModal] = useState(null);
 
+  // Content tab's textarea auto-grows with its content instead of scrolling
+  // sideways — same pattern as the Task Name field elsewhere in this app.
+  const contentStageTextRef = useRef(null);
+  useEffect(() => {
+    const el = contentStageTextRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [sectionModal?.stages?.content?.text]);
+
   const subPagesOf = (pageId) => pages.find(p => p.id === pageId)?.sub_pages || [];
 
   const openAddSubPage = (pageId) => {
@@ -165,15 +194,40 @@ export default function ProjectPagesTab({
     setSectionModal({
       mode: 'add', pageId, subPageId, name: '', description: '', reference_image: '',
       priority: 'medium', due_date: '', assigned_to: currentUser?.user_id || '',
+      stages: emptyStages(),
     });
   };
   const openEditSection = (pageId, subPageId, section) => {
     if (!canEdit) return;
+    // Pre-fill each stage tab from whichever task (if any) is already
+    // tagged to this section under that stage's category, so re-opening
+    // Edit shows what was saved instead of starting blank every time.
+    const secTasks = tasksForSection(section.id);
+    const stageFrom = (cat) => {
+      const t = secTasks.find((x) => (x.category || '').toLowerCase() === cat);
+      if (!t) return emptyStageTask();
+      return {
+        task_id: t.task_id, text: t.task_name || '', link: t.work_link || '',
+        assigned_to: t.assigned_to || '', due_date: (t.due_date || '').slice(0, 10),
+      };
+    };
+    const designTask = secTasks.find((x) => (x.category || '').toLowerCase() === 'design');
     setSectionModal({
       mode: 'edit', pageId, subPageId, id: section.id, name: section.name,
       description: section.description || '', reference_image: section.reference_image || '',
       priority: section.priority || 'medium', due_date: section.due_date || '',
       assigned_to: section.assigned_to || '',
+      stages: {
+        content: stageFrom('content'),
+        design: {
+          ...stageFrom('design'),
+          reference_image: designTask?.reference_image || '',
+          design_file: designTask?.design_file || '',
+          design_file_name: designTask?.design_file_name || '',
+        },
+        development: stageFrom('development'),
+        testing: stageFrom('testing'),
+      },
     });
   };
   const closeSectionModal = () => setSectionModal(null);
@@ -198,10 +252,50 @@ export default function ProjectPagesTab({
     }
   };
 
+  const updateStage = (key, patch) => setSectionModal((m) => ({
+    ...m, stages: { ...m.stages, [key]: { ...m.stages[key], ...patch } },
+  }));
+
+  const handleDesignImagePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error('Image is too large (max 5MB)');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => updateStage('design', { reference_image: reader.result });
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+  };
+
+  const handleDesignFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('File is too large (max 5MB)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => updateStage('design', { design_file: reader.result, design_file_name: file.name });
+    reader.readAsDataURL(file);
+  };
+
   const saveSectionModal = async () => {
     if (!sectionModal.name.trim()) { toast.error('Section name is required'); return; }
     setSaving(true);
     const trimmed = sectionModal.name.trim();
+    // Generated up front (not left to applyToSections) so the same id is
+    // available below for tagging this section's stage tasks even in Add mode.
+    const sectionId = sectionModal.mode === 'add' ? newSectionId() : sectionModal.id;
     const fields = {
       name: trimmed,
       description: sectionModal.description || '',
@@ -212,7 +306,7 @@ export default function ProjectPagesTab({
     };
     const applyToSections = (sections) => (
       sectionModal.mode === 'add'
-        ? [...sections, { id: newSectionId(), ...fields }]
+        ? [...sections, { id: sectionId, ...fields }]
         : sections.map((s) => (s.id === sectionModal.id ? { ...s, ...fields } : s))
     );
     const next = pages.map((p) => {
@@ -228,11 +322,56 @@ export default function ProjectPagesTab({
       };
     });
     const ok = await persist(next);
-    setSaving(false);
-    if (ok) {
-      toast.success(sectionModal.mode === 'add' ? 'Section added' : 'Section updated');
-      closeSectionModal();
+    if (!ok) { setSaving(false); return; }
+
+    // One task per workflow-stage tab that has anything filled in —
+    // created (or updated, if that stage already had a task from a
+    // previous save) tagged to this exact section via page_section_id.
+    const pageForModal = pages.find((p) => p.id === sectionModal.pageId);
+    const pageName = pageForModal?.page_name || '';
+    for (const { key, category } of STAGE_DEFS) {
+      const s = sectionModal.stages?.[key];
+      if (!s) continue;
+      const hasAnything = !!(s.link || s.assigned_to || s.due_date || s.text?.trim() || s.reference_image || s.design_file);
+      if (!hasAnything) continue;
+      const taskName = key === 'content'
+        ? (s.text.trim() || `Content: ${trimmed}`)
+        : `${category}: ${trimmed}`;
+      const payload = {
+        task_name: taskName,
+        due_date: s.due_date || null,
+        work_link: s.link || '',
+        assigned_to: s.assigned_to || null,
+        department: 'website',
+        project_id: project.project_id,
+        project_name: project.name,
+        website_page_id: sectionModal.pageId,
+        website_page_name: pageName,
+        page_section_id: sectionId,
+        page_section_name: trimmed,
+        category,
+        priority: 'medium',
+      };
+      if (key === 'design') {
+        payload.reference_image = s.reference_image || '';
+        payload.design_file = s.design_file || '';
+        payload.design_file_name = s.design_file_name || '';
+      }
+      try {
+        if (s.task_id) {
+          await axios.put(`${API}/api/our-tasks/tasks/${s.task_id}`, payload, { headers });
+        } else {
+          await axios.post(`${API}/api/our-tasks/tasks`, { ...payload, type: 'general', status: 'pending' }, { headers });
+        }
+      } catch (e) {
+        toast.error(`Failed to save the ${category} task`);
+      }
     }
+    onTasksChanged?.();
+
+    setSaving(false);
+    toast.success(sectionModal.mode === 'add' ? 'Section added' : 'Section updated');
+    closeSectionModal();
   };
 
   const deleteSection = async (pageId, subPageId, sectionId) => {
@@ -982,6 +1121,239 @@ export default function ProjectPagesTab({
                     {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Build-out tracking — one task per workflow stage, tagged
+                  to this exact section; filling in a tab and saving creates
+                  (or updates) that stage's task. */}
+              <div className={`pt-2 border-t ${borderColor}`}>
+                <p className={`text-[11px] uppercase tracking-wide ${textSecondary} mb-2`}>
+                  {project?.name} › {pages.find(p => p.id === sectionModal.pageId)?.page_name || '—'} › {sectionModal.name || 'New Section'}
+                </p>
+                <Tabs defaultValue="content">
+                  <TabsList className="grid grid-cols-4 w-full">
+                    <TabsTrigger value="content" data-testid="page-section-tab-content">Content</TabsTrigger>
+                    <TabsTrigger value="design" data-testid="page-section-tab-design">Design</TabsTrigger>
+                    <TabsTrigger value="development" data-testid="page-section-tab-development">Development</TabsTrigger>
+                    <TabsTrigger value="testing" data-testid="page-section-tab-testing">Testing</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="content" className="space-y-3 pt-2">
+                    <div>
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Content</p>
+                      <Textarea
+                        ref={contentStageTextRef}
+                        value={sectionModal.stages.content.text}
+                        onChange={(e) => updateStage('content', { text: e.target.value })}
+                        placeholder="Write the copy for this section…"
+                        rows={1}
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary} min-h-[70px] resize-none overflow-hidden leading-normal`}
+                        data-testid="page-section-content-text"
+                      />
+                    </div>
+                    <div>
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Content Link</p>
+                      <Input
+                        value={sectionModal.stages.content.link}
+                        onChange={(e) => updateStage('content', { link: e.target.value })}
+                        placeholder="https://…"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="page-section-content-link"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
+                        <Select value={sectionModal.stages.content.assigned_to || '_none'} onValueChange={(v) => updateStage('content', { assigned_to: v === '_none' ? '' : v })}>
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-section-content-assignee">
+                            <SelectValue placeholder="— Select —" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">— Select —</SelectItem>
+                            {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Deadline</p>
+                        <Input
+                          type="date"
+                          value={sectionModal.stages.content.due_date}
+                          onChange={(e) => updateStage('content', { due_date: e.target.value })}
+                          className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          data-testid="page-section-content-deadline"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="design" className="space-y-3 pt-2">
+                    <div>
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Design Link</p>
+                      <Input
+                        value={sectionModal.stages.design.link}
+                        onChange={(e) => updateStage('design', { link: e.target.value })}
+                        placeholder="https://…"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="page-section-design-link"
+                      />
+                    </div>
+                    <div>
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Screenshot</p>
+                      {sectionModal.stages.design.reference_image ? (
+                        <div className="relative inline-block">
+                          <img
+                            src={sectionModal.stages.design.reference_image}
+                            alt="Design screenshot"
+                            className={`max-h-40 rounded-md border ${borderColor}`}
+                            data-testid="page-section-design-screenshot-preview"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateStage('design', { reference_image: '' })}
+                            className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
+                            data-testid="page-section-design-screenshot-remove"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          onPaste={handleDesignImagePaste}
+                          tabIndex={0}
+                          className={`flex items-center justify-center h-20 rounded-md border border-dashed ${borderColor} ${bgSecondary} ${textSecondary} text-xs text-center px-3 cursor-text focus:outline-none focus:ring-1 focus:ring-[#6366f1]`}
+                          data-testid="page-section-design-screenshot-dropzone"
+                        >
+                          Click here, then paste a screenshot (Ctrl+V / Cmd+V)
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Design File</p>
+                      {sectionModal.stages.design.design_file ? (
+                        <div className={`flex items-center justify-between gap-2 p-2 rounded-md border ${borderColor} ${bgSecondary}`}>
+                          <span className={`inline-flex items-center gap-1.5 text-xs ${textPrimary} truncate`}>
+                            <FileText className="h-3.5 w-3.5 shrink-0" /> {sectionModal.stages.design.design_file_name || 'Uploaded file'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateStage('design', { design_file: '', design_file_name: '' })}
+                            className="text-red-500 hover:text-red-400 shrink-0"
+                            data-testid="page-section-design-file-remove"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label
+                          className={`flex items-center justify-center gap-1.5 h-11 rounded-md border border-dashed ${borderColor} ${bgSecondary} ${textSecondary} text-xs cursor-pointer hover:opacity-80`}
+                          data-testid="page-section-design-file-dropzone"
+                        >
+                          <Upload className="h-3.5 w-3.5" /> Upload a design file
+                          <input type="file" className="hidden" onChange={handleDesignFileUpload} />
+                        </label>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
+                        <Select value={sectionModal.stages.design.assigned_to || '_none'} onValueChange={(v) => updateStage('design', { assigned_to: v === '_none' ? '' : v })}>
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-section-design-assignee">
+                            <SelectValue placeholder="— Select —" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">— Select —</SelectItem>
+                            {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Deadline</p>
+                        <Input
+                          type="date"
+                          value={sectionModal.stages.design.due_date}
+                          onChange={(e) => updateStage('design', { due_date: e.target.value })}
+                          className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          data-testid="page-section-design-deadline"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="development" className="space-y-3 pt-2">
+                    <div>
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Page Link</p>
+                      <Input
+                        value={sectionModal.stages.development.link}
+                        onChange={(e) => updateStage('development', { link: e.target.value })}
+                        placeholder="https://…"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="page-section-development-link"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
+                        <Select value={sectionModal.stages.development.assigned_to || '_none'} onValueChange={(v) => updateStage('development', { assigned_to: v === '_none' ? '' : v })}>
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-section-development-assignee">
+                            <SelectValue placeholder="— Select —" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">— Select —</SelectItem>
+                            {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Deadline</p>
+                        <Input
+                          type="date"
+                          value={sectionModal.stages.development.due_date}
+                          onChange={(e) => updateStage('development', { due_date: e.target.value })}
+                          className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          data-testid="page-section-development-deadline"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="testing" className="space-y-3 pt-2">
+                    <div>
+                      <p className={`text-xs font-medium ${textSecondary} mb-1`}>Link</p>
+                      <Input
+                        value={sectionModal.stages.testing.link}
+                        onChange={(e) => updateStage('testing', { link: e.target.value })}
+                        placeholder="https://…"
+                        className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        data-testid="page-section-testing-link"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
+                        <Select value={sectionModal.stages.testing.assigned_to || '_none'} onValueChange={(v) => updateStage('testing', { assigned_to: v === '_none' ? '' : v })}>
+                          <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-section-testing-assignee">
+                            <SelectValue placeholder="— Select —" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">— Select —</SelectItem>
+                            {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-medium ${textSecondary} mb-1`}>Deadline</p>
+                        <Input
+                          type="date"
+                          value={sectionModal.stages.testing.due_date}
+                          onChange={(e) => updateStage('testing', { due_date: e.target.value })}
+                          className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                          data-testid="page-section-testing-deadline"
+                        />
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
