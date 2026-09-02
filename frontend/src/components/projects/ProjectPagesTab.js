@@ -4,8 +4,9 @@ import { toast } from 'sonner';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks, Layers } from 'lucide-react';
 import PageTaskModal from './PageTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -98,29 +99,69 @@ export default function ProjectPagesTab({
   // as the ERP Workflow tab's single-expanded-id pattern).
   const [expandedSectionsPageId, setExpandedSectionsPageId] = useState(null);
   const [expandedSectionTasksId, setExpandedSectionTasksId] = useState(null);
-  // { mode: 'add' | 'edit', pageId, id, name }
+  // { mode: 'add' | 'edit', pageId, id, name, description, reference_image,
+  //   priority, due_date, assigned_to } — a section carries the same kind
+  // of detail as a task (creating one IS the work of building it out), just
+  // with no Task Type picker: unlike a page/section's tagged tasks, section
+  // creation is inherently one kind of work, so there's nothing to pick.
   const [sectionModal, setSectionModal] = useState(null);
 
   const openAddSection = (pageId) => {
     if (!canEdit) return;
-    setSectionModal({ mode: 'add', pageId, name: '' });
+    setSectionModal({
+      mode: 'add', pageId, name: '', description: '', reference_image: '',
+      priority: 'medium', due_date: '', assigned_to: currentUser?.user_id || '',
+    });
   };
   const openEditSection = (pageId, section) => {
     if (!canEdit) return;
-    setSectionModal({ mode: 'edit', pageId, id: section.id, name: section.name });
+    setSectionModal({
+      mode: 'edit', pageId, id: section.id, name: section.name,
+      description: section.description || '', reference_image: section.reference_image || '',
+      priority: section.priority || 'medium', due_date: section.due_date || '',
+      assigned_to: section.assigned_to || '',
+    });
   };
   const closeSectionModal = () => setSectionModal(null);
+
+  const handleSectionImagePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        if (file.size > 5 * 1024 * 1024) {
+          toast.error('Image is too large (max 5MB)');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => setSectionModal(m => ({ ...m, reference_image: reader.result }));
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+  };
 
   const saveSectionModal = async () => {
     if (!sectionModal.name.trim()) { toast.error('Section name is required'); return; }
     setSaving(true);
     const trimmed = sectionModal.name.trim();
+    const fields = {
+      name: trimmed,
+      description: sectionModal.description || '',
+      reference_image: sectionModal.reference_image || '',
+      priority: sectionModal.priority || 'medium',
+      due_date: sectionModal.due_date || '',
+      assigned_to: sectionModal.assigned_to || '',
+    };
     const next = pages.map((p) => {
       if (p.id !== sectionModal.pageId) return p;
       const sections = p.sections || [];
       const nextSections = sectionModal.mode === 'add'
-        ? [...sections, { id: newSectionId(), name: trimmed }]
-        : sections.map((s) => (s.id === sectionModal.id ? { ...s, name: trimmed } : s));
+        ? [...sections, { id: newSectionId(), ...fields }]
+        : sections.map((s) => (s.id === sectionModal.id ? { ...s, ...fields } : s));
       return { ...p, sections: nextSections };
     });
     const ok = await persist(next);
@@ -295,6 +336,7 @@ export default function ProjectPagesTab({
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Content Link</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Page Link</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Status</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Sections</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Tasks</th>
                   <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-24`}>Actions</th>
                 </tr>
@@ -677,26 +719,112 @@ export default function ProjectPagesTab({
           above, no competing Select portal here to worry about either way. */}
       {sectionModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={closeSectionModal}>
-          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-sm`} onClick={(e) => e.stopPropagation()}>
+          <div className={`${bgCard} border ${borderColor} rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
             <div className={`p-5 border-b ${borderColor} flex items-center justify-between`}>
               <h3 className={`text-base font-semibold ${textPrimary} flex items-center gap-2`}>
                 <Globe className="h-4 w-4 text-[#6366f1]" />
-                {sectionModal.mode === 'add' ? 'Add Section' : 'Rename Section'}
+                {sectionModal.mode === 'add' ? 'Add Section' : 'Edit Section'}
               </h3>
               <button onClick={closeSectionModal} className={textSecondary}>
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-5">
-              <p className={`text-xs font-medium ${textSecondary} mb-1`}>Section Name</p>
-              <Input
-                value={sectionModal.name}
-                onChange={(e) => setSectionModal(m => ({ ...m, name: e.target.value }))}
-                placeholder="e.g. Hero"
-                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                data-testid="page-section-form-name"
-                autoFocus
-              />
+            <div className="p-5 space-y-4">
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Section Name</p>
+                <Input
+                  value={sectionModal.name}
+                  onChange={(e) => setSectionModal(m => ({ ...m, name: e.target.value }))}
+                  placeholder="e.g. Hero"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="page-section-form-name"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Description</p>
+                <Textarea
+                  value={sectionModal.description}
+                  onChange={(e) => setSectionModal(m => ({ ...m, description: e.target.value }))}
+                  placeholder="Details about this section…"
+                  rows={3}
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary} resize-none`}
+                  data-testid="page-section-form-description"
+                />
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Reference Image</p>
+                {sectionModal.reference_image ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={sectionModal.reference_image}
+                      alt="Reference"
+                      className={`max-h-40 rounded-md border ${borderColor}`}
+                      data-testid="page-section-form-refimage-preview"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSectionModal(m => ({ ...m, reference_image: '' }))}
+                      className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1"
+                      data-testid="page-section-form-refimage-remove"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onPaste={handleSectionImagePaste}
+                    tabIndex={0}
+                    className={`flex items-center justify-center h-20 rounded-md border border-dashed ${borderColor} ${bgSecondary} ${textSecondary} text-xs text-center px-3 cursor-text focus:outline-none focus:ring-1 focus:ring-[#6366f1]`}
+                    data-testid="page-section-form-refimage-dropzone"
+                  >
+                    Click here, then paste a screenshot (Ctrl+V / Cmd+V)
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Priority</p>
+                  <Select
+                    value={sectionModal.priority}
+                    onValueChange={(v) => setSectionModal(m => ({ ...m, priority: v }))}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-section-form-priority">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <p className={`text-xs font-medium ${textSecondary} mb-1`}>Deadline</p>
+                  <Input
+                    type="date"
+                    value={sectionModal.due_date}
+                    onChange={(e) => setSectionModal(m => ({ ...m, due_date: e.target.value }))}
+                    className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                    data-testid="page-section-form-deadline"
+                  />
+                </div>
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Assign To</p>
+                <Select
+                  value={sectionModal.assigned_to || '_none'}
+                  onValueChange={(v) => setSectionModal(m => ({ ...m, assigned_to: v === '_none' ? '' : v }))}
+                >
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-section-form-assignee">
+                    <SelectValue placeholder="— Select —" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">— Select —</SelectItem>
+                    {(projectMembers || []).map(usr => <SelectItem key={usr.user_id} value={usr.user_id}>{usr.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={closeSectionModal}>Cancel</Button>
