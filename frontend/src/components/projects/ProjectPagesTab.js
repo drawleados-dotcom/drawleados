@@ -384,6 +384,18 @@ export default function ProjectPagesTab({
                       </span>
                     </td>
                     <td className="p-3">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedSectionsPageId(isSectionsExpanded ? null : row.id)}
+                        className={`inline-flex items-center gap-1 text-xs ${textSecondary} hover:opacity-80`}
+                        data-testid={`page-sections-count-${row.id}`}
+                      >
+                        {isSectionsExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        <Layers className="h-3.5 w-3.5" />
+                        {sections.length}
+                      </button>
+                    </td>
+                    <td className="p-3">
                       <div className="inline-flex items-center gap-1">
                         <button
                           type="button"
@@ -418,7 +430,7 @@ export default function ProjectPagesTab({
                     const filteredTasks = pageTasks.filter(matchesTaskFilter);
                     return (
                     <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`page-tasks-row-${row.id}`}>
-                      <td colSpan={8} className="p-3">
+                      <td colSpan={9} className="p-3">
                         {taskFilter && (
                           <p className={`text-[11px] ${textSecondary} mb-2`}>Showing {filteredTasks.length} of {pageTasks.length} tasks matching the filter.</p>
                         )}
@@ -464,7 +476,7 @@ export default function ProjectPagesTab({
                   })()}
                   {isSectionsExpanded && (
                     <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`page-sections-row-${row.id}`}>
-                      <td colSpan={8} className="p-3">
+                      <td colSpan={9} className="p-3">
                         <div className="flex items-center justify-between mb-2">
                           <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sections</p>
                           {canEdit && (
@@ -574,7 +586,7 @@ export default function ProjectPagesTab({
                 })}
                 {pages.length === 0 && (
                   <tr>
-                    <td colSpan={8} className={`p-8 text-center text-xs ${textSecondary}`}>
+                    <td colSpan={9} className={`p-8 text-center text-xs ${textSecondary}`}>
                       No pages yet. {canEdit && <span>Click <span className="font-medium">Add Page</span> to add one.</span>}
                     </td>
                   </tr>
