@@ -587,12 +587,22 @@ export default function ProjectsPanel({
     return ap !== bp ? ap - bp : (a.order ?? 0) - (b.order ?? 0);
   };
 
-  const pinnedProjectCount = projects.filter(p => p.is_pinned).length;
+  // Scoped to the current department view — pinning 5 projects in one
+  // department used to lock out every other department's own pin button,
+  // since the cap was counted across all projects regardless of which
+  // department view you were pinning from. "All" keeps the original
+  // global cap; a specific department gets its own smaller pool so it
+  // can never be starved by another department's pins.
+  const pinCap = deptFilter === 'all' ? 5 : 4;
+  const pinnedProjectCount = deptFilter === 'all'
+    ? projects.filter(p => p.is_pinned).length
+    : projects.filter(p => p.is_pinned && (p.departments || []).includes(deptFilter)).length;
 
   const togglePinProject = async (project) => {
     if (!canManageProjects) return;
     try {
-      const res = await axios.put(`${API}/api/projects/${project.project_id}/pin`, {}, { headers });
+      const deptParam = deptFilter !== 'all' ? `?department=${encodeURIComponent(deptFilter)}` : '';
+      const res = await axios.put(`${API}/api/projects/${project.project_id}/pin${deptParam}`, {}, { headers });
       setProjects(prev => prev.map(x => x.project_id === project.project_id ? { ...x, ...res.data } : x).sort(pinnedThenOrderSort));
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to update pin');
@@ -3685,9 +3695,9 @@ export default function ProjectsPanel({
                         <button
                           type="button"
                           onClick={() => togglePinProject(p)}
-                          disabled={!canManageProjects || (!p.is_pinned && pinnedProjectCount >= 5)}
-                          title={p.is_pinned ? 'Unpin project' : (pinnedProjectCount >= 5 ? 'Maximum 5 projects can be pinned' : 'Pin project')}
-                          className={`p-1 rounded ${p.is_pinned ? 'text-amber-500' : `${textSecondary} ${pinnedProjectCount >= 5 ? 'opacity-40 cursor-not-allowed' : 'hover:text-amber-500'}`}`}
+                          disabled={!canManageProjects || (!p.is_pinned && pinnedProjectCount >= pinCap)}
+                          title={p.is_pinned ? 'Unpin project' : (pinnedProjectCount >= pinCap ? `Maximum ${pinCap} projects can be pinned${deptFilter !== 'all' ? ' per department' : ''}` : 'Pin project')}
+                          className={`p-1.5 rounded ${p.is_pinned ? 'text-amber-500' : `${textSecondary} ${pinnedProjectCount >= pinCap ? 'opacity-40 cursor-not-allowed' : 'hover:text-amber-500'}`}`}
                           data-testid={`project-row-pin-${p.project_id}`}
                         >
                           {p.is_pinned ? <Pin className="h-4 w-4 fill-current" /> : <PinOff className="h-4 w-4" />}

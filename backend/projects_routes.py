@@ -341,7 +341,7 @@ async def reorder_projects(payload: ProjectReorderRequest, request: Request):
 
 
 @projects_router.put("/{project_id}/pin")
-async def toggle_pin_project(project_id: str, request: Request):
+async def toggle_pin_project(project_id: str, request: Request, department: str = None):
     from server import get_current_user, db
     user = await get_current_user(request)
     if not await _is_operation_head_or_admin(user, db):
@@ -352,9 +352,20 @@ async def toggle_pin_project(project_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Project not found")
 
     if not project.get("is_pinned", False):
-        pinned_count = await db.projects.count_documents({"is_pinned": True})
-        if pinned_count >= 5:
-            raise HTTPException(status_code=400, detail="Maximum 5 projects can be pinned")
+        # Pinned from within a specific department's view (the frontend
+        # passes ?department=<dept_key> whenever a department filter, not
+        # "All", is active) — cap that department's own pins so one
+        # department maxing out the pin pool can't block every other
+        # department from pinning anything. The "All" view (no department
+        # param) keeps the original global cap.
+        if department:
+            pinned_count = await db.projects.count_documents({"is_pinned": True, "departments": department})
+            if pinned_count >= 4:
+                raise HTTPException(status_code=400, detail="Maximum 4 projects can be pinned per department")
+        else:
+            pinned_count = await db.projects.count_documents({"is_pinned": True})
+            if pinned_count >= 5:
+                raise HTTPException(status_code=400, detail="Maximum 5 projects can be pinned")
         top = await db.projects.find({"is_pinned": True}, {"order": 1}).sort("order", -1).limit(1).to_list(1)
         new_order = (top[0].get("order", 0) + 1) if top else 0
         await db.projects.update_one({"project_id": project_id}, {"$set": {"is_pinned": True, "order": new_order}})
