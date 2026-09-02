@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -13,6 +13,7 @@ import ProjectBacklinksTab from './projects/ProjectBacklinksTab';
 import ProjectDeliveryHistoryTab from './projects/ProjectDeliveryHistoryTab';
 import ProjectPagesTab from './projects/ProjectPagesTab';
 import ProjectFeaturesTab from './projects/ProjectFeaturesTab';
+import ProjectIntegrationsTab from './projects/ProjectIntegrationsTab';
 import ProjectOthersTab from './projects/ProjectOthersTab';
 import ProjectErpUsersTab from './projects/ProjectErpUsersTab';
 import ProjectErpDepartmentsTab from './projects/ProjectErpDepartmentsTab';
@@ -1723,6 +1724,7 @@ export default function ProjectsPanel({
             ...(isErpProject ? [{ id: 'erp_workflow', label: 'Workflow', icon: Workflow }] : []),
             ...(isErpProject ? [{ id: 'erp_others', label: 'Others', icon: FolderOpen }] : []),
             ...(isWebsiteProject ? [{ id: 'pages', label: 'Pages', icon: Globe }] : []),
+            ...(isWebsiteProject ? [{ id: 'integrations', label: 'Integrations', icon: Plug }] : []),
             ...(isWebsiteProject ? [{ id: 'features', label: 'Features', icon: Sparkles }] : []),
             ...(isWebsiteProject ? [{ id: 'others', label: 'Others', icon: FolderOpen }] : []),
             // Daily Notes — universal, every project regardless of department.
@@ -1837,6 +1839,21 @@ export default function ProjectsPanel({
             users={users}
             projectMembers={projectMembers}
             isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'integrations' && (
+          <ProjectIntegrationsTab
+            project={selectedProject}
+            onTasksChanged={() => { refreshSelectedProject(); loadProjects(); }}
+            currentUser={currentUser}
+            users={users}
+            projectMembers={projectMembers}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
             textPrimary={textPrimary}
