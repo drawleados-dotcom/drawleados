@@ -7,7 +7,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
-import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks, Layers, Upload, FileText } from 'lucide-react';
+import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Globe, ChevronDown, ChevronRight, ListChecks, Layers, Upload, FileText, GripVertical } from 'lucide-react';
 import PageTaskModal from './PageTaskModal';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -566,6 +566,33 @@ export default function ProjectPagesTab({
     }
   };
 
+  // Drag-and-drop row reorder — same pattern as the Projects list's own
+  // drag handle: grab the S.No cell's grip, drop on another row, splice the
+  // dragged page to that row's position, and persist the whole (now
+  // reordered) pages array the same way any other edit here does.
+  const [dragPageId, setDragPageId] = useState(null);
+  const movePage = (fromId, toId) => {
+    if (!canEdit || fromId === toId) return;
+    const fromIndex = pages.findIndex((p) => p.id === fromId);
+    const toIndex = pages.findIndex((p) => p.id === toId);
+    if (fromIndex === -1 || toIndex === -1) return;
+    const next = [...pages];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    persist(next);
+  };
+  const pageDragProps = (pageId) => (!canEdit ? {} : {
+    draggable: true,
+    onDragStart: (e) => { setDragPageId(pageId); e.dataTransfer.effectAllowed = 'move'; },
+    onDragOver: (e) => { if (dragPageId && dragPageId !== pageId) e.preventDefault(); },
+    onDrop: (e) => {
+      e.preventDefault();
+      if (dragPageId && dragPageId !== pageId) movePage(dragPageId, pageId);
+      setDragPageId(null);
+    },
+    onDragEnd: () => setDragPageId(null),
+  });
+
   const openAdd = () => {
     if (!canEdit) return;
     setModal({ mode: 'add', page: emptyPage(), editing: true });
@@ -671,7 +698,12 @@ export default function ProjectPagesTab({
                   return (
                   <React.Fragment key={row.id}>
                   <tr className={`border-b ${borderColor}`} data-testid={`page-row-${row.id}`}>
-                    <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
+                    <td className={`p-3 text-xs ${textSecondary}`} {...pageDragProps(row.id)}>
+                      <div className="flex items-center gap-1.5">
+                        {canEdit && <GripVertical className="h-3.5 w-3.5 cursor-grab shrink-0 opacity-50" />}
+                        {idx + 1}
+                      </div>
+                    </td>
                     <td className={`p-3 text-sm font-medium ${textPrimary}`}>
                       <button
                         type="button"
