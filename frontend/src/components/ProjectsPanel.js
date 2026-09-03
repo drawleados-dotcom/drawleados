@@ -91,6 +91,7 @@ export default function ProjectsPanel({
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [selectedProject, setSelectedProject] = useState(null); // project being viewed
   const [projectDetailCollapsed, setProjectDetailCollapsed] = useState(true);
@@ -224,16 +225,27 @@ export default function ProjectsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Bounded timeout + a couple of quick auto-retries: the list previously
+  // hung on "Loading..." with no limit whenever a request landed during a
+  // backend restart (e.g. a deploy in flight) — axios has no default
+  // timeout, so a stalled connection just sat there forever. Most restarts
+  // clear within a few seconds, so a short retry loop resolves those
+  // transparently; only a real, sustained outage surfaces the error state.
   const loadProjects = useCallback(async (showSpinner = false) => {
-    try {
-      if (showSpinner) setLoading(true);
-      const res = await axios.get(`${API}/api/projects`, { headers });
-      setProjects(res.data || []);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      if (showSpinner) setLoading(false);
+    if (showSpinner) { setLoading(true); setLoadError(false); }
+    const attempts = showSpinner ? 3 : 1;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const res = await axios.get(`${API}/api/projects`, { headers, timeout: 12000 });
+        setProjects(res.data || []);
+        if (showSpinner) { setLoading(false); setLoadError(false); }
+        return;
+      } catch (e) {
+        console.error(e);
+        if (i < attempts - 1) await new Promise(r => setTimeout(r, 2500));
+      }
     }
+    if (showSpinner) { setLoading(false); setLoadError(true); }
   }, [headers]);
 
   const loadUsers = useCallback(async () => {
@@ -3648,6 +3660,14 @@ export default function ProjectsPanel({
 
       {loading ? (
         <p className={textSecondary}>Loading...</p>
+      ) : loadError ? (
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-12 text-center">
+            <p className={textPrimary}>Couldn't load projects — the server may be restarting</p>
+            <p className={`text-sm ${textSecondary} mb-3`}>Check your connection and try again</p>
+            <Button variant="outline" onClick={() => loadProjects(true)}>Retry</Button>
+          </CardContent>
+        </Card>
       ) : projects.length === 0 ? (
         <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-12 text-center">
