@@ -168,6 +168,9 @@ export default function ProjectsPanel({
   const [deleteTargetProject, setDeleteTargetProject] = useState(null);
   // Task filters inside project detail
   const [taskMemberFilter, setTaskMemberFilter] = useState('all');
+  // Who logged the task (task.created_by) — distinct from taskMemberFilter,
+  // which filters by assignee.
+  const [taskCreatedByFilter, setTaskCreatedByFilter] = useState('all');
   const [taskDateFilter, setTaskDateFilter] = useState('all'); // all, today, single, range
   const [taskSingleDate, setTaskSingleDate] = useState('');
   const [taskDateFrom, setTaskDateFrom] = useState('');
@@ -1103,6 +1106,7 @@ export default function ProjectsPanel({
     // so every bucket stays visible to jump between) and the task list.
     const matchesMemberAndDate = (t) => {
       if (taskMemberFilter !== 'all' && t.assigned_to !== taskMemberFilter) return false;
+      if (taskCreatedByFilter !== 'all' && t.created_by !== taskCreatedByFilter) return false;
       const td = (t.due_date || t.created_at || '').slice(0, 10);
       if (taskDateFilter === 'today') return td === todayStr;
       if (taskDateFilter === 'tomorrow') return td === tomorrowStr;
@@ -2175,6 +2179,19 @@ export default function ProjectsPanel({
             </select>
 
             <select
+              value={taskCreatedByFilter}
+              onChange={(e) => setTaskCreatedByFilter(e.target.value)}
+              className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+              data-testid="project-filter-created-by"
+              title="Created By"
+            >
+              <option value="all">Created By</option>
+              {projectMembers.map(m => (
+                <option key={m.user_id} value={m.user_id}>{m.name}</option>
+              ))}
+            </select>
+
+            <select
               value={taskDateFilter}
               onChange={(e) => setTaskDateFilter(e.target.value)}
               className={`h-9 px-3 rounded-lg border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
@@ -2227,10 +2244,11 @@ export default function ProjectsPanel({
               </>
             )}
 
-            {(taskMemberFilter !== 'all' || taskDateFilter !== 'all' || taskStatusFilter !== 'all' || erpFiltersActive || websiteFiltersActive) && (
+            {(taskMemberFilter !== 'all' || taskCreatedByFilter !== 'all' || taskDateFilter !== 'all' || taskStatusFilter !== 'all' || erpFiltersActive || websiteFiltersActive) && (
               <button
                 onClick={() => {
                   setTaskMemberFilter('all');
+                  setTaskCreatedByFilter('all');
                   setTaskDateFilter('all');
                   setTaskSingleDate('');
                   setTaskDateFrom('');
