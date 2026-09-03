@@ -13,6 +13,7 @@ import PageTaskModal from './PageTaskModal';
 const API = process.env.REACT_APP_BACKEND_URL;
 
 const STATUS_OPTIONS = ['To-Do', 'In Progress', 'Client Review', 'Completed'];
+export const SUB_PAGE_TYPE_OPTIONS = ['Page', 'Product Listing Page', 'Single Product Page'];
 const STATUS_STYLE = {
   'To-Do': 'bg-slate-500/20 text-slate-300 border-slate-500/40',
   'In Progress': 'bg-blue-500/20 text-blue-400 border-blue-500/40',
@@ -189,11 +190,11 @@ export default function ProjectPagesTab({
 
   const openAddSubPage = (pageId, parentPath = []) => {
     if (!canEdit) return;
-    setSubPageModal({ mode: 'add', pageId, parentPath, name: '' });
+    setSubPageModal({ mode: 'add', pageId, parentPath, name: '', page_type: 'Page' });
   };
   const openEditSubPage = (pageId, parentPath, subPage) => {
     if (!canEdit) return;
-    setSubPageModal({ mode: 'edit', pageId, parentPath, id: subPage.id, name: subPage.name });
+    setSubPageModal({ mode: 'edit', pageId, parentPath, id: subPage.id, name: subPage.name, page_type: subPage.page_type || 'Page' });
   };
   const closeSubPageModal = () => setSubPageModal(null);
 
@@ -201,12 +202,13 @@ export default function ProjectPagesTab({
     if (!subPageModal.name.trim()) { toast.error('Sub page name is required'); return; }
     setSaving(true);
     const trimmed = subPageModal.name.trim();
+    const pageType = subPageModal.page_type || 'Page';
     const next = pages.map((p) => {
       if (p.id !== subPageModal.pageId) return p;
       const nextSubPages = mapSubPagesAtParentPath(p.sub_pages || [], subPageModal.parentPath, (subPages) => (
         subPageModal.mode === 'add'
-          ? [...subPages, { id: newSubPageId(), name: trimmed, sections: [], sub_pages: [] }]
-          : subPages.map((sp) => (sp.id === subPageModal.id ? { ...sp, name: trimmed } : sp))
+          ? [...subPages, { id: newSubPageId(), name: trimmed, page_type: pageType, sections: [], sub_pages: [] }]
+          : subPages.map((sp) => (sp.id === subPageModal.id ? { ...sp, name: trimmed, page_type: pageType } : sp))
       ));
       return { ...p, sub_pages: nextSubPages };
     });
@@ -652,6 +654,11 @@ export default function ProjectPagesTab({
                   >
                     {isSpExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                     {sp.name}
+                    {sp.page_type && sp.page_type !== 'Page' && (
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${sp.page_type === 'Single Product Page' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600' : 'border-blue-500/30 bg-blue-500/10 text-blue-600'}`}>
+                        {sp.page_type}
+                      </span>
+                    )}
                   </button>
                   <div className="flex items-center gap-1">
                     {canEdit && (
@@ -1529,16 +1536,32 @@ export default function ProjectPagesTab({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-5">
-              <p className={`text-xs font-medium ${textSecondary} mb-1`}>Sub Page Name</p>
-              <Input
-                value={subPageModal.name}
-                onChange={(e) => setSubPageModal(m => ({ ...m, name: e.target.value }))}
-                placeholder="e.g. Pricing"
-                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                data-testid="page-subpage-form-name"
-                autoFocus
-              />
+            <div className="p-5 space-y-4">
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Sub Page Name</p>
+                <Input
+                  value={subPageModal.name}
+                  onChange={(e) => setSubPageModal(m => ({ ...m, name: e.target.value }))}
+                  placeholder="e.g. Pricing"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="page-subpage-form-name"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Page Type</p>
+                <Select
+                  value={subPageModal.page_type || 'Page'}
+                  onValueChange={(v) => setSubPageModal(m => ({ ...m, page_type: v }))}
+                >
+                  <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="page-subpage-form-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUB_PAGE_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>
               <Button type="button" variant="outline" onClick={closeSubPageModal}>Cancel</Button>
