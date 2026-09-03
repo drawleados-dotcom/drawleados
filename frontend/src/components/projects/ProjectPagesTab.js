@@ -120,15 +120,26 @@ export default function ProjectPagesTab({
   // Workflow tab's single-expanded-id pattern).
   const [expandedSectionsPageId, setExpandedSectionsPageId] = useState(null);
   const [expandedSectionTasksId, setExpandedSectionTasksId] = useState(null);
-  const [expandedSubPageId, setExpandedSubPageId] = useState(null);
-  // { mode: 'add' | 'edit', pageId, id, name }
+  // Sub pages nest recursively (a sub page can have its own sub pages, to
+  // any depth), so "expanded" is a Set of node ids rather than one value —
+  // ids are unique regardless of depth, so a flat Set works for the whole
+  // tree. { mode: 'add' | 'edit', pageId, parentPath, id, name } — parentPath
+  // is the chain of ancestor sub-page ids from the page down to (but not
+  // including) the node being added under / renamed.
+  const [expandedSubPageIds, setExpandedSubPageIds] = useState(() => new Set());
+  const toggleSubPageExpanded = (id) => setExpandedSubPageIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [subPageModal, setSubPageModal] = useState(null);
-  // { mode: 'add' | 'edit', pageId, subPageId (null = section lives
-  //   directly on the page, not under a sub page), id, name, description,
-  //   reference_image, priority, due_date, assigned_to } — a section
-  // carries the same kind of detail as a task (creating one IS the work of
-  // building it out), just with no Task Type picker: unlike a page/
-  // section's tagged tasks, section creation is inherently one kind of
+  // { mode: 'add' | 'edit', pageId, path (chain of ancestor sub-page ids
+  //   from the page down to the node this section lives directly on; []
+  //   = section lives directly on the page, not under any sub page), id,
+  //   name, description, reference_image, priority, due_date, assigned_to }
+  // — a section carries the same kind of detail as a task (creating one IS
+  // the work of building it out), just with no Task Type picker: unlike a
+  // page/section's tagged tasks, section creation is inherently one kind of
   // work, so there's nothing to pick.
   const [sectionModal, setSectionModal] = useState(null);
 
@@ -142,15 +153,47 @@ export default function ProjectPagesTab({
     el.style.height = `${el.scrollHeight}px`;
   }, [sectionModal?.stages?.content?.text]);
 
-  const subPagesOf = (pageId) => pages.find(p => p.id === pageId)?.sub_pages || [];
-
-  const openAddSubPage = (pageId) => {
-    if (!canEdit) return;
-    setSubPageModal({ mode: 'add', pageId, name: '' });
+  // Recursive-tree helpers — a page's sub_pages array holds nodes shaped
+  // like { id, name, sections, sub_pages }, and any node's own sub_pages
+  // array is shaped the same way, to unbounded depth. `path` throughout
+  // this file means "chain of node ids from the page down to a target",
+  // walked one id at a time until it bottoms out.
+  const findSubPageAtPath = (subPages, path) => {
+    if (path.length === 0) return null;
+    const [head, ...rest] = path;
+    const node = (subPages || []).find((sp) => sp.id === head);
+    if (!node) return null;
+    if (rest.length === 0) return node;
+    return findSubPageAtPath(node.sub_pages || [], rest);
   };
-  const openEditSubPage = (pageId, subPage) => {
+  // Replaces the sub_pages array living at parentPath (empty = the
+  // top-level array itself) with fn(that array) — used to add/rename/
+  // remove a sub page at any depth by targeting its parent.
+  const mapSubPagesAtParentPath = (subPages, parentPath, fn) => {
+    if (parentPath.length === 0) return fn(subPages || []);
+    const [head, ...rest] = parentPath;
+    return (subPages || []).map((sp) => (
+      sp.id === head ? { ...sp, sub_pages: mapSubPagesAtParentPath(sp.sub_pages || [], rest, fn) } : sp
+    ));
+  };
+  // Replaces the sections array living at path (non-empty: chain down to
+  // the sub-page node those sections belong to) with fn(that array).
+  const mapSectionsAtSubPagePath = (subPages, path, fn) => {
+    const [head, ...rest] = path;
+    return (subPages || []).map((sp) => {
+      if (sp.id !== head) return sp;
+      if (rest.length === 0) return { ...sp, sections: fn(sp.sections || []) };
+      return { ...sp, sub_pages: mapSectionsAtSubPagePath(sp.sub_pages || [], rest, fn) };
+    });
+  };
+
+  const openAddSubPage = (pageId, parentPath = []) => {
     if (!canEdit) return;
-    setSubPageModal({ mode: 'edit', pageId, id: subPage.id, name: subPage.name });
+    setSubPageModal({ mode: 'add', pageId, parentPath, name: '' });
+  };
+  const openEditSubPage = (pageId, parentPath, subPage) => {
+    if (!canEdit) return;
+    setSubPageModal({ mode: 'edit', pageId, parentPath, id: subPage.id, name: subPage.name });
   };
   const closeSubPageModal = () => setSubPageModal(null);
 
@@ -160,10 +203,11 @@ export default function ProjectPagesTab({
     const trimmed = subPageModal.name.trim();
     const next = pages.map((p) => {
       if (p.id !== subPageModal.pageId) return p;
-      const subPages = p.sub_pages || [];
-      const nextSubPages = subPageModal.mode === 'add'
-        ? [...subPages, { id: newSubPageId(), name: trimmed, sections: [] }]
-        : subPages.map((sp) => (sp.id === subPageModal.id ? { ...sp, name: trimmed } : sp));
+      const nextSubPages = mapSubPagesAtParentPath(p.sub_pages || [], subPageModal.parentPath, (subPages) => (
+        subPageModal.mode === 'add'
+          ? [...subPages, { id: newSubPageId(), name: trimmed, sections: [], sub_pages: [] }]
+          : subPages.map((sp) => (sp.id === subPageModal.id ? { ...sp, name: trimmed } : sp))
+      ));
       return { ...p, sub_pages: nextSubPages };
     });
     const ok = await persist(next);
@@ -174,30 +218,33 @@ export default function ProjectPagesTab({
     }
   };
 
-  const deleteSubPage = async (pageId, subPageId) => {
+  const deleteSubPage = async (pageId, parentPath, subPageId) => {
     if (!canEdit) return;
-    const subPage = subPagesOf(pageId).find(sp => sp.id === subPageId);
-    if ((subPage?.sections || []).length > 0) {
-      toast.error('Cannot delete: this sub page still has sections. Remove them first.');
+    const page = pages.find((p) => p.id === pageId);
+    const node = findSubPageAtPath(page?.sub_pages || [], [...parentPath, subPageId]);
+    if ((node?.sections || []).length > 0 || (node?.sub_pages || []).length > 0) {
+      toast.error('Cannot delete: this sub page still has sections or sub pages. Remove them first.');
       return;
     }
     if (!window.confirm('Remove this sub page?')) return;
-    const next = pages.map((p) => (
-      p.id === pageId ? { ...p, sub_pages: (p.sub_pages || []).filter((sp) => sp.id !== subPageId) } : p
-    ));
+    const next = pages.map((p) => {
+      if (p.id !== pageId) return p;
+      const nextSubPages = mapSubPagesAtParentPath(p.sub_pages || [], parentPath, (subPages) => subPages.filter((sp) => sp.id !== subPageId));
+      return { ...p, sub_pages: nextSubPages };
+    });
     const ok = await persist(next);
     if (ok) toast.success('Sub page removed');
   };
 
-  const openAddSection = (pageId, subPageId = null) => {
+  const openAddSection = (pageId, path = []) => {
     if (!canEdit) return;
     setSectionModal({
-      mode: 'add', pageId, subPageId, name: '', description: '', reference_image: '',
+      mode: 'add', pageId, path, name: '', description: '', reference_image: '',
       priority: 'medium', due_date: '', assigned_to: currentUser?.user_id || '',
       stages: emptyStages(),
     });
   };
-  const openEditSection = (pageId, subPageId, section) => {
+  const openEditSection = (pageId, path, section) => {
     if (!canEdit) return;
     // Pre-fill each stage tab from whichever task (if any) is already
     // tagged to this section under that stage's category, so re-opening
@@ -213,7 +260,7 @@ export default function ProjectPagesTab({
     };
     const designTask = secTasks.find((x) => (x.category || '').toLowerCase() === 'design');
     setSectionModal({
-      mode: 'edit', pageId, subPageId, id: section.id, name: section.name,
+      mode: 'edit', pageId, path, id: section.id, name: section.name,
       description: section.description || '', reference_image: section.reference_image || '',
       priority: section.priority || 'medium', due_date: section.due_date || '',
       assigned_to: section.assigned_to || '',
@@ -311,14 +358,12 @@ export default function ProjectPagesTab({
     );
     const next = pages.map((p) => {
       if (p.id !== sectionModal.pageId) return p;
-      if (!sectionModal.subPageId) {
+      if (sectionModal.path.length === 0) {
         return { ...p, sections: applyToSections(p.sections || []) };
       }
       return {
         ...p,
-        sub_pages: (p.sub_pages || []).map((sp) => (
-          sp.id === sectionModal.subPageId ? { ...sp, sections: applyToSections(sp.sections || []) } : sp
-        )),
+        sub_pages: mapSectionsAtSubPagePath(p.sub_pages || [], sectionModal.path, applyToSections),
       };
     });
     const ok = await persist(next);
@@ -374,7 +419,7 @@ export default function ProjectPagesTab({
     closeSectionModal();
   };
 
-  const deleteSection = async (pageId, subPageId, sectionId) => {
+  const deleteSection = async (pageId, path, sectionId) => {
     if (!canEdit) return;
     if (tasksForSection(sectionId).length > 0) {
       toast.error('Cannot delete: tasks are tagged with this section. Untag them first.');
@@ -383,14 +428,12 @@ export default function ProjectPagesTab({
     if (!window.confirm('Remove this section?')) return;
     const next = pages.map((p) => {
       if (p.id !== pageId) return p;
-      if (!subPageId) {
+      if (path.length === 0) {
         return { ...p, sections: (p.sections || []).filter((s) => s.id !== sectionId) };
       }
       return {
         ...p,
-        sub_pages: (p.sub_pages || []).map((sp) => (
-          sp.id === subPageId ? { ...sp, sections: (sp.sections || []).filter((s) => s.id !== sectionId) } : sp
-        )),
+        sub_pages: mapSectionsAtSubPagePath(p.sub_pages || [], path, (sections) => sections.filter((s) => s.id !== sectionId)),
       };
     });
     const ok = await persist(next);
@@ -447,10 +490,11 @@ export default function ProjectPagesTab({
     </button>
   );
 
-  // Shared between a page's own direct Sections and a sub page's Sections —
-  // same list UI, addressed by (pageId, subPageId) so Add/Edit/Delete land
-  // in the right array (subPageId null = section lives directly on the page).
-  const SectionsPanel = ({ pageId, pageName, subPageId, sections }) => (
+  // Shared between a page's own direct Sections and any sub page's (at any
+  // depth) Sections — same list UI, addressed by (pageId, path) so Add/
+  // Edit/Delete land in the right array (path [] = section lives directly
+  // on the page, not under any sub page).
+  const SectionsPanel = ({ pageId, pageName, path, sections }) => (
     <div>
       <div className="flex items-center justify-between mb-2">
         <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sections</p>
@@ -458,9 +502,9 @@ export default function ProjectPagesTab({
           <Button
             type="button"
             size="sm"
-            onClick={() => openAddSection(pageId, subPageId)}
+            onClick={() => openAddSection(pageId, path)}
             className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-7 text-xs"
-            data-testid={`page-section-add-btn-${subPageId || pageId}`}
+            data-testid={`page-section-add-btn-${path.length ? path[path.length - 1] : pageId}`}
           >
             <Plus className="h-3 w-3 mr-1" /> Add Section
           </Button>
@@ -492,14 +536,14 @@ export default function ProjectPagesTab({
                       testId={`page-section-addtask-${sec.id}`}
                     />
                     {canEdit && (
-                      <button type="button" onClick={() => openEditSection(pageId, subPageId, sec)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`page-section-edit-${sec.id}`}>
+                      <button type="button" onClick={() => openEditSection(pageId, path, sec)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`page-section-edit-${sec.id}`}>
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                     )}
                     {canEdit && (
                       <button
                         type="button"
-                        onClick={() => deleteSection(pageId, subPageId, sec.id)}
+                        onClick={() => deleteSection(pageId, path, sec.id)}
                         disabled={secTasks.length > 0}
                         className={`p-1 ${secTasks.length > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
                         title={secTasks.length > 0 ? 'Cannot delete: tasks are tagged with this section' : 'Delete'}
@@ -557,6 +601,84 @@ export default function ProjectPagesTab({
                         </table>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  // Sub pages nest recursively — a sub page can hold its own sub pages, to
+  // unbounded depth — so this component renders itself for each node's
+  // sub_pages array. `path` is the chain of ancestor sub-page ids from the
+  // page down to (not including) the nodes being rendered here.
+  const SubPagesTree = ({ pageId, pageName, path, subPages }) => (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sub Pages</p>
+        {canEdit && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => openAddSubPage(pageId, path)}
+            className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-7 text-xs"
+            data-testid={`page-subpage-add-btn-${path.length ? path[path.length - 1] : pageId}`}
+          >
+            <Plus className="h-3 w-3 mr-1" /> Add Sub Page
+          </Button>
+        )}
+      </div>
+      {subPages.length === 0 ? (
+        <p className={`text-xs ${textSecondary}`}>No sub pages yet.</p>
+      ) : (
+        <div className={`rounded-md border ${borderColor} ${bgCard}`}>
+          {subPages.map((sp) => {
+            const nodePath = [...path, sp.id];
+            const isSpExpanded = expandedSubPageIds.has(sp.id);
+            const spSections = sp.sections || [];
+            const spSubPages = sp.sub_pages || [];
+            const blocked = spSections.length > 0 || spSubPages.length > 0;
+            return (
+              <div key={sp.id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`page-subpage-row-${sp.id}`}>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleSubPageExpanded(sp.id)}
+                    className={`inline-flex items-center gap-1.5 text-sm ${textPrimary} hover:opacity-80`}
+                    data-testid={`page-subpage-toggle-${sp.id}`}
+                  >
+                    {isSpExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    {sp.name}
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {canEdit && (
+                      <button type="button" onClick={() => openEditSubPage(pageId, path, sp)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`page-subpage-edit-${sp.id}`}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => deleteSubPage(pageId, path, sp.id)}
+                        disabled={blocked}
+                        className={`p-1 ${blocked ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
+                        title={blocked ? 'Cannot delete: this sub page still has sections or sub pages' : 'Delete'}
+                        data-testid={`page-subpage-delete-${sp.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {isSpExpanded && (
+                  <div className={`pl-6 pr-3 pb-3 space-y-3 ${bgSecondary}`}>
+                    <SectionsPanel pageId={pageId} pageName={pageName} path={nodePath} sections={spSections} />
+                    <div className={`pt-3 border-t ${borderColor}`}>
+                      <SubPagesTree pageId={pageId} pageName={pageName} path={nodePath} subPages={spSubPages} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -881,70 +1003,9 @@ export default function ProjectPagesTab({
                   {isSectionsExpanded && (
                     <tr className={`border-b ${borderColor} ${bgSecondary}`} data-testid={`page-sections-row-${row.id}`}>
                       <td colSpan={9} className="p-3 space-y-4">
-                        <SectionsPanel pageId={row.id} pageName={row.page_name} subPageId={null} sections={sections} />
+                        <SectionsPanel pageId={row.id} pageName={row.page_name} path={[]} sections={sections} />
                         <div className={`pt-3 border-t ${borderColor}`}>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className={`text-xs font-semibold uppercase tracking-wide ${textSecondary}`}>Sub Pages</p>
-                            {canEdit && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => openAddSubPage(row.id)}
-                                className="bg-[#6366f1] hover:bg-[#4f46e5] text-white h-7 text-xs"
-                                data-testid={`page-subpage-add-btn-${row.id}`}
-                              >
-                                <Plus className="h-3 w-3 mr-1" /> Add Sub Page
-                              </Button>
-                            )}
-                          </div>
-                          {subPages.length === 0 ? (
-                            <p className={`text-xs ${textSecondary}`}>No sub pages yet.</p>
-                          ) : (
-                            <div className={`rounded-md border ${borderColor} ${bgCard}`}>
-                              {subPages.map((sp) => {
-                                const isSpExpanded = expandedSubPageId === sp.id;
-                                return (
-                                  <div key={sp.id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`page-subpage-row-${sp.id}`}>
-                                    <div className="flex items-center justify-between px-3 py-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => setExpandedSubPageId(isSpExpanded ? null : sp.id)}
-                                        className={`inline-flex items-center gap-1.5 text-sm ${textPrimary} hover:opacity-80`}
-                                        data-testid={`page-subpage-toggle-${sp.id}`}
-                                      >
-                                        {isSpExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                                        {sp.name}
-                                      </button>
-                                      <div className="flex items-center gap-1">
-                                        {canEdit && (
-                                          <button type="button" onClick={() => openEditSubPage(row.id, sp)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`page-subpage-edit-${sp.id}`}>
-                                            <Pencil className="h-3.5 w-3.5" />
-                                          </button>
-                                        )}
-                                        {canEdit && (
-                                          <button
-                                            type="button"
-                                            onClick={() => deleteSubPage(row.id, sp.id)}
-                                            disabled={(sp.sections || []).length > 0}
-                                            className={`p-1 ${(sp.sections || []).length > 0 ? 'text-red-500/30 cursor-not-allowed' : 'text-red-500 hover:text-red-400'}`}
-                                            title={(sp.sections || []).length > 0 ? 'Cannot delete: this sub page still has sections' : 'Delete'}
-                                            data-testid={`page-subpage-delete-${sp.id}`}
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {isSpExpanded && (
-                                      <div className={`pl-6 pr-3 pb-3 ${bgSecondary}`}>
-                                        <SectionsPanel pageId={row.id} pageName={row.page_name} subPageId={sp.id} sections={sp.sections || []} />
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                          <SubPagesTree pageId={row.id} pageName={row.page_name} path={[]} subPages={subPages} />
                         </div>
                       </td>
                     </tr>
