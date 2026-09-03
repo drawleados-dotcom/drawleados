@@ -190,11 +190,11 @@ export default function ProjectPagesTab({
 
   const openAddSubPage = (pageId, parentPath = []) => {
     if (!canEdit) return;
-    setSubPageModal({ mode: 'add', pageId, parentPath, name: '', page_type: 'Page' });
+    setSubPageModal({ mode: 'add', pageId, parentPath, name: '', page_type: 'Page', page_link: '' });
   };
   const openEditSubPage = (pageId, parentPath, subPage) => {
     if (!canEdit) return;
-    setSubPageModal({ mode: 'edit', pageId, parentPath, id: subPage.id, name: subPage.name, page_type: subPage.page_type || 'Page' });
+    setSubPageModal({ mode: 'edit', pageId, parentPath, id: subPage.id, name: subPage.name, page_type: subPage.page_type || 'Page', page_link: subPage.page_link || '' });
   };
   const closeSubPageModal = () => setSubPageModal(null);
 
@@ -203,12 +203,13 @@ export default function ProjectPagesTab({
     setSaving(true);
     const trimmed = subPageModal.name.trim();
     const pageType = subPageModal.page_type || 'Page';
+    const pageLink = subPageModal.page_link || '';
     const next = pages.map((p) => {
       if (p.id !== subPageModal.pageId) return p;
       const nextSubPages = mapSubPagesAtParentPath(p.sub_pages || [], subPageModal.parentPath, (subPages) => (
         subPageModal.mode === 'add'
-          ? [...subPages, { id: newSubPageId(), name: trimmed, page_type: pageType, sections: [], sub_pages: [] }]
-          : subPages.map((sp) => (sp.id === subPageModal.id ? { ...sp, name: trimmed, page_type: pageType } : sp))
+          ? [...subPages, { id: newSubPageId(), name: trimmed, page_type: pageType, page_link: pageLink, sections: [], sub_pages: [] }]
+          : subPages.map((sp) => (sp.id === subPageModal.id ? { ...sp, name: trimmed, page_type: pageType, page_link: pageLink } : sp))
       ));
       return { ...p, sub_pages: nextSubPages };
     });
@@ -661,6 +662,17 @@ export default function ProjectPagesTab({
                     )}
                   </button>
                   <div className="flex items-center gap-1">
+                    {sp.page_link && (
+                      <a
+                        href={sp.page_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1 px-1"
+                        data-testid={`page-subpage-link-${sp.id}`}
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" /> Open
+                      </a>
+                    )}
                     {canEdit && (
                       <button type="button" onClick={() => openEditSubPage(pageId, path, sp)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Rename" data-testid={`page-subpage-edit-${sp.id}`}>
                         <Pencil className="h-3.5 w-3.5" />
@@ -1561,6 +1573,16 @@ export default function ProjectPagesTab({
                     {SUB_PAGE_TYPE_OPTIONS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <p className={`text-xs font-medium ${textSecondary} mb-1`}>Page Link</p>
+                <Input
+                  value={subPageModal.page_link}
+                  onChange={(e) => setSubPageModal(m => ({ ...m, page_link: e.target.value }))}
+                  placeholder="https://…"
+                  className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                  data-testid="page-subpage-form-link"
+                />
               </div>
             </div>
             <div className={`p-5 border-t ${borderColor} flex items-center justify-end gap-2`}>

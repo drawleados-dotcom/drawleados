@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent } from '../ui/card';
-import { ShoppingBag } from 'lucide-react';
+import { ShoppingBag, ExternalLink } from 'lucide-react';
 
 // Walks every page's sub_pages tree (to unbounded depth, same shape the
 // Pages tab's recursive Sub Pages editor writes) collecting nodes tagged
@@ -12,7 +12,7 @@ function collectSingleProductPages(pages) {
     for (const node of nodes || []) {
       const nextTrail = [...trail, node.name];
       if (node.page_type === 'Single Product Page') {
-        results.push({ id: node.id, name: node.name, breadcrumb: nextTrail.join(' > ') });
+        results.push({ id: node.id, name: node.name, pageLink: node.page_link || '', breadcrumb: nextTrail.join(' > ') });
       }
       walk(node.sub_pages || [], nextTrail);
     }
@@ -62,6 +62,7 @@ export default function ProjectSingleProductPagesTab({
                 <tr className={`border-b ${borderColor}`}>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Page Name</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Location</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Page Link</th>
                 </tr>
               </thead>
               <tbody>
@@ -69,11 +70,25 @@ export default function ProjectSingleProductPagesTab({
                   <tr key={it.id} className={`border-b ${borderColor} last:border-b-0`} data-testid={`single-product-page-row-${it.id}`}>
                     <td className={`p-3 text-sm font-medium ${textPrimary}`}>{it.name}</td>
                     <td className={`p-3 text-xs ${textSecondary}`}>{it.breadcrumb}</td>
+                    <td className="p-3">
+                      {it.pageLink ? (
+                        <a
+                          href={it.pageLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-[#6366f1] hover:underline inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> Open
+                        </a>
+                      ) : (
+                        <span className={`text-xs ${textSecondary}`}>—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {items.length === 0 && (
                   <tr>
-                    <td colSpan={2} className={`p-8 text-center text-xs ${textSecondary}`}>
+                    <td colSpan={3} className={`p-8 text-center text-xs ${textSecondary}`}>
                       No Single Product Pages yet. Tag a sub page's Page Type as "Single Product Page" from the Pages tab.
                     </td>
                   </tr>
