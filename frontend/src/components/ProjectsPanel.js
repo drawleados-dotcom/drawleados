@@ -1964,6 +1964,7 @@ export default function ProjectsPanel({
           <ProjectSingleProductPagesTab
             project={selectedProject}
             bgCard={bgCard}
+            bgSecondary={bgSecondary}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
