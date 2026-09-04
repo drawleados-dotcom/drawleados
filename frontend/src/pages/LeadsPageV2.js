@@ -1270,6 +1270,8 @@ const LeadsPageV2 = () => {
             formatCurrency={formatCurrency}
             leads={overviewLeads}
             stages={overviewStages}
+            teamMembers={teamMembers}
+            services={services}
             onEdit={openEditLead}
             onDelete={deleteLead}
             onStageChange={updateLeadStage}
@@ -2720,15 +2722,56 @@ const OVERVIEW_RANGES = [
 
 const OverviewPanel = ({
   range, setRange, data, loading, formatCurrency,
-  leads, stages, onEdit, onDelete, onStageChange, onViewQuotation, formatDate,
+  leads, stages, teamMembers, services, onEdit, onDelete, onStageChange, onViewQuotation, formatDate,
   isDark, textPrimary, textSecondary, borderColor, bgCard, bgSecondary,
 }) => {
+  const [selectedStep, setSelectedStep] = useState(null); // null | 'leads' | 'appointment' | 'proposal_shared' | 'sales'
+  const [selectedStageId, setSelectedStageId] = useState(null);
+  const [filterSource, setFilterSource] = useState(null);
+  const [filterOwner, setFilterOwner] = useState(null);
+  const [filterService, setFilterService] = useState(null);
+
+  const invoiceRaiseStage = stages.find(s => /invoice.?rais/i.test(s.name || ''));
+
   const cards = [
     { key: 'leads', label: 'Leads', sub: 'in this period', count: data?.leads ?? 0, icon: Users, ring: 'from-blue-500/30 to-blue-500/0', text: 'text-blue-500' },
     { key: 'appointment', label: 'Appointment', sub: `${data?.appointment?.pct ?? 0}% of Leads`, count: data?.appointment?.count ?? 0, icon: Calendar, ring: 'from-amber-500/30 to-amber-500/0', text: 'text-amber-500' },
     { key: 'proposal_shared', label: 'Proposal Shared', sub: `${data?.proposal_shared?.pct ?? 0}% of Appointment`, count: data?.proposal_shared?.count ?? 0, icon: FileText, ring: 'from-purple-500/30 to-purple-500/0', text: 'text-purple-500' },
     { key: 'sales', label: 'Sales', sub: `${formatCurrency(data?.sales?.value ?? 0)} · ${data?.sales?.pct ?? 0}% of Proposal Shared`, count: data?.sales?.count ?? 0, icon: IndianRupee, ring: 'from-emerald-500/30 to-emerald-500/0', text: 'text-emerald-500' },
   ];
+
+  // The leads behind whichever funnel step is selected — same signal fields
+  // the /overview endpoint counts by. null (nothing clicked yet) or 'leads'
+  // both mean the whole cohort.
+  let stepLeads = leads;
+  if (selectedStep === 'appointment') stepLeads = leads.filter(l => l.appointment_at);
+  else if (selectedStep === 'proposal_shared') stepLeads = leads.filter(l => l.quotation_id);
+  else if (selectedStep === 'sales') stepLeads = invoiceRaiseStage ? leads.filter(l => l.stage_id === invoiceRaiseStage.stage_id) : [];
+
+  // Stage breakdown of stepLeads — only the stages actually present, and
+  // only surfaced once a card is clicked, instead of every stage from both
+  // pipelines shown up front.
+  const stageCounts = {};
+  stepLeads.forEach(l => { stageCounts[l.stage_id] = (stageCounts[l.stage_id] || 0) + 1; });
+  const stageBreakdown = Object.keys(stageCounts)
+    .map(stageId => {
+      const stage = stages.find(s => s.stage_id === stageId);
+      return { stage_id: stageId, name: stage?.name || 'Unknown', color: stage?.color || '#71717a', count: stageCounts[stageId] };
+    })
+    .sort((a, b) => b.count - a.count);
+
+  const sourceOptions = [...new Set(leads.map(l => l.source).filter(Boolean))];
+
+  const visibleLeads = stepLeads
+    .filter(l => !selectedStageId || l.stage_id === selectedStageId)
+    .filter(l => !filterSource || l.source === filterSource)
+    .filter(l => !filterOwner || l.lead_owner === filterOwner)
+    .filter(l => !filterService || l.service === filterService);
+
+  const selectStep = (key) => {
+    setSelectedStep(prev => (prev === key ? null : key));
+    setSelectedStageId(null);
+  };
 
   return (
     <div className="flex-1 overflow-auto p-4" data-testid="overview-panel">
@@ -2751,16 +2794,21 @@ const OverviewPanel = ({
         </div>
       </div>
 
-      <p className={`text-xs ${textSecondary} uppercase tracking-wide mb-2`}>LAPS Overview</p>
+      <p className={`text-xs ${textSecondary} uppercase tracking-wide mb-2`}>LAPS Overview — click a card for its stage breakdown</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
         {cards.map(card => {
           const Icon = card.icon;
+          const isActive = selectedStep === card.key;
           return (
-            <div
+            <button
+              type="button"
               key={card.key}
               data-testid={`overview-card-${card.key}`}
-              className={`relative overflow-hidden rounded-xl border ${borderColor} ${bgCard} p-4`}
+              onClick={() => selectStep(card.key)}
+              className={`relative overflow-hidden rounded-xl border text-left transition-all ${
+                isActive ? 'border-[#3b82f6] ring-2 ring-[#3b82f6]/40' : borderColor
+              } ${bgCard} p-4`}
             >
               <div className={`absolute -top-8 -right-8 h-24 w-24 rounded-full bg-gradient-to-br ${card.ring}`} />
               <div className="relative">
@@ -2771,21 +2819,84 @@ const OverviewPanel = ({
                 <p className={`text-2xl font-bold ${textPrimary}`}>{loading ? '…' : card.count}</p>
                 <p className={`text-[11px] ${textSecondary} mt-0.5`}>{card.sub}</p>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
 
+      {/* Stage breakdown — dynamic to whichever card is selected, and only
+          shown once one is (see selectStep above). */}
+      {selectedStep && stageBreakdown.length > 0 && (
+        <div className="flex items-center flex-wrap gap-2 mb-4" data-testid="overview-stage-breakdown">
+          {stageBreakdown.map(s => (
+            <button
+              key={s.stage_id}
+              type="button"
+              onClick={() => setSelectedStageId(prev => (prev === s.stage_id ? null : s.stage_id))}
+              data-testid={`overview-stage-chip-${s.stage_id}`}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                selectedStageId === s.stage_id ? 'text-white' : `${bgSecondary} ${textSecondary}`
+              }`}
+              style={{
+                borderColor: s.color,
+                backgroundColor: selectedStageId === s.stage_id ? s.color : undefined,
+              }}
+            >
+              {s.name} ({s.count})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Source / Lead Owner / Service filters */}
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <Select value={filterSource || 'all'} onValueChange={(v) => setFilterSource(v === 'all' ? null : v)}>
+          <SelectTrigger className={`w-[160px] ${bgSecondary}`} data-testid="overview-source-select">
+            <SelectValue placeholder="All Sources" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sources</SelectItem>
+            {sourceOptions.map(src => (
+              <SelectItem key={src} value={src}>{src}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterOwner || 'all'} onValueChange={(v) => setFilterOwner(v === 'all' ? null : v)}>
+          <SelectTrigger className={`w-[180px] ${bgSecondary}`} data-testid="overview-owner-select">
+            <SelectValue placeholder="All Lead Owners" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Lead Owners</SelectItem>
+            {(teamMembers || []).map(m => (
+              <SelectItem key={m.user_id} value={m.user_id}>{m.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={filterService || 'all'} onValueChange={(v) => setFilterService(v === 'all' ? null : v)}>
+          <SelectTrigger className={`w-[160px] ${bgSecondary}`} data-testid="overview-service-select">
+            <SelectValue placeholder="All Services" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Services</SelectItem>
+            {(services || []).map(s => (
+              <SelectItem key={s.service_id} value={s.name}>{s.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {loading ? (
         <div className={`text-center py-12 ${textSecondary}`}>Loading...</div>
-      ) : leads.length === 0 ? (
+      ) : visibleLeads.length === 0 ? (
         <div className={`text-center py-12 ${textSecondary}`}>
           <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>No leads created in this period</p>
+          <p>No leads match this filter</p>
         </div>
       ) : (
         <ListView
-          leads={leads}
+          leads={visibleLeads}
           stages={stages}
           onEdit={onEdit}
           onDelete={onDelete}
@@ -2797,6 +2908,7 @@ const OverviewPanel = ({
           textSecondary={textSecondary}
           borderColor={borderColor}
           bgSecondary={bgSecondary}
+          hideStageTabs
         />
       )}
     </div>
@@ -2804,7 +2916,7 @@ const OverviewPanel = ({
 };
 
 // ============== LIST VIEW ==============
-const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange, onViewQuotation, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange, onViewQuotation, formatDate, isDark, textPrimary, textSecondary, borderColor, bgSecondary, hideStageTabs }) => {
   const [activeTab, setActiveTab] = useState('all');
   const getStage = (stageId) => stages.find(s => s.stage_id === stageId);
 
@@ -2814,10 +2926,13 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
     return acc;
   }, {});
 
-  // Filter leads based on active tab
-  const filteredLeads = activeTab === 'all' 
-    ? leads 
-    : leads.filter(l => l.stage_id === activeTab);
+  // Overview passes in `leads` already filtered by its own funnel-step/stage/
+  // source/owner/service pickers, and hides this component's own stage tab
+  // bar (which would otherwise combine every stage from both pipelines) —
+  // so there's nothing left for this tab bar to further narrow down.
+  const filteredLeads = hideStageTabs
+    ? leads
+    : (activeTab === 'all' ? leads : leads.filter(l => l.stage_id === activeTab));
 
   // Get initials from name
   const getInitials = (name) => {
@@ -2857,33 +2972,35 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
   return (
     <div className="space-y-4">
       {/* Tab Filters - wraps to fit the page width instead of scrolling */}
-      <div className={`flex items-center flex-wrap gap-x-4 gap-y-2 pb-3 border-b-2 ${borderColor}`}>
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`flex items-center gap-1.5 pb-2 border-b-2 transition-all ${
-            activeTab === 'all'
-              ? 'border-[#3b82f6] text-[#3b82f6]'
-              : `border-transparent ${textSecondary} hover:${textPrimary}`
-          }`}
-        >
-          <span className="font-medium text-sm">All ({leads.length})</span>
-        </button>
-        {stages.map(stage => (
+      {!hideStageTabs && (
+        <div className={`flex items-center flex-wrap gap-x-4 gap-y-2 pb-3 border-b-2 ${borderColor}`}>
           <button
-            key={stage.stage_id}
-            onClick={() => setActiveTab(stage.stage_id)}
-            className={`flex items-center gap-1.5 pb-2 border-b-2 transition-all whitespace-nowrap ${
-              activeTab === stage.stage_id
-                ? `border-current`
+            onClick={() => setActiveTab('all')}
+            className={`flex items-center gap-1.5 pb-2 border-b-2 transition-all ${
+              activeTab === 'all'
+                ? 'border-[#3b82f6] text-[#3b82f6]'
                 : `border-transparent ${textSecondary} hover:${textPrimary}`
             }`}
-            style={{ color: activeTab === stage.stage_id ? stage.color : undefined }}
           >
-            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-            <span className="text-sm">{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
+            <span className="font-medium text-sm">All ({leads.length})</span>
           </button>
-        ))}
-      </div>
+          {stages.map(stage => (
+            <button
+              key={stage.stage_id}
+              onClick={() => setActiveTab(stage.stage_id)}
+              className={`flex items-center gap-1.5 pb-2 border-b-2 transition-all whitespace-nowrap ${
+                activeTab === stage.stage_id
+                  ? `border-current`
+                  : `border-transparent ${textSecondary} hover:${textPrimary}`
+              }`}
+              style={{ color: activeTab === stage.stage_id ? stage.color : undefined }}
+            >
+              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
+              <span className="text-sm">{stage.name} ({stageCounts[stage.stage_id] || 0})</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Table */}
       {filteredLeads.length === 0 ? (
