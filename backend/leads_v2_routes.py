@@ -152,7 +152,11 @@ async def get_current_user_from_request(request: Request) -> dict:
 def _pipeline_match(pipeline: str) -> Dict[str, Any]:
     """Mongo filter matching documents in `pipeline`. Docs created before this
     field existed have no `pipeline` key at all — they're treated as
-    'pre_sales' since that was the only pipeline before the Sales split."""
+    'pre_sales' since that was the only pipeline before the Sales split.
+    'all' matches every lead regardless of pipeline (used by the Overview
+    tab, which spans both)."""
+    if pipeline == "all":
+        return {}
     if pipeline == "pre_sales":
         return {"$or": [{"pipeline": "pre_sales"}, {"pipeline": {"$exists": False}}]}
     return {"pipeline": pipeline}
@@ -466,9 +470,13 @@ async def get_leads(
     stage_id: Optional[str] = None,
     search: Optional[str] = None,
     lead_owner: Optional[str] = None,
-    pipeline: str = "pre_sales"
+    pipeline: str = "pre_sales",
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
 ):
-    """Get all leads with optional filters"""
+    """Get all leads with optional filters. `date_from`/`date_to` (ISO,
+    filtering on created_at) back the Overview tab's lead-rows table —
+    combine with pipeline=all to see leads from either pipeline."""
     await get_current_user_from_request(request)
 
     query = {"is_deleted": {"$ne": True}}
@@ -479,6 +487,14 @@ async def get_leads(
 
     if lead_owner:
         query["lead_owner"] = lead_owner
+
+    if date_from or date_to:
+        created_filter = {}
+        if date_from:
+            created_filter["$gte"] = _parse_iso(date_from)
+        if date_to:
+            created_filter["$lte"] = _parse_iso(date_to)
+        query["created_at"] = created_filter
 
     query["$and"] = and_clauses
 

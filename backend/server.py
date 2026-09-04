@@ -151,6 +151,14 @@ async def startup_tasks():
             ("expense_split_categories", [("parent_id", 1), ("is_deleted", 1)], {}),
             ("invoice_requests", [("status", 1), ("is_deleted", 1)], {}),
             ("lead_stages", [("order", 1), ("is_deleted", 1)], {}),
+            # leads_v2 (Sales Department) had no indexes at all — every list
+            # request was a full collection scan plus an in-memory sort,
+            # which is slow once the collection has more than a couple
+            # hundred docs (e.g. the historical dummy-lead sync bug).
+            ("leads_v2", [("is_deleted", 1), ("created_at", -1), ("sheet_row_index", -1)], {}),
+            ("leads_v2", [("stage_id", 1)], {}),
+            ("leads_v2", [("pipeline", 1)], {}),
+            ("leads_v2", [("lead_owner", 1)], {}),
         ]
         for coll_name, keys, opts in idx_targets:
             try:

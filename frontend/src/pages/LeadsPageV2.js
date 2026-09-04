@@ -49,6 +49,8 @@ import {
   ArrowDown,
   Download,
   Upload,
+  FileText,
+  IndianRupee,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -100,6 +102,8 @@ const LeadsPageV2 = () => {
   const [overviewRange, setOverviewRange] = useState('today'); // 'today' | 'yesterday' | 'week' | 'month'
   const [overviewData, setOverviewData] = useState(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewLeads, setOverviewLeads] = useState([]); // the lead rows behind the LAPS "Leads" count
+  const [overviewStages, setOverviewStages] = useState([]); // pre_sales + sales stages combined, for the rows' Status badges
   const [viewMode, setViewMode] = useState('list'); // 'list' only
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
@@ -257,12 +261,15 @@ const LeadsPageV2 = () => {
     setOverviewLoading(true);
     try {
       const { from, to } = getOverviewDateRange(overviewRange);
-      const res = await axios.get(`${API}/api/leads-v2/overview`, {
-        headers,
-        params: { date_from: from.toISOString(), date_to: to.toISOString() },
-        timeout: 12000,
-      });
-      setOverviewData(res.data);
+      const params = { date_from: from.toISOString(), date_to: to.toISOString() };
+      const [summaryRes, leadsRes] = await Promise.all([
+        axios.get(`${API}/api/leads-v2/overview`, { headers, params, timeout: 12000 }),
+        // pipeline=all: the row list backing "Leads" spans both pipelines,
+        // same as the count itself.
+        axios.get(`${API}/api/leads-v2/leads`, { headers, params: { ...params, pipeline: 'all' }, timeout: 12000 }),
+      ]);
+      setOverviewData(summaryRes.data);
+      setOverviewLeads(leadsRes.data || []);
     } catch (error) {
       toast.error('Failed to load overview');
     } finally {
@@ -270,9 +277,28 @@ const LeadsPageV2 = () => {
     }
   }, [overviewRange]);
 
+  // Stages from both pipelines, so a lead's Status badge resolves correctly
+  // regardless of which pipeline it currently lives in — fetched once per
+  // Overview visit rather than on every date-range change.
+  const loadOverviewStages = useCallback(async () => {
+    try {
+      const [preRes, salesRes] = await Promise.all([
+        axios.get(`${API}/api/leads-v2/stages`, { headers, params: { pipeline: 'pre_sales' } }),
+        axios.get(`${API}/api/leads-v2/stages`, { headers, params: { pipeline: 'sales' } }),
+      ]);
+      setOverviewStages([...(preRes.data || []), ...(salesRes.data || [])]);
+    } catch (error) {
+      console.error('Error loading overview stages:', error);
+    }
+  }, []);
+
   useEffect(() => {
     if (showOverview) loadOverview();
   }, [showOverview, overviewRange, loadOverview]);
+
+  useEffect(() => {
+    if (showOverview) loadOverviewStages();
+  }, [showOverview, loadOverviewStages]);
 
   const loadSheetsConfig = useCallback(async () => {
     try {
@@ -426,6 +452,7 @@ const LeadsPageV2 = () => {
       toast.success('Lead deleted');
       loadLeads();
       loadStats();
+      if (showOverview) loadOverview();
     } catch (error) {
       toast.error('Failed to delete lead');
     }
@@ -446,6 +473,7 @@ const LeadsPageV2 = () => {
       }
       loadLeads();
       loadStats();
+      if (showOverview) loadOverview();
     } catch (error) {
       toast.error('Failed to update lead stage');
     }
@@ -1240,9 +1268,18 @@ const LeadsPageV2 = () => {
             data={overviewData}
             loading={overviewLoading}
             formatCurrency={formatCurrency}
+            leads={overviewLeads}
+            stages={overviewStages}
+            onEdit={openEditLead}
+            onDelete={deleteLead}
+            onStageChange={updateLeadStage}
+            onViewQuotation={setViewingQuotationId}
+            formatDate={formatDate}
+            isDark={isDark}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+            bgCard={bgCard}
             bgSecondary={bgSecondary}
           />
         ) : (
@@ -1480,6 +1517,12 @@ const LeadsPageV2 = () => {
         <div className="flex-1 overflow-auto p-4">
           {loading ? (
             <div className={`text-center py-12 ${textSecondary}`}>Loading...</div>
+          ) : loadError ? (
+            <div className={`text-center py-12 ${textSecondary}`} data-testid="leads-load-error">
+              <p className={textPrimary}>Couldn't load leads — the server may be restarting</p>
+              <p className="text-sm mb-3">Check your connection and try again</p>
+              <Button variant="outline" onClick={() => loadAllWithRetry()} data-testid="leads-load-retry-btn">Retry</Button>
+            </div>
           ) : (
             <ListView
               leads={filteredLeads}
@@ -2665,61 +2708,96 @@ const LeadsPageV2 = () => {
 // ============== OVERVIEW (LAPS funnel) ==============
 // Leads -> Appointment -> Proposal Shared -> Sales: each card's percentage is
 // of the card immediately before it, not of the original Leads count, so a
-// weak step downstream is visible instead of being averaged away.
-const OverviewPanel = ({ range, setRange, data, loading, formatCurrency, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+// weak step downstream is visible instead of being averaged away. Card style
+// matches OperationsSummaryCards (see components/operations) — a soft
+// gradient blob behind the icon, uppercase label, big number, small caption.
+const OVERVIEW_RANGES = [
+  { key: 'today', label: 'Today' },
+  { key: 'yesterday', label: 'Yesterday' },
+  { key: 'week', label: 'This Week' },
+  { key: 'month', label: 'Month' },
+];
+
+const OverviewPanel = ({
+  range, setRange, data, loading, formatCurrency,
+  leads, stages, onEdit, onDelete, onStageChange, onViewQuotation, formatDate,
+  isDark, textPrimary, textSecondary, borderColor, bgCard, bgSecondary,
+}) => {
   const cards = [
-    { key: 'leads', label: 'Leads', color: '#3b82f6', count: data?.leads ?? 0, pctLabel: null },
-    { key: 'appointment', label: 'Appointment', color: '#f59e0b', count: data?.appointment?.count ?? 0, pctLabel: `${data?.appointment?.pct ?? 0}% of Leads` },
-    { key: 'proposal_shared', label: 'Proposal Shared', color: '#8b5cf6', count: data?.proposal_shared?.count ?? 0, pctLabel: `${data?.proposal_shared?.pct ?? 0}% of Appointment` },
+    { key: 'leads', label: 'Leads', sub: 'in this period', count: data?.leads ?? 0, icon: Users, ring: 'from-blue-500/30 to-blue-500/0', text: 'text-blue-500' },
+    { key: 'appointment', label: 'Appointment', sub: `${data?.appointment?.pct ?? 0}% of Leads`, count: data?.appointment?.count ?? 0, icon: Calendar, ring: 'from-amber-500/30 to-amber-500/0', text: 'text-amber-500' },
+    { key: 'proposal_shared', label: 'Proposal Shared', sub: `${data?.proposal_shared?.pct ?? 0}% of Appointment`, count: data?.proposal_shared?.count ?? 0, icon: FileText, ring: 'from-purple-500/30 to-purple-500/0', text: 'text-purple-500' },
+    { key: 'sales', label: 'Sales', sub: `${formatCurrency(data?.sales?.value ?? 0)} · ${data?.sales?.pct ?? 0}% of Proposal Shared`, count: data?.sales?.count ?? 0, icon: IndianRupee, ring: 'from-emerald-500/30 to-emerald-500/0', text: 'text-emerald-500' },
   ];
 
   return (
     <div className="flex-1 overflow-auto p-4" data-testid="overview-panel">
       <div className="flex items-center gap-2 mb-4">
         <span className={`text-xs ${textSecondary} uppercase tracking-wide`}>Date Filter:</span>
-        <Select value={range} onValueChange={setRange}>
-          <SelectTrigger className={`w-[160px] ${bgSecondary}`} data-testid="overview-range-select">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="today">Today</SelectItem>
-            <SelectItem value="yesterday">Yesterday</SelectItem>
-            <SelectItem value="week">This Week</SelectItem>
-            <SelectItem value="month">This Month</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-1">
+          {OVERVIEW_RANGES.map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setRange(opt.key)}
+              data-testid={`overview-range-${opt.key}`}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                range === opt.key ? 'bg-[#3b82f6] text-white' : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <p className={`text-xs ${textSecondary} uppercase tracking-wide mb-2`}>LAPS Overview</p>
 
-      {loading ? (
-        <div className={`text-center py-12 ${textSecondary}`}>Loading...</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {cards.map(card => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {cards.map(card => {
+          const Icon = card.icon;
+          return (
             <div
               key={card.key}
-              className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}
-              style={{ borderLeft: `4px solid ${card.color}` }}
               data-testid={`overview-card-${card.key}`}
+              className={`relative overflow-hidden rounded-xl border ${borderColor} ${bgCard} p-4`}
             >
-              <p className={`text-[10px] uppercase tracking-wide font-medium ${textSecondary}`}>{card.label}</p>
-              <p className="text-2xl font-bold mt-1" style={{ color: card.color }}>{card.count}</p>
-              {card.pctLabel && <p className={`text-xs mt-1 ${textSecondary}`}>{card.pctLabel}</p>}
+              <div className={`absolute -top-8 -right-8 h-24 w-24 rounded-full bg-gradient-to-br ${card.ring}`} />
+              <div className="relative">
+                <div className="flex items-center justify-between mb-2">
+                  <p className={`text-xs uppercase tracking-wide ${textSecondary}`}>{card.label}</p>
+                  <Icon className={`h-4 w-4 ${card.text}`} />
+                </div>
+                <p className={`text-2xl font-bold ${textPrimary}`}>{loading ? '…' : card.count}</p>
+                <p className={`text-[11px] ${textSecondary} mt-0.5`}>{card.sub}</p>
+              </div>
             </div>
-          ))}
+          );
+        })}
+      </div>
 
-          <div
-            className="p-4 rounded-lg border shadow-md"
-            style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
-            data-testid="overview-card-sales"
-          >
-            <p className="text-[10px] uppercase tracking-wide font-medium text-white/85">Sales</p>
-            <p className="text-2xl font-bold mt-1 text-white">{data?.sales?.count ?? 0}</p>
-            <p className="text-xs mt-1 text-white/85">{formatCurrency(data?.sales?.value ?? 0)}</p>
-            <p className="text-xs mt-0.5 text-white/85">{data?.sales?.pct ?? 0}% of Proposal Shared</p>
-          </div>
+      {loading ? (
+        <div className={`text-center py-12 ${textSecondary}`}>Loading...</div>
+      ) : leads.length === 0 ? (
+        <div className={`text-center py-12 ${textSecondary}`}>
+          <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p>No leads created in this period</p>
         </div>
+      ) : (
+        <ListView
+          leads={leads}
+          stages={stages}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onStageChange={onStageChange}
+          onViewQuotation={onViewQuotation}
+          formatDate={formatDate}
+          isDark={isDark}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+          bgSecondary={bgSecondary}
+        />
       )}
     </div>
   );
