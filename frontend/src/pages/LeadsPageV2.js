@@ -83,7 +83,8 @@ const LeadsPageV2 = () => {
   const [showLeadSheetModal, setShowLeadSheetModal] = useState(false);
   const { user: currentUser, isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
-  
+  const [loadError, setLoadError] = useState(false);
+
   // Dropdown data
   const [services, setServices] = useState([]);
   const [industries, setIndustries] = useState([]);
@@ -190,25 +191,29 @@ const LeadsPageV2 = () => {
 
   const loadLeads = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/leads`, { headers, params: { pipeline } });
+      const res = await axios.get(`${API}/api/leads-v2/leads`, { headers, params: { pipeline }, timeout: 12000 });
       setLeads(res.data || []);
+      return true;
     } catch (error) {
       console.error('Error loading leads:', error);
+      return false;
     }
   }, [pipeline]);
 
   const loadStages = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/stages`, { headers, params: { pipeline } });
+      const res = await axios.get(`${API}/api/leads-v2/stages`, { headers, params: { pipeline }, timeout: 12000 });
       setStages(res.data || []);
+      return true;
     } catch (error) {
       console.error('Error loading stages:', error);
+      return false;
     }
   }, [pipeline]);
 
   const loadCustomFields = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/custom-fields`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/custom-fields`, { headers, timeout: 12000 });
       setCustomFields(res.data || []);
     } catch (error) {
       console.error('Error loading custom fields:', error);
@@ -217,7 +222,7 @@ const LeadsPageV2 = () => {
 
   const loadStats = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/stats`, { headers, params: { pipeline } });
+      const res = await axios.get(`${API}/api/leads-v2/stats`, { headers, params: { pipeline }, timeout: 12000 });
       setStats(res.data || { total: 0, by_stage: {} });
     } catch (error) {
       console.error('Error loading stats:', error);
@@ -255,6 +260,7 @@ const LeadsPageV2 = () => {
       const res = await axios.get(`${API}/api/leads-v2/overview`, {
         headers,
         params: { date_from: from.toISOString(), date_to: to.toISOString() },
+        timeout: 12000,
       });
       setOverviewData(res.data);
     } catch (error) {
@@ -270,14 +276,14 @@ const LeadsPageV2 = () => {
 
   const loadSheetsConfig = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/google-sheets/config`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/google-sheets/config`, { headers, timeout: 12000 });
       setSheetsConfig(res.data || null);
     } catch (error) {
       console.error('Error loading sheets config:', error);
     }
     // Also load the new dual-sheet (Prospect/Lead) configs
     try {
-      const res2 = await axios.get(`${API}/api/sheets/configs`, { headers });
+      const res2 = await axios.get(`${API}/api/sheets/configs`, { headers, timeout: 12000 });
       setProspectCfgs(res2.data?.prospect || []);
       setLeadCfgs(res2.data?.lead || []);
     } catch (e) { /* ignore */ }
@@ -285,7 +291,7 @@ const LeadsPageV2 = () => {
 
   const loadServices = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/services`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/services`, { headers, timeout: 12000 });
       setServices(res.data || []);
     } catch (error) {
       console.error('Error loading services:', error);
@@ -294,7 +300,7 @@ const LeadsPageV2 = () => {
 
   const loadIndustries = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/industries`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/industries`, { headers, timeout: 12000 });
       setIndustries(res.data || []);
     } catch (error) {
       console.error('Error loading industries:', error);
@@ -303,17 +309,26 @@ const LeadsPageV2 = () => {
 
   const loadTeamMembers = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/api/leads-v2/team-members`, { headers });
+      const res = await axios.get(`${API}/api/leads-v2/team-members`, { headers, timeout: 12000 });
       setTeamMembers(res.data || []);
     } catch (error) {
       console.error('Error loading team members:', error);
     }
   }, []);
 
-  useEffect(() => {
-    const loadAll = async () => {
-      setLoading(true);
-      await Promise.all([
+  // Bounded timeout + a couple of quick auto-retries (mirrors ProjectsPanel's
+  // loadProjects): axios has no default timeout, so a request landing during
+  // a backend restart (e.g. a deploy in flight) previously hung "Loading..."
+  // forever. Leads + Stages are the two resources the page can't function
+  // without, so only their failure triggers a retry / the error state — the
+  // other 6 are best-effort enrichment data. Hoisted out of the effect (with
+  // a `cancelled` guard param) so the Retry button can call it directly too.
+  const loadAllWithRetry = useCallback(async (isCancelled = () => false) => {
+    setLoading(true);
+    setLoadError(false);
+    const attempts = 3;
+    for (let i = 0; i < attempts; i++) {
+      const [stagesOk, leadsOk] = await Promise.all([
         loadStages(),
         loadLeads(),
         loadCustomFields(),
@@ -323,10 +338,24 @@ const LeadsPageV2 = () => {
         loadIndustries(),
         loadTeamMembers(),
       ]);
+      if (isCancelled()) return;
+      if (stagesOk && leadsOk) {
+        setLoading(false);
+        return;
+      }
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 2500));
+    }
+    if (!isCancelled()) {
       setLoading(false);
-    };
-    loadAll();
+      setLoadError(true);
+    }
   }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadTeamMembers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAllWithRetry(() => cancelled);
+    return () => { cancelled = true; };
+  }, [loadAllWithRetry]);
 
   // Background polling + focus refresh — keeps leads + stats live
   useAutoRefresh([loadLeads, loadStats]);
@@ -2790,13 +2819,14 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
             {/* Table Header */}
             <thead>
               <tr className={`text-xs ${textSecondary} uppercase border-b ${borderColor}`}>
-                <th className="px-4 py-3 text-left font-medium">Lead</th>
-                <th className="px-4 py-3 text-left font-medium">Contact</th>
-                <th className="px-4 py-3 text-left font-medium">Source</th>
-                <th className="px-4 py-3 text-left font-medium">Stage</th>
+                <th className="px-4 py-3 text-left font-medium">Lead Name</th>
+                <th className="px-4 py-3 text-left font-medium">Service</th>
+                <th className="px-4 py-3 text-left font-medium">Industry</th>
                 <th className="px-4 py-3 text-left font-medium">Appointment</th>
-                <th className="px-4 py-3 text-left font-medium">Follow-up</th>
-                <th className="px-4 py-3 text-left font-medium">Created</th>
+                <th className="px-4 py-3 text-left font-medium">Followup</th>
+                <th className="px-4 py-3 text-left font-medium">Source</th>
+                <th className="px-4 py-3 text-left font-medium">Status</th>
+                <th className="px-4 py-3 text-left font-medium">Created At</th>
                 <th className="px-4 py-3 text-center font-medium">Actions</th>
               </tr>
             </thead>
@@ -2811,32 +2841,55 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                     data-testid={`lead-row-${lead.lead_id}`}
                     className={`border-b ${borderColor} ${isDark ? 'hover:bg-[#27272a]/30' : 'hover:bg-gray-50'} transition-colors cursor-pointer`}
                   >
-                    {/* Lead Column - Avatar + Name + Location */}
+                    {/* Lead Name Column - Avatar + Name */}
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <div 
+                        <div
                           className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm"
                           style={{ backgroundColor: avatarColor }}
                         >
                           {getInitials(lead.name)}
                         </div>
-                        <div>
-                          <p className={`font-medium ${textPrimary}`}>{lead.name}</p>
-                          {lead.service && (
-                            <p className={`text-xs ${textSecondary}`}>{lead.service}</p>
-                          )}
-                        </div>
+                        <p className={`font-medium ${textPrimary}`}>{lead.name}</p>
                       </div>
                     </td>
 
-                    {/* Contact Column - Phone + Email */}
-                    <td className="px-4 py-4">
-                      <div className="space-y-1">
-                        <p className={textPrimary}>{lead.phone || '-'}</p>
-                        {lead.email && (
-                          <p className={`text-sm ${textSecondary}`}>{lead.email}</p>
-                        )}
-                      </div>
+                    {/* Service Column */}
+                    <td className={`px-4 py-4 ${textSecondary}`}>
+                      {lead.service || '-'}
+                    </td>
+
+                    {/* Industry Column */}
+                    <td className={`px-4 py-4 ${textSecondary}`}>
+                      {lead.industry || '-'}
+                    </td>
+
+                    {/* Appointment Column — shown for any lead with appointment_at */}
+                    <td className={`px-4 py-4 ${textSecondary}`} data-testid={`lead-appointment-${lead.lead_id}`}>
+                      {lead.appointment_at ? (
+                        <div>
+                          <p className={`text-sm ${textPrimary}`}>
+                            {new Date(lead.appointment_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                          <p className="text-xs">
+                            {new Date(lead.appointment_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      ) : <span>-</span>}
+                    </td>
+
+                    {/* Followup Column */}
+                    <td className={`px-4 py-4 ${textSecondary}`} data-testid={`lead-followup-${lead.lead_id}`}>
+                      {lead.followup_at ? (
+                        <div>
+                          <p className={`text-sm ${textPrimary}`}>
+                            {new Date(lead.followup_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                          <p className="text-xs">
+                            {new Date(lead.followup_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      ) : <span>-</span>}
                     </td>
 
                     {/* Source Column */}
@@ -2850,7 +2903,7 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                       )}
                     </td>
 
-                    {/* Stage Column */}
+                    {/* Status Column */}
                     <td className="px-4 py-4">
                       <span
                         className="inline-block px-3 py-1 rounded text-sm border-2 font-medium whitespace-nowrap"
@@ -2882,35 +2935,7 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                       )}
                     </td>
 
-                    {/* Appointment Column — shown for any lead with appointment_at */}
-                    <td className={`px-4 py-4 ${textSecondary}`} data-testid={`lead-appointment-${lead.lead_id}`}>
-                      {lead.appointment_at ? (
-                        <div>
-                          <p className={`text-sm ${textPrimary}`}>
-                            {new Date(lead.appointment_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </p>
-                          <p className="text-xs">
-                            {new Date(lead.appointment_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      ) : <span>-</span>}
-                    </td>
-
-                    {/* Follow-up Column */}
-                    <td className={`px-4 py-4 ${textSecondary}`} data-testid={`lead-followup-${lead.lead_id}`}>
-                      {lead.followup_at ? (
-                        <div>
-                          <p className={`text-sm ${textPrimary}`}>
-                            {new Date(lead.followup_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                          </p>
-                          <p className="text-xs">
-                            {new Date(lead.followup_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
-                      ) : <span>-</span>}
-                    </td>
-
-                    {/* Created Column */}
+                    {/* Created At Column */}
                     <td className={`px-4 py-4 ${textSecondary}`}>
                       {formatDateTime(lead.created_at)}
                     </td>
