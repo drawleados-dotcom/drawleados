@@ -444,6 +444,22 @@ async def delete_custom_field(field_id: str, request: Request):
 
 # ============== LEADS ROUTES ==============
 
+def _search_clause(search: Optional[str]) -> List[Dict[str, Any]]:
+    if not search:
+        return []
+    return [{"$or": [
+        {"name": {"$regex": search, "$options": "i"}},
+        {"email": {"$regex": search, "$options": "i"}},
+        {"phone": {"$regex": search, "$options": "i"}},
+    ]}]
+
+
+def _leads_sort_key(lead: Dict[str, Any]):
+    created_at = lead.get("created_at")
+    created_key = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at or "")
+    return (created_key, lead.get("sheet_row_index") or 0)
+
+
 @leads_v2_router.get("/leads")
 async def get_leads(
     request: Request,
@@ -456,20 +472,13 @@ async def get_leads(
     await get_current_user_from_request(request)
 
     query = {"is_deleted": {"$ne": True}}
-    and_clauses = [_pipeline_match(pipeline)]
+    and_clauses = [_pipeline_match(pipeline)] + _search_clause(search)
 
     if stage_id:
         query["stage_id"] = stage_id
 
     if lead_owner:
         query["lead_owner"] = lead_owner
-
-    if search:
-        and_clauses.append({"$or": [
-            {"name": {"$regex": search, "$options": "i"}},
-            {"email": {"$regex": search, "$options": "i"}},
-            {"phone": {"$regex": search, "$options": "i"}},
-        ]})
 
     query["$and"] = and_clauses
 
@@ -480,7 +489,27 @@ async def get_leads(
     leads = await db.leads_v2.find(query, {"_id": 0}).sort(
         [("created_at", -1), ("sheet_row_index", -1)]
     ).to_list(10000)
-    
+
+    # Pre-sales keeps visibility on a lead even after booking its appointment
+    # auto-promotes it into the Sales pipeline (see update_lead_stage) — as
+    # long as Sales hasn't moved it past that first Appointment step yet, it's
+    # merged back into the Pre-sales list here (read-only: its stage_id is
+    # remapped to Pre-sales' own Appointment stage so it slots into that
+    # bucket/card count instead of vanishing from Pre-sales entirely).
+    if pipeline == "pre_sales":
+        pre_sales_appt_stage, sales_appt_stage = await _pre_sales_promoted_appointment_stages(request)
+        if pre_sales_appt_stage and sales_appt_stage and (not stage_id or stage_id == pre_sales_appt_stage["stage_id"]):
+            promo_query = {"is_deleted": {"$ne": True}, "stage_id": sales_appt_stage["stage_id"]}
+            if lead_owner:
+                promo_query["lead_owner"] = lead_owner
+            promo_query["$and"] = [{"pipeline": "sales"}] + _search_clause(search)
+            promoted = await db.leads_v2.find(promo_query, {"_id": 0}).to_list(10000)
+            if promoted:
+                for p in promoted:
+                    p["stage_id"] = pre_sales_appt_stage["stage_id"]
+                    p["promoted_to_sales"] = True
+                leads = sorted(leads + promoted, key=_leads_sort_key, reverse=True)
+
     # Enrich leads with lead_owner_name
     user_ids = list(set([lead.get("lead_owner") for lead in leads if lead.get("lead_owner")]))
     users_map = {}
@@ -644,6 +673,17 @@ async def _get_sales_appointment_stage(request: Request) -> Optional[Dict[str, A
         sort=[("order", 1)],
     )
 
+async def _pre_sales_promoted_appointment_stages(request: Request):
+    """The two ends of the Pre-sales -> Sales appointment-booking promotion:
+    (pre_sales_appointment_stage, sales_appointment_stage). Either can be
+    None if that pipeline's stages haven't been seeded yet."""
+    pre_sales_appt_stage = await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "$and": [_pipeline_match("pre_sales")], "name": {"$regex": "appoin", "$options": "i"}},
+        {"_id": 0},
+    )
+    sales_appt_stage = await _get_sales_appointment_stage(request)
+    return pre_sales_appt_stage, sales_appt_stage
+
 async def _sync_calendar_and_log_appointment(
     lead: Dict[str, Any], appointment_at: str, reason: str, current_user: Dict[str, Any], update_doc: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -694,6 +734,20 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
     new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
     new_stage_name = (new_stage.get("name") or "").strip().lower() if new_stage else ""
     is_appointment_stage = "appoin" in new_stage_name
+
+    # Once a lead is actually promoted into Sales, it's shown back in
+    # Pre-sales read-only (see get_leads) — block any attempt to move it into
+    # a stage from the other pipeline instead of silently corrupting it with
+    # a stage_id that belongs to a pipeline it's no longer in. The one
+    # legitimate cross-pipeline move is the promotion itself, handled below.
+    lead_pipeline = _lead_pipeline(lead) if lead else None
+    new_stage_pipeline = new_stage.get("pipeline") if new_stage else None
+    is_promotion_transition = is_appointment_stage and lead_pipeline == "pre_sales" and bool(stage_data.get("appointment_at"))
+    if new_stage_pipeline and lead_pipeline and new_stage_pipeline != lead_pipeline and not is_promotion_transition:
+        raise HTTPException(
+            status_code=400,
+            detail="This lead now belongs to the Sales pipeline — change its stage from the Sales tab.",
+        )
 
     history_entry = None
     if stage_data.get("appointment_at"):
@@ -904,6 +958,15 @@ async def get_lead_stats(request: Request, pipeline: str = "pre_sales"):
     total_leads = await db.leads_v2.count_documents(
         {"is_deleted": {"$ne": True}, "$and": [_pipeline_match(pipeline)]}
     )
+
+    # Keep this in sync with the promoted-lead merge in get_leads() so the
+    # header total matches the number of rows Pre-sales actually sees.
+    if pipeline == "pre_sales":
+        pre_sales_appt_stage, sales_appt_stage = await _pre_sales_promoted_appointment_stages(request)
+        if pre_sales_appt_stage and sales_appt_stage:
+            total_leads += await db.leads_v2.count_documents(
+                {"is_deleted": {"$ne": True}, "pipeline": "sales", "stage_id": sales_appt_stage["stage_id"]}
+            )
 
     stats = {
         "total": total_leads,

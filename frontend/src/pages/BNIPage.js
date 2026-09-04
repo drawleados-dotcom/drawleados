@@ -1983,7 +1983,10 @@ export default function BNIPage() {
                               oneToOnes.map((o) => {
                                 const mode = o.meeting_mode || 'offline';
                                 const isCross = o.entry_type === 'cross_chapter' || !!o.chapter_name;
-                                const memberCategory = members.find((m) => m.member_id === o.member_id)?.category_name;
+                                // Cross-chapter entries (synced from BNI Outreach) have no
+                                // member_id — they carry the prospect's category on the
+                                // one-to-one record itself.
+                                const memberCategory = members.find((m) => m.member_id === o.member_id)?.category_name || o.category_name;
                                 return (
                                   <tr key={o.entry_id} className={`${bgCard} hover:${bgSecondary} transition-colors`}>
                                     <td className={`px-4 py-3 font-medium ${textPrimary}`}>{o.member_name}</td>

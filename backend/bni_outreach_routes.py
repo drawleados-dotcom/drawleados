@@ -164,7 +164,7 @@ async def _lead_from_outreach(db, entry, user_id):
     await db.bni_outreach.update_one({"outreach_id": entry["outreach_id"]}, {"$set": {"lead_created": True}})
 
 
-async def _sync_cross_chapter_oto(db, entry, meeting_status, user_id):
+async def _sync_cross_chapter_oto(db, entry, meeting_status, user_id, meeting_date=None, meeting_time=None):
     """Mirror an outreach prospect into the BNI One-to-One tab as a
     cross-chapter one-to-one (kept in sync by outreach_id)."""
     now = datetime.now(timezone.utc).isoformat()
@@ -174,9 +174,19 @@ async def _sync_cross_chapter_oto(db, entry, meeting_status, user_id):
         "member_email": entry.get("email", ""),
         "member_company": entry.get("brand_name", ""),
         "chapter_name": entry.get("chapter_name", "") or "Cross Chapter",
+        # Cross-chapter entries have no member_id to look up a category
+        # through, so the outreach prospect's own category is copied across
+        # directly — this is what lets the One-to-One tab show a Category
+        # for these rows instead of a blank dash.
+        "category_id": entry.get("category_id", ""),
+        "category_name": entry.get("category_name", ""),
         "meeting_status": meeting_status,
         "updated_at": now,
     }
+    if meeting_date:
+        fields["meeting_date"] = meeting_date
+    if meeting_time:
+        fields["meeting_time"] = meeting_time
     existing = await db.bni_one_to_ones.find_one({"outreach_id": entry["outreach_id"]}, {"_id": 0, "entry_id": 1})
     if existing:
         await db.bni_one_to_ones.update_one({"entry_id": existing["entry_id"]}, {"$set": fields})
@@ -185,8 +195,8 @@ async def _sync_cross_chapter_oto(db, entry, meeting_status, user_id):
         "entry_id": f"bniotoo_{uuid.uuid4().hex[:10]}",
         "entry_type": "cross_chapter",
         "member_id": "",
-        "meeting_date": now[:10],
-        "meeting_time": "",
+        "meeting_date": fields.get("meeting_date", now[:10]),
+        "meeting_time": fields.get("meeting_time", ""),
         "location": "",
         "invited_by": "me",
         "remark": "",
@@ -232,6 +242,8 @@ class OutreachUpdate(BaseModel):
     location: Optional[str] = None
     category_id: Optional[str] = None
     remarks: Optional[str] = None
+    meeting_date: Optional[str] = None  # only used when status -> Scheduled/Completed One to One
+    meeting_time: Optional[str] = None
 
 
 @bni_outreach_router.get("")
@@ -292,6 +304,10 @@ async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Re
         raise HTTPException(status_code=404, detail="Outreach entry not found")
 
     update_data = {k: v for k, v in payload.dict().items() if v is not None}
+    # Meeting date/time are relayed to the linked One-to-One entry below, not
+    # stored as fields on the outreach record itself.
+    meeting_date = update_data.pop("meeting_date", None)
+    meeting_time = update_data.pop("meeting_time", None)
     if "status" in update_data and update_data["status"] not in OUTREACH_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {update_data['status']}")
     if "category_id" in update_data:
@@ -314,9 +330,9 @@ async def update_outreach(outreach_id: str, payload: OutreachUpdate, request: Re
     if new_status == "Lead":
         await _lead_from_outreach(db, updated, user.user_id)
     elif new_status == "Scheduled One to One":
-        await _sync_cross_chapter_oto(db, updated, "Scheduled", user.user_id)
+        await _sync_cross_chapter_oto(db, updated, "Scheduled", user.user_id, meeting_date, meeting_time)
     elif new_status == "One to One Completed":
-        await _sync_cross_chapter_oto(db, updated, "Completed", user.user_id)
+        await _sync_cross_chapter_oto(db, updated, "Completed", user.user_id, meeting_date, meeting_time)
 
     return await db.bni_outreach.find_one({"outreach_id": outreach_id}, {"_id": 0})
 

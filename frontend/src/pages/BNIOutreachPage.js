@@ -270,13 +270,39 @@ const BNIOutreachPage = () => {
       setSaving(false);
     }
   };
-  const updateStatus = async (outreachId, status) => {
+  const updateStatus = async (outreachId, status, extra = {}) => {
     try {
-      await api.put(`/bni/outreach/${outreachId}`, { status });
+      await api.put(`/bni/outreach/${outreachId}`, { status, ...extra });
       setOutreach((prev) => prev.map((o) => (o.outreach_id === outreachId ? { ...o, status } : o)));
       if (status === 'Lead') toast.success('Marked as Lead — added to Sales Leads');
       else if (status === 'Scheduled One to One' || status === 'One to One Completed') toast.success('Synced to BNI One-to-One (cross chapter)');
     } catch (error) { toast.error('Failed to update status'); }
+  };
+  // "Scheduled One to One" asks for the meeting date/time first, so the
+  // synced BNI One-to-One entry shows the real meeting time instead of
+  // defaulting to today with a blank time.
+  const [scheduleFor, setScheduleFor] = useState(null); // outreach entry pending a date/time
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  const handleStatusChange = (outreachId, status) => {
+    if (status === 'Scheduled One to One') {
+      setScheduleFor(outreach.find((o) => o.outreach_id === outreachId) || { outreach_id: outreachId });
+      setScheduleDate(new Date().toISOString().slice(0, 10));
+      setScheduleTime('10:00');
+      return;
+    }
+    updateStatus(outreachId, status);
+  };
+  const confirmSchedule = async () => {
+    if (!scheduleDate || !scheduleTime) { toast.error('Pick a date and time'); return; }
+    setScheduling(true);
+    try {
+      await updateStatus(scheduleFor.outreach_id, 'Scheduled One to One', { meeting_date: scheduleDate, meeting_time: scheduleTime });
+      setScheduleFor(null);
+    } finally {
+      setScheduling(false);
+    }
   };
   const remove = async (outreachId) => {
     if (!window.confirm('Delete this outreach entry?')) return;
@@ -586,7 +612,7 @@ const BNIOutreachPage = () => {
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.phone2 || '—'}</td>
                             <td className={`px-4 py-3 ${textSecondary}`}>{o.website || '—'}</td>
                             <td className="px-4 py-3">
-                              <Select value={o.status || 'To do'} onValueChange={(v) => updateStatus(o.outreach_id, v)}>
+                              <Select value={o.status || 'To do'} onValueChange={(v) => handleStatusChange(o.outreach_id, v)}>
                                 <SelectTrigger className={`w-[150px] ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-status-${o.outreach_id}`}>
                                   <SelectValue />
                                 </SelectTrigger>
@@ -651,7 +677,7 @@ const BNIOutreachPage = () => {
                         {o.source_name && <p className="truncate">Source: {o.source_name}</p>}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Select value={o.status || 'To do'} onValueChange={(v) => updateStatus(o.outreach_id, v)}>
+                        <Select value={o.status || 'To do'} onValueChange={(v) => handleStatusChange(o.outreach_id, v)}>
                           <SelectTrigger className={`flex-1 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`bni-outreach-card-status-${o.outreach_id}`}>
                             <SelectValue />
                           </SelectTrigger>
@@ -903,6 +929,32 @@ const BNIOutreachPage = () => {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={!!scheduleFor} onOpenChange={(open) => { if (!open) setScheduleFor(null); }}>
+          <DialogContent className={`${bgCard} max-w-md`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>
+                Schedule One-to-One{scheduleFor?.name ? ` — ${scheduleFor.name}` : ''}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Meeting Date *</Label>
+                <Input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-outreach-schedule-date-input" />
+              </div>
+              <div>
+                <Label className={textPrimary}>Meeting Time *</Label>
+                <Input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="bni-outreach-schedule-time-input" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setScheduleFor(null)}>Cancel</Button>
+              <Button onClick={confirmSchedule} disabled={scheduling} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-outreach-schedule-save-btn">
+                {scheduling ? 'Saving…' : 'Schedule'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <CSVImportModal
           open={showImport}
           onClose={() => setShowImport(false)}
@@ -1062,6 +1114,47 @@ const BNIOutreachPage = () => {
               <Button variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
               <Button onClick={save} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-outreach-save-btn">
                 {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Outreach'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Scheduling a One-to-One asks for date/time before it syncs to
+            the BNI One-to-One tab, instead of defaulting to today/blank. */}
+        <Dialog open={!!scheduleFor} onOpenChange={(o) => !o && !scheduling && setScheduleFor(null)}>
+          <DialogContent className={`${bgCard} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle className={textPrimary}>Schedule One-to-One</DialogTitle>
+            </DialogHeader>
+            <p className={`text-sm ${textSecondary}`}>
+              When is the one-to-one with <span className={textPrimary}>{scheduleFor?.name}</span>?
+            </p>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Date</Label>
+                <Input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={(e) => setScheduleDate(e.target.value)}
+                  className={`${bgSecondary} border ${borderColor}`}
+                  data-testid="bni-schedule-date"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Time</Label>
+                <Input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={(e) => setScheduleTime(e.target.value)}
+                  className={`${bgSecondary} border ${borderColor}`}
+                  data-testid="bni-schedule-time"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setScheduleFor(null)} disabled={scheduling}>Cancel</Button>
+              <Button onClick={confirmSchedule} disabled={scheduling} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-schedule-confirm">
+                {scheduling ? 'Saving…' : 'Confirm'}
               </Button>
             </DialogFooter>
           </DialogContent>

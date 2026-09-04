@@ -1869,6 +1869,11 @@ const LeadsPageV2 = () => {
             {editingLead && stages.length > 0 && (
               <div className={`border-t ${borderColor} pt-3 mt-1`} data-testid="stage-transition-tabs">
                 <p className={`text-xs ${textSecondary} mb-2 uppercase tracking-wide`}>Move to Stage</p>
+                {editingLead.promoted_to_sales && (
+                  <p className={`text-xs ${textSecondary} mb-2`} data-testid="promoted-to-sales-note">
+                    This lead's appointment has been booked and it now lives in the Sales pipeline — change its stage from the Sales tab instead.
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {stages.map((stage) => {
                     const isCurrent = leadForm.stage_id === stage.stage_id;
@@ -2717,6 +2722,14 @@ const ListView = ({ leads, stages, customFields, onEdit, onDelete, onStageChange
                       >
                         {stage?.name || 'Unknown'}
                       </span>
+                      {lead.promoted_to_sales && (
+                        <span
+                          className={`block mt-1 text-xs ${textSecondary}`}
+                          data-testid={`promoted-to-sales-${lead.lead_id}`}
+                        >
+                          Moved to Sales
+                        </span>
+                      )}
                       {lead.quotation_id && onViewQuotation && (
                         <button
                           type="button"
