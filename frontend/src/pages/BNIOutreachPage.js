@@ -1118,47 +1118,6 @@ const BNIOutreachPage = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Scheduling a One-to-One asks for date/time before it syncs to
-            the BNI One-to-One tab, instead of defaulting to today/blank. */}
-        <Dialog open={!!scheduleFor} onOpenChange={(o) => !o && !scheduling && setScheduleFor(null)}>
-          <DialogContent className={`${bgCard} max-w-sm`}>
-            <DialogHeader>
-              <DialogTitle className={textPrimary}>Schedule One-to-One</DialogTitle>
-            </DialogHeader>
-            <p className={`text-sm ${textSecondary}`}>
-              When is the one-to-one with <span className={textPrimary}>{scheduleFor?.name}</span>?
-            </p>
-            <div className="space-y-3">
-              <div>
-                <Label className={textPrimary}>Date</Label>
-                <Input
-                  type="date"
-                  value={scheduleDate}
-                  onChange={(e) => setScheduleDate(e.target.value)}
-                  className={`${bgSecondary} border ${borderColor}`}
-                  data-testid="bni-schedule-date"
-                />
-              </div>
-              <div>
-                <Label className={textPrimary}>Time</Label>
-                <Input
-                  type="time"
-                  value={scheduleTime}
-                  onChange={(e) => setScheduleTime(e.target.value)}
-                  className={`${bgSecondary} border ${borderColor}`}
-                  data-testid="bni-schedule-time"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setScheduleFor(null)} disabled={scheduling}>Cancel</Button>
-              <Button onClick={confirmSchedule} disabled={scheduling} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="bni-schedule-confirm">
-                {scheduling ? 'Saving…' : 'Confirm'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
     </Layout>
   );
