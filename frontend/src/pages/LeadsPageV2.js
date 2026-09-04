@@ -91,6 +91,14 @@ const LeadsPageV2 = () => {
 
   // UI state
   const [pipeline, setPipeline] = useState('pre_sales'); // 'pre_sales' | 'sales' — Sales Department sub-tabs
+  // Overview is a separate top-level tab (shown instead of the Pre-sales/Sales
+  // stage board), so it's tracked independently of `pipeline` rather than as a
+  // third pipeline value — `pipeline` still only ever drives the leads/stages/
+  // stats loaders below.
+  const [showOverview, setShowOverview] = useState(false);
+  const [overviewRange, setOverviewRange] = useState('today'); // 'today' | 'yesterday' | 'week' | 'month'
+  const [overviewData, setOverviewData] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' only
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
@@ -215,6 +223,50 @@ const LeadsPageV2 = () => {
       console.error('Error loading stats:', error);
     }
   }, [pipeline]);
+
+  // LAPS funnel window for the Overview tab. "This Week" matches the
+  // Tue–Mon convention already used by the date-range picker below (and by
+  // Finance's Week-Wise view), for consistency across the app.
+  const getOverviewDateRange = (range) => {
+    const now = new Date();
+    const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+    const endOfDay = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+    if (range === 'yesterday') {
+      const y = new Date(now);
+      y.setDate(now.getDate() - 1);
+      return { from: startOfDay(y), to: endOfDay(y) };
+    }
+    if (range === 'week') {
+      const day = now.getDay(); // 0=Sun..6=Sat, Tue=2
+      const back = day >= 2 ? day - 2 : day + 5;
+      const from = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - back));
+      return { from, to: endOfDay(now) };
+    }
+    if (range === 'month') {
+      return { from: startOfDay(new Date(now.getFullYear(), now.getMonth(), 1)), to: endOfDay(now) };
+    }
+    return { from: startOfDay(now), to: endOfDay(now) }; // 'today'
+  };
+
+  const loadOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    try {
+      const { from, to } = getOverviewDateRange(overviewRange);
+      const res = await axios.get(`${API}/api/leads-v2/overview`, {
+        headers,
+        params: { date_from: from.toISOString(), date_to: to.toISOString() },
+      });
+      setOverviewData(res.data);
+    } catch (error) {
+      toast.error('Failed to load overview');
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, [overviewRange]);
+
+  useEffect(() => {
+    if (showOverview) loadOverview();
+  }, [showOverview, overviewRange, loadOverview]);
 
   const loadSheetsConfig = useCallback(async () => {
     try {
@@ -1122,27 +1174,50 @@ const LeadsPageV2 = () => {
           </div>
         </div>
 
-        {/* Pre-sales / Sales pipeline tabs */}
+        {/* Overview / Pre-sales / Sales tabs */}
         <div className={`px-4 pt-3 flex items-center gap-2`} data-testid="pipeline-tabs">
           {[
+            { key: 'overview', label: 'Overview' },
             { key: 'pre_sales', label: 'Pre-sales' },
             { key: 'sales', label: 'Sales' },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => { setPipeline(tab.key); setFilterStage(null); }}
-              data-testid={`pipeline-tab-${tab.key}`}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                pipeline === tab.key
-                  ? 'bg-[#3b82f6] text-white'
-                  : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+          ].map(tab => {
+            const isActive = tab.key === 'overview' ? showOverview : (!showOverview && pipeline === tab.key);
+            return (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  if (tab.key === 'overview') { setShowOverview(true); return; }
+                  setShowOverview(false);
+                  setPipeline(tab.key);
+                  setFilterStage(null);
+                }}
+                data-testid={`pipeline-tab-${tab.key}`}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[#3b82f6] text-white'
+                    : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
+        {showOverview ? (
+          <OverviewPanel
+            range={overviewRange}
+            setRange={setOverviewRange}
+            data={overviewData}
+            loading={overviewLoading}
+            formatCurrency={formatCurrency}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+            bgSecondary={bgSecondary}
+          />
+        ) : (
+        <>
         {/* Date Range Filter */}
         <div className={`px-4 pt-4 flex items-center gap-2 flex-wrap`} data-testid="date-filter-bar">
           <span className={`text-xs ${textSecondary} uppercase tracking-wide mr-1`}>Date Range:</span>
@@ -1394,6 +1469,8 @@ const LeadsPageV2 = () => {
             />
           )}
         </div>
+        </>
+        )}
 
         {/* ============== MODALS ============== */}
 
@@ -2553,6 +2630,69 @@ const LeadsPageV2 = () => {
         </Dialog>
       </div>
     </Layout>
+  );
+};
+
+// ============== OVERVIEW (LAPS funnel) ==============
+// Leads -> Appointment -> Proposal Shared -> Sales: each card's percentage is
+// of the card immediately before it, not of the original Leads count, so a
+// weak step downstream is visible instead of being averaged away.
+const OverviewPanel = ({ range, setRange, data, loading, formatCurrency, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+  const cards = [
+    { key: 'leads', label: 'Leads', color: '#3b82f6', count: data?.leads ?? 0, pctLabel: null },
+    { key: 'appointment', label: 'Appointment', color: '#f59e0b', count: data?.appointment?.count ?? 0, pctLabel: `${data?.appointment?.pct ?? 0}% of Leads` },
+    { key: 'proposal_shared', label: 'Proposal Shared', color: '#8b5cf6', count: data?.proposal_shared?.count ?? 0, pctLabel: `${data?.proposal_shared?.pct ?? 0}% of Appointment` },
+  ];
+
+  return (
+    <div className="flex-1 overflow-auto p-4" data-testid="overview-panel">
+      <div className="flex items-center gap-2 mb-4">
+        <span className={`text-xs ${textSecondary} uppercase tracking-wide`}>Date Filter:</span>
+        <Select value={range} onValueChange={setRange}>
+          <SelectTrigger className={`w-[160px] ${bgSecondary}`} data-testid="overview-range-select">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="today">Today</SelectItem>
+            <SelectItem value="yesterday">Yesterday</SelectItem>
+            <SelectItem value="week">This Week</SelectItem>
+            <SelectItem value="month">This Month</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <p className={`text-xs ${textSecondary} uppercase tracking-wide mb-2`}>LAPS Overview</p>
+
+      {loading ? (
+        <div className={`text-center py-12 ${textSecondary}`}>Loading...</div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {cards.map(card => (
+            <div
+              key={card.key}
+              className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}
+              style={{ borderLeft: `4px solid ${card.color}` }}
+              data-testid={`overview-card-${card.key}`}
+            >
+              <p className={`text-[10px] uppercase tracking-wide font-medium ${textSecondary}`}>{card.label}</p>
+              <p className="text-2xl font-bold mt-1" style={{ color: card.color }}>{card.count}</p>
+              {card.pctLabel && <p className={`text-xs mt-1 ${textSecondary}`}>{card.pctLabel}</p>}
+            </div>
+          ))}
+
+          <div
+            className="p-4 rounded-lg border shadow-md"
+            style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+            data-testid="overview-card-sales"
+          >
+            <p className="text-[10px] uppercase tracking-wide font-medium text-white/85">Sales</p>
+            <p className="text-2xl font-bold mt-1 text-white">{data?.sales?.count ?? 0}</p>
+            <p className="text-xs mt-1 text-white/85">{formatCurrency(data?.sales?.value ?? 0)}</p>
+            <p className="text-xs mt-0.5 text-white/85">{data?.sales?.pct ?? 0}% of Proposal Shared</p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

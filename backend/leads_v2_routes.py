@@ -987,6 +987,60 @@ async def get_lead_stats(request: Request, pipeline: str = "pre_sales"):
     return stats
 
 
+def _parse_iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+@leads_v2_router.get("/overview")
+async def get_overview(request: Request, date_from: Optional[str] = None, date_to: Optional[str] = None):
+    """LAPS funnel snapshot for the Overview tab: of the leads created in the
+    given window (across both pipelines), how many went on to book an
+    Appointment, get a Proposal (Quotation) shared, and close as a Sale
+    (Invoice Raise) — using each lead's current state rather than a stage-
+    change log, so a lead is counted the moment it has an appointment_at /
+    quotation_id / is sitting at Invoice Raise, regardless of which pipeline
+    it lives in now. Each step's percentage is of the step before it."""
+    await get_current_user_from_request(request)
+
+    query = {"is_deleted": {"$ne": True}}
+    created_filter = {}
+    if date_from:
+        created_filter["$gte"] = _parse_iso(date_from)
+    if date_to:
+        created_filter["$lte"] = _parse_iso(date_to)
+    if created_filter:
+        query["created_at"] = created_filter
+
+    leads = await db.leads_v2.find(
+        query, {"_id": 0, "appointment_at": 1, "quotation_id": 1, "stage_id": 1, "estimation": 1}
+    ).to_list(200000)
+
+    invoice_stage = await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "pipeline": "sales", "name": {"$regex": "invoice.?rais", "$options": "i"}},
+        {"_id": 0},
+    )
+    invoice_stage_id = invoice_stage["stage_id"] if invoice_stage else None
+
+    total = len(leads)
+    appointment_leads = [l for l in leads if l.get("appointment_at")]
+    proposal_leads = [l for l in leads if l.get("quotation_id")]
+    sales_leads = [l for l in leads if invoice_stage_id and l.get("stage_id") == invoice_stage_id]
+
+    def pct(part: int, whole: int) -> float:
+        return round((part / whole) * 100, 2) if whole else 0
+
+    return {
+        "leads": total,
+        "appointment": {"count": len(appointment_leads), "pct": pct(len(appointment_leads), total)},
+        "proposal_shared": {"count": len(proposal_leads), "pct": pct(len(proposal_leads), len(appointment_leads))},
+        "sales": {
+            "count": len(sales_leads),
+            "value": sum(float(l.get("estimation") or 0) for l in sales_leads),
+            "pct": pct(len(sales_leads), len(proposal_leads)),
+        },
+    }
+
+
 # ============== SERVICES ROUTES ==============
 
 @leads_v2_router.get("/services")
