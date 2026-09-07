@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug, ShoppingBag } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug, ShoppingBag, Zap } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
@@ -24,6 +24,7 @@ import ErpTaskModal from './projects/ErpTaskModal';
 import ProjectScopesTab from './projects/ProjectScopesTab';
 import ProjectCampaignsTab from './projects/ProjectCampaignsTab';
 import ProjectMetaReportsTab from './projects/ProjectMetaReportsTab';
+import ProjectDailyOptimizationTab from './projects/ProjectDailyOptimizationTab';
 import ProjectDailyNotesTab from './projects/ProjectDailyNotesTab';
 import ProjectsNotesHistoryPanel from './projects/ProjectsNotesHistoryPanel';
 import { Button } from './ui/button';
@@ -1835,6 +1836,7 @@ export default function ProjectsPanel({
             ...(isMetaAdsProject ? [{ id: 'scopes', label: 'Scopes', icon: Target }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'campaigns', label: 'Campaigns', icon: Megaphone }] : []),
             ...(isMetaAdsProject || isSeoProject ? [{ id: 'reports', label: 'Reports', icon: BarChart3 }] : []),
+            ...(isMetaAdsProject || isSeoProject ? [{ id: 'daily_optimization', label: 'Daily Optimization', icon: Zap }] : []),
             ...(isMetaAdsProject ? [{ id: 'additional', label: 'Additional', icon: Layers }] : []),
             // Delivery Date History — universal, every project regardless of department.
             { id: 'delivery_history', label: 'Delivery History', icon: History },
@@ -2126,6 +2128,20 @@ export default function ProjectsPanel({
         {projectInnerTab === 'reports' && (
           <ProjectMetaReportsTab
             project={selectedProject}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'daily_optimization' && (
+          <ProjectDailyOptimizationTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            canEdit={canManageProjects}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}
