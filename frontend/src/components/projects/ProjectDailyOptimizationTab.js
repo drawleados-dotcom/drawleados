@@ -253,7 +253,7 @@ export default function ProjectDailyOptimizationTab({
                     <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="daily-optimization-form-campaign">
                       <SelectValue placeholder="Select campaign" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[80]">
                       {campaigns.map(c => (
                         <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>
                       ))}
