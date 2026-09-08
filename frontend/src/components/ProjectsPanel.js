@@ -2503,7 +2503,20 @@ export default function ProjectsPanel({
               return (rank[a.priority] ?? 1) - (rank[b.priority] ?? 1);
             }).map(task => {
               const user = users.find(u => u.user_id === task.assigned_to);
-              const erpBreadcrumb = [task.erp_user_name, task.erp_page_name, task.erp_sub_tab_name, task.erp_ultra_sub_tab_name, task.erp_ultra_tab_name].filter(Boolean).join(' > ');
+              // Same "Prompt" breadcrumb shown in the create/edit modal and the
+              // view popup — Project > User > Page > ... > "Task Name". Shown
+              // for every task (not just ERP-tagged ones): with no hierarchy
+              // segments tagged, buildErpPrompt still falls back to just the
+              // task name in quotes.
+              const promptPath = buildErpPrompt({
+                projectName: selectedProject.name,
+                userName: task.erp_user_name,
+                pageName: task.erp_page_name,
+                subTabName: task.erp_sub_tab_name,
+                ultraSubTabName: task.erp_ultra_sub_tab_name,
+                ultraTabName: task.erp_ultra_tab_name,
+                taskName: task.task_name,
+              });
               const priorityColor = task.priority === 'high' ? '#ef4444' : task.priority === 'low' ? '#10b981' : '#f59e0b';
               return (
                 <Card
@@ -2530,6 +2543,9 @@ export default function ProjectsPanel({
                           task.priority === 'low' ? 'bg-[#10b981]/20 text-[#10b981] text-xs' :
                           'bg-[#f59e0b]/20 text-[#f59e0b] text-xs'
                         }>{task.priority || 'medium'}</Badge>
+                        <Badge variant="outline" className="text-xs" data-testid={`task-type-badge-${task.task_id}`}>
+                          {task.type || 'general'}
+                        </Badge>
                         {task.category && (
                           <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-xs">{task.category}</Badge>
                         )}
@@ -2555,11 +2571,10 @@ export default function ProjectsPanel({
                         Assigned to <span className={textPrimary}>{user?.name || task.assigned_to}</span>
                         {task.due_date && <> · Due {fmtDate(task.due_date)}</>}
                       </p>
-                      {erpBreadcrumb && (
-                        <p className={`text-xs ${textSecondary} mt-1 flex items-center gap-1`}>
-                          <Users className="h-3 w-3" /> {erpBreadcrumb}
-                        </p>
-                      )}
+                      <p className={`text-xs ${textSecondary} mt-1 flex items-center gap-1`} data-testid={`task-prompt-path-${task.task_id}`}>
+                        <Users className="h-3 w-3 shrink-0" />
+                        <span className="truncate" title={promptPath}>{promptPath}</span>
+                      </p>
                     </div>
                     <div className="flex items-center gap-1">
                       {task.work_link && (
