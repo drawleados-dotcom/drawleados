@@ -385,7 +385,10 @@ async def get_project(project_id: str, request: Request):
     project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    tasks = await db.our_tasks.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # No cap — a project's task count isn't bounded, and the existing
+    # our_tasks.project_id index keeps this fast regardless (it narrows to
+    # just this project's docs before the in-memory sort even starts).
+    tasks = await db.our_tasks.find({"project_id": project_id}, {"_id": 0}).sort("created_at", -1).to_list(None)
     project["tasks"] = tasks
     project = await _filter_erp_visibility(project, user, db)
     return project
