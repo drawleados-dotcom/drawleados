@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Plus, Trash2, Pencil, Eye, X, ExternalLink, Users as UsersIcon, ChevronDown, ChevronRight, ListChecks, GripVertical, Search, Building2, FileText, Layers, LayoutGrid, Boxes, Sparkles } from 'lucide-react';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
+import { MONTH_NAMES } from '../../utils/monthNames';
 import ErpTaskList, { ErpTaskCountBadge } from './ErpTaskList';
 import ErpTaskModal from './ErpTaskModal';
 
@@ -239,9 +240,10 @@ export default function ProjectErpUsersTab({
   // (per-page Tasks badge + the expandable table): date range, task status
   // (All/Todo/Pending/Approval/Completed), hierarchy depth (Department/
   // Users/Pages/Sub Tabs/Ultra Sub Tabs/Ultra Tabs), and task type.
-  const [taskDateFilter, setTaskDateFilter] = useState('all'); // all | today | week | month | custom
+  const [taskDateFilter, setTaskDateFilter] = useState('all'); // all | today | week | month | specific_month | custom
   const [taskDateFrom, setTaskDateFrom] = useState('');
   const [taskDateTo, setTaskDateTo] = useState('');
+  const [taskSpecificMonth, setTaskSpecificMonth] = useState(new Date().getMonth()); // 0-11, for the Jan-Dec filter
   const [taskStatusFilter, setTaskStatusFilter] = useState('todo'); // all | todo | progress | approval | completed — defaults to Todo
   const [taskLevelFilter, setTaskLevelFilter] = useState('all'); // all | user | page | sub_tab | ultra_sub_tab | ultra_tab | ultra_tab_pro
   const [taskTypeFilter, setTaskTypeFilter] = useState('all'); // all | one of ERP_TASK_TYPE_OPTIONS
@@ -265,6 +267,11 @@ export default function ProjectErpUsersTab({
     }
     if (taskDateFilter === 'month') {
       return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+    }
+    if (taskDateFilter === 'specific_month') {
+      // Jan-Dec picker — any task due in that month of the current year
+      // (not every year that month has ever occurred).
+      return d.getFullYear() === today.getFullYear() && d.getMonth() === taskSpecificMonth;
     }
     if (taskDateFilter === 'custom') {
       if (taskDateFrom && d < new Date(taskDateFrom)) return false;
@@ -1085,9 +1092,20 @@ export default function ProjectErpUsersTab({
               <SelectItem value="today">Today</SelectItem>
               <SelectItem value="week">This Week</SelectItem>
               <SelectItem value="month">This Month</SelectItem>
+              <SelectItem value="specific_month">Pick a Month</SelectItem>
               <SelectItem value="custom">Custom Range</SelectItem>
             </SelectContent>
           </Select>
+          {taskDateFilter === 'specific_month' && (
+            <Select value={String(taskSpecificMonth)} onValueChange={(v) => setTaskSpecificMonth(Number(v))}>
+              <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary} h-9 w-[110px]`} data-testid="erp-task-month-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_NAMES.map((m, i) => <SelectItem key={m} value={String(i)}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           {taskDateFilter === 'custom' && (
             <>
               <Input

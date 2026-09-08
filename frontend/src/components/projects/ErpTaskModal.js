@@ -9,6 +9,7 @@ import { SearchableSelect } from '../ui/searchable-select';
 import { ListChecks, X, Mic, Pause, Play, Square, Trash2 } from 'lucide-react';
 import { buildErpPrompt } from '../../utils/erpPrompt';
 import { ERP_TASK_TYPE_OPTIONS } from '../../utils/erpTaskTypes';
+import { MONTH_NAMES } from '../../utils/monthNames';
 import ErpLocationPicker from './ErpLocationPicker';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -391,6 +392,30 @@ export default function ErpTaskModal({
                 data-testid="erp-quicktask-form-due-date"
               />
             </div>
+          </div>
+          <div>
+            <p className={`text-xs font-medium ${textSecondary} mb-1`}>Due Month</p>
+            <Select
+              value={String((draft.due_date ? new Date(draft.due_date) : new Date()).getMonth())}
+              onValueChange={(v) => {
+                const base = draft.due_date ? new Date(draft.due_date) : new Date();
+                const day = base.getDate();
+                const year = base.getFullYear();
+                const month = Number(v);
+                // Clamp to the target month's real last day (e.g. day 31 picked
+                // in Jan shouldn't roll over into March when switching to Feb).
+                const lastDay = new Date(year, month + 1, 0).getDate();
+                const next = new Date(year, month, Math.min(day, lastDay));
+                setDraft(d => ({ ...d, due_date: next.toISOString().slice(0, 10) }));
+              }}
+            >
+              <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="erp-quicktask-form-due-month">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTH_NAMES.map((m, i) => <SelectItem key={m} value={String(i)}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <p className={`text-xs font-medium ${textSecondary} mb-1`}>Work Link</p>
