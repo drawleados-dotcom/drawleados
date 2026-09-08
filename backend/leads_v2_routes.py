@@ -1174,6 +1174,73 @@ async def create_industry(request: Request):
     await db.lead_industries.insert_one(industry_doc)
     return await db.lead_industries.find_one({"industry_id": industry_id}, {"_id": 0})
 
+# ============== LEAD SOURCES ROUTES ==============
+
+@leads_v2_router.get("/sources")
+async def get_sources(request: Request):
+    """Get all lead sources for dropdown"""
+    await get_current_user_from_request(request)
+    sources = await db.lead_sources.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("name", 1).to_list(100)
+
+    # Create default sources if none exist
+    if not sources:
+        default_sources = [
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "Website"},
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "Referral"},
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "Meta"},
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "Google"},
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "Instagram"},
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "WhatsApp"},
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "Walk-in"},
+            {"source_id": f"src_{uuid.uuid4().hex[:8]}", "name": "Cold Call"},
+        ]
+        for src in default_sources:
+            src["created_at"] = datetime.now(timezone.utc)
+            src["is_deleted"] = False
+            await db.lead_sources.insert_one(src)
+        sources = default_sources
+
+    return sources
+
+@leads_v2_router.post("/sources")
+async def create_source(request: Request):
+    """Create a new lead source"""
+    user = await get_current_user_from_request(request)
+    body = await request.json()
+    name = body.get("name", "").strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Source name is required")
+
+    existing = await db.lead_sources.find_one({"name": {"$regex": f"^{name}$", "$options": "i"}, "is_deleted": {"$ne": True}})
+    if existing:
+        raise HTTPException(status_code=400, detail="Source already exists")
+
+    source_id = f"src_{uuid.uuid4().hex[:8]}"
+    source_doc = {
+        "source_id": source_id,
+        "name": name,
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "is_deleted": False
+    }
+
+    await db.lead_sources.insert_one(source_doc)
+    return await db.lead_sources.find_one({"source_id": source_id}, {"_id": 0})
+
+@leads_v2_router.delete("/sources/{source_id}")
+async def delete_source(source_id: str, request: Request):
+    """Delete a lead source"""
+    await get_current_user_from_request(request)
+    await db.lead_sources.update_one(
+        {"source_id": source_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}}
+    )
+    return {"message": "Source deleted"}
+
 # ============== TEAM MEMBERS ROUTES ==============
 
 @leads_v2_router.get("/team-members")

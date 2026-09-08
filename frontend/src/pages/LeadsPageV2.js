@@ -51,6 +51,7 @@ import {
   Upload,
   FileText,
   IndianRupee,
+  Tag,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -90,6 +91,7 @@ const LeadsPageV2 = () => {
   // Dropdown data
   const [services, setServices] = useState([]);
   const [industries, setIndustries] = useState([]);
+  const [sources, setSources] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
 
   // UI state
@@ -130,6 +132,11 @@ const LeadsPageV2 = () => {
   const [showAddIndustryModal, setShowAddIndustryModal] = useState(false);
   const [newServiceName, setNewServiceName] = useState('');
   const [newIndustryName, setNewIndustryName] = useState('');
+
+  // Lead Sources — managed via a toolbar button (list + add + delete),
+  // selected from the same list when creating/editing a lead.
+  const [showSourcesModal, setShowSourcesModal] = useState(false);
+  const [newSourceName, setNewSourceName] = useState('');
   
   // Import/Export state
   const [showImportModal, setShowImportModal] = useState(false);
@@ -333,6 +340,15 @@ const LeadsPageV2 = () => {
     }
   }, []);
 
+  const loadSources = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/leads-v2/sources`, { headers, timeout: 12000 });
+      setSources(res.data || []);
+    } catch (error) {
+      console.error('Error loading sources:', error);
+    }
+  }, []);
+
   const loadTeamMembers = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/leads-v2/team-members`, { headers, timeout: 12000 });
@@ -362,6 +378,7 @@ const LeadsPageV2 = () => {
         loadSheetsConfig(),
         loadServices(),
         loadIndustries(),
+        loadSources(),
         loadTeamMembers(),
       ]);
       if (isCancelled()) return;
@@ -375,7 +392,7 @@ const LeadsPageV2 = () => {
       setLoading(false);
       setLoadError(true);
     }
-  }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadTeamMembers]);
+  }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadSources, loadTeamMembers]);
 
   useEffect(() => {
     let cancelled = false;
@@ -708,6 +725,32 @@ const LeadsPageV2 = () => {
       loadIndustries();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to add industry');
+    }
+  };
+
+  const addNewSource = async () => {
+    if (!newSourceName.trim()) {
+      toast.error('Source name is required');
+      return;
+    }
+    try {
+      await axios.post(`${API}/api/leads-v2/sources`, { name: newSourceName }, { headers });
+      toast.success('Source added');
+      setNewSourceName('');
+      loadSources();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add source');
+    }
+  };
+
+  const deleteSource = async (sourceId) => {
+    if (!window.confirm('Delete this lead source?')) return;
+    try {
+      await axios.delete(`${API}/api/leads-v2/sources/${sourceId}`, { headers });
+      toast.success('Source deleted');
+      loadSources();
+    } catch (error) {
+      toast.error('Failed to delete source');
     }
   };
 
@@ -1179,6 +1222,16 @@ const LeadsPageV2 = () => {
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Fields
+              </Button>
+
+              <Button
+                onClick={() => setShowSourcesModal(true)}
+                variant="outline"
+                className={`${borderColor} ${bgSecondary} ${textSecondary} hover:${textPrimary}`}
+                data-testid="lead-sources-btn"
+              >
+                <Tag className="h-4 w-4 mr-2" />
+                Lead Source
               </Button>
 
               {/* Import/Export */}
@@ -1689,12 +1742,30 @@ const LeadsPageV2 = () => {
                   </div>
                   <div>
                     <label className={`text-sm ${textSecondary} block mb-1`}>Source</label>
-                    <Input
-                      value={leadForm.source}
-                      onChange={(e) => setLeadForm({ ...leadForm, source: e.target.value })}
-                      placeholder="e.g., Website, Referral"
-                      className={bgSecondary}
-                    />
+                    <Select
+                      value={leadForm.source || ''}
+                      onValueChange={(v) => {
+                        if (v === '__add_new__') {
+                          setShowSourcesModal(true);
+                        } else {
+                          setLeadForm({ ...leadForm, source: v });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className={bgSecondary} data-testid="lead-source-select"><SelectValue placeholder="Select source" /></SelectTrigger>
+                      <SelectContent>
+                        {/* Historical/sheet-synced leads can carry a source value that
+                            isn't in the curated list — keep it selectable (instead of
+                            silently blanking out) until it's picked again or replaced. */}
+                        {leadForm.source && !sources.some(s => s.name === leadForm.source) && (
+                          <SelectItem value={leadForm.source}>{leadForm.source} (not in list)</SelectItem>
+                        )}
+                        {sources.map(s => (
+                          <SelectItem key={s.source_id} value={s.name}>{s.name}</SelectItem>
+                        ))}
+                        <SelectItem value="__add_new__" className="text-blue-400">+ Add New Source</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 
@@ -2181,6 +2252,45 @@ const LeadsPageV2 = () => {
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowAddIndustryModal(false)}>Cancel</Button>
               <Button onClick={addNewIndustry} className="bg-[#3b82f6] hover:bg-[#2563eb]">Add</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Manage Lead Sources Modal */}
+        <Dialog open={showSourcesModal} onOpenChange={setShowSourcesModal}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle>Lead Sources</DialogTitle>
+            </DialogHeader>
+            <div className="flex gap-2">
+              <Input
+                value={newSourceName}
+                onChange={(e) => setNewSourceName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addNewSource(); }}
+                placeholder="e.g., Website, Referral, Meta"
+                className={bgSecondary}
+                data-testid="new-source-input"
+              />
+              <Button onClick={addNewSource} className="bg-[#3b82f6] hover:bg-[#2563eb] shrink-0" data-testid="add-source-btn">
+                <Plus className="h-4 w-4 mr-1" /> Add
+              </Button>
+            </div>
+            <div className="max-h-64 overflow-y-auto space-y-1 mt-2">
+              {sources.length === 0 ? (
+                <p className={`text-sm ${textSecondary} text-center py-4`}>No lead sources yet</p>
+              ) : (
+                sources.map(s => (
+                  <div key={s.source_id} className={`flex items-center justify-between px-3 py-2 rounded-md ${bgSecondary}`} data-testid={`source-row-${s.source_id}`}>
+                    <span className="text-sm">{s.name}</span>
+                    <button onClick={() => deleteSource(s.source_id)} className="text-red-400 hover:text-red-500" data-testid={`delete-source-${s.source_id}`}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowSourcesModal(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
