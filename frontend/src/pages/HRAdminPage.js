@@ -1265,6 +1265,7 @@ export default function HRAdminPage() {
     { id: 'approvals', label: 'Approvals', icon: CheckCircle, hrManagerAccess: true },
     { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard, hrManagerAccess: false },
     { id: 'reviews', label: 'Reviews', icon: ClipboardList, hrManagerAccess: true, hrManagerCanWrite: true },
+    { id: 'recruitment', label: 'Recruitment', icon: UserPlus, hrManagerAccess: true },
     { id: 'calendar', label: 'Calendar', icon: Calendar, hrManagerAccess: true },
     { id: 'quotes', label: 'Quotes', icon: FileText, hrManagerAccess: false },
     { id: 'my-profile-config', label: 'My Profile Config', icon: Settings, hrManagerAccess: false },
@@ -1365,6 +1366,8 @@ export default function HRAdminPage() {
                 onClick={() => {
                   if (tab.id === 'org-structure') {
                     window.location.href = '/org-structure';
+                  } else if (tab.id === 'recruitment') {
+                    window.location.href = '/recruitment';
                   } else {
                     setActiveTab(tab.id);
                   }
@@ -1755,6 +1758,7 @@ export default function HRAdminPage() {
         )}
 
         {/* Org Structure Tab handled by separate route to keep this file lean — see /org-structure */}
+        {/* Recruitment Tab handled by separate route to keep this file lean — see /recruitment */}
 
         {/* Reviews Tab */}
         {activeTab === 'reviews' && (

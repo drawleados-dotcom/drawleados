@@ -30,6 +30,7 @@ import DLOperationsPage from './pages/DLOperationsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import OperationsModalPage from './components/operations/OperationsModalPage';
 import OrgStructurePage from './pages/OrgStructurePage';
+import RecruitmentPage from './pages/RecruitmentPage';
 import EmployeeAttendanceViewPage from './pages/EmployeeAttendanceViewPage';
 import ClientPortalLoginPage from './pages/ClientPortalLoginPage';
 import ClientPortalViewPage from './pages/ClientPortalViewPage';
@@ -288,6 +289,14 @@ function AppRouter() {
         element={
           <ProtectedRoute module="hr_admin">
             <OrgStructurePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/recruitment"
+        element={
+          <ProtectedRoute module="hr_admin">
+            <RecruitmentPage />
           </ProtectedRoute>
         }
       />
