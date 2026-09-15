@@ -37,6 +37,20 @@ class StageUpdate(BaseModel):
     color: Optional[str] = None
     order: Optional[int] = None
 
+class OpeningCreate(BaseModel):
+    title: str
+    department: str = ''
+    status: str = 'Open'  # Open, On Hold, Closed
+    openings_count: int = 1
+    description: str = ''
+
+class OpeningUpdate(BaseModel):
+    title: Optional[str] = None
+    department: Optional[str] = None
+    status: Optional[str] = None
+    openings_count: Optional[int] = None
+    description: Optional[str] = None
+
 class CandidateCreate(BaseModel):
     name: str
     email: str = ''
@@ -184,6 +198,63 @@ async def delete_stage(stage_id: str, request: Request):
         {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
     )
     return {"message": "Stage deleted"}
+
+# ============== OPENING POSITIONS ROUTES ==============
+# A managed list of job postings — feeds the "Position Applied" dropdown on
+# the candidate form (mirrors the Sales Department's Lead Source manager).
+
+OPENING_STATUSES = ["Open", "On Hold", "Closed"]
+
+@recruitment_router.get("/openings")
+async def get_openings(request: Request):
+    await get_current_user_from_request(request)
+    return await db.recruitment_openings.find(
+        {"is_deleted": {"$ne": True}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+
+@recruitment_router.post("/openings")
+async def create_opening(payload: OpeningCreate, request: Request):
+    user = await get_current_user_from_request(request)
+    if not payload.title.strip():
+        raise HTTPException(status_code=400, detail="Position title is required")
+    if payload.status not in OPENING_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(OPENING_STATUSES)}")
+
+    opening_id = f"open_{uuid.uuid4().hex[:8]}"
+    now = datetime.now(timezone.utc)
+    doc = {
+        "opening_id": opening_id,
+        "title": payload.title.strip(),
+        "department": payload.department.strip(),
+        "status": payload.status,
+        "openings_count": payload.openings_count,
+        "description": payload.description,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now,
+        "is_deleted": False,
+    }
+    await db.recruitment_openings.insert_one(doc)
+    return await db.recruitment_openings.find_one({"opening_id": opening_id}, {"_id": 0})
+
+@recruitment_router.put("/openings/{opening_id}")
+async def update_opening(opening_id: str, payload: OpeningUpdate, request: Request):
+    await get_current_user_from_request(request)
+    update_dict = {k: v for k, v in payload.dict().items() if v is not None}
+    if "status" in update_dict and update_dict["status"] not in OPENING_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(OPENING_STATUSES)}")
+    update_dict["updated_at"] = datetime.now(timezone.utc)
+    await db.recruitment_openings.update_one({"opening_id": opening_id}, {"$set": update_dict})
+    return await db.recruitment_openings.find_one({"opening_id": opening_id}, {"_id": 0})
+
+@recruitment_router.delete("/openings/{opening_id}")
+async def delete_opening(opening_id: str, request: Request):
+    await get_current_user_from_request(request)
+    await db.recruitment_openings.update_one(
+        {"opening_id": opening_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
+    )
+    return {"message": "Opening deleted"}
 
 # ============== CANDIDATES ROUTES ==============
 

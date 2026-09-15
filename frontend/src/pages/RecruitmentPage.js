@@ -14,12 +14,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { toast } from 'sonner';
 import {
   ArrowLeft, Kanban, List, Plus, ExternalLink, Trash2, Pencil, Settings,
-  Loader2, ArrowUp, ArrowDown, X, Briefcase, Clock,
+  Loader2, ArrowUp, ArrowDown, X, Briefcase, Clock, LayoutList,
 } from 'lucide-react';
 
 const TABS = [
   { key: 'list', label: 'Candidates', icon: List },
   { key: 'pipeline', label: 'Pipeline', icon: Kanban },
+  { key: 'openings', label: 'Opening Positions', icon: LayoutList },
 ];
 
 const STAGE_COLORS = [
@@ -27,10 +28,21 @@ const STAGE_COLORS = [
   '#14b8a6', '#ec4899', '#f97316', '#a855f7', '#10b981', '#71717a',
 ];
 
+const OPENING_STATUSES = ['Open', 'On Hold', 'Closed'];
+const OPENING_STATUS_STYLE = {
+  Open: 'bg-[#22c55e]/20 text-[#22c55e] border-[#22c55e]',
+  'On Hold': 'bg-[#f59e0b]/20 text-[#f59e0b] border-[#f59e0b]',
+  Closed: 'bg-[#71717a]/20 text-[#71717a] border-[#71717a]',
+};
+
 const EMPTY_FORM = {
   name: '', email: '', phone: '', address: '', position_applied: '',
   experience_years: '', source: '', salary_expected: '', salary_offered: '',
   resume_link: '', notes: '', assigned_to: '', stage_id: '',
+};
+
+const EMPTY_OPENING_FORM = {
+  title: '', department: '', status: 'Open', openings_count: 1, description: '',
 };
 
 // ============== KANBAN ==============
@@ -100,20 +112,23 @@ const RecruitmentPage = () => {
   const [candidates, setCandidates] = useState([]);
   const [stages, setStages] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
+  const [openings, setOpenings] = useState([]);
 
   const stageColor = (stageName) => STAGE_COLORS[stages.findIndex(s => s.name === stageName) % STAGE_COLORS.length] || '#71717a';
   const stageById = (id) => stages.find(s => s.stage_id === id);
 
   const loadAll = useCallback(async () => {
     try {
-      const [cRes, sRes, tRes] = await Promise.all([
+      const [cRes, sRes, tRes, oRes] = await Promise.all([
         api.get('/recruitment/candidates'),
         api.get('/recruitment/stages'),
         api.get('/recruitment/team-members'),
+        api.get('/recruitment/openings'),
       ]);
       setCandidates(cRes.data || []);
       setStages(sRes.data || []);
       setTeamMembers(tRes.data || []);
+      setOpenings(oRes.data || []);
     } catch (e) {
       toast.error('Failed to load Recruitment data');
     } finally {
@@ -233,6 +248,58 @@ const RecruitmentPage = () => {
       setStages(reordered);
     } catch (e) {
       toast.error('Failed to reorder stages');
+    }
+  };
+
+  // ---------- Opening Positions ----------
+  const [showOpeningModal, setShowOpeningModal] = useState(false);
+  const [editingOpeningId, setEditingOpeningId] = useState(null);
+  const [openingForm, setOpeningForm] = useState(EMPTY_OPENING_FORM);
+  const [savingOpening, setSavingOpening] = useState(false);
+
+  const openNewOpening = () => {
+    setEditingOpeningId(null);
+    setOpeningForm(EMPTY_OPENING_FORM);
+    setShowOpeningModal(true);
+  };
+  const openEditOpening = (o) => {
+    setEditingOpeningId(o.opening_id);
+    setOpeningForm({
+      title: o.title || '', department: o.department || '', status: o.status || 'Open',
+      openings_count: o.openings_count ?? 1, description: o.description || '',
+    });
+    setShowOpeningModal(true);
+  };
+
+  const saveOpening = async () => {
+    if (!openingForm.title.trim()) { toast.error('Position title is required'); return; }
+    setSavingOpening(true);
+    try {
+      const payload = { ...openingForm, openings_count: Number(openingForm.openings_count) || 1 };
+      if (editingOpeningId) {
+        await api.put(`/recruitment/openings/${editingOpeningId}`, payload);
+        toast.success('Opening updated');
+      } else {
+        await api.post('/recruitment/openings', payload);
+        toast.success('Opening added');
+      }
+      setShowOpeningModal(false);
+      loadAll();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save opening');
+    } finally {
+      setSavingOpening(false);
+    }
+  };
+
+  const deleteOpening = async (openingId) => {
+    if (!window.confirm('Delete this opening position?')) return;
+    try {
+      await api.delete(`/recruitment/openings/${openingId}`);
+      toast.success('Opening deleted');
+      loadAll();
+    } catch (e) {
+      toast.error('Failed to delete opening');
     }
   };
 
@@ -360,6 +427,58 @@ const RecruitmentPage = () => {
           </DndProvider>
         )}
 
+        {/* ============== OPENING POSITIONS ============== */}
+        {activeTab === 'openings' && (
+          <div data-testid="recruitment-openings-tab">
+            <div className="flex justify-end mb-3">
+              <Button onClick={openNewOpening} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="new-opening-btn">
+                <Plus className="h-4 w-4 mr-2" /> Add Opening
+              </Button>
+            </div>
+            <div className={`rounded-lg border ${borderColor} ${bgCard} overflow-x-auto`}>
+              <table className="w-full">
+                <thead>
+                  <tr className={`border-b ${borderColor}`}>
+                    {['Position', 'Department', 'Openings', 'Status', 'Actions'].map(h => (
+                      <th key={h} className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase whitespace-nowrap`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {openings.map((o) => (
+                    <tr key={o.opening_id} className={`border-b ${borderColor}`} data-testid={`opening-row-${o.opening_id}`}>
+                      <td className="p-3">
+                        <p className={`text-sm font-medium ${textPrimary}`}>{o.title}</p>
+                        {o.description && <p className={`text-xs ${textSecondary} truncate max-w-xs`}>{o.description}</p>}
+                      </td>
+                      <td className={`p-3 text-xs ${textSecondary}`}>{o.department || '—'}</td>
+                      <td className={`p-3 text-xs ${textSecondary}`}>{o.openings_count}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${OPENING_STATUS_STYLE[o.status] || OPENING_STATUS_STYLE.Open}`}>
+                          {o.status}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1">
+                          <button title="Edit" onClick={() => openEditOpening(o)} className={`p-1.5 rounded ${bgSecondary} hover:opacity-80`} data-testid={`opening-edit-${o.opening_id}`}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button title="Delete" onClick={() => deleteOpening(o.opening_id)} className="p-1.5 rounded bg-red-500/10 hover:bg-red-500/20" data-testid={`opening-delete-${o.opening_id}`}>
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {openings.length === 0 && (
+                    <tr><td colSpan={5} className={`p-8 text-center text-xs ${textSecondary}`}>No opening positions yet. Click "Add Opening" to post one.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {/* ============== CANDIDATE MODAL ============== */}
         <Dialog open={showCandidateModal} onOpenChange={setShowCandidateModal}>
           <DialogContent className={`${bgCard} ${textPrimary} max-w-lg max-h-[85vh] overflow-y-auto`}>
@@ -388,7 +507,28 @@ const RecruitmentPage = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className={textPrimary}>Position Applied</Label>
-                  <Input value={candidateForm.position_applied} onChange={(e) => setCandidateForm({ ...candidateForm, position_applied: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                  <Select
+                    value={candidateForm.position_applied || ''}
+                    onValueChange={(v) => {
+                      if (v === '__add_new__') {
+                        openNewOpening();
+                      } else {
+                        setCandidateForm({ ...candidateForm, position_applied: v });
+                      }
+                    }}
+                  >
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`} data-testid="candidate-form-position"><SelectValue placeholder="Select position" /></SelectTrigger>
+                    <SelectContent>
+                      {/* A candidate can already be tagged with a position that was
+                          since removed from Opening Positions — keep it selectable
+                          instead of silently blanking it out. */}
+                      {candidateForm.position_applied && !openings.some(o => o.title === candidateForm.position_applied) && (
+                        <SelectItem value={candidateForm.position_applied}>{candidateForm.position_applied} (not in list)</SelectItem>
+                      )}
+                      {openings.map(o => <SelectItem key={o.opening_id} value={o.title}>{o.title}</SelectItem>)}
+                      <SelectItem value="__add_new__" className="text-blue-400">+ Add New Opening</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label className={textPrimary}>Experience (years)</Label>
@@ -522,6 +662,56 @@ const RecruitmentPage = () => {
             </div>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setShowStagesModal(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ============== ADD/EDIT OPENING MODAL ============== */}
+        <Dialog open={showOpeningModal} onOpenChange={setShowOpeningModal}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-sm`}>
+            <DialogHeader>
+              <DialogTitle>{editingOpeningId ? 'Edit Opening' : 'Add Opening'}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label className={textPrimary}>Position Title *</Label>
+                <Input
+                  value={openingForm.title}
+                  onChange={(e) => setOpeningForm({ ...openingForm, title: e.target.value })}
+                  placeholder="e.g. Backend Engineer"
+                  className={`${bgSecondary} border ${borderColor}`}
+                  data-testid="opening-form-title"
+                />
+              </div>
+              <div>
+                <Label className={textPrimary}>Department</Label>
+                <Input value={openingForm.department} onChange={(e) => setOpeningForm({ ...openingForm, department: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className={textPrimary}>Status</Label>
+                  <Select value={openingForm.status} onValueChange={(v) => setOpeningForm({ ...openingForm, status: v })}>
+                    <SelectTrigger className={`${bgSecondary} border ${borderColor}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {OPENING_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className={textPrimary}>No. of Openings</Label>
+                  <Input type="number" min="1" value={openingForm.openings_count} onChange={(e) => setOpeningForm({ ...openingForm, openings_count: e.target.value })} className={`${bgSecondary} border ${borderColor}`} />
+                </div>
+              </div>
+              <div>
+                <Label className={textPrimary}>Description</Label>
+                <Textarea value={openingForm.description} onChange={(e) => setOpeningForm({ ...openingForm, description: e.target.value })} className={`${bgSecondary} border ${borderColor}`} rows={3} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setShowOpeningModal(false)}>Cancel</Button>
+              <Button onClick={saveOpening} disabled={savingOpening} className="bg-[#6366f1] hover:bg-[#4f46e5]" data-testid="opening-form-save">
+                {savingOpening ? 'Saving…' : (editingOpeningId ? 'Update Opening' : 'Add Opening')}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
