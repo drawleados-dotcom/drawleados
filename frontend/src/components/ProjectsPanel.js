@@ -2526,7 +2526,7 @@ export default function ProjectsPanel({
                   data-testid={`project-task-${task.task_id}`}
                 >
                   <CardContent className="p-4 flex items-center justify-between gap-3">
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-medium ${textPrimary}`}>{task.task_name}</span>
                         <Badge className={
@@ -2571,12 +2571,12 @@ export default function ProjectsPanel({
                         Assigned to <span className={textPrimary}>{user?.name || task.assigned_to}</span>
                         {task.due_date && <> · Due {fmtDate(task.due_date)}</>}
                       </p>
-                      <p className={`text-xs ${textSecondary} mt-1 flex items-center gap-1`} data-testid={`task-prompt-path-${task.task_id}`}>
+                      <p className={`text-xs ${textSecondary} mt-1 flex items-center gap-1 min-w-0`} data-testid={`task-prompt-path-${task.task_id}`}>
                         <Users className="h-3 w-3 shrink-0" />
-                        <span className="truncate" title={promptPath}>{promptPath}</span>
+                        <span className="truncate min-w-0" title={promptPath}>{promptPath}</span>
                       </p>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       {task.work_link && (
                         <a href={task.work_link} target="_blank" rel="noopener noreferrer" className="text-[#6366f1] text-sm hover:underline flex items-center gap-1 px-2" data-testid={`project-task-link-${task.task_id}`}>
                           <ExternalLink className="h-3 w-3" /> Link
