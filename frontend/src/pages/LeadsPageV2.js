@@ -1290,6 +1290,7 @@ const LeadsPageV2 = () => {
             { key: 'overview', label: 'Overview' },
             { key: 'pre_sales', label: 'Pre-sales' },
             { key: 'sales', label: 'Sales' },
+            { key: 'sales_kit', label: 'Sales Kit' },
           ].map(tab => {
             const isActive = tab.key === 'overview' ? showOverview : (!showOverview && pipeline === tab.key);
             return (
@@ -1297,6 +1298,7 @@ const LeadsPageV2 = () => {
                 key={tab.key}
                 onClick={() => {
                   if (tab.key === 'overview') { setShowOverview(true); return; }
+                  if (tab.key === 'sales_kit') { window.location.href = '/sales-kit'; return; }
                   setShowOverview(false);
                   setPipeline(tab.key);
                   setFilterStage(null);

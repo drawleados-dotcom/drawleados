@@ -31,6 +31,8 @@ import ProjectDetailPage from './pages/ProjectDetailPage';
 import OperationsModalPage from './components/operations/OperationsModalPage';
 import OrgStructurePage from './pages/OrgStructurePage';
 import RecruitmentPage from './pages/RecruitmentPage';
+import SalesKitPage from './pages/SalesKitPage';
+import PublicFormPage from './pages/PublicFormPage';
 import EmployeeAttendanceViewPage from './pages/EmployeeAttendanceViewPage';
 import ClientPortalLoginPage from './pages/ClientPortalLoginPage';
 import ClientPortalViewPage from './pages/ClientPortalViewPage';
@@ -62,6 +64,8 @@ function AppRouter() {
       {/* Client Portal — separate auth from staff accounts, no ProtectedRoute */}
       <Route path="/client-portal/:projectId" element={<ClientPortalLoginPage />} />
       <Route path="/client-portal/:projectId/view" element={<ClientPortalViewPage />} />
+      {/* Sales Kit public form fill — respondents are never logged in, no ProtectedRoute */}
+      <Route path="/form/:token" element={<PublicFormPage />} />
       <Route
         path="/dashboard"
         element={
@@ -297,6 +301,14 @@ function AppRouter() {
         element={
           <ProtectedRoute module="hr_admin">
             <RecruitmentPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sales-kit"
+        element={
+          <ProtectedRoute module="leads">
+            <SalesKitPage />
           </ProtectedRoute>
         }
       />
