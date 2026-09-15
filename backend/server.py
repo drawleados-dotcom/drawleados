@@ -1055,6 +1055,37 @@ async def disable_2fa(request: Request, data: Disable2FARequest):
     
     return {"success": True, "message": "Two-factor authentication disabled"}
 
+@api_router.post("/users/{user_id}/2fa/disable")
+async def admin_disable_2fa(user_id: str, current_user: User = Depends(get_current_user)):
+    """Admin override: turn off 2FA for another employee — e.g. they lost
+    their authenticator device and are locked out. Unlike the self-service
+    /auth/2fa/disable, this doesn't require the employee's password or a
+    valid TOTP code, since it's the admin acting on their behalf. Login
+    always re-checks two_factor_enabled fresh from the DB, so this alone
+    is enough for that employee's next login to skip 2FA entirely."""
+    if not current_user.can_manage_users:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    user_doc = await db.users.find_one({"user_id": user_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user_doc.get("two_factor_enabled"):
+        return {"success": True, "message": "2FA was already disabled for this user"}
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "two_factor_enabled": False,
+                "two_factor_disabled_by": current_user.user_id,
+                "two_factor_disabled_at": datetime.now(timezone.utc),
+            },
+            "$unset": {"two_factor_secret": "", "two_factor_secret_pending": ""},
+        }
+    )
+    return {"success": True, "message": "Two-factor authentication disabled for this user"}
+
 @api_router.get("/auth/2fa/status")
 async def get_2fa_status(request: Request):
     """Get 2FA status for current user"""

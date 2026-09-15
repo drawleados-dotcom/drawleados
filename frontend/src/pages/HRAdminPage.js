@@ -3779,7 +3779,9 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
   const [regeneratingPassword, setRegeneratingPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
-  
+  const [is2FAEnabled, setIs2FAEnabled] = useState(!!employee.two_factor_enabled);
+  const [disabling2FA, setDisabling2FA] = useState(false);
+
   // Compute hoverBg from isDark
   const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
   const bgInput = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -3899,6 +3901,24 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
   const copyPassword = () => {
     navigator.clipboard.writeText(newPassword);
     toast.success('Password copied to clipboard!');
+  };
+
+  const handleDisable2FA = async () => {
+    if (!window.confirm(`Turn off 2FA for ${employee.name}? They'll be able to log in with just their password until they set it up again.`)) return;
+    setDisabling2FA(true);
+    try {
+      const API = process.env.REACT_APP_BACKEND_URL;
+      const token = localStorage.getItem('session_token');
+      await axios.post(`${API}/api/users/${employee.user_id}/2fa/disable`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setIs2FAEnabled(false);
+      toast.success('2FA turned off — no code needed at their next login');
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to turn off 2FA');
+    } finally {
+      setDisabling2FA(false);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -4432,6 +4452,53 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
                       Password should contain: 8+ characters, uppercase, lowercase, number, special character
                     </div>
                   </div>
+                </div>
+
+                {/* Two-Factor Authentication Section — admin override, no
+                    password/code needed from the employee. Login re-checks
+                    two_factor_enabled fresh on every attempt, so this alone
+                    is enough to skip 2FA at their next login. */}
+                <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="admin-2fa-section">
+                  <h3 className={`font-medium ${textPrimary} mb-4 flex items-center gap-2`}>
+                    <Shield className="h-5 w-5 text-[#6366f1]" />
+                    Two-Factor Authentication
+                  </h3>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className={textPrimary}>Login 2FA</p>
+                      <p className={`text-sm ${textSecondary}`}>
+                        {is2FAEnabled
+                          ? 'This employee needs a code from their authenticator app to log in.'
+                          : "This employee can log in with just their password."}
+                      </p>
+                    </div>
+                    {is2FAEnabled ? (
+                      <Badge className="bg-[#22c55e]/20 text-[#22c55e]" data-testid="2fa-status-enabled">Enabled</Badge>
+                    ) : (
+                      <Badge className="bg-[#71717a]/20 text-[#71717a]" data-testid="2fa-status-disabled">Disabled</Badge>
+                    )}
+                  </div>
+                  {is2FAEnabled && (
+                    <Button
+                      type="button"
+                      onClick={handleDisable2FA}
+                      disabled={disabling2FA}
+                      className="bg-[#ef4444] hover:bg-[#dc2626] text-white mt-3"
+                      data-testid="admin-disable-2fa-btn"
+                    >
+                      {disabling2FA ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Turning off…
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="h-4 w-4 mr-2" />
+                          Turn Off 2FA
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 {/* Account Status Section */}
