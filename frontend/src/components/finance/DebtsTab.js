@@ -23,7 +23,7 @@ const STATUS_STYLE = {
 const fmtMoney = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 const fmtDate = (s) => s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
 
-const EMPTY_FORM = { debt_name: '', debt_type: '', cycle: 'one_time', due_date: '', amount: '' };
+const EMPTY_FORM = { debt_name: '', debt_type: '', cycle: 'one_time', due_date: '', amount: '', lender_name: '', disbursed_date: '' };
 
 const DebtsTab = () => {
   const { isDark } = useTheme();
@@ -83,7 +83,10 @@ const DebtsTab = () => {
   const openCreate = () => { setEditingId(null); setForm(EMPTY_FORM); setShowModal(true); };
   const openEdit = (d) => {
     setEditingId(d.debt_id);
-    setForm({ debt_name: d.debt_name, debt_type: d.debt_type || '', cycle: d.cycle, due_date: d.due_date, amount: String(d.amount || '') });
+    setForm({
+      debt_name: d.debt_name, debt_type: d.debt_type || '', cycle: d.cycle, due_date: d.due_date,
+      amount: String(d.amount || ''), lender_name: d.lender_name || '', disbursed_date: d.disbursed_date || '',
+    });
     setShowModal(true);
   };
 
@@ -98,6 +101,8 @@ const DebtsTab = () => {
         cycle: form.cycle,
         due_date: form.due_date,
         amount: parseFloat(form.amount) || 0,
+        lender_name: form.lender_name.trim(),
+        disbursed_date: form.disbursed_date || null,
       };
       if (editingId) {
         await axios.put(`${API}/api/finance/debts/${editingId}`, payload, { headers });
@@ -191,6 +196,8 @@ const DebtsTab = () => {
                 <tr>
                   <th className={`text-left px-4 py-2.5 text-xs font-medium uppercase ${textSecondary}`}>Debt Name</th>
                   <th className={`text-left px-4 py-2.5 text-xs font-medium uppercase ${textSecondary}`}>Type</th>
+                  <th className={`text-left px-4 py-2.5 text-xs font-medium uppercase ${textSecondary}`}>Loan Giver</th>
+                  <th className={`text-left px-4 py-2.5 text-xs font-medium uppercase ${textSecondary}`}>Disbursed</th>
                   <th className={`text-left px-4 py-2.5 text-xs font-medium uppercase ${textSecondary}`}>Cycle</th>
                   <th className={`text-left px-4 py-2.5 text-xs font-medium uppercase ${textSecondary}`}>Due Date</th>
                   <th className={`text-left px-4 py-2.5 text-xs font-medium uppercase ${textSecondary}`}>Amount</th>
@@ -203,6 +210,8 @@ const DebtsTab = () => {
                   <tr key={d.debt_id} data-testid={`debt-row-${d.debt_id}`}>
                     <td className={`px-4 py-3 font-medium ${textPrimary}`}>{d.debt_name}</td>
                     <td className={`px-4 py-3 ${textSecondary}`}>{d.debt_type || '-'}</td>
+                    <td className={`px-4 py-3 ${textSecondary}`}>{d.lender_name || '-'}</td>
+                    <td className={`px-4 py-3 ${textSecondary}`}>{fmtDate(d.disbursed_date)}</td>
                     <td className={`px-4 py-3 ${textSecondary}`}>{CYCLE_LABEL[d.cycle] || d.cycle}</td>
                     <td className={`px-4 py-3 ${textSecondary}`}>{fmtDate(d.due_date)}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{fmtMoney(d.amount)}</td>
@@ -356,6 +365,24 @@ const DebtsTab = () => {
                 value={form.amount}
                 onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
                 placeholder="0"
+                className={`${bgInput} ${borderColor} ${textPrimary}`}
+              />
+            </div>
+            <div>
+              <Label className={textPrimary}>Loan Giver Name</Label>
+              <Input
+                value={form.lender_name}
+                onChange={(e) => setForm(prev => ({ ...prev, lender_name: e.target.value }))}
+                placeholder="e.g. HDFC Bank"
+                className={`${bgInput} ${borderColor} ${textPrimary}`}
+              />
+            </div>
+            <div>
+              <Label className={textPrimary}>Loan Disbursed Date</Label>
+              <Input
+                type="date"
+                value={form.disbursed_date}
+                onChange={(e) => setForm(prev => ({ ...prev, disbursed_date: e.target.value }))}
                 className={`${bgInput} ${borderColor} ${textPrimary}`}
               />
             </div>

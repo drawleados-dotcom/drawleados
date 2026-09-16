@@ -70,6 +70,8 @@ class DebtCreate(BaseModel):
     cycle: str = "one_time"  # one_time | monthly | yearly
     due_date: str            # YYYY-MM-DD — the due date (one_time) or anchor date (monthly/yearly)
     amount: float = 0.0
+    lender_name: str = ""        # who the loan/debt is owed to
+    disbursed_date: Optional[str] = None  # YYYY-MM-DD — when the loan amount was received
     notes: str = ""
 
 
@@ -79,6 +81,8 @@ class DebtUpdate(BaseModel):
     cycle: Optional[str] = None
     due_date: Optional[str] = None
     amount: Optional[float] = None
+    lender_name: Optional[str] = None
+    disbursed_date: Optional[str] = None
     notes: Optional[str] = None
     status: Optional[str] = None  # active | closed
 
@@ -118,7 +122,7 @@ def _period_key(debt: dict, occurrence: date) -> str:
     return occurrence.isoformat()  # one_time
 
 
-def _validate_cycle_and_date(cycle: Optional[str], due_date: Optional[str]):
+def _validate_cycle_and_date(cycle: Optional[str], due_date: Optional[str], disbursed_date: Optional[str] = None):
     if cycle is not None and cycle not in CYCLES:
         raise HTTPException(status_code=400, detail="cycle must be one_time, monthly, or yearly")
     if due_date is not None:
@@ -126,6 +130,11 @@ def _validate_cycle_and_date(cycle: Optional[str], due_date: Optional[str]):
             _parse_date(due_date)
         except ValueError:
             raise HTTPException(status_code=400, detail="due_date must be YYYY-MM-DD")
+    if disbursed_date:
+        try:
+            _parse_date(disbursed_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="disbursed_date must be YYYY-MM-DD")
 
 
 # ============== DEBTS REGISTRY ("Collected" tab) ==============
@@ -141,7 +150,7 @@ async def create_debt(data: DebtCreate, request: Request):
     user = await get_current_user(request)
     if not can_manage_finance(user):
         raise HTTPException(status_code=403, detail="Finance access required")
-    _validate_cycle_and_date(data.cycle, data.due_date)
+    _validate_cycle_and_date(data.cycle, data.due_date, data.disbursed_date)
 
     now = datetime.now(timezone.utc)
     doc = {
@@ -151,6 +160,8 @@ async def create_debt(data: DebtCreate, request: Request):
         "cycle": data.cycle,
         "due_date": data.due_date,
         "amount": data.amount,
+        "lender_name": data.lender_name,
+        "disbursed_date": data.disbursed_date,
         "notes": data.notes,
         "status": "active",
         "created_by": user["user_id"],
@@ -174,7 +185,7 @@ async def update_debt(debt_id: str, data: DebtUpdate, request: Request):
         raise HTTPException(status_code=404, detail="Debt not found")
 
     update = data.model_dump(exclude_unset=True)
-    _validate_cycle_and_date(update.get("cycle"), update.get("due_date"))
+    _validate_cycle_and_date(update.get("cycle"), update.get("due_date"), update.get("disbursed_date"))
     if "status" in update and update["status"] not in ("active", "closed"):
         raise HTTPException(status_code=400, detail="status must be active or closed")
     update["updated_at"] = datetime.now(timezone.utc)
