@@ -9558,7 +9558,11 @@ function EnhancedCalendarTab({
     // Add days of the month
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
-      const dateStr = date.toISOString().split('T')[0];
+      // Build the key from local Y/M/D, not toISOString() — that converts to
+      // UTC first, which silently rolls the date back a day in any timezone
+      // ahead of UTC (e.g. IST), desyncing this grid from the holiday/Sunday
+      // dates stored as plain local "YYYY-MM-DD" strings everywhere else.
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const dayOfWeek = date.getDay();
       const isSunday = dayOfWeek === 0;
       const isToday = date.toDateString() === today.toDateString();
