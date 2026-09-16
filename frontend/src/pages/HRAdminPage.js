@@ -7808,11 +7808,11 @@ function EnhancedApprovalsTab({
   // Handle approve with remarks
   const handleApprove = () => {
     if (approvalType === 'attendance') {
-      onApproveAttendance({ ...selectedItem, remarks, lop_deduction: enableLOP });
+      onApproveAttendance(selectedItem.attendance_id, 'approve');
     } else if (approvalType === 'permission') {
-      onApprovePermission({ ...selectedItem, remarks, lop_deduction: enableLOP });
+      onApprovePermission(selectedItem.permission_id, 'approve');
     } else if (approvalType === 'leave') {
-      onApproveLeave(selectedItem.request_id, remarks, enableLOP);
+      onApproveLeave(selectedItem.leave_id);
     } else if (approvalType === 'wfh') {
       onApproveWfh(selectedItem.wfh_id, remarks);
     }
@@ -7826,10 +7826,14 @@ function EnhancedApprovalsTab({
       toast.error('Please enter a rejection reason');
       return;
     }
-    if (approvalType === 'wfh') {
+    if (approvalType === 'attendance') {
+      onApproveAttendance(selectedItem.attendance_id, 'reject');
+    } else if (approvalType === 'permission') {
+      onApprovePermission(selectedItem.permission_id, 'reject');
+    } else if (approvalType === 'wfh') {
       onRejectWfh(selectedItem.wfh_id, rejectReason);
     } else {
-      onRejectLeave(selectedItem.request_id, rejectReason);
+      onRejectLeave(selectedItem.leave_id, rejectReason);
     }
     setShowRejectModal(false);
     toast.success('Rejected');
