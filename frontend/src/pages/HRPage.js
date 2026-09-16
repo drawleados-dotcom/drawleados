@@ -40,6 +40,9 @@ export default function HRPage() {
   const { isDark } = useTheme();
   const { user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState('attendance');
+  // Which Requests sub-tab (Attendance/Leave/Permission/Remote) is open —
+  // declared early so the data-loading effect below can react to it.
+  const [activeRequestSubTab, setActiveRequestSubTab] = useState('req-leave');
   const [tabVisibility, setTabVisibility] = useState({
     attendance: true, profile: true, requests: true,
     payroll: true, reviews: true, security: true,
@@ -222,28 +225,34 @@ export default function HRPage() {
       loadCalendarData();
     } else if (activeTab === 'profile') {
       loadProfile();
-    } else if (activeTab === 'leave') {
-      loadLeaveRequests();
-      loadLeaveBalance();
-    } else if (activeTab === 'permission') {
-      loadPermissionRequests();
-    } else if (activeTab === 'remote') {
-      loadWfhRequests();
+    } else if (activeTab === 'requests') {
+      // Attendance/Leave/Permission/Remote are sub-tabs of the unified
+      // "Requests" tab — load whichever one is currently open. Without this,
+      // leaveRequests/permissionRequests/wfhRequests stay at their initial
+      // [] and the list looks empty even though the sub-tab badge (fetched
+      // separately on mount) correctly shows a pending count.
+      if (activeRequestSubTab === 'req-attendance') loadAttendanceHistory();
+      else if (activeRequestSubTab === 'req-leave') { loadLeaveRequests(); loadLeaveBalance(); }
+      else if (activeRequestSubTab === 'req-permission') loadPermissionRequests();
+      else if (activeRequestSubTab === 'req-remote') loadWfhRequests();
     } else if (activeTab === 'payroll') {
       loadPayslips();
     } else if (activeTab === 'reviews') {
       loadReviews();
     }
-  }, [activeTab, loadTodayAttendance, loadAttendanceHistory, loadCalendarData, loadProfile, loadLeaveRequests, loadLeaveBalance, loadPermissionRequests, loadWfhRequests, loadPayslips, loadReviews]);
+  }, [activeTab, activeRequestSubTab, loadTodayAttendance, loadAttendanceHistory, loadCalendarData, loadProfile, loadLeaveRequests, loadLeaveBalance, loadPermissionRequests, loadWfhRequests, loadPayslips, loadReviews]);
 
   // Background polling + tab-focus refresh — only re-fetches data for the active tab
   useAutoRefresh(() => {
     if (activeTab === 'attendance') { loadTodayAttendance(); loadAttendanceHistory(); }
     else if (activeTab === 'calendar') { loadCalendarData(); }
     else if (activeTab === 'profile') { loadProfile(); }
-    else if (activeTab === 'leave') { loadLeaveRequests(); loadLeaveBalance(); }
-    else if (activeTab === 'permission') { loadPermissionRequests(); }
-    else if (activeTab === 'remote') { loadWfhRequests(); }
+    else if (activeTab === 'requests') {
+      if (activeRequestSubTab === 'req-attendance') loadAttendanceHistory();
+      else if (activeRequestSubTab === 'req-leave') { loadLeaveRequests(); loadLeaveBalance(); }
+      else if (activeRequestSubTab === 'req-permission') loadPermissionRequests();
+      else if (activeRequestSubTab === 'req-remote') loadWfhRequests();
+    }
     else if (activeTab === 'payroll') { loadPayslips(); }
     else if (activeTab === 'reviews') { loadReviews(); }
   });
@@ -377,9 +386,6 @@ export default function HRPage() {
     { id: 'req-permission', label: 'Permission', icon: Clock, count: tabCounts.permission },
     { id: 'req-remote', label: 'Remote', icon: Home, count: tabCounts.remote },
   ];
-
-  // State for request sub-tab
-  const [activeRequestSubTab, setActiveRequestSubTab] = useState('req-leave');
 
   return (
     <Layout>
