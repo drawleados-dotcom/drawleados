@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useTheme } from '../contexts/ThemeContext';
@@ -11,7 +11,8 @@ import { Label } from '../components/ui/label';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, X,
   Clock, Briefcase, Users, MapPin, ExternalLink, Link2, Check,
-  AlertCircle, Home, Building, Palmtree, Stethoscope, Coffee
+  AlertCircle, Home, Building, Palmtree, Stethoscope, Coffee,
+  CheckCircle2, XCircle, CalendarDays, Award
 } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -353,6 +354,52 @@ export default function CalendarPage() {
   const days = generateCalendarDays();
   const today = new Date().toISOString().split('T')[0];
 
+  // Group days into calendar weeks (rows of 7, already padded to start on Sunday)
+  const weeks = useMemo(() => {
+    const rows = [];
+    for (let i = 0; i < days.length; i += 7) {
+      rows.push(days.slice(i, i + 7));
+    }
+    return rows;
+  }, [days]);
+
+  // Monthly attendance summary — present / absent / holidays / worked-on-holiday / leave / total hours
+  const monthStats = useMemo(() => {
+    let present = 0, absent = 0, holidays = 0, workedOnHoliday = 0, leave = 0,
+      workedOnWeekOff = 0, totalHours = 0;
+
+    for (const d of days) {
+      if (!d.day) continue;
+      const hours = d.attendance?.total_hours || 0;
+      const didWork = !!d.attendance?.clock_in;
+      totalHours += hours;
+
+      if (d.holiday) {
+        holidays++;
+        if (didWork) workedOnHoliday++;
+        continue;
+      }
+      if (d.leave) {
+        leave++;
+        continue;
+      }
+      if (d.isWeekend && !d.isSpecialWorking) {
+        if (didWork) workedOnWeekOff++;
+        continue;
+      }
+      if (didWork) present++;
+      else if (d.date <= today) absent++;
+    }
+
+    return { present, absent, holidays, workedOnHoliday, leave, workedOnWeekOff, totalHours };
+  }, [days, today]);
+
+  // Per-week total worked hours (for the "Total" column in the grid)
+  const weekTotals = useMemo(
+    () => weeks.map(week => week.reduce((sum, d) => sum + (d?.attendance?.total_hours || 0), 0)),
+    [weeks]
+  );
+
   return (
     <Layout>
       <div className={`min-h-screen ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'} p-6`} data-testid="calendar-page">
@@ -368,6 +415,28 @@ export default function CalendarPage() {
           </div>
           
           {/* Google Calendar Connect & Add Holiday buttons removed — Google Calendar to be wired up later; Holidays managed in HR Admin */}
+        </div>
+
+        {/* Monthly Attendance Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" data-testid="calendar-month-stats">
+          {[
+            { label: 'Present', value: monthStats.present, color: '#22c55e', Icon: CheckCircle2 },
+            { label: 'Absent', value: monthStats.absent, color: '#ef4444', Icon: XCircle },
+            { label: 'Holidays', value: monthStats.holidays, color: '#ef4444', Icon: CalendarDays },
+            { label: 'Worked on Holiday', value: monthStats.workedOnHoliday, color: '#8b5cf6', Icon: Award },
+            { label: 'On Leave', value: monthStats.leave, color: '#f59e0b', Icon: Palmtree },
+            { label: 'Total Hours', value: `${monthStats.totalHours.toFixed(1)}h`, color: '#6366f1', Icon: Clock },
+          ].map((s) => (
+            <Card key={s.label} className={`${bgCard} border ${borderColor}`}>
+              <CardContent className="p-3 flex items-center justify-between">
+                <div>
+                  <p className={`text-[10px] ${textSecondary} uppercase tracking-wide`}>{s.label}</p>
+                  <p className="text-xl font-bold mt-0.5" style={{ color: s.color }}>{s.value}</p>
+                </div>
+                <s.Icon className="h-6 w-6 shrink-0" style={{ color: s.color }} />
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -408,71 +477,94 @@ export default function CalendarPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {/* Day headers */}
-                <div className="grid grid-cols-7 gap-1 mb-2">
+                {/* Day headers + weekly Total column */}
+                <div className="grid grid-cols-8 gap-1 mb-2">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
                     <div key={d} className={`text-center text-xs font-medium ${textSecondary} py-2`}>
                       {d}
                     </div>
                   ))}
+                  <div className={`text-center text-xs font-semibold ${textPrimary} py-2`}>
+                    Total
+                  </div>
                 </div>
-                
-                {/* Calendar grid */}
-                <div className="grid grid-cols-7 gap-1">
-                  {days.map((dayObj, idx) => (
-                    <div key={idx} className="aspect-square">
-                      {dayObj.day ? (
-                        <button
-                          onClick={() => handleDateClick(dayObj.date)}
-                          className={`${getDayCellStyle(dayObj)} ${selectedDate === dayObj.date ? 'ring-2 ring-[#6366f1]' : ''}`}
-                          data-testid={`calendar-day-${dayObj.date}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className={`text-sm font-medium ${dayObj.date === today ? 'bg-[#6366f1] text-white rounded-full w-6 h-6 flex items-center justify-center' : textPrimary}`}>
-                              {dayObj.day}
-                            </span>
-                            {dayObj.tasks && dayObj.tasks.length > 0 && (
-                              <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px] px-1.5 py-0">
-                                {dayObj.tasks.length} {dayObj.tasks.length === 1 ? 'task' : 'tasks'}
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          {/* Status indicators (no task list inside the box) */}
-                          <div className="flex flex-col justify-end h-full gap-0.5 mt-1">
-                            {dayObj.holiday && (
-                              <span className="text-[10px] text-[#ef4444] truncate">{dayObj.holiday.name}</span>
-                            )}
-                            {dayObj.leave && (
-                              <Badge className={`text-[10px] px-1 py-0 ${
-                                dayObj.leave.leave_type === 'casual' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
-                                dayObj.leave.leave_type === 'sick' ? 'bg-[#ec4899]/20 text-[#ec4899]' :
-                                'bg-[#8b5cf6]/20 text-[#8b5cf6]'
-                              }`}>
-                                {dayObj.leave.leave_type}
-                              </Badge>
-                            )}
-                            {dayObj.attendance && !dayObj.leave && (
-                              <div className="flex items-center gap-1">
-                                {dayObj.attendance.work_mode === 'remote' ? (
-                                  <Home className="h-3 w-3 text-[#10b981]" />
-                                ) : (
-                                  <Building className="h-3 w-3 text-[#6366f1]" />
-                                )}
-                                <span className="text-[10px] text-[#10b981]">
-                                  {dayObj.attendance.total_hours?.toFixed(1)}h
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      ) : (
-                        <div className={`w-full h-full ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'} rounded-lg`}></div>
-                      )}
+
+                {/* Calendar grid — one row per week, with a running hours total */}
+                {weeks.map((week, wIdx) => (
+                  <div key={wIdx} className="grid grid-cols-8 gap-1 mb-1">
+                    {week.map((dayObj, idx) => (
+                      <div key={idx} className="aspect-square">
+                        {dayObj.day ? (
+                          <button
+                            onClick={() => handleDateClick(dayObj.date)}
+                            className={`${getDayCellStyle(dayObj)} ${selectedDate === dayObj.date ? 'ring-2 ring-[#6366f1]' : ''}`}
+                            data-testid={`calendar-day-${dayObj.date}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm font-medium ${dayObj.date === today ? 'bg-[#6366f1] text-white rounded-full w-6 h-6 flex items-center justify-center' : textPrimary}`}>
+                                {dayObj.day}
+                              </span>
+                              {dayObj.tasks && dayObj.tasks.length > 0 && (
+                                <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px] px-1.5 py-0">
+                                  {dayObj.tasks.length} {dayObj.tasks.length === 1 ? 'task' : 'tasks'}
+                                </Badge>
+                              )}
+                            </div>
+
+                            {/* Status indicators (no task list inside the box) */}
+                            <div className="flex flex-col justify-end h-full gap-0.5 mt-1">
+                              {dayObj.holiday && (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-[#ef4444] truncate">{dayObj.holiday.name}</span>
+                                  {dayObj.attendance?.clock_in && (
+                                    <Award className="h-3 w-3 text-[#8b5cf6] shrink-0" />
+                                  )}
+                                </div>
+                              )}
+                              {dayObj.leave && (
+                                <Badge className={`text-[10px] px-1 py-0 ${
+                                  dayObj.leave.leave_type === 'casual' ? 'bg-[#f59e0b]/20 text-[#f59e0b]' :
+                                  dayObj.leave.leave_type === 'sick' ? 'bg-[#ec4899]/20 text-[#ec4899]' :
+                                  'bg-[#8b5cf6]/20 text-[#8b5cf6]'
+                                }`}>
+                                  {dayObj.leave.leave_type}
+                                </Badge>
+                              )}
+                              {dayObj.attendance?.clock_in && !dayObj.leave && (
+                                <div className="flex items-center gap-1">
+                                  {dayObj.attendance.work_mode === 'remote' ? (
+                                    <Home className="h-3 w-3 text-[#10b981]" />
+                                  ) : (
+                                    <Building className="h-3 w-3 text-[#6366f1]" />
+                                  )}
+                                  <span className="text-[10px] font-semibold text-[#10b981]">
+                                    {(dayObj.attendance.total_hours || 0).toFixed(1)}h
+                                  </span>
+                                </div>
+                              )}
+                              {!dayObj.attendance?.clock_in && !dayObj.holiday && !dayObj.leave &&
+                                !(dayObj.isWeekend && !dayObj.isSpecialWorking) && dayObj.date <= today && (
+                                <span className="text-[10px] text-[#ef4444]/70">Absent</span>
+                              )}
+                            </div>
+                          </button>
+                        ) : (
+                          <div className={`w-full h-full ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'} rounded-lg`}></div>
+                        )}
+                      </div>
+                    ))}
+                    {/* Weekly total hours */}
+                    <div className="aspect-square">
+                      <div className={`w-full h-full min-h-[80px] rounded-lg border flex flex-col items-center justify-center ${borderColor} ${isDark ? 'bg-[#18181b]' : 'bg-gray-50'}`}>
+                        <span className={`text-[9px] uppercase tracking-wide ${textSecondary}`}>Week</span>
+                        <span className={`text-sm font-bold ${textPrimary}`}>
+                          {weekTotals[wIdx].toFixed(1)}h
+                        </span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-                
+                  </div>
+                ))}
+
                 {/* Legend */}
                 <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-dashed">
                   <div className="flex items-center gap-2">
@@ -494,6 +586,14 @@ export default function CalendarPage() {
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 rounded bg-[#ec4899]/20 border-2 border-[#ec4899]"></div>
                     <span className={`text-xs ${textSecondary}`}>Sick Leave</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Award className="h-4 w-4 text-[#8b5cf6]" />
+                    <span className={`text-xs ${textSecondary}`}>Worked on Holiday</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[#ef4444]/70">Absent</span>
+                    <span className={`text-xs ${textSecondary}`}>No clock-in on a working day</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-[#6366f1]/20 text-[#6366f1] text-[10px] px-1.5 py-0">N tasks</Badge>

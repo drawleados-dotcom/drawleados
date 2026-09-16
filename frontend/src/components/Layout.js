@@ -640,6 +640,18 @@ const Layout = ({ children }) => {
                 </Button>
               </nav>
             )}
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => navigate('/calendar')}
+              className={`h-8 w-8 ${location.pathname.startsWith('/calendar')
+                ? 'bg-[#6366f1]/10 text-[#6366f1]'
+                : isDark ? 'text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#27272a]' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`}
+              title="Calendar"
+              data-testid="header-calendar-btn"
+            >
+              <Calendar className="h-4 w-4" />
+            </Button>
             <ThemeToggle />
             <Button
               size="sm"
