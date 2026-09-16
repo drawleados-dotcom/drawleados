@@ -5797,10 +5797,14 @@ function EnhancedAttendanceTab({
   const [taskTimeEmployee, setTaskTimeEmployee] = useState(null);
   const [taskTimeData, setTaskTimeData] = useState(null);
   const [taskTimeLoading, setTaskTimeLoading] = useState(false);
+  const [taskTimeDeptFilter, setTaskTimeDeptFilter] = useState('all');
+  const [taskTimeProjectFilter, setTaskTimeProjectFilter] = useState('all');
 
   const openTaskTimeDetail = async (emp) => {
     setTaskTimeEmployee(emp);
     setTaskTimeData(null);
+    setTaskTimeDeptFilter('all');
+    setTaskTimeProjectFilter('all');
     setTaskTimeLoading(true);
     try {
       const res = await axios.get(
@@ -5815,6 +5819,20 @@ function EnhancedAttendanceTab({
       setTaskTimeLoading(false);
     }
   };
+  // Options for the popup's Department/Project filters — derived from
+  // whatever tasks actually show up for this employee on this day.
+  const taskTimeDepartments = Array.from(
+    new Set((taskTimeData?.entries || []).map((e) => e.department).filter((d) => d && d !== '-'))
+  );
+  const taskTimeProjects = Array.from(
+    new Set((taskTimeData?.entries || []).map((e) => e.project_name).filter((p) => p && p !== '-'))
+  );
+  const filteredTaskTimeEntries = (taskTimeData?.entries || []).filter((e) => {
+    if (taskTimeDeptFilter !== 'all' && e.department !== taskTimeDeptFilter) return false;
+    if (taskTimeProjectFilter === '__none__' && e.project_name !== '-') return false;
+    if (taskTimeProjectFilter !== 'all' && taskTimeProjectFilter !== '__none__' && e.project_name !== taskTimeProjectFilter) return false;
+    return true;
+  });
   const fmtBreakDur = (mins) => {
     const m = Number(mins || 0);
     if (m <= 0) return '0m';
@@ -6261,23 +6279,55 @@ function EnhancedAttendanceTab({
               {taskTimeLoading ? (
                 <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
               ) : taskTimeData?.entries?.length ? (
-                <div className="space-y-2 mt-2 max-h-[60vh] overflow-y-auto">
-                  {taskTimeData.entries.map((e, i) => (
-                    <div key={e.task_id + i} className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`} data-testid={`task-time-row-${i}`}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`font-medium ${textPrimary}`}>{e.task_name}</span>
-                        <span className={`text-xs font-medium ${textPrimary} whitespace-nowrap`}>{e.duration_hours}h</span>
-                      </div>
-                      <div className={`flex items-center gap-3 mt-1 text-xs ${textSecondary} flex-wrap`}>
-                        <span>Project: <b className={textPrimary}>{e.project_name}</b></span>
-                        <span>Assigned by: <b className={textPrimary}>{e.assigned_by_name}</b></span>
-                      </div>
-                      <div className={`mt-1 text-xs ${textSecondary}`}>
-                        {formatTime(e.start)} – {e.end ? formatTime(e.end) : 'in progress'}
-                      </div>
+                <>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Select value={taskTimeDeptFilter} onValueChange={setTaskTimeDeptFilter}>
+                      <SelectTrigger className={`w-40 ${bgSecondary} ${borderColor}`} data-testid="task-time-dept-filter">
+                        <SelectValue placeholder="Department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {taskTimeDepartments.map((d) => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={taskTimeProjectFilter} onValueChange={setTaskTimeProjectFilter}>
+                      <SelectTrigger className={`w-40 ${bgSecondary} ${borderColor}`} data-testid="task-time-project-filter">
+                        <SelectValue placeholder="Project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Projects</SelectItem>
+                        {taskTimeProjects.map((p) => (
+                          <SelectItem key={p} value={p}>{p}</SelectItem>
+                        ))}
+                        <SelectItem value="__none__">Unselected Project</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {filteredTaskTimeEntries.length ? (
+                    <div className="space-y-2 mt-2 max-h-[60vh] overflow-y-auto">
+                      {filteredTaskTimeEntries.map((e, i) => (
+                        <div key={e.task_id + i} className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`} data-testid={`task-time-row-${i}`}>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className={`font-medium ${textPrimary}`}>{e.task_name}</span>
+                            <span className={`text-xs font-medium ${textPrimary} whitespace-nowrap`}>{e.duration_hours}h</span>
+                          </div>
+                          <div className={`flex items-center gap-3 mt-1 text-xs ${textSecondary} flex-wrap`}>
+                            <span>Department: <b className={textPrimary}>{e.department}</b></span>
+                            <span>Project: <b className={textPrimary}>{e.project_name}</b></span>
+                            <span>Assigned by: <b className={textPrimary}>{e.assigned_by_name}</b></span>
+                          </div>
+                          <div className={`mt-1 text-xs ${textSecondary}`}>
+                            {formatTime(e.start)} – {e.end ? formatTime(e.end) : 'in progress'}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <p className={`text-sm ${textSecondary} text-center py-8`}>No tasks match this filter.</p>
+                  )}
+                </>
               ) : (
                 <p className={`text-sm ${textSecondary} text-center py-8`}>No tracked task time for this day.</p>
               )}
