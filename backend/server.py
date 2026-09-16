@@ -33,6 +33,7 @@ from ai_routes import ai_router, init_ai_db
 from sop_routes import sop_router, init_sop_db
 from website_projects_routes import website_projects_router, init_website_projects_db
 from expense_routes import expense_router, set_expense_db
+from debts_routes import debts_router, init_debts_db
 from leads_v2_routes import leads_v2_router, init_leads_v2_db
 from quotation_routes import quotation_router, init_quotation_db
 from documentation_routes import documentation_router, init_documentation_db
@@ -100,6 +101,7 @@ init_sales_kit_db(db)
 init_sop_db(db)
 init_website_projects_db(db)
 set_expense_db(db)
+init_debts_db(db)
 init_leads_v2_db(db)
 init_quotation_db(db)
 init_documentation_db(db)
@@ -3007,6 +3009,7 @@ api_router.include_router(ai_router)
 api_router.include_router(sop_router)
 api_router.include_router(website_projects_router)
 api_router.include_router(expense_router)
+api_router.include_router(debts_router)
 api_router.include_router(leads_v2_router)
 api_router.include_router(quotation_router)
 api_router.include_router(documentation_router)

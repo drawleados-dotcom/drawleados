@@ -19,6 +19,7 @@ import ToolsSubscriptionTab from './ToolsSubscriptionTab';
 import VendorsTab from './VendorsTab';
 import ExpenseForecastTab from './ExpenseForecastTab';
 import CashInBankTab from './CashInBankTab';
+import DebtsTab from './DebtsTab';
 import useAutoRefresh from '../../hooks/useAutoRefresh';
 import {
   Select,
@@ -114,6 +115,7 @@ const DEFAULT_TABS = [
   { id: 'cash_in_bank', label: 'Cash in Bank', icon: Landmark, isDefault: true },
   { id: 'cashbook', label: 'Cashbook', icon: Wallet, isDefault: true },
   { id: 'expense', label: 'Expense', icon: TrendingDown, isDefault: true },
+  { id: 'debts', label: 'Debts', icon: CreditCard, isDefault: true },
   { id: 'invoice', label: 'Invoice', icon: FileText, isDefault: true },
   { id: 'pnl', label: 'P&L', icon: Scale, isDefault: true },
   { id: 'pipeline', label: 'Pipeline', icon: TargetIcon, isDefault: true },
@@ -2084,6 +2086,8 @@ const ExpenseTab = () => {
           )}
 
           {activeTab === 'cash_in_bank' && <CashInBankTab />}
+
+          {activeTab === 'debts' && <DebtsTab />}
 
           {/* Cashbook with Banks sub-tab */}
           {activeTab === 'cashbook' && (() => {
