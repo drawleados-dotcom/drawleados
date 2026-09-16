@@ -5785,6 +5785,7 @@ function EnhancedAttendanceTab({
   const [dateFilter, setDateFilter] = useState('day'); // day, range, month, year
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [attendanceCardFilter, setAttendanceCardFilter] = useState('present'); // total | present | office | remote | absent
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [employeeRecords, setEmployeeRecords] = useState([]);
@@ -5932,15 +5933,21 @@ function EnhancedAttendanceTab({
   };
 
   const employeesWithStatus = getEmployeesWithStatus();
-  const presentCount = employeesWithStatus.filter(e => e.status === 'present' || e.status === 'working').length;
+  const isPresent = (e) => e.status === 'present' || e.status === 'working';
+  const isRemote = (e) => e.workLocation === 'home' || e.workLocation === 'remote';
+  const presentCount = employeesWithStatus.filter(isPresent).length;
   const absentCount = employeesWithStatus.filter(e => e.status === 'absent').length;
-  const yetToLoginCount = employeesWithStatus.filter(e => e.status === 'yet_to_login').length;
-  
-  // Calculate WFH count from records
-  const wfhCount = activeRecords.filter(r => 
-    r.date?.split('T')[0] === selectedDate && 
-    (r.work_location === 'home' || r.work_mode === 'wfh')
-  ).length;
+  const officeCount = employeesWithStatus.filter(e => isPresent(e) && !isRemote(e)).length;
+  const remoteCount = employeesWithStatus.filter(e => isPresent(e) && isRemote(e)).length;
+
+  const cardFilteredEmployees = employeesWithStatus.filter(e => {
+    if (attendanceCardFilter === 'total') return true;
+    if (attendanceCardFilter === 'present') return isPresent(e);
+    if (attendanceCardFilter === 'office') return isPresent(e) && !isRemote(e);
+    if (attendanceCardFilter === 'remote') return isPresent(e) && isRemote(e);
+    if (attendanceCardFilter === 'absent') return e.status === 'absent';
+    return true;
+  });
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -6050,47 +6057,42 @@ function EnhancedAttendanceTab({
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
+      {/* Summary Cards — each one filters the table below; click again to return to that view */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className={`${bgCard} border ${borderColor}`}>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-[#6366f1]">{employees.length}</div>
-            <div className={`text-sm ${textSecondary}`}>Total Employees</div>
-          </CardContent>
-        </Card>
-        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#22c55e]`}>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-[#22c55e]">{presentCount}</div>
-            <div className={`text-sm ${textSecondary}`}>Present/Working</div>
-          </CardContent>
-        </Card>
-        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#8b5cf6]`}>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-[#8b5cf6]">{wfhCount}</div>
-            <div className={`text-sm ${textSecondary}`}>Work from Home</div>
-          </CardContent>
-        </Card>
-        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#f59e0b]`}>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-[#f59e0b]">{yetToLoginCount}</div>
-            <div className={`text-sm ${textSecondary}`}>Yet to Login</div>
-          </CardContent>
-        </Card>
-        <Card className={`${bgCard} border ${borderColor} cursor-pointer hover:border-[#ef4444]`}>
-          <CardContent className="p-4 text-center">
-            <div className="text-3xl font-bold text-[#ef4444]">{absentCount}</div>
-            <div className={`text-sm ${textSecondary}`}>Absent/Leave</div>
-          </CardContent>
-        </Card>
+        {[
+          { key: 'total', label: 'Total', value: employees.length, color: '#6366f1' },
+          { key: 'present', label: 'Present today', value: presentCount, color: '#22c55e' },
+          { key: 'office', label: 'Office', value: officeCount, color: '#3b82f6' },
+          { key: 'remote', label: 'Remote', value: remoteCount, color: '#8b5cf6' },
+          { key: 'absent', label: 'Absent', value: absentCount, color: '#ef4444' },
+        ].map(c => (
+          <Card
+            key={c.key}
+            onClick={() => setAttendanceCardFilter(c.key)}
+            data-testid={`attendance-card-${c.key}`}
+            className={`${bgCard} border cursor-pointer transition-colors ${
+              attendanceCardFilter === c.key ? '' : borderColor
+            }`}
+            style={attendanceCardFilter === c.key ? { borderColor: c.color, borderWidth: 2 } : undefined}
+          >
+            <CardContent className="p-4 text-center">
+              <div className="text-3xl font-bold" style={{ color: c.color }}>{c.value}</div>
+              <div className={`text-sm ${textSecondary}`}>{c.label}</div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Employee List Table */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">
-          <div className={`p-4 border-b ${borderColor} flex justify-between items-center`}>
+          <div className={`p-4 border-b ${borderColor} flex justify-between items-center flex-wrap gap-2`}>
             <h3 className={`font-semibold ${textPrimary}`}>
               Employee Attendance - {new Date(selectedDate).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </h3>
+            <Badge className="bg-[#6366f1]/20 text-[#6366f1] capitalize">
+              {attendanceCardFilter === 'total' ? 'All' : attendanceCardFilter} · {cardFilteredEmployees.length}
+            </Badge>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -6098,6 +6100,7 @@ function EnhancedAttendanceTab({
                 <tr>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Employee</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Department</th>
+                  <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Mode</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Status</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Check In</th>
                   <th className={`px-4 py-3 text-left text-xs font-medium ${textSecondary} uppercase`}>Check Out</th>
@@ -6108,7 +6111,7 @@ function EnhancedAttendanceTab({
                 </tr>
               </thead>
               <tbody className={`divide-y ${borderColor}`}>
-                {employeesWithStatus.map(emp => (
+                {cardFilteredEmployees.map(emp => (
                   <tr key={emp.user_id} className={isDark ? 'hover:bg-[#27272a]/30' : 'hover:bg-gray-50'}>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -6122,6 +6125,13 @@ function EnhancedAttendanceTab({
                       </div>
                     </td>
                     <td className={`px-4 py-3 ${textSecondary}`}>{emp.department || '-'}</td>
+                    <td className={`px-4 py-3 ${textSecondary}`}>
+                      {isRemote(emp) ? (
+                        <span className="inline-flex items-center gap-1"><Home className="h-3.5 w-3.5 text-[#8b5cf6]" /> Remote</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1"><Building className="h-3.5 w-3.5 text-[#3b82f6]" /> Office</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">{getStatusBadge(emp.status)}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkIn || '-'}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkOut || '-'}</td>
