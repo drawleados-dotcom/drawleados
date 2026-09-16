@@ -623,7 +623,7 @@ export default function CalendarPage() {
                     <span className={`font-bold ${textPrimary}`}>
                       {monthlyLeaveBalance?.remaining?.casual ?? 2}
                     </span>
-                    <span className={`text-xs ${textSecondary}`}>/ 2</span>
+                    <span className={`text-xs ${textSecondary}`}>/ {monthlyLeaveBalance?.monthly_allocation?.casual ?? 2}</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
@@ -635,7 +635,7 @@ export default function CalendarPage() {
                     <span className={`font-bold ${textPrimary}`}>
                       {monthlyLeaveBalance?.remaining?.sick ?? 2}
                     </span>
-                    <span className={`text-xs ${textSecondary}`}>/ 2</span>
+                    <span className={`text-xs ${textSecondary}`}>/ {monthlyLeaveBalance?.monthly_allocation?.sick ?? 2}</span>
                   </div>
                 </div>
                 <p className={`text-xs ${textSecondary} pt-2 border-t ${borderColor}`}>

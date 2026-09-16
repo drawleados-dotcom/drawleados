@@ -3343,9 +3343,14 @@ async def get_monthly_leave_balance(request: Request, month: Optional[int] = Non
         elif leave_type == "sick":
             sick_used += days
     
-    # Monthly allocation: 2 casual + 2 sick
-    monthly_casual = 2
-    monthly_sick = 2
+    # Monthly allocation is admin-configurable via HR Admin > Calendar > Work
+    # Settings > Leave Days (defaults to 2 + 2 when no calendar doc exists yet).
+    calendar = await db.hr_calendar.find_one({
+        "month": target_month,
+        "year": target_year
+    }, {"_id": 0})
+    monthly_casual = calendar.get("monthly_casual_leave", 2) if calendar else 2
+    monthly_sick = calendar.get("monthly_sick_leave", 2) if calendar else 2
     
     return {
         "month": target_month,
