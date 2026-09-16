@@ -1302,6 +1302,70 @@ async def get_attendance_calendar(year: int, month: int, request: Request, user_
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class ManualAttendanceUpdate(BaseModel):
+    status: str  # "present" | "absent"
+
+@hr_router.put("/admin/attendance/{user_id}/{date_str}")
+async def set_manual_attendance(user_id: str, date_str: str, data: ManualAttendanceUpdate, request: Request):
+    """HR-Admin: manually mark an employee Present/Absent for one day (Team Calendar).
+    Creates the day's attendance record if none exists yet; overwrites clock
+    in/out and hours when marking Absent so the day doesn't show stale work
+    time alongside the manual override."""
+    from server import get_current_user
+    requester = await get_current_user(request)
+    if not await is_hr_admin(requester):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+    if data.status not in ("present", "absent"):
+        raise HTTPException(status_code=400, detail="status must be 'present' or 'absent'")
+
+    try:
+        day_start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    day_end = day_start + timedelta(days=1)
+
+    existing = await db.attendance.find_one({"user_id": user_id, "date": {"$gte": day_start, "$lt": day_end}})
+
+    update = {
+        "status": data.status,
+        "is_manual": True,
+        "marked_by": requester.user_id,
+        "marked_at": datetime.now(timezone.utc),
+    }
+    if data.status == "absent":
+        update.update({"clock_in": None, "clock_out": None, "sessions": [], "total_hours": 0.0, "extra_hours": 0.0})
+
+    if existing:
+        attendance_id = existing["attendance_id"]
+        await db.attendance.update_one({"attendance_id": attendance_id}, {"$set": update})
+    else:
+        attendance_id = f"att_{uuid.uuid4().hex[:12]}"
+        doc = {
+            "attendance_id": attendance_id,
+            "user_id": user_id,
+            "date": day_start,
+            "clock_in": None,
+            "clock_out": None,
+            "lunch_start": None,
+            "lunch_end": None,
+            "lunch_duration": 0.0,
+            "sessions": [],
+            "work_location": "office",
+            "total_hours": 0.0,
+            "extra_hours": 0.0,
+            "permission_hours": 0.0,
+            "approval_status": "auto",
+            "approval_notes": "",
+            "approved_by": None,
+            "notes": "",
+            "created_at": datetime.now(timezone.utc),
+        }
+        doc.update(update)
+        await db.attendance.insert_one(doc)
+
+    return await db.attendance.find_one({"attendance_id": attendance_id}, {"_id": 0})
+
 # ============== PERMISSION REQUEST ROUTES ==============
 
 @hr_router.post("/permission/request")

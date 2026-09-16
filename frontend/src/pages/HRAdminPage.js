@@ -9439,6 +9439,196 @@ function LeaveAllocationCard({ canEdit = true, bgCard, bgSecondary, textPrimary,
   );
 }
 
+// ============ Team Calendar (Calendar View > Team Calendar) ============
+// Pick any employee and see their month at a glance (Present/Absent/Leave),
+// with HR Admins able to manually mark a day Present or Absent — e.g. to
+// backfill a day someone forgot to clock in/out, or correct a mistake.
+// View is open to anyone in this HR Admin section; the edit action is
+// gated both here (canEdit) and, authoritatively, on the backend.
+function TeamCalendarPanel({ canEdit = true, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [employees, setEmployees] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [calendarData, setCalendarData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [editDate, setEditDate] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('session_token');
+    axios.get(`${API}/api/hr/admin/employees`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setEmployees(list);
+        setSelectedUserId(prev => prev || list[0]?.user_id || '');
+      })
+      .catch(() => toast.error('Failed to load employees'));
+  }, []);
+
+  const loadCalendar = useCallback(async () => {
+    if (!selectedUserId) return;
+    setLoading(true);
+    const token = localStorage.getItem('session_token');
+    try {
+      const res = await axios.get(`${API}/api/hr/attendance/calendar/${year}/${month}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { user_id: selectedUserId },
+      });
+      setCalendarData(res.data);
+    } catch (e) {
+      toast.error('Failed to load calendar');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedUserId, year, month]);
+
+  useEffect(() => { loadCalendar(); }, [loadCalendar]);
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstWeekday = new Date(year, month - 1, 1).getDay();
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const cellInfo = (day) => {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const entry = calendarData?.calendar_data?.[dateStr];
+    const onLeave = (calendarData?.leaves || []).some(l => dateStr >= l.start_date && dateStr <= l.end_date);
+    return { dateStr, entry, onLeave };
+  };
+
+  const handleSetStatus = async (status) => {
+    if (!editDate || !selectedUserId) return;
+    setSaving(true);
+    const token = localStorage.getItem('session_token');
+    try {
+      await axios.put(`${API}/api/hr/admin/attendance/${selectedUserId}/${editDate}`, { status }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success(`Marked ${status === 'present' ? 'Present' : 'Absent'}`);
+      setEditDate(null);
+      loadCalendar();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update attendance');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedEmployee = employees.find(e => e.user_id === selectedUserId);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+          <SelectTrigger className={`w-64 ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="team-cal-employee-select">
+            <SelectValue placeholder="Select an employee" />
+          </SelectTrigger>
+          <SelectContent>
+            {employees.map(e => (
+              <SelectItem key={e.user_id} value={e.user_id}>{e.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <select
+          value={month}
+          onChange={(e) => setMonth(parseInt(e.target.value))}
+          className={`px-3 py-2 rounded-md ${bgSecondary} border ${borderColor} ${textPrimary}`}
+        >
+          {Array.from({ length: 12 }, (_, i) => (
+            <option key={i} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>
+          ))}
+        </select>
+        <Input
+          type="number"
+          value={year}
+          onChange={(e) => setYear(parseInt(e.target.value))}
+          className={`w-24 ${bgSecondary} ${borderColor}`}
+          min="2020"
+          max="2030"
+        />
+        <div className={`text-sm ${textSecondary} flex items-center gap-4`}>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#22c55e]/30"></span> Present</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#ef4444]/30"></span> Absent</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-[#f59e0b]/30"></span> Leave</span>
+        </div>
+      </div>
+
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          {loading ? (
+            <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : !selectedUserId ? (
+            <p className={`text-sm ${textSecondary} text-center py-10`}>No employees found.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-7 gap-1">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                  <div key={d} className={`text-center font-medium py-2 text-sm ${textSecondary}`}>{d}</div>
+                ))}
+                {Array.from({ length: firstWeekday }).map((_, i) => <div key={`pad-${i}`} />)}
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
+                  const { dateStr, entry, onLeave } = cellInfo(day);
+                  const status = onLeave ? 'leave' : entry?.status;
+                  const bg =
+                    status === 'present' ? 'bg-[#22c55e]/20 hover:bg-[#22c55e]/30' :
+                    status === 'absent' ? 'bg-[#ef4444]/20 hover:bg-[#ef4444]/30' :
+                    status === 'leave' ? 'bg-[#f59e0b]/20 hover:bg-[#f59e0b]/30' :
+                    `${bgSecondary}`;
+                  return (
+                    <div
+                      key={day}
+                      onClick={() => canEdit && setEditDate(dateStr)}
+                      data-testid={`team-cal-day-${dateStr}`}
+                      className={`p-2 min-h-[64px] rounded text-center transition-colors ${bg} ${canEdit ? 'cursor-pointer' : ''} ${dateStr === todayStr ? 'ring-2 ring-[#6366f1]' : ''}`}
+                    >
+                      <div className={`text-sm font-medium ${textPrimary}`}>{day}</div>
+                      {status && (
+                        <div className={`text-[10px] mt-1 capitalize ${
+                          status === 'present' ? 'text-[#22c55e]' : status === 'absent' ? 'text-[#ef4444]' : 'text-[#f59e0b]'
+                        }`}>
+                          {status}
+                        </div>
+                      )}
+                      {status === 'present' && entry?.total_hours > 0 && (
+                        <div className={`text-[9px] ${textSecondary}`}>{entry.total_hours.toFixed(1)}h</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {canEdit && (
+                <div className={`mt-4 p-3 rounded ${bgSecondary} text-sm ${textSecondary}`}>
+                  <strong>Tip:</strong> Click any day to manually mark it Present or Absent for {selectedEmployee?.name || 'this employee'}.
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!editDate} onOpenChange={(o) => !o && setEditDate(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark Attendance</DialogTitle>
+          </DialogHeader>
+          <p className={`text-sm ${textSecondary}`}>
+            {selectedEmployee?.name} — {editDate}
+          </p>
+          <div className="flex gap-2 pt-2">
+            <Button onClick={() => handleSetStatus('present')} disabled={saving} className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white">
+              Mark Present
+            </Button>
+            <Button onClick={() => handleSetStatus('absent')} disabled={saving} className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white">
+              Mark Absent
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 // ============ Enhanced Calendar Tab with Work Settings ============
 function EnhancedCalendarTab({
   calendar, hrSettings, month, year, setMonth, setYear,
@@ -9449,6 +9639,7 @@ function EnhancedCalendarTab({
   // HR Manager cannot edit calendar - view only
   const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('calendar');
+  const [calendarViewSubTab, setCalendarViewSubTab] = useState('global'); // global | team
   const [settingsSubTab, setSettingsSubTab] = useState('working_hours'); // working_hours | lunch_hours | leave_days
   const [editingSettings, setEditingSettings] = useState(false);
   const [formData, setFormData] = useState({
@@ -9747,6 +9938,28 @@ function EnhancedCalendarTab({
       {/* Calendar View */}
       {activeSubTab === 'calendar' && (
         <div className="space-y-4">
+          {/* Global Calendar / Team Calendar inner tabs */}
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={calendarViewSubTab === 'global' ? 'default' : 'outline'}
+              onClick={() => setCalendarViewSubTab('global')}
+              className={calendarViewSubTab === 'global' ? 'bg-[#6366f1]' : ''}
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              Global Calendar
+            </Button>
+            <Button
+              variant={calendarViewSubTab === 'team' ? 'default' : 'outline'}
+              onClick={() => setCalendarViewSubTab('team')}
+              className={calendarViewSubTab === 'team' ? 'bg-[#6366f1]' : ''}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Team Calendar
+            </Button>
+          </div>
+
+          {calendarViewSubTab === 'global' && (
+          <div className="space-y-4">
           <div className="flex items-center gap-4 flex-wrap">
             <select
               value={month}
@@ -9823,7 +10036,19 @@ function EnhancedCalendarTab({
               </div>
             </CardContent>
           </Card>
+          </div>
+          )}
 
+          {calendarViewSubTab === 'team' && (
+            <TeamCalendarPanel
+              canEdit={canEdit}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          )}
         </div>
       )}
 
