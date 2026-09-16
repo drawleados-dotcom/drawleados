@@ -869,12 +869,15 @@ async def clock_out(clock_data: ClockOutRequest, request: Request):
     standard_hours = settings["standard_work_hours"]
     extra_hours = max(0, total_hours - standard_hours)
     
-    # Check if early logout needs approval
+    # Check if early logout needs approval — "early" means clocking out
+    # before the company's standard office end time (e.g. 7:00 PM), not
+    # working fewer than standard_hours. Someone who logs in late can still
+    # legitimately clock out at/after standard_logout_time without having
+    # completed standard_hours, and that shouldn't be flagged as early.
     standard_logout = parse_time_string(settings["standard_logout_time"], today)
     approval_status = existing.get("approval_status", "auto")
-    
-    # If clocking out early (before standard hours completed)
-    if total_hours < standard_hours and approval_status == "auto":
+
+    if now < standard_logout and approval_status == "auto":
         approval_status = "pending_early_logout"
     
     # Save this session
