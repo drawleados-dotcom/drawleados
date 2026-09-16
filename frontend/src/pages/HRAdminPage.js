@@ -1264,6 +1264,7 @@ export default function HRAdminPage() {
     { id: 'designations-depts', label: 'Designation & Depts', icon: Briefcase, hrManagerAccess: false },
     { id: 'approvals', label: 'Approvals', icon: CheckCircle, hrManagerAccess: true },
     { id: 'payroll', label: 'Payroll Mgmt', icon: CreditCard, hrManagerAccess: false },
+    { id: 'project-wise', label: 'Project Wise', icon: FolderOpen, hrManagerAccess: true },
     { id: 'reviews', label: 'Reviews', icon: ClipboardList, hrManagerAccess: true, hrManagerCanWrite: true },
     { id: 'recruitment', label: 'Recruitment', icon: UserPlus, hrManagerAccess: true },
     { id: 'calendar', label: 'Calendar', icon: Calendar, hrManagerAccess: true },
@@ -1536,6 +1537,18 @@ export default function HRAdminPage() {
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
+          />
+        )}
+
+        {activeTab === 'project-wise' && (
+          <ProjectWiseTab
+            headers={headers}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+            isDark={isDark}
           />
         )}
 
@@ -9765,6 +9778,138 @@ function TeamCalendarPanel({ canEdit = true, bgCard, bgSecondary, textPrimary, t
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ============ Project Wise Tab — hours worked per department, drill into projects ============
+function ProjectWiseTab({ headers, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark }) {
+  const [period, setPeriod] = useState('today');
+  const [departments, setDepartments] = useState([]); // canonical list: [{dept_key, label}]
+  const [hoursData, setHoursData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [expandedDept, setExpandedDept] = useState(null);
+
+  useEffect(() => {
+    axios.get(`${API}/api/department-categories`, { headers })
+      .then((res) => setDepartments(res.data || []))
+      .catch(() => setDepartments([]));
+  }, [headers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    axios.get(`${API}/api/hr/admin/project-hours?period=${period}`, { headers })
+      .then((res) => { if (!cancelled) setHoursData(res.data); })
+      .catch(() => { if (!cancelled) toast.error('Failed to load project hours'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [period, headers]);
+
+  const hoursByDept = useMemo(() => {
+    const map = {};
+    (hoursData?.departments || []).forEach((d) => { map[d.dept_key] = d; });
+    return map;
+  }, [hoursData]);
+
+  // Merge the canonical department list with the aggregated hours so every
+  // department shows (even at 0h — "all, like the department view"), plus
+  // any dept_key found on tasks that isn't in the canonical list.
+  const rows = useMemo(() => {
+    const known = new Set(departments.map((d) => d.dept_key));
+    const merged = departments.map((d) => ({
+      dept_key: d.dept_key,
+      label: d.label,
+      total_hours: hoursByDept[d.dept_key]?.total_hours || 0,
+      projects: hoursByDept[d.dept_key]?.projects || [],
+    }));
+    Object.keys(hoursByDept).forEach((key) => {
+      if (!known.has(key)) {
+        merged.push({
+          dept_key: key,
+          label: key === 'unassigned' ? 'Unassigned' : key,
+          total_hours: hoursByDept[key].total_hours,
+          projects: hoursByDept[key].projects,
+        });
+      }
+    });
+    return merged.sort((a, b) => b.total_hours - a.total_hours);
+  }, [departments, hoursByDept]);
+
+  const periodLabel = { today: 'Today', yesterday: 'Yesterday', week: 'This Week' };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className={`text-lg font-semibold ${textPrimary}`}>Project Wise — Hours Worked</h2>
+        <div className="flex gap-2">
+          {['today', 'yesterday', 'week'].map((p) => (
+            <Button
+              key={p}
+              size="sm"
+              onClick={() => setPeriod(p)}
+              className={period === p ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary} hover:opacity-80`}
+              data-testid={`project-wise-period-${p}`}
+            >
+              {periodLabel[p]}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4 flex items-center justify-between">
+          <span className={`text-sm ${textSecondary}`}>Total tracked hours — {periodLabel[period]}</span>
+          <span className="text-2xl font-bold text-[#6366f1]" data-testid="project-wise-grand-total">
+            {loading ? '—' : `${hoursData?.grand_total_hours ?? 0}h`}
+          </span>
+        </CardContent>
+      </Card>
+
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" /></div>
+      ) : rows.length === 0 ? (
+        <p className={`text-sm ${textSecondary} text-center py-8`}>No departments configured yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {rows.map((row) => {
+            const isOpen = expandedDept === row.dept_key;
+            return (
+              <Card key={row.dept_key} className={`${bgCard} border ${borderColor}`} data-testid={`project-wise-dept-${row.dept_key}`}>
+                <CardContent className="p-4">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between"
+                    onClick={() => setExpandedDept(isOpen ? null : row.dept_key)}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <span className={`font-medium ${textPrimary}`}>{row.label}</span>
+                    </div>
+                    <span className={`font-bold ${row.total_hours > 0 ? 'text-[#10b981]' : textSecondary}`}>
+                      {row.total_hours}h
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className={`mt-3 pt-3 border-t ${borderColor} space-y-2`}>
+                      {row.projects.length === 0 ? (
+                        <p className={`text-xs ${textSecondary}`}>No tracked hours in this range.</p>
+                      ) : (
+                        row.projects.map((p, i) => (
+                          <div key={p.project_name + i} className={`flex items-center justify-between text-sm ${bgSecondary} rounded px-3 py-2`}>
+                            <span className={textPrimary}>{p.project_name}</span>
+                            <span className={textSecondary}>{p.hours}h</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1566,6 +1566,86 @@ async def get_task_time_breakdown(user_id: str, date_str: str, request: Request)
         "total_hours": round(total_seconds / 3600, 2),
     }
 
+@hr_router.get("/admin/project-hours")
+async def get_project_hours(request: Request, period: str = "today"):
+    """HR-Admin: total tracked hours across everyone, grouped by department
+    and — within each department — by client project, for a date range.
+    Powers the Project Wise tab (department list that drills into projects)."""
+    from server import get_current_user
+    requester = await get_current_user(request)
+    if not await is_hr_admin(requester):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+
+    # Day boundaries in IST, not UTC — the company operates in IST, and a
+    # naive UTC midnight cutoff would mislabel the first ~5.5 hours of every
+    # IST day as "yesterday" (same class of bug as the calendar grid fix).
+    IST = timezone(timedelta(hours=5, minutes=30))
+    today_start = datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    if period == "today":
+        range_start, range_end = today_start, today_start + timedelta(days=1)
+    elif period == "yesterday":
+        range_start, range_end = today_start - timedelta(days=1), today_start
+    elif period == "week":
+        range_start = today_start - timedelta(days=today_start.weekday())  # Monday
+        range_end = today_start + timedelta(days=1)
+    else:
+        raise HTTPException(status_code=400, detail="period must be today, yesterday, or week")
+
+    tasks = await db.our_tasks.find(
+        {}, {"_id": 0, "project_name": 1, "department": 1, "time_tracking": 1},
+    ).to_list(10000)
+
+    def _parse_dt(v):
+        if not v:
+            return None
+        if isinstance(v, str):
+            try:
+                v = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v
+
+    dept_map = {}
+    for t in tasks:
+        dept_key = t.get("department") or "unassigned"
+        project = t.get("project_name") or "Unassigned"
+        for s in (t.get("time_tracking") or {}).get("sessions") or []:
+            start_dt = _parse_dt(s.get("start"))
+            if not start_dt or not (range_start <= start_dt < range_end):
+                continue
+            seconds = s.get("duration_seconds", 0) or 0
+            entry = dept_map.setdefault(dept_key, {"total_seconds": 0, "projects": {}})
+            entry["total_seconds"] += seconds
+            entry["projects"][project] = entry["projects"].get(project, 0) + seconds
+
+    departments = []
+    for dept_key, data in dept_map.items():
+        projects = sorted(
+            [
+                {"project_name": p, "seconds": sec, "hours": round(sec / 3600, 2)}
+                for p, sec in data["projects"].items()
+            ],
+            key=lambda p: -p["seconds"],
+        )
+        departments.append({
+            "dept_key": dept_key,
+            "total_seconds": data["total_seconds"],
+            "total_hours": round(data["total_seconds"] / 3600, 2),
+            "projects": projects,
+        })
+    departments.sort(key=lambda d: -d["total_seconds"])
+
+    return {
+        "period": period,
+        "range_start": range_start.isoformat(),
+        "range_end": range_end.isoformat(),
+        "departments": departments,
+        "grand_total_hours": round(sum(d["total_seconds"] for d in departments) / 3600, 2),
+    }
+
 # ============== PERMISSION REQUEST ROUTES ==============
 
 @hr_router.post("/permission/request")
