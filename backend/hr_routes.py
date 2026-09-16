@@ -1608,7 +1608,9 @@ async def get_project_hours(request: Request, period: str = "today"):
             v = v.replace(tzinfo=timezone.utc)
         return v
 
+    # dept -> { total_seconds, projects: { project_name -> { total_seconds, users: { user_id -> seconds } } } }
     dept_map = {}
+    all_user_ids = set()
     for t in tasks:
         dept_key = t.get("department") or "unassigned"
         project = t.get("project_name") or "Unassigned"
@@ -1617,23 +1619,81 @@ async def get_project_hours(request: Request, period: str = "today"):
             if not start_dt or not (range_start <= start_dt < range_end):
                 continue
             seconds = s.get("duration_seconds", 0) or 0
-            entry = dept_map.setdefault(dept_key, {"total_seconds": 0, "projects": {}})
-            entry["total_seconds"] += seconds
-            entry["projects"][project] = entry["projects"].get(project, 0) + seconds
+            uid = s.get("user_id")
+            dept_entry = dept_map.setdefault(dept_key, {"total_seconds": 0, "projects": {}})
+            dept_entry["total_seconds"] += seconds
+            proj_entry = dept_entry["projects"].setdefault(project, {"total_seconds": 0, "users": {}})
+            proj_entry["total_seconds"] += seconds
+            if uid:
+                proj_entry["users"][uid] = proj_entry["users"].get(uid, 0) + seconds
+                all_user_ids.add(uid)
+
+    # Resolve name + hourly rate (per-day salary / 8h) for everyone involved.
+    # per-day salary mirrors the same formula payslips already use: gross
+    # salary (salary_details, falling back to users.current_salary) divided
+    # by the current month's configured working days.
+    users_map, salary_map = {}, {}
+    if all_user_ids:
+        uid_list = list(all_user_ids)
+        user_docs = await db.users.find(
+            {"user_id": {"$in": uid_list}}, {"_id": 0, "user_id": 1, "name": 1, "current_salary": 1},
+        ).to_list(len(uid_list))
+        users_map = {u["user_id"]: u for u in user_docs}
+        salary_docs = await db.salary_details.find(
+            {"user_id": {"$in": uid_list}}, {"_id": 0},
+        ).to_list(len(uid_list))
+        salary_map = {s["user_id"]: s for s in salary_docs}
+
+    calendar_doc = await db.hr_calendar.find_one(
+        {"month": today_start.month, "year": today_start.year}, {"_id": 0},
+    )
+    total_working_days = (calendar_doc or {}).get("working_days", 22)
+
+    def _hourly_rate(uid):
+        salary = salary_map.get(uid) or {}
+        gross = sum(
+            float(salary.get(k) or 0)
+            for k in ("basic_salary", "hra", "conveyance", "medical", "special_allowance")
+        )
+        if gross <= 0:
+            gross = float((users_map.get(uid) or {}).get("current_salary") or 0)
+        if gross <= 0 or total_working_days <= 0:
+            return 0
+        return round((gross / total_working_days) / 8, 2)
 
     departments = []
-    for dept_key, data in dept_map.items():
-        projects = sorted(
-            [
-                {"project_name": p, "seconds": sec, "hours": round(sec / 3600, 2)}
-                for p, sec in data["projects"].items()
-            ],
-            key=lambda p: -p["seconds"],
-        )
+    for dept_key, ddata in dept_map.items():
+        projects = []
+        for project_name, pdata in ddata["projects"].items():
+            people = []
+            total_cost = 0
+            for uid, secs in pdata["users"].items():
+                hrs = round(secs / 3600, 2)
+                rate = _hourly_rate(uid)
+                cost = round(hrs * rate, 2)
+                total_cost += cost
+                people.append({
+                    "user_id": uid,
+                    "name": (users_map.get(uid) or {}).get("name", "Unknown"),
+                    "hours": hrs,
+                    "hourly_rate": rate,
+                    "cost": cost,
+                })
+            people.sort(key=lambda p: -p["hours"])
+            projects.append({
+                "project_name": project_name,
+                "seconds": pdata["total_seconds"],
+                "hours": round(pdata["total_seconds"] / 3600, 2),
+                "headcount": len(people),
+                "people": people,
+                "total_cost": round(total_cost, 2),
+            })
+        projects.sort(key=lambda p: -p["seconds"])
         departments.append({
             "dept_key": dept_key,
-            "total_seconds": data["total_seconds"],
-            "total_hours": round(data["total_seconds"] / 3600, 2),
+            "total_seconds": ddata["total_seconds"],
+            "total_hours": round(ddata["total_seconds"] / 3600, 2),
+            "total_cost": round(sum(p["total_cost"] for p in projects), 2),
             "projects": projects,
         })
     departments.sort(key=lambda d: -d["total_seconds"])
@@ -1644,6 +1704,7 @@ async def get_project_hours(request: Request, period: str = "today"):
         "range_end": range_end.isoformat(),
         "departments": departments,
         "grand_total_hours": round(sum(d["total_seconds"] for d in departments) / 3600, 2),
+        "grand_total_cost": round(sum(d["total_cost"] for d in departments), 2),
     }
 
 # ============== PERMISSION REQUEST ROUTES ==============

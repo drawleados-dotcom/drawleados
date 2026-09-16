@@ -9782,13 +9782,14 @@ function TeamCalendarPanel({ canEdit = true, bgCard, bgSecondary, textPrimary, t
   );
 }
 
-// ============ Project Wise Tab — hours worked per department, drill into projects ============
+// ============ Project Wise Tab — hours & cost per project, Operations-style filter bar ============
 function ProjectWiseTab({ headers, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark }) {
   const [period, setPeriod] = useState('today');
   const [departments, setDepartments] = useState([]); // canonical list: [{dept_key, label}]
   const [hoursData, setHoursData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [expandedDept, setExpandedDept] = useState(null);
+  const [deptFilter, setDeptFilter] = useState('all');
+  const [expandedProject, setExpandedProject] = useState(null); // `${dept_key}::${project_name}`
 
   useEffect(() => {
     axios.get(`${API}/api/department-categories`, { headers })
@@ -9806,42 +9807,50 @@ function ProjectWiseTab({ headers, bgCard, bgSecondary, textPrimary, textSeconda
     return () => { cancelled = true; };
   }, [period, headers]);
 
-  const hoursByDept = useMemo(() => {
+  const deptLabel = useMemo(() => {
     const map = {};
-    (hoursData?.departments || []).forEach((d) => { map[d.dept_key] = d; });
+    departments.forEach((d) => { map[d.dept_key] = d.label; });
     return map;
+  }, [departments]);
+
+  // Flatten department -> projects into one list, department tag kept on
+  // each row, mirroring how Operations' Projects table shows one row per
+  // project with a Department badge rather than grouping by department.
+  const allProjectRows = useMemo(() => {
+    const rows = [];
+    (hoursData?.departments || []).forEach((d) => {
+      d.projects.forEach((p) => rows.push({ ...p, dept_key: d.dept_key }));
+    });
+    return rows.sort((a, b) => b.hours - a.hours);
   }, [hoursData]);
 
-  // Merge the canonical department list with the aggregated hours so every
-  // department shows (even at 0h — "all, like the department view"), plus
-  // any dept_key found on tasks that isn't in the canonical list.
-  const rows = useMemo(() => {
+  const filteredProjectRows = deptFilter === 'all'
+    ? allProjectRows
+    : allProjectRows.filter((p) => p.dept_key === deptFilter);
+
+  // Department filter pills (Operations-style "All (34) | Website (16) | …")
+  // — every canonical department, count = its projects with tracked hours
+  // this period, plus any dept_key on a task that isn't in the canonical list.
+  const deptPills = useMemo(() => {
+    const counts = {};
+    allProjectRows.forEach((p) => { counts[p.dept_key] = (counts[p.dept_key] || 0) + 1; });
     const known = new Set(departments.map((d) => d.dept_key));
-    const merged = departments.map((d) => ({
-      dept_key: d.dept_key,
-      label: d.label,
-      total_hours: hoursByDept[d.dept_key]?.total_hours || 0,
-      projects: hoursByDept[d.dept_key]?.projects || [],
-    }));
-    Object.keys(hoursByDept).forEach((key) => {
+    const pills = departments.map((d) => ({ dept_key: d.dept_key, label: d.label, count: counts[d.dept_key] || 0 }));
+    Object.keys(counts).forEach((key) => {
       if (!known.has(key)) {
-        merged.push({
-          dept_key: key,
-          label: key === 'unassigned' ? 'Unassigned' : key,
-          total_hours: hoursByDept[key].total_hours,
-          projects: hoursByDept[key].projects,
-        });
+        pills.push({ dept_key: key, label: key === 'unassigned' ? 'Unassigned' : key, count: counts[key] });
       }
     });
-    return merged.sort((a, b) => b.total_hours - a.total_hours);
-  }, [departments, hoursByDept]);
+    return pills;
+  }, [departments, allProjectRows]);
 
   const periodLabel = { today: 'Today', yesterday: 'Yesterday', week: 'This Week' };
+  const fmtMoney = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className={`text-lg font-semibold ${textPrimary}`}>Project Wise — Hours Worked</h2>
+        <h2 className={`text-lg font-semibold ${textPrimary}`}>Project Wise — Hours & Cost</h2>
         <div className="flex gap-2">
           {['today', 'yesterday', 'week'].map((p) => (
             <Button
@@ -9857,58 +9866,141 @@ function ProjectWiseTab({ headers, bgCard, bgSecondary, textPrimary, textSeconda
         </div>
       </div>
 
-      <Card className={`${bgCard} border ${borderColor}`}>
-        <CardContent className="p-4 flex items-center justify-between">
-          <span className={`text-sm ${textSecondary}`}>Total tracked hours — {periodLabel[period]}</span>
-          <span className="text-2xl font-bold text-[#6366f1]" data-testid="project-wise-grand-total">
-            {loading ? '—' : `${hoursData?.grand_total_hours ?? 0}h`}
-          </span>
-        </CardContent>
-      </Card>
+      {/* Summary — mirrors the totals strip on Operations' Projects page */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 flex items-center justify-between">
+            <span className={`text-sm ${textSecondary}`}>Total tracked hours — {periodLabel[period]}</span>
+            <span className="text-2xl font-bold text-[#6366f1]" data-testid="project-wise-grand-total">
+              {loading ? '—' : `${hoursData?.grand_total_hours ?? 0}h`}
+            </span>
+          </CardContent>
+        </Card>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-4 flex items-center justify-between">
+            <span className={`text-sm ${textSecondary}`}>Total cost — {periodLabel[period]}</span>
+            <span className="text-2xl font-bold text-[#10b981]" data-testid="project-wise-grand-cost">
+              {loading ? '—' : fmtMoney(hoursData?.grand_total_cost)}
+            </span>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Department filter pills */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        <Button
+          size="sm"
+          onClick={() => setDeptFilter('all')}
+          className={deptFilter === 'all' ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`}
+          data-testid="project-wise-dept-pill-all"
+        >
+          All ({allProjectRows.length})
+        </Button>
+        {deptPills.map((d) => (
+          <Button
+            key={d.dept_key}
+            size="sm"
+            onClick={() => setDeptFilter(d.dept_key)}
+            className={deptFilter === d.dept_key ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`}
+            data-testid={`project-wise-dept-pill-${d.dept_key}`}
+          >
+            {d.label} ({d.count})
+          </Button>
+        ))}
+      </div>
 
       {loading ? (
         <div className="flex justify-center py-10"><Loader2 className="h-6 w-6 animate-spin" /></div>
-      ) : rows.length === 0 ? (
-        <p className={`text-sm ${textSecondary} text-center py-8`}>No departments configured yet.</p>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {rows.map((row) => {
-            const isOpen = expandedDept === row.dept_key;
-            return (
-              <Card key={row.dept_key} className={`${bgCard} border ${borderColor}`} data-testid={`project-wise-dept-${row.dept_key}`}>
-                <CardContent className="p-4">
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-between"
-                    onClick={() => setExpandedDept(isOpen ? null : row.dept_key)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                      <span className={`font-medium ${textPrimary}`}>{row.label}</span>
-                    </div>
-                    <span className={`font-bold ${row.total_hours > 0 ? 'text-[#10b981]' : textSecondary}`}>
-                      {row.total_hours}h
-                    </span>
-                  </button>
-                  {isOpen && (
-                    <div className={`mt-3 pt-3 border-t ${borderColor} space-y-2`}>
-                      {row.projects.length === 0 ? (
-                        <p className={`text-xs ${textSecondary}`}>No tracked hours in this range.</p>
-                      ) : (
-                        row.projects.map((p, i) => (
-                          <div key={p.project_name + i} className={`flex items-center justify-between text-sm ${bgSecondary} rounded px-3 py-2`}>
-                            <span className={textPrimary}>{p.project_name}</span>
-                            <span className={textSecondary}>{p.hours}h</span>
-                          </div>
-                        ))
-                      )}
-                    </div>
+        <Card className={`${bgCard} border ${borderColor}`}>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className={`border-b ${borderColor}`}>
+                    <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Project</th>
+                    <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Department</th>
+                    <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>People</th>
+                    <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Hours</th>
+                    <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Cost</th>
+                    <th className="p-3 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProjectRows.map((p) => {
+                    const rowKey = `${p.dept_key}::${p.project_name}`;
+                    const isOpen = expandedProject === rowKey;
+                    return (
+                      <React.Fragment key={rowKey}>
+                        <tr
+                          className={`border-b ${borderColor} hover:${bgSecondary} cursor-pointer`}
+                          onClick={() => setExpandedProject(isOpen ? null : rowKey)}
+                          data-testid={`project-wise-row-${rowKey}`}
+                        >
+                          <td className={`p-3 font-medium ${textPrimary}`}>{p.project_name}</td>
+                          <td className={`p-3 ${textSecondary}`}>{deptLabel[p.dept_key] || p.dept_key}</td>
+                          <td className={`p-3 ${textSecondary}`}>{p.headcount}</td>
+                          <td className="p-3 font-medium text-[#6366f1]">{p.hours}h</td>
+                          <td className="p-3 font-medium text-[#10b981]">{fmtMoney(p.total_cost)}</td>
+                          <td className="p-3 text-center">
+                            {isOpen ? <ChevronDown className="h-4 w-4 inline" /> : <ChevronRight className="h-4 w-4 inline" />}
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr className={`border-b ${borderColor}`}>
+                            <td colSpan={6} className={`p-0 ${bgSecondary}`}>
+                              <div className="p-4" data-testid={`project-wise-detail-${rowKey}`}>
+                                <p className={`text-xs ${textSecondary} mb-2`}>
+                                  {p.headcount} {p.headcount === 1 ? 'person' : 'people'} worked on this project — {p.hours}h total
+                                </p>
+                                {p.people.length === 0 ? (
+                                  <p className={`text-sm ${textSecondary}`}>No individual sessions recorded.</p>
+                                ) : (
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className={`border-b ${borderColor}`}>
+                                        <th className={`text-left py-1.5 ${textSecondary} font-medium`}>Employee</th>
+                                        <th className={`text-left py-1.5 ${textSecondary} font-medium`}>Rate / hr</th>
+                                        <th className={`text-left py-1.5 ${textSecondary} font-medium`}>Hours</th>
+                                        <th className={`text-left py-1.5 ${textSecondary} font-medium`}>Amount</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {p.people.map((person) => (
+                                        <tr key={person.user_id}>
+                                          <td className={`py-1.5 ${textPrimary}`}>{person.name}</td>
+                                          <td className={textSecondary}>{fmtMoney(person.hourly_rate)}</td>
+                                          <td className={textSecondary}>{person.hours}h</td>
+                                          <td className={`font-medium ${textPrimary}`}>{fmtMoney(person.cost)}</td>
+                                        </tr>
+                                      ))}
+                                      <tr className={`border-t ${borderColor}`}>
+                                        <td className={`py-1.5 font-semibold ${textPrimary}`} colSpan={2}>Total</td>
+                                        <td className={`font-semibold ${textPrimary}`}>{p.hours}h</td>
+                                        <td className="font-semibold text-[#10b981]">{fmtMoney(p.total_cost)}</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                  {filteredProjectRows.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className={`p-8 text-center ${textSecondary}`}>
+                        No tracked hours in this range.
+                      </td>
+                    </tr>
                   )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
