@@ -1403,12 +1403,35 @@ async def get_pending_approvals(request: Request):
     permission_pending = await db.permissions.find({
         "status": "pending"
     }, {"_id": 0}).sort("created_at", -1).to_list(100)
-    
+
     # Get pending leave requests
     leave_pending = await db.leave_requests.find({
         "status": "pending"
     }, {"_id": 0}).sort("created_at", -1).to_list(100)
-    
+
+    # permissions/leave_requests store user_name/user_email (set at request time), but the
+    # approvals UI reads employee_name/employee_email (the field names attendance already
+    # uses) — resolve fresh from users so renamed/edited employees still show correctly.
+    other_user_ids = list({
+        r.get("user_id") for r in (permission_pending + leave_pending) if r.get("user_id")
+    })
+    other_user_map = {}
+    if other_user_ids:
+        other_users = await db.users.find(
+            {"user_id": {"$in": other_user_ids}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1}
+        ).to_list(len(other_user_ids))
+        other_user_map = {u["user_id"]: u for u in other_users}
+
+    for record in permission_pending:
+        user_info = other_user_map.get(record.get("user_id"), {})
+        record["employee_name"] = user_info.get("name") or record.get("user_name", "Unknown")
+        record["employee_email"] = user_info.get("email", "")
+
+    for record in leave_pending:
+        user_info = other_user_map.get(record.get("user_id"), {})
+        record["employee_name"] = user_info.get("name") or record.get("user_name", "Unknown")
+        record["employee_email"] = user_info.get("email") or record.get("user_email", "")
+
     return {
         "attendance": attendance_pending,
         "permissions": permission_pending,
@@ -3447,7 +3470,20 @@ async def get_all_leave_requests(request: Request, status: Optional[str] = None)
         query,
         {"_id": 0}
     ).sort("created_at", -1).to_list(500)
-    
+
+    # leave_requests stores user_name/user_email at request time; resolve fresh
+    # employee_name/employee_email from users (matches the approvals-tab field names).
+    user_ids = list({r.get("user_id") for r in requests if r.get("user_id")})
+    if user_ids:
+        users = await db.users.find(
+            {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "name": 1, "email": 1}
+        ).to_list(len(user_ids))
+        user_map = {u["user_id"]: u for u in users}
+        for record in requests:
+            user_info = user_map.get(record.get("user_id"), {})
+            record["employee_name"] = user_info.get("name") or record.get("user_name", "Unknown")
+            record["employee_email"] = user_info.get("email") or record.get("user_email", "")
+
     return requests
 
 @hr_router.get("/admin/employees")

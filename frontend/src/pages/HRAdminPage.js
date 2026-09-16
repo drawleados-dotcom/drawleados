@@ -8470,8 +8470,11 @@ function EnhancedApprovalsTab({
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#6366f1] to-[#4f46e5] flex items-center justify-center text-white font-bold text-sm">
+                        {item.employee_name?.charAt(0).toUpperCase() || '?'}
+                      </div>
                       <p className={`font-medium ${textPrimary}`}>{item.employee_name}</p>
-                      <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{item.hours}h Permission</Badge>
+                      <Badge className="bg-[#6366f1]/20 text-[#6366f1]">{item.hours_requested}h Permission</Badge>
                     </div>
                     <p className={`text-sm ${textSecondary}`}>{item.reason}</p>
                     <p className={`text-xs ${textSecondary} mt-1`}>
@@ -8941,7 +8944,7 @@ function EnhancedApprovalsTab({
                 <div className={`p-3 rounded-lg ${bgSecondary} mb-4`}>
                   <p className={`text-sm ${textSecondary}`}>
                     {approvalType === 'leave' ? `${selectedItem.leave_type} Leave` : 
-                     approvalType === 'permission' ? `${selectedItem.hours}h Permission` :
+                     approvalType === 'permission' ? `${selectedItem.hours_requested}h Permission` :
                      approvalType === 'wfh' ? `${selectedItem.days} Days WFH` :
                      selectedItem.type}
                   </p>
@@ -9010,7 +9013,7 @@ function EnhancedApprovalsTab({
                 <p className={`font-medium ${textPrimary}`}>{selectedItem.employee_name}</p>
                 <p className={`text-sm ${textSecondary}`}>
                   {approvalType === 'leave' ? `${selectedItem.leave_type} Leave` : 
-                   approvalType === 'permission' ? `${selectedItem.hours}h Permission` :
+                   approvalType === 'permission' ? `${selectedItem.hours_requested}h Permission` :
                    selectedItem.type}
                 </p>
               </div>
