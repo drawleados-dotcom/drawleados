@@ -1902,15 +1902,31 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  // Status tab (Pending / Approved / Rejected) — filters across ALL months
+  // so a request never looks "missing" just because the month selector
+  // above happens to be on a different month.
+  const [statusTab, setStatusTab] = useState('pending');
 
   const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const years = [2024, 2025, 2026, 2027];
 
-  // Filter leave requests by selected month/year
+  // Filter leave requests by selected month/year (drives the quota cards below)
   const filteredRequests = leaveRequests.filter(r => {
     const reqDate = new Date(r.start_date || r.from_date);
     return reqDate.getMonth() + 1 === selectedMonth && reqDate.getFullYear() === selectedYear;
   });
+
+  // Status tabs — deliberately NOT month-scoped, so a pending/approved/
+  // rejected request always shows under its tab regardless of which month
+  // is selected above.
+  const statusTabs = [
+    { id: 'pending', label: 'Pending', color: '#f59e0b', requests: leaveRequests.filter(r => r.status === 'pending') },
+    { id: 'approved', label: 'Approved', color: '#22c55e', requests: leaveRequests.filter(r => r.status === 'approved') },
+    { id: 'rejected', label: 'Rejected', color: '#ef4444', requests: leaveRequests.filter(r => r.status === 'rejected') },
+  ];
+  const statusFilteredRequests = (statusTabs.find(t => t.id === statusTab)?.requests || [])
+    .slice()
+    .sort((a, b) => new Date(b.start_date || b.from_date) - new Date(a.start_date || a.from_date));
 
   // MONTHLY QUOTA SYSTEM: 1 Casual + 1 Sick per month, then LOP
   // Calculate monthly usage based on approved/pending leaves in selected month
@@ -2045,10 +2061,39 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
         </Card>
       </div>
 
+      {/* Status Tabs: Pending | Approved | Rejected */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {statusTabs.map((tab) => (
+          <Button
+            key={tab.id}
+            onClick={() => setStatusTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+              statusTab === tab.id ? 'text-white' : `${bgSecondary} ${textSecondary} ${hoverBg}`
+            }`}
+            style={statusTab === tab.id ? { backgroundColor: tab.color } : undefined}
+            data-testid={`leave-status-tab-${tab.id}`}
+          >
+            {tab.label}
+            <span
+              className="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+              style={
+                statusTab === tab.id
+                  ? { backgroundColor: 'rgba(255,255,255,0.2)' }
+                  : { backgroundColor: `${tab.color}33`, color: tab.color }
+              }
+            >
+              {tab.requests.length}
+            </span>
+          </Button>
+        ))}
+      </div>
+
       {/* Leave Requests Table */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardHeader>
-          <CardTitle className={textPrimary}>Leave Requests - {months[selectedMonth - 1]} {selectedYear}</CardTitle>
+          <CardTitle className={textPrimary}>
+            {statusTabs.find(t => t.id === statusTab)?.label} Leave Requests
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -2064,11 +2109,12 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                 </tr>
               </thead>
               <tbody>
-                {filteredRequests.map((req, index) => (
-                  <tr 
-                    key={req.leave_id || index} 
+                {statusFilteredRequests.map((req, index) => (
+                  <tr
+                    key={req.leave_id || index}
                     className={`border-b ${borderColor} hover:${bgSecondary} cursor-pointer`}
                     onClick={() => { setSelectedRequest(req); setShowDetailModal(true); }}
+                    data-testid={`leave-request-row-${req.leave_id || index}`}
                   >
                     <td className="p-3">
                       <Badge className={getLeaveTypeBadge(req.leave_type)}>
@@ -2095,17 +2141,19 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                     </td>
                   </tr>
                 ))}
-                {filteredRequests.length === 0 && (
+                {statusFilteredRequests.length === 0 && (
                   <tr>
                     <td colSpan={6} className={`p-8 text-center ${textSecondary}`}>
                       <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                      <p>No leave requests found for {months[selectedMonth - 1]} {selectedYear}</p>
-                      <Button 
-                        onClick={() => setShowModal(true)}
-                        className="mt-4 bg-[#10b981] hover:bg-[#059669]"
-                      >
-                        Request Leave
-                      </Button>
+                      <p>No {statusTab} leave requests</p>
+                      {statusTab === 'pending' && (
+                        <Button
+                          onClick={() => setShowModal(true)}
+                          className="mt-4 bg-[#10b981] hover:bg-[#059669]"
+                        >
+                          Request Leave
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -2304,6 +2352,27 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                   <div>
                     <span className={textSecondary}>HR Remarks:</span>
                     <p className={`${textPrimary} mt-1`}>{selectedRequest.hr_remarks}</p>
+                  </div>
+                )}
+                {selectedRequest.status === 'rejected' && (
+                  <div>
+                    <span className={textSecondary}>Rejected by:</span>
+                    <p className={`${textPrimary} mt-1`}>
+                      {selectedRequest.approved_by_name || 'HR Admin'}
+                      {selectedRequest.approved_at && ` on ${formatDate(selectedRequest.approved_at)}`}
+                    </p>
+                    {selectedRequest.rejection_reason && (
+                      <p className="text-[#ef4444] mt-1">Reason: {selectedRequest.rejection_reason}</p>
+                    )}
+                  </div>
+                )}
+                {selectedRequest.status === 'approved' && selectedRequest.approved_by_name && (
+                  <div>
+                    <span className={textSecondary}>Approved by:</span>
+                    <p className={`${textPrimary} mt-1`}>
+                      {selectedRequest.approved_by_name}
+                      {selectedRequest.approved_at && ` on ${formatDate(selectedRequest.approved_at)}`}
+                    </p>
                   </div>
                 )}
               </div>
