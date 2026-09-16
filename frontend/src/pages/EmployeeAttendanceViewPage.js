@@ -1,14 +1,19 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
 import Layout from '../components/Layout';
-import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { ArrowLeft, ChevronLeft, ChevronRight, Clock, Home, Building, CheckCircle, XCircle, Calendar } from 'lucide-react';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import {
+  ArrowLeft, ChevronLeft, ChevronRight, Clock, Home, Building, CheckCircle, XCircle, Calendar,
+  Pencil, History, Loader2,
+} from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -31,10 +36,22 @@ const fmtTime = (s) => {
   return new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 };
 
+// For pre-filling an <input type="time"> from a stored datetime/ISO string.
+const to24h = (s) => {
+  if (!s) return '';
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+const dateKey = (d) => {
+  if (!d) return '';
+  return typeof d === 'string' ? d.split('T')[0] : new Date(d).toISOString().split('T')[0];
+};
+
 export default function EmployeeAttendanceViewPage() {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const { token } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -45,7 +62,12 @@ export default function EmployeeAttendanceViewPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
 
-  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
+  const [editRecord, setEditRecord] = useState(null); // record being time-edited
+  const [editForm, setEditForm] = useState({ clock_in: '', clock_out: '', lunch_start: '', lunch_end: '' });
+  const [saving, setSaving] = useState(false);
+  const [historyRecord, setHistoryRecord] = useState(null); // record whose history popup is open
+
+  const headers = useMemo(() => ({ Authorization: `Bearer ${localStorage.getItem('session_token')}` }), []);
 
   const bgPage = isDark ? 'bg-[#0a0a0a]' : 'bg-gray-50';
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -54,25 +76,25 @@ export default function EmployeeAttendanceViewPage() {
   const textSecondary = isDark ? 'text-[#a1a1aa]' : 'text-gray-600';
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const [empListRes, recRes] = await Promise.all([
-          axios.get(`${API}/api/hr/admin/employees`, { headers }).catch(() => ({ data: [] })),
-          axios.get(`${API}/api/hr/attendance/employee/${userId}`, { headers, params: { month, year } }),
-        ]);
-        const list = Array.isArray(empListRes.data) ? empListRes.data : [];
-        const found = list.find(e => e.user_id === userId);
-        if (found) setEmployee(found);
-        setRecords(Array.isArray(recRes.data) ? recRes.data : []);
-      } catch (e) {
-        toast.error(e.response?.data?.detail || 'Failed to load attendance');
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [empListRes, recRes] = await Promise.all([
+        axios.get(`${API}/api/hr/admin/employees`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/api/hr/attendance/employee/${userId}`, { headers, params: { month, year } }),
+      ]);
+      const list = Array.isArray(empListRes.data) ? empListRes.data : [];
+      const found = list.find(e => e.user_id === userId);
+      if (found) setEmployee(found);
+      setRecords(Array.isArray(recRes.data) ? recRes.data : []);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load attendance');
+    } finally {
+      setLoading(false);
+    }
   }, [userId, headers, month, year]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const stats = useMemo(() => {
     let present = 0, absent = 0, wfh = 0, leave = 0, totalH = 0;
@@ -99,6 +121,35 @@ export default function EmployeeAttendanceViewPage() {
     let m = month + delta, y = year;
     if (m < 1) { m = 12; y--; } else if (m > 12) { m = 1; y++; }
     setMonth(m); setYear(y);
+  };
+
+  const openEdit = (r) => {
+    setEditRecord(r);
+    setEditForm({
+      clock_in: to24h(r.clock_in || r.clock_in_time),
+      clock_out: to24h(r.clock_out || r.clock_out_time),
+      lunch_start: to24h(r.lunch_start),
+      lunch_end: to24h(r.lunch_end),
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editRecord) return;
+    setSaving(true);
+    try {
+      await axios.put(
+        `${API}/api/hr/admin/attendance/${userId}/${dateKey(editRecord.date)}/edit-times`,
+        editForm,
+        { headers },
+      );
+      toast.success('Attendance times updated');
+      setEditRecord(null);
+      loadData();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to update attendance');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -171,9 +222,12 @@ export default function EmployeeAttendanceViewPage() {
                       <th className="text-left px-3 py-2">Date</th>
                       <th className="text-left px-3 py-2">Clock In</th>
                       <th className="text-left px-3 py-2">Clock Out</th>
+                      <th className="text-left px-3 py-2">Lunch</th>
                       <th className="text-left px-3 py-2">Hours</th>
                       <th className="text-left px-3 py-2">Mode</th>
                       <th className="text-left px-3 py-2">Status</th>
+                      <th className="text-left px-3 py-2">Edited</th>
+                      <th className="text-right px-3 py-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -187,11 +241,15 @@ export default function EmployeeAttendanceViewPage() {
                       else if (ci && co) hours = `${((new Date(co) - new Date(ci)) / 3600000).toFixed(1)}h`;
                       const status = isLeave ? r.leave_type : isWfh ? 'wfh' : co ? 'present' : ci ? 'working' : 'absent';
                       const cls = STATUS_COLORS[status] || 'bg-[#71717a]/20 text-[#71717a]';
+                      const hasHistory = Array.isArray(r.edit_history) && r.edit_history.length > 0;
                       return (
-                        <tr key={i} className={`border-b ${borderColor}`}>
+                        <tr key={i} className={`border-b ${borderColor}`} data-testid={`attendance-row-${dateKey(r.date)}`}>
                           <td className={`px-3 py-2 ${textPrimary}`}>{fmtDate(r.date)}</td>
                           <td className={`px-3 py-2 ${textSecondary}`}>{fmtTime(ci)}</td>
                           <td className={`px-3 py-2 ${textSecondary}`}>{fmtTime(co)}</td>
+                          <td className={`px-3 py-2 ${textSecondary}`}>
+                            {r.lunch_start ? `${fmtTime(r.lunch_start)}–${fmtTime(r.lunch_end)}` : '-'}
+                          </td>
                           <td className={`px-3 py-2 ${textPrimary} font-medium`}>{hours}</td>
                           <td className={`px-3 py-2 ${textSecondary}`}>
                             {isWfh ? (
@@ -201,6 +259,22 @@ export default function EmployeeAttendanceViewPage() {
                             )}
                           </td>
                           <td className="px-3 py-2"><Badge className={cls}>{status}</Badge></td>
+                          <td className="px-3 py-2">
+                            {r.last_edited_by_name && (
+                              <button
+                                onClick={() => setHistoryRecord(r)}
+                                className={`inline-flex items-center gap-1 text-xs ${textSecondary} hover:text-[#6366f1] hover:underline`}
+                                title="View edit history"
+                              >
+                                <History className="h-3 w-3" /> by {r.last_edited_by_name}
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button onClick={() => openEdit(r)} className="text-[#6366f1] hover:opacity-70" title="Edit times">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
@@ -211,6 +285,75 @@ export default function EmployeeAttendanceViewPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit times dialog */}
+      <Dialog open={!!editRecord} onOpenChange={(o) => !o && setEditRecord(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Attendance — {editRecord && fmtDate(editRecord.date)}</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Clock In</Label>
+              <Input type="time" value={editForm.clock_in} onChange={(e) => setEditForm(prev => ({ ...prev, clock_in: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Clock Out</Label>
+              <Input type="time" value={editForm.clock_out} onChange={(e) => setEditForm(prev => ({ ...prev, clock_out: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Lunch Start</Label>
+              <Input type="time" value={editForm.lunch_start} onChange={(e) => setEditForm(prev => ({ ...prev, lunch_start: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Lunch End</Label>
+              <Input type="time" value={editForm.lunch_end} onChange={(e) => setEditForm(prev => ({ ...prev, lunch_end: e.target.value }))} />
+            </div>
+          </div>
+          <p className={`text-xs ${textSecondary}`}>Total hours are recalculated automatically from these times. The change is logged with your name and the before/after values.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditRecord(null)}>Cancel</Button>
+            <Button onClick={saveEdit} disabled={saving} className="bg-[#6366f1] hover:bg-[#4f46e5]">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit history dialog */}
+      <Dialog open={!!historyRecord} onOpenChange={(o) => !o && setHistoryRecord(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit History — {historyRecord && fmtDate(historyRecord.date)}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {(historyRecord?.edit_history || []).slice().reverse().map((h, idx) => (
+              <div key={idx} className={`p-3 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                <p className={`text-sm font-medium ${textPrimary}`}>
+                  {h.edited_by_name} <span className={`font-normal ${textSecondary}`}>— {new Date(h.edited_at).toLocaleString('en-IN')}</span>
+                </p>
+                <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                  <div>
+                    <p className={`${textSecondary} uppercase tracking-wide mb-1`}>Before</p>
+                    <p className={textPrimary}>In: {h.before?.clock_in || '-'} · Out: {h.before?.clock_out || '-'}</p>
+                    <p className={textPrimary}>Lunch: {h.before?.lunch_start || '-'}–{h.before?.lunch_end || '-'}</p>
+                    <p className={textPrimary}>Hours: {h.before?.total_hours ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className={`${textSecondary} uppercase tracking-wide mb-1`}>After</p>
+                    <p className={textPrimary}>In: {h.after?.clock_in || '-'} · Out: {h.after?.clock_out || '-'}</p>
+                    <p className={textPrimary}>Lunch: {h.after?.lunch_start || '-'}–{h.after?.lunch_end || '-'}</p>
+                    <p className={textPrimary}>Hours: {h.after?.total_hours ?? 0}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {(!historyRecord?.edit_history || historyRecord.edit_history.length === 0) && (
+              <p className={`text-sm ${textSecondary} text-center py-4`}>No edits recorded.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

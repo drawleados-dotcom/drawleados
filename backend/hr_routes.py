@@ -1366,6 +1366,131 @@ async def set_manual_attendance(user_id: str, date_str: str, data: ManualAttenda
 
     return await db.attendance.find_one({"attendance_id": attendance_id}, {"_id": 0})
 
+
+class AttendanceTimesEdit(BaseModel):
+    clock_in: Optional[str] = None    # "HH:MM" / "HH:MM AM/PM"; "" clears it
+    clock_out: Optional[str] = None
+    lunch_start: Optional[str] = None
+    lunch_end: Optional[str] = None
+
+def _attendance_history_snapshot(doc: dict) -> dict:
+    """Before/after snapshot for the edit-history popup — just the fields
+    this endpoint can change, as plain HH:MM strings."""
+    def _t(v):
+        if not v:
+            return None
+        if isinstance(v, str):
+            return v
+        return v.strftime("%H:%M")
+    return {
+        "clock_in": _t(doc.get("clock_in")),
+        "clock_out": _t(doc.get("clock_out")),
+        "lunch_start": _t(doc.get("lunch_start")),
+        "lunch_end": _t(doc.get("lunch_end")),
+        "total_hours": doc.get("total_hours", 0),
+    }
+
+@hr_router.put("/admin/attendance/{user_id}/{date_str}/edit-times")
+async def edit_attendance_times(user_id: str, date_str: str, data: AttendanceTimesEdit, request: Request):
+    """HR-Admin: correct an employee's clock-in/out and lunch times for one
+    day (e.g. a forgotten clock-out, or lunch that wasn't tracked). Total
+    hours are recomputed from the corrected times, and a before/after entry
+    is appended to the record's edit_history so the change stays auditable —
+    who edited it and when, visible via the "edited by" note + history popup."""
+    from server import get_current_user
+    requester = await get_current_user(request)
+    if not await is_hr_admin(requester):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+
+    try:
+        day_start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    day_end = day_start + timedelta(days=1)
+
+    existing = await db.attendance.find_one({"user_id": user_id, "date": {"$gte": day_start, "$lt": day_end}})
+    before = _attendance_history_snapshot(existing or {})
+
+    update: Dict[str, Any] = {}
+    if data.clock_in is not None:
+        update["clock_in"] = parse_time_string(data.clock_in, day_start) if data.clock_in else None
+    if data.clock_out is not None:
+        update["clock_out"] = parse_time_string(data.clock_out, day_start) if data.clock_out else None
+    if data.lunch_start is not None:
+        update["lunch_start"] = parse_time_string(data.lunch_start, day_start) if data.lunch_start else None
+    if data.lunch_end is not None:
+        update["lunch_end"] = parse_time_string(data.lunch_end, day_start) if data.lunch_end else None
+
+    def _tz_aware(dt):
+        # Datetimes read back from Mongo often come back naive; parse_time_string's
+        # output is always UTC-aware, so normalize before comparing/subtracting.
+        if isinstance(dt, datetime) and dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    merged_clock_in = update["clock_in"] if "clock_in" in update else _tz_aware((existing or {}).get("clock_in"))
+    merged_clock_out = update["clock_out"] if "clock_out" in update else _tz_aware((existing or {}).get("clock_out"))
+    merged_lunch_start = update["lunch_start"] if "lunch_start" in update else _tz_aware((existing or {}).get("lunch_start"))
+    merged_lunch_end = update["lunch_end"] if "lunch_end" in update else _tz_aware((existing or {}).get("lunch_end"))
+
+    lunch_minutes = 0.0
+    if merged_lunch_start and merged_lunch_end and merged_lunch_end > merged_lunch_start:
+        lunch_minutes = (merged_lunch_end - merged_lunch_start).total_seconds() / 60
+    update["lunch_duration"] = lunch_minutes
+
+    total_hours = 0.0
+    if merged_clock_in and merged_clock_out and merged_clock_out > merged_clock_in:
+        total_hours = (merged_clock_out - merged_clock_in).total_seconds() / 3600 - lunch_minutes / 60
+    update["total_hours"] = round(max(total_hours, 0.0), 2)
+    update["sessions"] = []  # a manual time edit replaces session-based tracking for the day
+    update["status"] = "present" if merged_clock_in else ((existing or {}).get("status") or "absent")
+
+    history_entry = {
+        "edited_by": requester.user_id,
+        "edited_by_name": requester.name,
+        "edited_at": datetime.now(timezone.utc),
+        "before": before,
+        "after": _attendance_history_snapshot({**(existing or {}), **update}),
+    }
+    update["is_manual"] = True
+    update["last_edited_by"] = requester.user_id
+    update["last_edited_by_name"] = requester.name
+    update["last_edited_at"] = datetime.now(timezone.utc)
+
+    if existing:
+        attendance_id = existing["attendance_id"]
+        await db.attendance.update_one(
+            {"attendance_id": attendance_id},
+            {"$set": update, "$push": {"edit_history": history_entry}},
+        )
+    else:
+        attendance_id = f"att_{uuid.uuid4().hex[:12]}"
+        doc = {
+            "attendance_id": attendance_id,
+            "user_id": user_id,
+            "date": day_start,
+            "clock_in": None,
+            "clock_out": None,
+            "lunch_start": None,
+            "lunch_end": None,
+            "lunch_duration": 0.0,
+            "sessions": [],
+            "work_location": "office",
+            "total_hours": 0.0,
+            "extra_hours": 0.0,
+            "permission_hours": 0.0,
+            "approval_status": "auto",
+            "approval_notes": "",
+            "approved_by": None,
+            "notes": "",
+            "created_at": datetime.now(timezone.utc),
+            "edit_history": [history_entry],
+        }
+        doc.update(update)
+        await db.attendance.insert_one(doc)
+
+    return await db.attendance.find_one({"attendance_id": attendance_id}, {"_id": 0})
+
 # ============== PERMISSION REQUEST ROUTES ==============
 
 @hr_router.post("/permission/request")
