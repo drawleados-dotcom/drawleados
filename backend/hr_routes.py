@@ -1494,6 +1494,78 @@ async def edit_attendance_times(user_id: str, date_str: str, data: AttendanceTim
 
     return await db.attendance.find_one({"attendance_id": attendance_id}, {"_id": 0})
 
+
+@hr_router.get("/admin/attendance/{user_id}/{date_str}/task-time")
+async def get_task_time_breakdown(user_id: str, date_str: str, request: Request):
+    """HR-Admin: what an employee's Total Login Hour on one day actually
+    breaks down into — each task worked (with its project, who assigned it,
+    and the from/to time of each tracked session), backing the Attendance
+    tab's Total Login Hour popup."""
+    from server import get_current_user
+    requester = await get_current_user(request)
+    if not await is_hr_admin(requester):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+
+    try:
+        day = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    tasks = await db.our_tasks.find(
+        {"time_tracking.sessions.user_id": user_id},
+        {"_id": 0, "task_id": 1, "task_name": 1, "project_name": 1, "department": 1,
+         "assigned_by": 1, "time_tracking": 1},
+    ).to_list(2000)
+
+    assigned_by_ids = {t.get("assigned_by") for t in tasks if t.get("assigned_by")}
+    assigned_by_map = {}
+    if assigned_by_ids:
+        assigners = await db.users.find(
+            {"user_id": {"$in": list(assigned_by_ids)}}, {"_id": 0, "user_id": 1, "name": 1}
+        ).to_list(len(assigned_by_ids))
+        assigned_by_map = {u["user_id"]: u["name"] for u in assigners}
+
+    def _parse_dt(v):
+        if not v:
+            return None
+        if isinstance(v, str):
+            try:
+                return datetime.fromisoformat(v.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        return v
+
+    entries = []
+    total_seconds = 0
+    for t in tasks:
+        for s in (t.get("time_tracking") or {}).get("sessions") or []:
+            if s.get("user_id") != user_id:
+                continue
+            start_dt = _parse_dt(s.get("start"))
+            if not start_dt or start_dt.date() != day:
+                continue
+            end_dt = _parse_dt(s.get("end"))
+            duration_seconds = s.get("duration_seconds", 0) or 0
+            total_seconds += duration_seconds
+            entries.append({
+                "task_id": t.get("task_id"),
+                "task_name": t.get("task_name") or "Untitled task",
+                "project_name": t.get("project_name") or "-",
+                "department": t.get("department") or "-",
+                "assigned_by_name": assigned_by_map.get(t.get("assigned_by"), "-"),
+                "start": start_dt.isoformat(),
+                "end": end_dt.isoformat() if end_dt else None,
+                "duration_seconds": duration_seconds,
+                "duration_hours": round(duration_seconds / 3600, 2),
+            })
+
+    entries.sort(key=lambda e: e["start"])
+    return {
+        "entries": entries,
+        "total_seconds": total_seconds,
+        "total_hours": round(total_seconds / 3600, 2),
+    }
+
 # ============== PERMISSION REQUEST ROUTES ==============
 
 @hr_router.post("/permission/request")

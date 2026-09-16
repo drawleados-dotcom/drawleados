@@ -5793,6 +5793,28 @@ function EnhancedAttendanceTab({
   const [dayRecords, setDayRecords] = useState([]);
   // Segregated breaks viewer state — opens from the Break Time column.
   const [breakDetail, setBreakDetail] = useState(null);
+  // Task-time breakdown popup — opens from the Total Login Hour column.
+  const [taskTimeEmployee, setTaskTimeEmployee] = useState(null);
+  const [taskTimeData, setTaskTimeData] = useState(null);
+  const [taskTimeLoading, setTaskTimeLoading] = useState(false);
+
+  const openTaskTimeDetail = async (emp) => {
+    setTaskTimeEmployee(emp);
+    setTaskTimeData(null);
+    setTaskTimeLoading(true);
+    try {
+      const res = await axios.get(
+        `${API}/api/hr/admin/attendance/${emp.user_id}/${selectedDate}/task-time`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setTaskTimeData(res.data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to load task time breakdown');
+      setTaskTimeEmployee(null);
+    } finally {
+      setTaskTimeLoading(false);
+    }
+  };
   const fmtBreakDur = (mins) => {
     const m = Number(mins || 0);
     if (m <= 0) return '0m';
@@ -6136,7 +6158,15 @@ function EnhancedAttendanceTab({
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkIn || '-'}</td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.checkOut || '-'}</td>
                     <td className={`px-4 py-3 ${textPrimary}`} data-testid={`td-total-login-${emp.user_id}`}>
-                      {emp.totalLoginHours ? `${emp.totalLoginHours}h` : '-'}
+                      {emp.totalLoginHours ? (
+                        <button
+                          onClick={() => openTaskTimeDetail(emp)}
+                          className="text-[#6366f1] hover:underline"
+                          data-testid={`total-login-hour-btn-${emp.user_id}`}
+                        >
+                          {emp.totalLoginHours}h
+                        </button>
+                      ) : '-'}
                     </td>
                     <td className={`px-4 py-3 ${textPrimary}`}>{emp.workedHours ? `${emp.workedHours}h` : '-'}</td>
                     <td className={`px-4 py-3 ${textSecondary}`}>
@@ -6207,6 +6237,52 @@ function EnhancedAttendanceTab({
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setBreakDetail(null)} className={borderColor}>Close</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Total Login Hour → task-time breakdown popup */}
+      <Dialog open={!!taskTimeEmployee} onOpenChange={(o) => !o && setTaskTimeEmployee(null)}>
+        <DialogContent className={`${bgCard} border ${borderColor} max-w-2xl`}>
+          {taskTimeEmployee && (
+            <>
+              <DialogHeader>
+                <DialogTitle className={`${textPrimary} flex items-center gap-2`}>
+                  <Clock className="h-5 w-5 text-[#6366f1]" />
+                  Task Time — {taskTimeEmployee.name}
+                </DialogTitle>
+                <DialogDescription className={textSecondary}>
+                  {taskTimeEmployee.department || '-'} · {selectedDate}
+                  {taskTimeData && ` · Total ${taskTimeData.total_hours}h`}
+                </DialogDescription>
+              </DialogHeader>
+              {taskTimeLoading ? (
+                <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin" /></div>
+              ) : taskTimeData?.entries?.length ? (
+                <div className="space-y-2 mt-2 max-h-[60vh] overflow-y-auto">
+                  {taskTimeData.entries.map((e, i) => (
+                    <div key={e.task_id + i} className={`p-3 rounded-lg ${bgSecondary} border ${borderColor}`} data-testid={`task-time-row-${i}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`font-medium ${textPrimary}`}>{e.task_name}</span>
+                        <span className={`text-xs font-medium ${textPrimary} whitespace-nowrap`}>{e.duration_hours}h</span>
+                      </div>
+                      <div className={`flex items-center gap-3 mt-1 text-xs ${textSecondary} flex-wrap`}>
+                        <span>Project: <b className={textPrimary}>{e.project_name}</b></span>
+                        <span>Assigned by: <b className={textPrimary}>{e.assigned_by_name}</b></span>
+                      </div>
+                      <div className={`mt-1 text-xs ${textSecondary}`}>
+                        {formatTime(e.start)} – {e.end ? formatTime(e.end) : 'in progress'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm ${textSecondary} text-center py-8`}>No tracked task time for this day.</p>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setTaskTimeEmployee(null)} className={borderColor}>Close</Button>
               </DialogFooter>
             </>
           )}
