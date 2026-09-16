@@ -155,7 +155,7 @@ export default function EmployeeAttendanceViewPage() {
   return (
     <Layout>
       <div className={`p-6 ${bgPage} min-h-screen`} data-testid="employee-attendance-page">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className={`mb-4 ${textSecondary}`} data-testid="back-btn">
+        <Button variant="ghost" size="sm" onClick={() => navigate('/hr-admin')} className={`mb-4 ${textSecondary}`} data-testid="back-btn">
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to HR Admin
         </Button>
 
