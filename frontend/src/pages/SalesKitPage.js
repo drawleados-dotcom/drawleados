@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import Layout from '../components/Layout';
@@ -168,6 +168,7 @@ const FormBuilderView = ({ initialForm, onCancel, onSaved, textPrimary, textSeco
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(initialForm.status || 'draft');
   const [shareOpen, setShareOpen] = useState(false);
+  const pageInputRefs = useRef({});
 
   const activePage = pages[activePageIdx] || pages[0];
 
@@ -279,12 +280,27 @@ const FormBuilderView = ({ initialForm, onCancel, onSaved, textPrimary, textSeco
                 </button>
               )}
               <input
+                ref={(node) => { pageInputRefs.current[p.page_id] = node; }}
                 value={p.title}
                 onChange={(e) => renamePage(idx, e.target.value)}
-                onFocus={() => setActivePageIdx(idx)}
-                className="bg-transparent px-2 py-1.5 text-sm font-medium outline-none w-28"
+                onFocus={(e) => { setActivePageIdx(idx); e.target.select(); }}
+                placeholder={`Page ${idx + 1} name`}
+                className={`bg-transparent px-2 py-1.5 text-sm font-medium outline-none w-28 border-b border-dashed ${
+                  idx === activePageIdx ? 'border-white/50 placeholder-white/60' : `${borderColor} placeholder-gray-400`
+                }`}
+                title="Click to rename this page"
                 data-testid={`sk-page-tab-${idx}`}
               />
+              <button
+                onClick={() => {
+                  setActivePageIdx(idx);
+                  pageInputRefs.current[p.page_id]?.focus();
+                }}
+                className="pr-1 opacity-70 hover:opacity-100"
+                title="Rename page"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
               {idx < pages.length - 1 && (
                 <button onClick={() => movePage(idx, 1)} className="opacity-70 hover:opacity-100" title="Move page right">
                   <ChevronRight className="h-3.5 w-3.5" />
