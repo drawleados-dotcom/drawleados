@@ -2112,6 +2112,11 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Days</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Reason</th>
                   <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>Status</th>
+                  {statusTab !== 'pending' && (
+                    <th className={`text-left p-3 ${textSecondary} text-sm font-medium`}>
+                      {statusTab === 'rejected' ? 'Rejected By' : 'Approved By'}
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2145,11 +2150,16 @@ function LeaveTab({ leaveRequests, leaveBalance, showModal, setShowModal, leaveF
                     <td className="p-3">
                       <Badge className={getStatusBadge(req.status)}>{req.status}</Badge>
                     </td>
+                    {statusTab !== 'pending' && (
+                      <td className={`p-3 ${textPrimary}`}>
+                        {req.approved_by_name || '-'}
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {statusFilteredRequests.length === 0 && (
                   <tr>
-                    <td colSpan={6} className={`p-8 text-center ${textSecondary}`}>
+                    <td colSpan={statusTab !== 'pending' ? 7 : 6} className={`p-8 text-center ${textSecondary}`}>
                       <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
                       <p>No {statusTab} leave requests</p>
                       {statusTab === 'pending' && (
