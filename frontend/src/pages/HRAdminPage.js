@@ -7771,56 +7771,6 @@ function EnhancedApprovalsTab({
   const leaveApprovals = pendingApprovals?.leaves || [];
   const wfhApprovals = wfhRequests || [];
 
-  // Leave allocation setup (per-month casual/sick)
-  const now = new Date();
-  const [leaveAllocMonth, setLeaveAllocMonth] = useState(now.getMonth() + 1);
-  const [leaveAllocYear, setLeaveAllocYear] = useState(now.getFullYear());
-  const [leaveAlloc, setLeaveAlloc] = useState({ monthly_casual_leave: 2, monthly_sick_leave: 2 });
-  const [leaveAllocSaving, setLeaveAllocSaving] = useState(false);
-
-  useEffect(() => {
-    if (activeSubTab !== 'leave') return;
-    const API = process.env.REACT_APP_BACKEND_URL;
-    const token = localStorage.getItem('session_token');
-    axios.get(`${API}/api/hr/admin/calendar/${leaveAllocYear}/${leaveAllocMonth}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(res => {
-      setLeaveAlloc({
-        monthly_casual_leave: res.data?.monthly_casual_leave ?? 2,
-        monthly_sick_leave: res.data?.monthly_sick_leave ?? 2,
-      });
-    }).catch(() => { /* defaults */ });
-  }, [activeSubTab, leaveAllocMonth, leaveAllocYear]);
-
-  const handleSaveLeaveAlloc = async () => {
-    const API = process.env.REACT_APP_BACKEND_URL;
-    const token = localStorage.getItem('session_token');
-    setLeaveAllocSaving(true);
-    try {
-      // Fetch existing calendar so we don't wipe other fields
-      let existing = {};
-      try {
-        const cur = await axios.get(`${API}/api/hr/admin/calendar/${leaveAllocYear}/${leaveAllocMonth}`, { headers: { Authorization: `Bearer ${token}` } });
-        existing = cur.data || {};
-      } catch { /* ignore */ }
-      const payload = {
-        holidays: existing.holidays || [],
-        working_days: existing.working_days || 22,
-        special_working_days: existing.special_working_days || [],
-        monthly_casual_leave: Number(leaveAlloc.monthly_casual_leave) || 0,
-        monthly_sick_leave: Number(leaveAlloc.monthly_sick_leave) || 0,
-      };
-      await axios.put(`${API}/api/hr/admin/calendar/${leaveAllocYear}/${leaveAllocMonth}`, payload, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      toast.success('Leave allocation saved for the month');
-    } catch (e) {
-      toast.error(e.response?.data?.detail || 'Failed to save allocation');
-    } finally {
-      setLeaveAllocSaving(false);
-    }
-  };
-
   // Save attendance rules
   const handleSaveRules = () => {
     setAttendanceRules({ ...editingRules });
@@ -8281,75 +8231,15 @@ function EnhancedApprovalsTab({
       {/* Leave Approvals Tab */}
       {activeSubTab === 'leave' && (
         <div className="space-y-3">
-          {/* Monthly Leave Allocation Setup (HR Admin) */}
-          {canEdit && (
-            <Card className={`${bgCard} border ${borderColor}`} data-testid="leave-allocation-setup">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-                  <div>
-                    <h3 className={`text-sm font-semibold ${textPrimary}`}>Monthly Leave Allocation</h3>
-                    <p className={`text-xs ${textSecondary}`}>Set how many casual & sick leaves employees get for the selected month</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={leaveAllocMonth}
-                      onChange={(e) => setLeaveAllocMonth(Number(e.target.value))}
-                      className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-                      data-testid="leave-alloc-month"
-                    >
-                      {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
-                        <option key={i} value={i + 1}>{m}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={leaveAllocYear}
-                      onChange={(e) => setLeaveAllocYear(Number(e.target.value))}
-                      className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
-                      data-testid="leave-alloc-year"
-                    >
-                      {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <Label className={`${textPrimary} text-xs`}>Casual Leave / month</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={leaveAlloc.monthly_casual_leave}
-                      onChange={(e) => setLeaveAlloc(prev => ({ ...prev, monthly_casual_leave: e.target.value }))}
-                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      data-testid="leave-alloc-casual"
-                    />
-                  </div>
-                  <div>
-                    <Label className={`${textPrimary} text-xs`}>Sick Leave / month</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={leaveAlloc.monthly_sick_leave}
-                      onChange={(e) => setLeaveAlloc(prev => ({ ...prev, monthly_sick_leave: e.target.value }))}
-                      className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
-                      data-testid="leave-alloc-sick"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button
-                      onClick={handleSaveLeaveAlloc}
-                      disabled={leaveAllocSaving}
-                      className="w-full bg-[#10b981] hover:bg-[#059669] text-white"
-                      data-testid="leave-alloc-save"
-                    >
-                      {leaveAllocSaving ? 'Saving…' : 'Save allocation'}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Monthly Leave Allocation Setup (HR Admin) — also available under Calendar > Work Settings > Leave Days */}
+          <LeaveAllocationCard
+            canEdit={canEdit}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
 
           {/* Filter */}
           <div className="flex gap-2">
@@ -9238,6 +9128,317 @@ function PayrollApprovalSection({ isDark, bgCard, bgSecondary, textPrimary, text
   );
 }
 
+// ============ Lunch Hours (Calendar > Work Settings > Lunch Hours) ============
+// The designated office lunch window can change on a known future date
+// (e.g. "from 1 Oct, lunch is 1:15-2:00 PM"). Saving adds a new effective-dated
+// entry instead of overwriting the current one, so the change history is kept.
+// This is informational/display only — employees can still take their actual
+// break whenever during the day.
+function LunchHoursPanel({ canEdit = true, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+  const [form, setForm] = useState({ lunch_start_time: '13:00', lunch_end_time: '13:45', effective_from: '' });
+  const [saving, setSaving] = useState(false);
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '-';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const formatTime12h = (hhmm) => {
+    if (!hhmm) return '-';
+    const [h, m] = hhmm.split(':').map(Number);
+    const period = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+  };
+
+  const load = useCallback(async () => {
+    const token = localStorage.getItem('session_token');
+    try {
+      const res = await axios.get(`${API}/api/hr/admin/lunch-schedule`, { headers: { Authorization: `Bearer ${token}` } });
+      setEntries(res.data || []);
+    } catch (e) {
+      toast.error('Failed to load lunch schedule');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const activeEntry = entries
+    .filter(e => e.effective_from <= todayStr)
+    .sort((a, b) => (a.effective_from < b.effective_from ? 1 : -1))[0];
+  const upcomingEntries = entries
+    .filter(e => e.effective_from > todayStr)
+    .sort((a, b) => (a.effective_from < b.effective_from ? -1 : 1));
+
+  const handleSave = async () => {
+    if (!form.lunch_start_time || !form.lunch_end_time || !form.effective_from) {
+      toast.error('Set start time, end time, and an effective date');
+      return;
+    }
+    const token = localStorage.getItem('session_token');
+    setSaving(true);
+    try {
+      await axios.post(`${API}/api/hr/admin/lunch-schedule`, form, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success('Lunch time saved');
+      setForm(prev => ({ ...prev, effective_from: '' }));
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save lunch time');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (scheduleId) => {
+    const token = localStorage.getItem('session_token');
+    try {
+      await axios.delete(`${API}/api/hr/admin/lunch-schedule/${scheduleId}`, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success('Removed');
+      load();
+    } catch (e) {
+      toast.error('Failed to remove');
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-6 flex justify-center"><Loader2 className="h-5 w-5 animate-spin" /></CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className={`${bgCard} border ${borderColor}`}>
+      <CardContent className="p-6 space-y-4">
+        <div>
+          <h3 className={`text-lg font-semibold ${textPrimary}`}>Lunch Hours</h3>
+          <p className={`text-xs ${textSecondary} mt-1`}>
+            The designated office lunch time. Employees can still take their break at any time during the day — this is just what's shown as the official lunch time.
+          </p>
+        </div>
+
+        <div className={`p-4 rounded-lg ${bgSecondary}`}>
+          {activeEntry ? (
+            <>
+              <p className={`text-xs ${textSecondary} uppercase tracking-wide mb-1`}>Current Lunch Time</p>
+              <p className="text-2xl font-bold text-[#f59e0b]">
+                {formatTime12h(activeEntry.lunch_start_time)} – {formatTime12h(activeEntry.lunch_end_time)}
+              </p>
+              <p className={`text-xs ${textSecondary} mt-1`}>Effective from {formatDate(activeEntry.effective_from)}</p>
+            </>
+          ) : (
+            <p className={`text-sm ${textSecondary}`}>No lunch time configured yet.</p>
+          )}
+        </div>
+
+        {upcomingEntries.length > 0 && (
+          <div className={`p-3 rounded-lg border ${borderColor} text-sm`}>
+            <p className={`${textSecondary} text-xs uppercase tracking-wide mb-1`}>Upcoming change</p>
+            <p className={textPrimary}>
+              From {formatDate(upcomingEntries[0].effective_from)}: {formatTime12h(upcomingEntries[0].lunch_start_time)} – {formatTime12h(upcomingEntries[0].lunch_end_time)}
+            </p>
+          </div>
+        )}
+
+        {canEdit && (
+          <div className={`grid grid-cols-1 md:grid-cols-4 gap-3 items-end pt-3 border-t ${borderColor}`}>
+            <div>
+              <Label className={`${textPrimary} text-xs`}>Lunch Start Time</Label>
+              <Input
+                type="time"
+                value={form.lunch_start_time}
+                onChange={(e) => setForm(prev => ({ ...prev, lunch_start_time: e.target.value }))}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              />
+            </div>
+            <div>
+              <Label className={`${textPrimary} text-xs`}>Lunch End Time</Label>
+              <Input
+                type="time"
+                value={form.lunch_end_time}
+                onChange={(e) => setForm(prev => ({ ...prev, lunch_end_time: e.target.value }))}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              />
+            </div>
+            <div>
+              <Label className={`${textPrimary} text-xs`}>Effective From</Label>
+              <Input
+                type="date"
+                value={form.effective_from}
+                onChange={(e) => setForm(prev => ({ ...prev, effective_from: e.target.value }))}
+                className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                data-testid="lunch-effective-from"
+              />
+            </div>
+            <Button onClick={handleSave} disabled={saving} className="bg-[#f59e0b] hover:bg-[#d97706] text-white" data-testid="lunch-save-btn">
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setShowHistory(v => !v)}
+          className={`flex items-center gap-1 text-xs ${textSecondary} hover:${textPrimary}`}
+          data-testid="lunch-history-toggle"
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showHistory ? 'rotate-180' : ''}`} />
+          {showHistory ? 'Hide' : 'Show'} schedule history ({entries.length})
+        </button>
+
+        {showHistory && (
+          <div className="space-y-2">
+            {entries.length === 0 && <p className={`text-sm ${textSecondary}`}>No entries yet.</p>}
+            {entries.map(e => (
+              <div key={e.schedule_id} className={`flex items-center justify-between p-2 rounded ${bgSecondary} text-sm`}>
+                <div>
+                  <span className={textPrimary}>{formatTime12h(e.lunch_start_time)} – {formatTime12h(e.lunch_end_time)}</span>
+                  <span className={`${textSecondary} ml-2 text-xs`}>from {formatDate(e.effective_from)}</span>
+                  {activeEntry?.schedule_id === e.schedule_id && (
+                    <Badge className="ml-2 bg-[#22c55e]/20 text-[#22c55e] text-[10px]">Active</Badge>
+                  )}
+                </div>
+                {canEdit && (
+                  <button onClick={() => handleDelete(e.schedule_id)} className="text-[#ef4444] hover:opacity-70">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ============ Monthly Leave Allocation (shared: Approvals > Leave, and Calendar > Work Settings > Leave Days) ============
+function LeaveAllocationCard({ canEdit = true, bgCard, bgSecondary, textPrimary, textSecondary, borderColor }) {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+  const [alloc, setAlloc] = useState({ monthly_casual_leave: 2, monthly_sick_leave: 2 });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('session_token');
+    axios.get(`${API}/api/hr/admin/calendar/${year}/${month}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(res => {
+      setAlloc({
+        monthly_casual_leave: res.data?.monthly_casual_leave ?? 2,
+        monthly_sick_leave: res.data?.monthly_sick_leave ?? 2,
+      });
+    }).catch(() => { /* defaults */ });
+  }, [month, year]);
+
+  const handleSave = async () => {
+    const token = localStorage.getItem('session_token');
+    setSaving(true);
+    try {
+      let existing = {};
+      try {
+        const cur = await axios.get(`${API}/api/hr/admin/calendar/${year}/${month}`, { headers: { Authorization: `Bearer ${token}` } });
+        existing = cur.data || {};
+      } catch { /* ignore */ }
+      const payload = {
+        holidays: existing.holidays || [],
+        working_days: existing.working_days || 22,
+        special_working_days: existing.special_working_days || [],
+        monthly_casual_leave: Number(alloc.monthly_casual_leave) || 0,
+        monthly_sick_leave: Number(alloc.monthly_sick_leave) || 0,
+      };
+      await axios.put(`${API}/api/hr/admin/calendar/${year}/${month}`, payload, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success('Leave allocation saved for the month');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to save allocation');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!canEdit) return null;
+
+  return (
+    <Card className={`${bgCard} border ${borderColor}`} data-testid="leave-allocation-setup">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+          <div>
+            <h3 className={`text-sm font-semibold ${textPrimary}`}>Monthly Leave Allocation</h3>
+            <p className={`text-xs ${textSecondary}`}>Set how many casual & sick leaves employees get for the selected month</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+              data-testid="leave-alloc-month"
+            >
+              {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => (
+                <option key={i} value={i + 1}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className={`h-9 px-2 rounded border ${borderColor} ${bgSecondary} ${textPrimary} text-sm`}
+              data-testid="leave-alloc-year"
+            >
+              {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <Label className={`${textPrimary} text-xs`}>Casual Leave / month</Label>
+            <Input
+              type="number"
+              min="0"
+              value={alloc.monthly_casual_leave}
+              onChange={(e) => setAlloc(prev => ({ ...prev, monthly_casual_leave: e.target.value }))}
+              className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              data-testid="leave-alloc-casual"
+            />
+          </div>
+          <div>
+            <Label className={`${textPrimary} text-xs`}>Sick Leave / month</Label>
+            <Input
+              type="number"
+              min="0"
+              value={alloc.monthly_sick_leave}
+              onChange={(e) => setAlloc(prev => ({ ...prev, monthly_sick_leave: e.target.value }))}
+              className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+              data-testid="leave-alloc-sick"
+            />
+          </div>
+          <div className="flex items-end">
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              className="w-full bg-[#10b981] hover:bg-[#059669] text-white"
+              data-testid="leave-alloc-save"
+            >
+              {saving ? 'Saving…' : 'Save allocation'}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ============ Enhanced Calendar Tab with Work Settings ============
 function EnhancedCalendarTab({
   calendar, hrSettings, month, year, setMonth, setYear,
@@ -9248,6 +9449,7 @@ function EnhancedCalendarTab({
   // HR Manager cannot edit calendar - view only
   const isViewOnly = !canEdit;
   const [activeSubTab, setActiveSubTab] = useState('calendar');
+  const [settingsSubTab, setSettingsSubTab] = useState('working_hours'); // working_hours | lunch_hours | leave_days
   const [editingSettings, setEditingSettings] = useState(false);
   const [formData, setFormData] = useState({
     standard_login_time: hrSettings?.standard_login_time || '10:00',
@@ -9623,7 +9825,37 @@ function EnhancedCalendarTab({
 
       {/* Work Settings */}
       {activeSubTab === 'settings' && (
-        <Card className={`${bgCard} border ${borderColor}`}>
+        <div className="space-y-4">
+          {/* Working Hours / Lunch Hours / Leave Days inner tabs */}
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={settingsSubTab === 'working_hours' ? 'default' : 'outline'}
+              onClick={() => setSettingsSubTab('working_hours')}
+              className={settingsSubTab === 'working_hours' ? 'bg-[#6366f1]' : ''}
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              Working Hours
+            </Button>
+            <Button
+              variant={settingsSubTab === 'lunch_hours' ? 'default' : 'outline'}
+              onClick={() => setSettingsSubTab('lunch_hours')}
+              className={settingsSubTab === 'lunch_hours' ? 'bg-[#6366f1]' : ''}
+            >
+              <Coffee className="h-4 w-4 mr-2" />
+              Lunch Hours
+            </Button>
+            <Button
+              variant={settingsSubTab === 'leave_days' ? 'default' : 'outline'}
+              onClick={() => setSettingsSubTab('leave_days')}
+              className={settingsSubTab === 'leave_days' ? 'bg-[#6366f1]' : ''}
+            >
+              <ClipboardList className="h-4 w-4 mr-2" />
+              Leave Days
+            </Button>
+          </div>
+
+          {settingsSubTab === 'working_hours' && (
+          <Card className={`${bgCard} border ${borderColor}`}>
           <CardContent className="p-6 space-y-6">
             <div className="flex justify-between items-center">
               <h3 className={`text-lg font-semibold ${textPrimary}`}>Work Settings</h3>
@@ -9782,7 +10014,31 @@ function EnhancedCalendarTab({
               </div>
             )}
           </CardContent>
-        </Card>
+          </Card>
+          )}
+
+          {settingsSubTab === 'lunch_hours' && (
+            <LunchHoursPanel
+              canEdit={canEdit}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          )}
+
+          {settingsSubTab === 'leave_days' && (
+            <LeaveAllocationCard
+              canEdit={canEdit}
+              bgCard={bgCard}
+              bgSecondary={bgSecondary}
+              textPrimary={textPrimary}
+              textSecondary={textSecondary}
+              borderColor={borderColor}
+            />
+          )}
+        </div>
       )}
 
       {/* Holidays - with Edit & Approve */}

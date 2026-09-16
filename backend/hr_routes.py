@@ -1614,6 +1614,61 @@ async def get_work_settings(request: Request):
     }
 
 
+# ============== LUNCH TIME SCHEDULE ==============
+# The fixed office lunch window (start–end) can change on a known future date
+# (e.g. "from the 1st of next month, lunch is 1:15–2:00 PM"). Each save adds a
+# new effective-dated entry rather than overwriting the current one, so the
+# history of changes is kept and the "active" window is whichever entry has
+# the latest effective_from that is on/before today. This is informational
+# only — employees can still take their break whenever within the day; it
+# just tells them (and HR) what the designated lunch time is.
+
+class LunchScheduleCreate(BaseModel):
+    lunch_start_time: str  # "13:15" (24h HH:MM)
+    lunch_end_time: str    # "14:00" (24h HH:MM)
+    effective_from: str    # "2026-10-01" (YYYY-MM-DD)
+
+@hr_router.get("/admin/lunch-schedule")
+async def get_lunch_schedule(request: Request):
+    """List all configured lunch-time windows, newest effective date first."""
+    from server import get_current_user
+    await get_current_user(request)
+    entries = await db.lunch_schedule.find({}, {"_id": 0}).sort("effective_from", -1).to_list(200)
+    return entries
+
+@hr_router.post("/admin/lunch-schedule")
+async def create_lunch_schedule(data: LunchScheduleCreate, request: Request):
+    """Add a new scheduled lunch-time window, effective from a given date."""
+    from server import get_current_user
+    user = await get_current_user(request)
+    if not has_hr_access(user):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+
+    entry = {
+        "schedule_id": f"lunch_{uuid.uuid4().hex[:10]}",
+        "lunch_start_time": data.lunch_start_time,
+        "lunch_end_time": data.lunch_end_time,
+        "effective_from": data.effective_from,
+        "created_by": user.user_id,
+        "created_at": datetime.now(timezone.utc),
+    }
+    await db.lunch_schedule.insert_one(dict(entry))
+    entry.pop("_id", None)
+    return entry
+
+@hr_router.delete("/admin/lunch-schedule/{schedule_id}")
+async def delete_lunch_schedule(schedule_id: str, request: Request):
+    """Remove a scheduled lunch-time entry (e.g. one added by mistake)."""
+    from server import get_current_user
+    user = await get_current_user(request)
+    if not has_hr_access(user):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+    result = await db.lunch_schedule.delete_one({"schedule_id": schedule_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Schedule entry not found")
+    return {"message": "Lunch schedule entry deleted"}
+
+
 # ============== MY PROFILE TAB CONFIG ==============
 # Controls which tabs are visible on the /hr (My Profile) page for all employees.
 # Stored as a single document in collection `my_profile_tab_config`.
