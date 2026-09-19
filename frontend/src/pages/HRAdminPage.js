@@ -6229,6 +6229,7 @@ function EnhancedAttendanceTab({
   records, employees, stats, month, year, setMonth, setYear, onRefresh, 
   formatDate, formatTime, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, token, isDark, hoverBg 
 }) {
+  const [attendanceViewMode, setAttendanceViewMode] = useState('list'); // list | analytics
   const [dateFilter, setDateFilter] = useState('day'); // day, range, month, year
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
@@ -6457,12 +6458,38 @@ function EnhancedAttendanceTab({
 
   return (
     <div className="space-y-6">
+      {/* Attendance List vs Analytics — a view switch, not a date filter */}
+      <div className="flex gap-2">
+        {[{ key: 'list', label: 'Attendance List' }, { key: 'analytics', label: 'Analytics' }].map(v => (
+          <Button
+            key={v.key}
+            onClick={() => setAttendanceViewMode(v.key)}
+            className={attendanceViewMode === v.key ? 'bg-[#6366f1]' : `${bgSecondary} ${textSecondary}`}
+            data-testid={`attendance-view-${v.key}`}
+          >
+            {v.label}
+          </Button>
+        ))}
+      </div>
+
+      {attendanceViewMode === 'analytics' ? (
+        <AttendanceAnalyticsPanel
+          token={token}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+          isDark={isDark}
+        />
+      ) : (
+      <>
       {/* Date Filters */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex gap-2">
-              {['day', 'range', 'month', 'year', 'analytics'].map(filter => (
+              {['day', 'range', 'month', 'year'].map(filter => (
                 <Button
                   key={filter}
                   variant={dateFilter === filter ? 'default' : 'outline'}
@@ -6553,20 +6580,6 @@ function EnhancedAttendanceTab({
         </CardContent>
       </Card>
 
-      {dateFilter === 'analytics' && (
-        <AttendanceAnalyticsPanel
-          token={token}
-          bgCard={bgCard}
-          bgSecondary={bgSecondary}
-          textPrimary={textPrimary}
-          textSecondary={textSecondary}
-          borderColor={borderColor}
-          isDark={isDark}
-        />
-      )}
-
-      {dateFilter !== 'analytics' && (
-      <>
       {/* Summary Cards — each one filters the table below; click again to return to that view */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
