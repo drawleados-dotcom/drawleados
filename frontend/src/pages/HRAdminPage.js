@@ -6040,8 +6040,10 @@ const GRANULARITY_DAYS = { day: 30, week: 84, month: 365 };
 function bucketAnalyticsDays(days, granularity) {
   if (granularity === 'day') {
     return days.map(d => ({
+      date: d.date,
       label: new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
       present: d.present, remote: d.remote, leave: d.leave, absent: d.absent,
+      is_holiday: d.is_holiday, holiday_name: d.holiday_name, is_sunday: d.is_sunday,
     }));
   }
   const buckets = new Map();
@@ -6101,6 +6103,30 @@ function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, tex
   const gridColor = isDark ? '#27272a' : '#e5e7eb';
   const tickColor = isDark ? '#a1a1aa' : '#6b7280';
 
+  // Day-wise only: label each bar with its weekday, red-highlighting
+  // Sundays/declared holidays with the holiday's name underneath —
+  // e.g. "Mon" in normal color for a working day, "Mon" + "Vinayagar
+  // Chathurthi" in red for a holiday, "Sun" + "Sunday" in red otherwise.
+  const DayOfWeekTick = (props) => {
+    const { x, y, payload } = props;
+    const day = chartData[payload.index];
+    if (!day) return null;
+    const dow = new Date(day.date).toLocaleDateString('en-IN', { weekday: 'short' });
+    const holidayColor = '#ef4444';
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={12} textAnchor="middle" fontSize={11} fontWeight={day.is_holiday ? 600 : 400} fill={day.is_holiday ? holidayColor : tickColor}>
+          {dow}
+        </text>
+        {day.is_holiday && day.holiday_name && (
+          <text x={0} y={0} dy={25} textAnchor="middle" fontSize={9} fill={holidayColor}>
+            {day.holiday_name.length > 16 ? `${day.holiday_name.slice(0, 15)}…` : day.holiday_name}
+          </text>
+        )}
+      </g>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <Card className={`${bgCard} border ${borderColor}`}>
@@ -6150,10 +6176,14 @@ function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, tex
           ) : chartData.length === 0 ? (
             <p className={`text-sm ${textSecondary} text-center py-16`}>No attendance data for this range.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={360}>
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 8 }}>
+            <ResponsiveContainer width="100%" height={granularity === 'day' ? 400 : 360}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: granularity === 'day' ? 32 : 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                <XAxis dataKey="label" tick={{ fill: tickColor, fontSize: 11 }} />
+                {granularity === 'day' ? (
+                  <XAxis dataKey="label" height={48} interval={0} tick={<DayOfWeekTick />} />
+                ) : (
+                  <XAxis dataKey="label" tick={{ fill: tickColor, fontSize: 11 }} />
+                )}
                 <YAxis tick={{ fill: tickColor, fontSize: 11 }} allowDecimals={false} />
                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#18181b' : '#fff', border: `1px solid ${gridColor}`, fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />

@@ -1723,8 +1723,12 @@ async def get_project_hours(request: Request, period: str = "today"):
 async def get_attendance_analytics(request: Request, start_date: str, end_date: str):
     """HR-Admin: Present/Remote/On-Leave/Absent headcount for every day in a
     date range — powers the Attendance tab's Analytics view (bar chart plus
-    week/month rollups). Absent is only counted for past/current weekdays;
-    future dates and Sundays show 0 rather than a false "everyone absent"."""
+    week/month rollups), including which days are Sundays/declared holidays
+    so the chart can label them (and red-highlight them) by name. Absent is
+    only counted for past/current, non-holiday, non-Sunday workdays; future
+    dates, Sundays, and declared holidays show 0 rather than a false
+    "everyone absent" — unless that Sunday was explicitly marked a special
+    working day on the Global Calendar, in which case it counts normally."""
     from server import get_current_user
     requester = await get_current_user(request)
     if not await is_hr_admin(requester):
@@ -1756,6 +1760,29 @@ async def get_attendance_analytics(request: Request, start_date: str, end_date: 
             d = d.replace(tzinfo=timezone.utc)
         by_date.setdefault(d.strftime("%Y-%m-%d"), []).append(r)
 
+    # Holidays + special (explicitly-working) Sundays/Saturdays for every
+    # month the range touches, so both the absent-exclusion and the chart's
+    # per-day label can use them.
+    months_in_range = set()
+    m = start.replace(day=1)
+    while m <= end:
+        months_in_range.add((m.year, m.month))
+        m = (m.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+    calendar_docs = (
+        await db.hr_calendar.find(
+            {"$or": [{"year": y, "month": mo} for (y, mo) in months_in_range]}, {"_id": 0},
+        ).to_list(100)
+        if months_in_range else []
+    )
+    holiday_map = {}
+    special_working_days = set()
+    for cal in calendar_docs:
+        for h in cal.get("holidays") or []:
+            if h.get("date"):
+                holiday_map[h["date"]] = h.get("name") or "Holiday"
+        special_working_days.update(cal.get("special_working_days") or [])
+
     today = datetime.now(timezone.utc).date()
     days = []
     cur = start
@@ -1770,18 +1797,27 @@ async def get_attendance_analytics(request: Request, start_date: str, end_date: 
                     remote += 1
                 else:
                     present += 1
+
         is_sunday = cur.weekday() == 6
-        if cur.date() <= today and not is_sunday:
+        is_special_working = key in special_working_days
+        declared_holiday_name = holiday_map.get(key)
+        # A Sunday counts as a holiday unless explicitly marked working;
+        # a declared holiday always does, even on an otherwise-working day.
+        is_off_day = bool(declared_holiday_name) or (is_sunday and not is_special_working)
+        holiday_name = declared_holiday_name or ("Sunday" if (is_sunday and not is_special_working) else None)
+
+        if cur.date() <= today and not is_off_day:
             absent = max(0, total_employees - present - remote - leave)
         else:
             absent = 0
         days.append({
             "date": key, "present": present, "remote": remote,
             "leave": leave, "absent": absent, "total": total_employees,
+            "is_sunday": is_sunday, "is_holiday": is_off_day, "holiday_name": holiday_name,
         })
         cur += timedelta(days=1)
 
-    workdays = [d for d in days if d["date"] <= today.strftime("%Y-%m-%d") and datetime.strptime(d["date"], "%Y-%m-%d").weekday() != 6]
+    workdays = [d for d in days if d["date"] <= today.strftime("%Y-%m-%d") and not d["is_holiday"]]
     summary = {
         "total_present": sum(d["present"] for d in days),
         "total_remote": sum(d["remote"] for d in days),
