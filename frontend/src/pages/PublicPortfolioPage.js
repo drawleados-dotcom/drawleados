@@ -89,7 +89,7 @@ const PublicPortfolioPage = () => {
         <FileText className="h-9 w-9 text-[#3b82f6] mb-3" />
         <h1 className="text-xl font-semibold text-gray-900 mb-1">Explore our portfolio of Drawlead</h1>
         <p className="text-sm text-gray-500 mb-5">
-          {portfolio.service_name}{portfolio.portfolio_type ? ` — ${portfolio.portfolio_type}` : ''}. Enter your name and email to continue.
+          {portfolio.service_name}{portfolio.service_type ? ` — ${portfolio.service_type}` : ''}. Enter your name and email to continue.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">

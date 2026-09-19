@@ -23,7 +23,7 @@ const TABS = [
   { key: 'portfolio', label: 'Portfolio', icon: Briefcase },
 ];
 
-const PORTFOLIO_TYPES = ['Website', 'Branding', 'SEO', 'Social Media', 'Meta Ads', 'App Development', 'ERP', 'Other'];
+const LINK_TYPES = ['Portfolio', 'Case Study', 'Testimonials', 'Proposal Template'];
 
 const FIELD_TYPE_META = {
   short_text: { label: 'Short Text', icon: Type },
@@ -502,7 +502,10 @@ const ResponsesView = ({ form, responses, onBack, onDeleteResponse, textPrimary,
 
 // ============== PORTFOLIO LIST ==============
 
-const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelete, textPrimary, textSecondary, borderColor, bgCard }) => {
+const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelete, linkTypeFilter, onLinkTypeFilterChange, textPrimary, textSecondary, borderColor, bgCard, bgSecondary }) => {
+  const filtered = linkTypeFilter === 'all' ? portfolios : portfolios.filter(p => p.link_type === linkTypeFilter);
+  const filterTabs = ['all', ...LINK_TYPES];
+
   if (portfolios.length === 0) {
     return (
       <div className={`border border-dashed ${borderColor} rounded-xl p-12 text-center`}>
@@ -515,21 +518,47 @@ const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelet
   }
   return (
     <div>
-      <div className="flex justify-end mb-3">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {filterTabs.map(t => (
+            <button
+              key={t}
+              onClick={() => onLinkTypeFilterChange(t)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                linkTypeFilter === t ? 'bg-[#3b82f6] text-white' : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
+              }`}
+              data-testid={`sk-portfolio-filter-${t}`}
+            >
+              {t === 'all' ? 'All' : t}
+            </button>
+          ))}
+        </div>
         <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]" data-testid="sk-new-portfolio-btn">
           <Plus className="h-4 w-4 mr-1.5" /> Add Portfolio
         </Button>
       </div>
+      {filtered.length === 0 ? (
+        <div className={`border border-dashed ${borderColor} rounded-xl p-10 text-center text-sm ${textSecondary}`}>
+          No portfolio items with this link type yet.
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {portfolios.map(p => (
+        {filtered.map(p => (
           <div key={p.portfolio_id} className={`${bgCard} border ${borderColor} rounded-xl p-4 flex flex-col`} data-testid={`sk-portfolio-card-${p.portfolio_id}`}>
             <div className="flex items-start justify-between mb-2 gap-2">
               <p className={`font-medium ${textPrimary}`}>{p.service_name}</p>
-              {p.portfolio_type && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#3b82f6]/40 text-[#3b82f6] whitespace-nowrap">
-                  {p.portfolio_type}
-                </span>
-              )}
+              <div className="flex flex-col items-end gap-1">
+                {p.link_type && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#3b82f6]/40 text-[#3b82f6] whitespace-nowrap">
+                    {p.link_type}
+                  </span>
+                )}
+                {p.service_type && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${bgSecondary} ${textSecondary} whitespace-nowrap`}>
+                    {p.service_type}
+                  </span>
+                )}
+              </div>
             </div>
             <a
               href={p.portfolio_link}
@@ -557,6 +586,7 @@ const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelet
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 };
@@ -644,10 +674,12 @@ const SalesKitPage = () => {
   const [portfolioResponses, setPortfolioResponses] = useState([]);
   const [portfolioClicks, setPortfolioClicks] = useState([]);
   const [newPortfolioOpen, setNewPortfolioOpen] = useState(false);
-  const [portfolioForm, setPortfolioForm] = useState({ service_name: '', portfolio_type: '', portfolio_link: '' });
+  const [portfolioForm, setPortfolioForm] = useState({ service_name: '', service_type: '', link_type: '', portfolio_link: '' });
   const [creatingPortfolio, setCreatingPortfolio] = useState(false);
   const [deletePortfolioTarget, setDeletePortfolioTarget] = useState(null);
   const [sharePortfolio, setSharePortfolio] = useState(null);
+  const [services, setServices] = useState([]);
+  const [portfolioLinkTypeFilter, setPortfolioLinkTypeFilter] = useState('all');
 
   const loadForms = useCallback(async () => {
     try {
@@ -671,8 +703,18 @@ const SalesKitPage = () => {
     }
   }, []);
 
+  const loadServices = useCallback(async () => {
+    try {
+      const res = await api.get('/services');
+      setServices(res.data || []);
+    } catch (e) {
+      // Non-fatal — the Service Type dropdown just shows no options.
+    }
+  }, []);
+
   useEffect(() => { loadForms(); }, [loadForms]);
   useEffect(() => { loadPortfolios(); }, [loadPortfolios]);
+  useEffect(() => { loadServices(); }, [loadServices]);
 
   const openCreate = () => { setNewFormTitle(''); setNewFormOpen(true); };
 
@@ -759,7 +801,7 @@ const SalesKitPage = () => {
 
   // Portfolio handlers
   const openPortfolioCreate = () => {
-    setPortfolioForm({ service_name: '', portfolio_type: '', portfolio_link: '' });
+    setPortfolioForm({ service_name: '', service_type: '', link_type: '', portfolio_link: '' });
     setNewPortfolioOpen(true);
   };
 
@@ -907,10 +949,13 @@ const SalesKitPage = () => {
                 onResponses={openPortfolioResponses}
                 onShare={setSharePortfolio}
                 onDelete={setDeletePortfolioTarget}
+                linkTypeFilter={portfolioLinkTypeFilter}
+                onLinkTypeFilterChange={setPortfolioLinkTypeFilter}
                 textPrimary={textPrimary}
                 textSecondary={textSecondary}
                 borderColor={borderColor}
                 bgCard={bgCard}
+                bgSecondary={bgSecondary}
               />
             )}
             {portfolioView === 'responses' && activePortfolio && (
@@ -1002,14 +1047,26 @@ const SalesKitPage = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label>Portfolio Type</Label>
+              <Label>Service Type</Label>
               <Select
-                value={portfolioForm.portfolio_type}
-                onValueChange={(v) => setPortfolioForm(prev => ({ ...prev, portfolio_type: v }))}
+                value={portfolioForm.service_type}
+                onValueChange={(v) => setPortfolioForm(prev => ({ ...prev, service_type: v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a service" /></SelectTrigger>
+                <SelectContent>
+                  {services.map(s => <SelectItem key={s.service_id} value={s.name}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Link Type</Label>
+              <Select
+                value={portfolioForm.link_type}
+                onValueChange={(v) => setPortfolioForm(prev => ({ ...prev, link_type: v }))}
               >
                 <SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger>
                 <SelectContent>
-                  {PORTFOLIO_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {LINK_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

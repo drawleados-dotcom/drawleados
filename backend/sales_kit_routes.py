@@ -67,7 +67,8 @@ class FormResponseSubmit(BaseModel):
 
 class PortfolioCreate(BaseModel):
     service_name: str
-    portfolio_type: str = ""
+    service_type: str = ""  # which company service this relates to (from Settings > Services)
+    link_type: str = ""     # Portfolio | Case Study | Testimonials | Proposal Template
     portfolio_link: str  # external URL the portfolio actually lives at
 
 
@@ -327,7 +328,8 @@ async def create_portfolio(payload: PortfolioCreate, request: Request):
     doc = {
         "portfolio_id": str(uuid.uuid4()),
         "service_name": payload.service_name.strip(),
-        "portfolio_type": payload.portfolio_type,
+        "service_type": payload.service_type,
+        "link_type": payload.link_type,
         "portfolio_link": link,
         "share_token": secrets.token_urlsafe(16),    # public link
         "private_token": secrets.token_urlsafe(16),  # private (lead-gated) link
@@ -411,7 +413,8 @@ async def get_private_portfolio(private_token: str):
     return {
         "portfolio_id": doc["portfolio_id"],
         "service_name": doc["service_name"],
-        "portfolio_type": doc.get("portfolio_type", ""),
+        "service_type": doc.get("service_type", ""),
+        "link_type": doc.get("link_type", ""),
     }
 
 
