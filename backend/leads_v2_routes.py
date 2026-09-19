@@ -789,6 +789,15 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
     if stage_data.get("followup_at"):
         update_doc["followup_at"] = stage_data["followup_at"]
 
+    # Lost reason — captured by the popup Pre-sales sees when moving a lead
+    # to the Lost stage. lost_reason_type is either one of the accreting
+    # /lost-reasons list or a fresh "Other" value the caller already POSTed
+    # there before this call.
+    if stage_data.get("lost_reason_type"):
+        update_doc["lost_reason_type"] = stage_data["lost_reason_type"]
+        update_doc["lost_summary"] = stage_data.get("lost_summary") or ""
+        update_doc["lost_at"] = datetime.now(timezone.utc)
+
     # RNR (Ring No Response): each click logs an entry — when it was clicked
     # and the retry date/time the caller entered in the popup — so the RNR
     # button's count badge and the lead's timeline both reflect every attempt,
@@ -1359,6 +1368,61 @@ async def delete_source(source_id: str, request: Request):
         {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}}
     )
     return {"message": "Source deleted"}
+
+# ============== LOST REASONS ROUTES ==============
+# The reason-type list behind the "why was this lead lost" popup (Pre-sales'
+# Move to Stage -> Lost). Same accreting-list pattern as Sources/Industries:
+# a fixed default set, plus whatever custom "Other" text a user has typed in
+# before — each one becomes selectable for the next person too.
+
+@leads_v2_router.get("/lost-reasons")
+async def get_lost_reasons(request: Request):
+    """Get all lost-reason types for the Lost-stage popup dropdown"""
+    await get_current_user_from_request(request)
+    reasons = await db.lead_lost_reasons.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0}
+    ).sort("name", 1).to_list(100)
+
+    if not reasons:
+        default_reasons = [
+            {"reason_id": f"lr_{uuid.uuid4().hex[:8]}", "name": "Language Buffer"},
+            {"reason_id": f"lr_{uuid.uuid4().hex[:8]}", "name": "Not Interested"},
+            {"reason_id": f"lr_{uuid.uuid4().hex[:8]}", "name": "Hindi"},
+            {"reason_id": f"lr_{uuid.uuid4().hex[:8]}", "name": "Low Budget"},
+        ]
+        for r in default_reasons:
+            r["created_at"] = datetime.now(timezone.utc)
+            r["is_deleted"] = False
+            await db.lead_lost_reasons.insert_one(r)
+        reasons = default_reasons
+
+    return reasons
+
+@leads_v2_router.post("/lost-reasons")
+async def create_lost_reason(request: Request):
+    """Add a new lost-reason type (the "Other" -> custom text flow)"""
+    user = await get_current_user_from_request(request)
+    body = await request.json()
+    name = (body.get("name") or "").strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Reason name is required")
+
+    existing = await db.lead_lost_reasons.find_one({"name": {"$regex": f"^{name}$", "$options": "i"}, "is_deleted": {"$ne": True}})
+    if existing:
+        return existing
+
+    reason_id = f"lr_{uuid.uuid4().hex[:8]}"
+    reason_doc = {
+        "reason_id": reason_id,
+        "name": name,
+        "created_by": user["user_id"],
+        "created_at": datetime.now(timezone.utc),
+        "is_deleted": False,
+    }
+    await db.lead_lost_reasons.insert_one(reason_doc)
+    return await db.lead_lost_reasons.find_one({"reason_id": reason_id}, {"_id": 0})
 
 # ============== TEAM MEMBERS ROUTES ==============
 

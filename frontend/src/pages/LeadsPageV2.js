@@ -100,6 +100,16 @@ const LeadsPageV2 = () => {
   const [stageDateValue, setStageDateValue] = useState('');
   const [stageTimeValue, setStageTimeValue] = useState('');
   const [stageDateSaving, setStageDateSaving] = useState(false);
+  // Lost-reason popup — Pre-sales' Move to Stage -> Lost. Stores the target
+  // Lost stage plus the reason type / "Other" custom text / summary being
+  // filled in before commit.
+  const [lostReasonModal, setLostReasonModal] = useState(null);
+  const [lostReasonType, setLostReasonType] = useState('');
+  const [lostReasonOther, setLostReasonOther] = useState('');
+  const [lostSummary, setLostSummary] = useState('');
+  const [lostReasonSaving, setLostReasonSaving] = useState(false);
+  const [lostReasons, setLostReasons] = useState([]);
+  const [filterLostReasonType, setFilterLostReasonType] = useState(null);
   const [customFields, setCustomFields] = useState([]);
   const [stats, setStats] = useState({ total: 0, by_stage: {} });
   const [sheetsConfig, setSheetsConfig] = useState(null);
@@ -383,6 +393,15 @@ const LeadsPageV2 = () => {
     }
   }, []);
 
+  const loadLostReasons = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/api/leads-v2/lost-reasons`, { headers, timeout: 12000 });
+      setLostReasons(res.data || []);
+    } catch (error) {
+      console.error('Error loading lost reasons:', error);
+    }
+  }, []);
+
   // Bounded timeout + a couple of quick auto-retries (mirrors ProjectsPanel's
   // loadProjects): axios has no default timeout, so a request landing during
   // a backend restart (e.g. a deploy in flight) previously hung "Loading..."
@@ -405,6 +424,7 @@ const LeadsPageV2 = () => {
         loadIndustries(),
         loadSources(),
         loadTeamMembers(),
+        loadLostReasons(),
       ]);
       if (isCancelled()) return;
       if (stagesOk && leadsOk) {
@@ -417,7 +437,7 @@ const LeadsPageV2 = () => {
       setLoading(false);
       setLoadError(true);
     }
-  }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadSources, loadTeamMembers]);
+  }, [loadStages, loadLeads, loadCustomFields, loadStats, loadSheetsConfig, loadServices, loadIndustries, loadSources, loadTeamMembers, loadLostReasons]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1098,7 +1118,12 @@ const LeadsPageV2 = () => {
   };
 
   const baseFilteredLeads = leads.filter(passesNonStageFilters);
-  const filteredLeads = baseFilteredLeads.filter(lead => !filterStage || lead.stage_id === filterStage);
+  const stageFilteredLeads = baseFilteredLeads.filter(lead => !filterStage || lead.stage_id === filterStage);
+  const lostStageForFilter = stages.find(s => (s.name || '').toLowerCase().trim() === 'lost');
+  const isViewingLostStage = pipeline === 'pre_sales' && lostStageForFilter && filterStage === lostStageForFilter.stage_id;
+  const filteredLeads = stageFilteredLeads.filter(
+    lead => !isViewingLostStage || !filterLostReasonType || lead.lost_reason_type === filterLostReasonType
+  );
 
   // ============== STAGE SUMMARY CARDS ==============
   // One small clickable card per actual stage of the active pipeline
@@ -1684,7 +1709,25 @@ const LeadsPageV2 = () => {
                 ))}
               </SelectContent>
             </Select>
-            
+
+            {/* Lost Reason Type Filter — only shown while viewing the Lost stage */}
+            {isViewingLostStage && (
+              <Select
+                value={filterLostReasonType || ''}
+                onValueChange={(v) => setFilterLostReasonType(v === 'all' ? null : v)}
+              >
+                <SelectTrigger className={`w-[180px] ${bgSecondary}`} data-testid="lost-reason-filter">
+                  <SelectValue placeholder="All Lost Reasons" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Lost Reasons</SelectItem>
+                  {lostReasons.map(r => (
+                    <SelectItem key={r.reason_id} value={r.name}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
             {/* Active Filters */}
             {(filterStage || filterLeadOwner) && (
               <div className="flex items-center gap-2">
@@ -2336,6 +2379,12 @@ const LeadsPageV2 = () => {
                     This lead's appointment has been booked and it now lives in the Sales pipeline — change its stage from the Sales tab instead.
                   </p>
                 )}
+                {editingLead.lost_reason_type && (
+                  <div className={`text-xs ${textSecondary} mb-2 p-2 rounded-lg border border-red-400/30 bg-red-400/5`} data-testid="lost-reason-note">
+                    <span className="font-semibold text-red-400">Lost — {editingLead.lost_reason_type}</span>
+                    {editingLead.lost_summary && <span>: {editingLead.lost_summary}</span>}
+                  </div>
+                )}
                 {(() => {
                   // Same Pre-Sales / Appointment split as the stage summary
                   // cards row, applied to these buttons too — Pre-sales only,
@@ -2365,6 +2414,8 @@ const LeadsPageV2 = () => {
                     // Discovery Call is Sales-owned — Pre-sales sees it read-only
                     // (see get_leads' merge-back) and can never move a lead there.
                     const isLockedDiscoveryCall = needsDiscoveryCall && pipeline === 'pre_sales';
+                    // Moving to Lost asks why first — Pre-sales only for now.
+                    const needsLostReason = stageNameLower === 'lost' && pipeline === 'pre_sales';
 
                     const openStageDatePopup = (kind, existingISO) => {
                       const ex = existingISO ? new Date(existingISO) : null;
@@ -2394,6 +2445,13 @@ const LeadsPageV2 = () => {
                             // stage — every ring-no-response attempt is its own logged
                             // entry, not just the first one that moved the stage here.
                             if (isCurrent && !needsRnr) return;
+                            if (needsLostReason) {
+                              setLostReasonType('');
+                              setLostReasonOther('');
+                              setLostSummary('');
+                              setLostReasonModal({ stage });
+                              return;
+                            }
                             // Open mini date/time popup for Appointment, Followup & RNR stages.
                             if (needsAppointment || needsFollowup || needsRnr) {
                               const existingISO = needsAppointment
@@ -3192,6 +3250,96 @@ const LeadsPageV2 = () => {
                     className="bg-[#6366f1] hover:bg-[#4f46e5] text-white"
                   >
                     {stageDateSaving ? 'Saving…' : 'Confirm & Move'}
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Lost reason popup — Pre-sales' Move to Stage -> Lost. */}
+        <Dialog open={!!lostReasonModal} onOpenChange={(o) => !o && !lostReasonSaving && setLostReasonModal(null)}>
+          <DialogContent className={`${bgCard} ${textPrimary} max-w-sm`} data-testid="lost-reason-modal">
+            {lostReasonModal && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <X className="h-4 w-4 text-red-400" />
+                    Why was this lead lost?
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                  <div>
+                    <Label className={textPrimary}>Reason</Label>
+                    <Select value={lostReasonType} onValueChange={setLostReasonType}>
+                      <SelectTrigger className={bgSecondary} data-testid="lost-reason-select"><SelectValue placeholder="Select a reason" /></SelectTrigger>
+                      <SelectContent>
+                        {lostReasons.map(r => (
+                          <SelectItem key={r.reason_id} value={r.name}>{r.name}</SelectItem>
+                        ))}
+                        <SelectItem value="__other__">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {lostReasonType === '__other__' && (
+                    <div>
+                      <Label className={textPrimary}>Enter reason type</Label>
+                      <Input
+                        value={lostReasonOther}
+                        onChange={(e) => setLostReasonOther(e.target.value)}
+                        placeholder="e.g. Went with a competitor"
+                        className={bgSecondary}
+                        data-testid="lost-reason-other-input"
+                      />
+                    </div>
+                  )}
+                  <div>
+                    <Label className={textPrimary}>Summary of the lost (optional)</Label>
+                    <Textarea
+                      value={lostSummary}
+                      onChange={(e) => setLostSummary(e.target.value)}
+                      rows={3}
+                      placeholder="Any extra context..."
+                      className={bgSecondary}
+                      data-testid="lost-summary-input"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setLostReasonModal(null)} disabled={lostReasonSaving}>Cancel</Button>
+                  <Button
+                    data-testid="lost-reason-save"
+                    disabled={lostReasonSaving || !lostReasonType || (lostReasonType === '__other__' && !lostReasonOther.trim())}
+                    onClick={async () => {
+                      setLostReasonSaving(true);
+                      try {
+                        let finalType = lostReasonType;
+                        if (lostReasonType === '__other__') {
+                          const res = await axios.post(`${API}/api/leads-v2/lost-reasons`, { name: lostReasonOther.trim() }, { headers });
+                          finalType = res.data.name;
+                          setLostReasons(prev => (prev.some(r => r.name.toLowerCase() === finalType.toLowerCase()) ? prev : [...prev, res.data]));
+                        }
+                        const stage = lostReasonModal.stage;
+                        const res2 = await axios.put(
+                          `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
+                          { stage_id: stage.stage_id, lost_reason_type: finalType, lost_summary: lostSummary.trim() },
+                          { headers },
+                        );
+                        setLeadForm({ ...leadForm, stage_id: res2.data.stage_id });
+                        setEditingLead(res2.data);
+                        toast.success(`Moved to Lost — ${finalType}`);
+                        setLostReasonModal(null);
+                        loadLeads();
+                        loadStats();
+                      } catch (e) {
+                        toast.error(e?.response?.data?.detail || 'Failed to move to Lost');
+                      } finally {
+                        setLostReasonSaving(false);
+                      }
+                    }}
+                    className="bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                  >
+                    {lostReasonSaving ? 'Saving…' : 'Confirm & Move to Lost'}
                   </Button>
                 </DialogFooter>
               </>
