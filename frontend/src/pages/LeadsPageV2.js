@@ -1146,17 +1146,16 @@ const LeadsPageV2 = () => {
       <div className="flex flex-col h-full" data-testid="leads-page">
         {/* Header */}
         <div className={`p-4 border-b ${borderColor}`}>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-[#3b82f6]/20">
                 <Users className="h-6 w-6 text-[#3b82f6]" />
               </div>
               <div>
-                <h1 className={`text-xl font-bold ${textPrimary}`}>Sales Department</h1>
                 <p className={`text-sm ${textSecondary}`}>{stats.total} Total Leads</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Two separate Google Sheets — Prospect & Lead */}
               <Button
                 onClick={() => setShowProspectSheetModal(true)}
