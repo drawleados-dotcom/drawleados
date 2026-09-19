@@ -5891,6 +5891,12 @@ function EnhancedAttendanceTab({
   // Get all employees with their attendance status for the selected date
   const getEmployeesWithStatus = () => {
     const today = selectedDate;
+    // "Yet to Login" only makes sense while the viewed day is still in
+    // progress (they might still clock in later). Once a day has fully
+    // passed, no clock-in + no leave on file is unambiguous — they simply
+    // didn't show up, so it should count as Absent.
+    const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const isPastDate = today < todayIST;
     const employeesWithStatus = employees.map(emp => {
       // Find attendance record for this employee on selected date
       const record = activeRecords.find(r => {
@@ -5960,7 +5966,8 @@ function EnhancedAttendanceTab({
         r.leave_type
       );
       if (isAbsent) status = 'absent';
-      
+      else if (status === 'yet_to_login' && isPastDate) status = 'absent';
+
       return {
         ...emp,
         status,
