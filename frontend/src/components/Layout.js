@@ -34,6 +34,101 @@ const routeToContext = {
   '/profile': 'general'
 };
 
+// Read-Only Time Display — shows auto-captured time (no editing). Defined at
+// module scope (not inside Layout) so its component identity stays stable
+// across renders — Layout re-renders on every keystroke typed into the
+// modals that use this, and a component redefined inside a render body gets
+// a fresh identity each time, which makes React unmount/remount the whole
+// subtree (including whatever textarea has focus) instead of just updating
+// it in place. That dropped focus on every keystroke, which looked like the
+// text field wasn't accepting input properly.
+const ReadOnlyTimeDisplay = ({ hour, minute, period, label, isDark, textPrimary, textSecondary }) => {
+  return (
+    <div>
+      <Label className={`${textPrimary} mb-2 block`}>{label}</Label>
+      <div className={`flex items-center justify-center gap-3 p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
+        {/* Hour */}
+        <div className={`w-16 h-16 flex items-center justify-center rounded-lg ${isDark ? 'bg-[#3f3f46]' : 'bg-white'} shadow-sm`}>
+          <span className={`text-3xl font-bold ${textPrimary}`} data-testid="time-hour-display">
+            {hour.toString().padStart(2, '0')}
+          </span>
+        </div>
+
+        <span className={`text-3xl font-bold ${textPrimary}`}>:</span>
+
+        {/* Minute */}
+        <div className={`w-16 h-16 flex items-center justify-center rounded-lg ${isDark ? 'bg-[#3f3f46]' : 'bg-white'} shadow-sm`}>
+          <span className={`text-3xl font-bold ${textPrimary}`} data-testid="time-minute-display">
+            {minute.toString().padStart(2, '0')}
+          </span>
+        </div>
+
+        {/* AM/PM */}
+        <div className={`px-4 h-16 flex items-center justify-center rounded-lg font-bold text-xl ${
+          period === 'AM'
+            ? 'bg-[#6366f1] text-white'
+            : 'bg-[#f59e0b] text-white'
+        }`} data-testid="time-period-display">
+          {period}
+        </div>
+      </div>
+      <p className={`text-xs mt-2 text-center ${textSecondary}`}>
+        Time auto-captured • Cannot be edited
+      </p>
+    </div>
+  );
+};
+
+// Attendance Modal — see ReadOnlyTimeDisplay comment above for why this is
+// at module scope rather than defined inside Layout.
+const AttendanceModal = ({
+  isOpen, onClose, title, icon: Icon, iconColor, children, onSubmit, submitText, submitColor,
+  bgCard, borderColor, textPrimary, textSecondary, isDark, currentDateTime, loading,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4 shadow-xl`}>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className={`flex items-center gap-3 ${textPrimary}`}>
+              <div className={`p-2 rounded-lg ${iconColor}`}>
+                <Icon className="h-5 w-5 text-white" />
+              </div>
+              {title}
+            </CardTitle>
+            <button onClick={onClose} className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 ${textSecondary}`}>
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Date & Day Info */}
+          <div className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-4`}>
+            <Calendar className={`h-10 w-10 ${textSecondary}`} />
+            <div>
+              <p className={`text-lg font-semibold ${textPrimary}`}>{currentDateTime.date}</p>
+              <p className={`text-sm ${textSecondary}`}>{currentDateTime.day}</p>
+            </div>
+          </div>
+
+          {children}
+
+          <div className="flex gap-3 pt-4">
+            <Button variant="outline" onClick={onClose} className={`flex-1 ${borderColor}`}>
+              Cancel
+            </Button>
+            <Button onClick={onSubmit} disabled={loading} className={`flex-1 ${submitColor} text-white`}>
+              {submitText}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
 const Layout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -442,90 +537,6 @@ const Layout = ({ children }) => {
   const borderColor = isDark ? 'border-[#27272a]' : 'border-gray-200';
   const bgInput = isDark ? 'bg-[#27272a]' : 'bg-gray-50';
 
-  // Read-Only Time Display Component - Shows auto-captured time (no editing)
-  const ReadOnlyTimeDisplay = ({ hour, minute, period, label }) => {
-    return (
-      <div>
-        <Label className={`${textPrimary} mb-2 block`}>{label}</Label>
-        <div className={`flex items-center justify-center gap-3 p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'}`}>
-          {/* Hour */}
-          <div className={`w-16 h-16 flex items-center justify-center rounded-lg ${isDark ? 'bg-[#3f3f46]' : 'bg-white'} shadow-sm`}>
-            <span className={`text-3xl font-bold ${textPrimary}`} data-testid="time-hour-display">
-              {hour.toString().padStart(2, '0')}
-            </span>
-          </div>
-
-          <span className={`text-3xl font-bold ${textPrimary}`}>:</span>
-
-          {/* Minute */}
-          <div className={`w-16 h-16 flex items-center justify-center rounded-lg ${isDark ? 'bg-[#3f3f46]' : 'bg-white'} shadow-sm`}>
-            <span className={`text-3xl font-bold ${textPrimary}`} data-testid="time-minute-display">
-              {minute.toString().padStart(2, '0')}
-            </span>
-          </div>
-
-          {/* AM/PM */}
-          <div className={`px-4 h-16 flex items-center justify-center rounded-lg font-bold text-xl ${
-            period === 'AM' 
-              ? 'bg-[#6366f1] text-white' 
-              : 'bg-[#f59e0b] text-white'
-          }`} data-testid="time-period-display">
-            {period}
-          </div>
-        </div>
-        <p className={`text-xs mt-2 text-center ${textSecondary}`}>
-          Time auto-captured • Cannot be edited
-        </p>
-      </div>
-    );
-  };
-
-  // Attendance Modal Component
-  const AttendanceModal = ({ isOpen, onClose, title, icon: Icon, iconColor, children, onSubmit, submitText, submitColor }) => {
-    if (!isOpen) return null;
-    
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <Card className={`${bgCard} border ${borderColor} w-full max-w-md mx-4 shadow-xl`}>
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className={`flex items-center gap-3 ${textPrimary}`}>
-                <div className={`p-2 rounded-lg ${iconColor}`}>
-                  <Icon className="h-5 w-5 text-white" />
-                </div>
-                {title}
-              </CardTitle>
-              <button onClick={onClose} className={`p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 ${textSecondary}`}>
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Date & Day Info */}
-            <div className={`p-4 rounded-lg ${isDark ? 'bg-[#27272a]' : 'bg-gray-100'} flex items-center gap-4`}>
-              <Calendar className={`h-10 w-10 ${textSecondary}`} />
-              <div>
-                <p className={`text-lg font-semibold ${textPrimary}`}>{currentDateTime.date}</p>
-                <p className={`text-sm ${textSecondary}`}>{currentDateTime.day}</p>
-              </div>
-            </div>
-            
-            {children}
-            
-            <div className="flex gap-3 pt-4">
-              <Button variant="outline" onClick={onClose} className={`flex-1 ${borderColor}`}>
-                Cancel
-              </Button>
-              <Button onClick={onSubmit} disabled={loading} className={`flex-1 ${submitColor} text-white`}>
-                {submitText}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  };
-
   return (
     <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-[#09090b]' : 'bg-gray-50'}`}>
       {/* Left sidebar — hidden on mobile in favour of the bottom nav */}
@@ -689,12 +700,22 @@ const Layout = ({ children }) => {
         onSubmit={handleClockIn}
         submitText="Clock In"
         submitColor="bg-[#10b981] hover:bg-[#059669]"
+        bgCard={bgCard}
+        borderColor={borderColor}
+        textPrimary={textPrimary}
+        textSecondary={textSecondary}
+        isDark={isDark}
+        currentDateTime={currentDateTime}
+        loading={loading}
       >
         {/* Read-Only Time Display */}
         <ReadOnlyTimeDisplay
           hour={clockInData.hour}
           minute={clockInData.minute}
           period={clockInData.period}
+          isDark={isDark}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
           label="Clock In Time"
         />
         
@@ -774,6 +795,13 @@ const Layout = ({ children }) => {
         onSubmit={handleClockOut}
         submitText="Clock Out"
         submitColor="bg-[#ef4444] hover:bg-[#dc2626]"
+        bgCard={bgCard}
+        borderColor={borderColor}
+        textPrimary={textPrimary}
+        textSecondary={textSecondary}
+        isDark={isDark}
+        currentDateTime={currentDateTime}
+        loading={loading}
       >
         {/* Work Duration Display */}
         {(() => {
@@ -815,6 +843,9 @@ const Layout = ({ children }) => {
           minute={clockOutData.minute}
           period={clockOutData.period}
           label="Clock Out Time"
+          isDark={isDark}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
         />
       </AttendanceModal>
 
@@ -828,6 +859,13 @@ const Layout = ({ children }) => {
         onSubmit={handleBreakOut}
         submitText="Start Break"
         submitColor="bg-[#f59e0b] hover:bg-[#d97706]"
+        bgCard={bgCard}
+        borderColor={borderColor}
+        textPrimary={textPrimary}
+        textSecondary={textSecondary}
+        isDark={isDark}
+        currentDateTime={currentDateTime}
+        loading={loading}
       >
         {/* Category buttons */}
         <div>
@@ -891,6 +929,9 @@ const Layout = ({ children }) => {
           minute={breakOutData.minute}
           period={breakOutData.period}
           label="Break Start Time"
+          isDark={isDark}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
         />
       </AttendanceModal>
 
@@ -904,6 +945,13 @@ const Layout = ({ children }) => {
         onSubmit={handleBreakIn}
         submitText="Resume Work"
         submitColor="bg-[#8b5cf6] hover:bg-[#7c3aed]"
+        bgCard={bgCard}
+        borderColor={borderColor}
+        textPrimary={textPrimary}
+        textSecondary={textSecondary}
+        isDark={isDark}
+        currentDateTime={currentDateTime}
+        loading={loading}
       >
         {/* Current break duration */}
         {(() => {
@@ -939,6 +987,9 @@ const Layout = ({ children }) => {
           minute={breakInData.minute}
           period={breakInData.period}
           label="Break End Time"
+          isDark={isDark}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
         />
       </AttendanceModal>
     </div>
