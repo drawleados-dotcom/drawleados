@@ -485,6 +485,7 @@ async def get_hr_settings():
         settings = {
             "settings_id": f"hrs_{uuid.uuid4().hex[:8]}",
             "standard_work_hours": 9.0,
+            "total_office_hours": 9.0,
             "standard_login_time": "09:00",
             "standard_logout_time": "18:00",
             "early_login_threshold_minutes": 60,
@@ -1628,10 +1629,14 @@ async def get_project_hours(request: Request, period: str = "today"):
                 proj_entry["users"][uid] = proj_entry["users"].get(uid, 0) + seconds
                 all_user_ids.add(uid)
 
-    # Resolve name + hourly rate (per-day salary / 8h) for everyone involved.
-    # per-day salary mirrors the same formula payslips already use: gross
-    # salary (salary_details, falling back to users.current_salary) divided
-    # by the current month's configured working days.
+    # Resolve name + hourly rate for everyone involved. Per-day salary
+    # mirrors the same formula payslips already use: gross salary
+    # (salary_details, falling back to users.current_salary) divided by the
+    # period's configured working days. That per-day figure is then divided
+    # by the company's Total Office Hours (Work Settings — includes lunch,
+    # e.g. 9h), NOT the employee's own actual clocked hours, so the hourly
+    # rate is a fixed company-wide figure per person, independent of how
+    # long they personally worked that day.
     users_map, salary_map = {}, {}
     if all_user_ids:
         uid_list = list(all_user_ids)
@@ -1644,10 +1649,16 @@ async def get_project_hours(request: Request, period: str = "today"):
         ).to_list(len(uid_list))
         salary_map = {s["user_id"]: s for s in salary_docs}
 
+    # Use the period's own month (range_start), not "today" — matters when
+    # viewing "yesterday" on the 1st of a month, or a "week" that straddles
+    # a month boundary.
     calendar_doc = await db.hr_calendar.find_one(
-        {"month": today_start.month, "year": today_start.year}, {"_id": 0},
+        {"month": range_start.month, "year": range_start.year}, {"_id": 0},
     )
     total_working_days = (calendar_doc or {}).get("working_days", 22)
+
+    hr_settings = await get_hr_settings()
+    total_office_hours = hr_settings.get("total_office_hours") or 9.0
 
     def _hourly_rate(uid):
         salary = salary_map.get(uid) or {}
@@ -1657,9 +1668,9 @@ async def get_project_hours(request: Request, period: str = "today"):
         )
         if gross <= 0:
             gross = float((users_map.get(uid) or {}).get("current_salary") or 0)
-        if gross <= 0 or total_working_days <= 0:
+        if gross <= 0 or total_working_days <= 0 or total_office_hours <= 0:
             return 0
-        return round((gross / total_working_days) / 8, 2)
+        return round((gross / total_working_days) / total_office_hours, 2)
 
     departments = []
     for dept_key, ddata in dept_map.items():
@@ -1987,7 +1998,7 @@ async def update_settings(request: Request, settings_data: dict):
     current = await get_hr_settings()
     
     allowed_fields = [
-        "standard_work_hours", "standard_login_time", "standard_logout_time",
+        "standard_work_hours", "total_office_hours", "standard_login_time", "standard_logout_time",
         "early_login_threshold_minutes", "grace_period_minutes",
         "default_lunch_duration", "overtime_rate_multiplier"
     ]
