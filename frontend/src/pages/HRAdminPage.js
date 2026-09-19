@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import PayrollManagementTab from '../components/hr/PayrollManagementTab';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 
@@ -6046,24 +6046,31 @@ function bucketAnalyticsDays(days, granularity) {
       is_holiday: d.is_holiday, holiday_name: d.holiday_name, is_sunday: d.is_sunday,
     }));
   }
+  if (granularity === 'week') {
+    // "Week wise" aggregates by day-of-week across the whole range instead
+    // of one bar per calendar week — e.g. "are Fridays worse for absences
+    // than Mondays" instead of "was week 1 worse than week 2". Each bar is
+    // still split into Present/Remote/Leave/Absent, plus a line for average
+    // attendance % on that weekday (excluding holidays from the denominator,
+    // same as the summary card's own formula).
+    const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const buckets = WEEKDAY_LABELS.map((label, key) => ({ key, label, present: 0, remote: 0, leave: 0, absent: 0, workdayTotal: 0 }));
+    for (const d of days) {
+      const dow = (new Date(d.date).getDay() + 6) % 7; // Mon=0..Sun=6
+      const b = buckets[dow];
+      b.present += d.present; b.remote += d.remote; b.leave += d.leave; b.absent += d.absent;
+      if (!d.is_holiday) b.workdayTotal += d.total || 0;
+    }
+    return buckets.map(b => ({
+      ...b,
+      avg_attendance_pct: b.workdayTotal ? Math.round(((b.present + b.remote) / b.workdayTotal) * 1000) / 10 : 0,
+    }));
+  }
   const buckets = new Map();
   for (const d of days) {
     const dt = new Date(d.date);
-    let key, label;
-    if (granularity === 'week') {
-      const monday = new Date(dt);
-      const dow = (dt.getDay() + 6) % 7; // Mon=0..Sun=6
-      monday.setDate(dt.getDate() - dow);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
-      key = monday.toISOString().split('T')[0];
-      const startStr = monday.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-      const endStr = sunday.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-      label = `${startStr} – ${endStr}`;
-    } else {
-      key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-      label = dt.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
-    }
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+    const label = dt.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
     const b = buckets.get(key) || { key, label, present: 0, remote: 0, leave: 0, absent: 0 };
     b.present += d.present; b.remote += d.remote; b.leave += d.leave; b.absent += d.absent;
     buckets.set(key, b);
@@ -6188,21 +6195,27 @@ function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, tex
             <p className={`text-sm ${textSecondary} text-center py-16`}>No attendance data for this range.</p>
           ) : (
             <ResponsiveContainer width="100%" height={granularity === 'day' ? 420 : 360}>
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: granularity === 'day' ? 50 : 8 }}>
+              <ComposedChart data={chartData} margin={{ top: 8, right: granularity === 'week' ? 36 : 8, left: -12, bottom: granularity === 'day' ? 50 : 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                 {granularity === 'day' ? (
                   <XAxis dataKey="label" height={70} interval={0} tick={<DayOfWeekTick />} />
                 ) : (
                   <XAxis dataKey="label" tick={{ fill: tickColor, fontSize: 11 }} />
                 )}
-                <YAxis tick={{ fill: tickColor, fontSize: 11 }} allowDecimals={false} />
+                <YAxis yAxisId="left" tick={{ fill: tickColor, fontSize: 11 }} allowDecimals={false} />
+                {granularity === 'week' && (
+                  <YAxis yAxisId="right" orientation="right" tick={{ fill: tickColor, fontSize: 11 }} unit="%" domain={[0, 100]} />
+                )}
                 <Tooltip contentStyle={{ backgroundColor: isDark ? '#18181b' : '#fff', border: `1px solid ${gridColor}`, fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="present" name="Present" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="remote" name="Remote" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="leave" name="Leave" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="absent" name="Absent" fill="#ef4444" radius={[3, 3, 0, 0]} />
-              </BarChart>
+                <Bar yAxisId="left" dataKey="present" name="Present" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                <Bar yAxisId="left" dataKey="remote" name="Remote" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+                <Bar yAxisId="left" dataKey="leave" name="Leave" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+                <Bar yAxisId="left" dataKey="absent" name="Absent" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                {granularity === 'week' && (
+                  <Line yAxisId="right" type="monotone" dataKey="avg_attendance_pct" name="Avg Attendance %" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </CardContent>
