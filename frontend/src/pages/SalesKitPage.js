@@ -1411,9 +1411,20 @@ const SalesKitPage = () => {
             </div>
             <div className="space-y-2">
               <Label>Cover Image</Label>
+              <p className="text-xs text-gray-500">Recommended: 1200 × 800px (3:2), max 2MB — crops to fill the card on mobile and desktop.</p>
               <input type="file" accept="image/*" onChange={handleWebsiteCoverUpload} className={`text-sm ${textSecondary}`} />
               {websitePortfolioForm.cover_image && (
-                <img src={websitePortfolioForm.cover_image} alt="" className={`h-24 rounded-lg border ${borderColor} object-cover`} />
+                <div className="relative inline-block">
+                  <img src={websitePortfolioForm.cover_image} alt="" className={`h-24 rounded-lg border ${borderColor} object-cover`} />
+                  <button
+                    type="button"
+                    onClick={() => setWebsitePortfolioForm(prev => ({ ...prev, cover_image: '' }))}
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-[#ef4444] text-white flex items-center justify-center shadow"
+                    title="Remove cover image"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -1467,10 +1478,20 @@ const SalesKitPage = () => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Cover Image</Label>
-              <p className="text-xs text-gray-500">Shown as a banner at the top of the public gallery page — same idea as a Google Form cover image.</p>
+              <p className="text-xs text-gray-500">Shown as a banner at the top of the public gallery page — same idea as a Google Form cover image. Recommended: 1600 × 500px (roughly 16:5), max 2MB — wide and short so it crops well on mobile too.</p>
               <input type="file" accept="image/*" onChange={handleSettingsCoverUpload} className={`text-sm ${textSecondary}`} />
               {settingsForm.cover_image && (
-                <img src={settingsForm.cover_image} alt="" className={`h-24 w-full rounded-lg border ${borderColor} object-cover`} />
+                <div className="relative">
+                  <img src={settingsForm.cover_image} alt="" className={`h-24 w-full rounded-lg border ${borderColor} object-cover`} />
+                  <button
+                    type="button"
+                    onClick={() => setSettingsForm(prev => ({ ...prev, cover_image: '' }))}
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-[#ef4444] text-white flex items-center justify-center shadow"
+                    title="Remove cover image"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               )}
             </div>
             <div className="space-y-2">
