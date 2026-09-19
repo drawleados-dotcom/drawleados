@@ -1109,16 +1109,7 @@ const LeadsPageV2 = () => {
   const findStageByName = (re) => stages.find(s => re.test(s.name || ''));
   const appointmentStage = findStageByName(/appoin/i);
 
-  // "Appoint Followup" / "RNR Appnt" were an earlier, unused attempt at
-  // separate stages for this (leads never actually moved into them — see
-  // Apt. Followup/RNR below, which log history without changing stage).
-  // Hidden from the summary row so they don't show two near-duplicate,
-  // confusingly-different cards next to each other.
-  const orphanedAptStageIds = new Set(
-    stages.filter(s => ['appoint followup', 'rnr appnt'].includes((s.name || '').toLowerCase().trim())).map(s => s.stage_id)
-  );
-
-  let orderedStages = stages.filter(s => !orphanedAptStageIds.has(s.stage_id));
+  let orderedStages = stages;
   let highlightStageId = null;
   if (pipeline === 'sales') {
     const invoiceRaiseStage = findStageByName(/invoice.?rais/i);
@@ -1605,13 +1596,20 @@ const LeadsPageV2 = () => {
           const PRESALES_GROUP_NAMES = new Set(['prospect', 'lead', 'rnr', 'qualified', 'followup', 'followup rnr', 'follwup rnr']);
           // Explicit order (not just a filter) so Discovery Call — which
           // sits earlier in stageCards' underlying stage order — still
-          // renders last within this group, as asked: Appointment, Apnt.
-          // Followup, Apnt RNR, then Discovery Call.
-          const discoveryCard = stageCards.find(c => (c.name || '').toLowerCase().trim() === 'discovery call');
-          const appointmentCoreCards = stageCards.filter(c => c.isAppointment || c.stage_id === '__apt_followup__' || c.stage_id === '__apt_rnr__');
-          const appointmentGroup = [...appointmentCoreCards, ...(discoveryCard ? [discoveryCard] : [])];
-          const presalesGroup = stageCards.filter(c => c !== discoveryCard && !appointmentCoreCards.includes(c) && (PRESALES_GROUP_NAMES.has((c.name || '').toLowerCase().trim()) || (c.name || '').toLowerCase().startsWith('portfolio')));
-          const otherCards = stageCards.filter(c => !presalesGroup.includes(c) && c !== discoveryCard && !appointmentCoreCards.includes(c));
+          // renders last within this group, as asked: Appointment, Appoint
+          // Followup, RNR Appnt, Apnt. Followup, Apnt RNR, Discovery Call.
+          const findCard = (n) => stageCards.find(c => (c.name || '').toLowerCase().trim() === n);
+          const appointmentGroup = [
+            stageCards.find(c => c.isAppointment),
+            findCard('appoint followup'),
+            findCard('rnr appnt'),
+            stageCards.find(c => c.stage_id === '__apt_followup__'),
+            stageCards.find(c => c.stage_id === '__apt_rnr__'),
+            findCard('discovery call'),
+          ].filter(Boolean);
+          const appointmentGroupIds = new Set(appointmentGroup.map(c => c.stage_id));
+          const presalesGroup = stageCards.filter(c => !appointmentGroupIds.has(c.stage_id) && (PRESALES_GROUP_NAMES.has((c.name || '').toLowerCase().trim()) || (c.name || '').toLowerCase().startsWith('portfolio')));
+          const otherCards = stageCards.filter(c => !presalesGroup.includes(c) && !appointmentGroupIds.has(c.stage_id));
 
           return (
             <div className="px-4 pt-4 flex items-start gap-3" data-testid="stage-summary-row">
@@ -2310,8 +2308,20 @@ const LeadsPageV2 = () => {
                     This lead's appointment has been booked and it now lives in the Sales pipeline — change its stage from the Sales tab instead.
                   </p>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {stages.map((stage) => {
+                {(() => {
+                  // Same Pre-Sales / Appointment split as the stage summary
+                  // cards row, applied to these buttons too — Pre-sales only,
+                  // Sales keeps its existing single flat row.
+                  const PRESALES_GROUP_NAMES = new Set(['prospect', 'lead', 'rnr', 'qualified', 'followup', 'followup rnr', 'follwup rnr']);
+                  const APPOINTMENT_GROUP_NAMES = new Set(['appoinment', 'appointment', 'appointment reshuedule', 'appointment reschedule', 'appointment rescheule', 'appoint followup', 'rnr appnt', 'discovery call']);
+                  const classifyStageGroup = (stage) => {
+                    const n = (stage.name || '').toLowerCase().trim();
+                    if (APPOINTMENT_GROUP_NAMES.has(n)) return 'appointment';
+                    if (PRESALES_GROUP_NAMES.has(n) || n.startsWith('portfolio')) return 'presales';
+                    return 'other';
+                  };
+
+                  const renderStageButton = (stage) => {
                     const isCurrent = leadForm.stage_id === stage.stage_id;
                     const stageNameLower = (stage.name || '').toLowerCase().trim();
                     const needsAppointment = stageNameLower === 'appoinment' || stageNameLower === 'appointment' || stageNameLower === 'appointment reshuedule' || stageNameLower === 'appointment reschedule' || stageNameLower === 'appointment rescheule';
@@ -2468,8 +2478,30 @@ const LeadsPageV2 = () => {
                         )}
                       </React.Fragment>
                     );
-                  })}
-                </div>
+                  };
+
+                  const presalesStages = stages.filter(s => classifyStageGroup(s) === 'presales');
+                  const appointmentStages = stages.filter(s => classifyStageGroup(s) === 'appointment');
+                  const otherStages = stages.filter(s => classifyStageGroup(s) === 'other');
+
+                  if (pipeline !== 'pre_sales') {
+                    return <div className="flex flex-wrap gap-2">{stages.map(renderStageButton)}</div>;
+                  }
+
+                  return (
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Pre-Sales</p>
+                        <div className="flex flex-wrap gap-2">{presalesStages.map(renderStageButton)}</div>
+                      </div>
+                      <div className={`w-px self-stretch border-l ${borderColor}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Appointment</p>
+                        <div className="flex flex-wrap gap-2">{[...appointmentStages, ...otherStages].map(renderStageButton)}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
