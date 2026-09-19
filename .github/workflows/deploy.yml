@@ -27,7 +27,6 @@ jobs:
               else
                 echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> backend/.env
               fi
-              pm2 restart drawlead-backend --update-env || true
             fi
             if [ -n "${{ secrets.VAPID_PUBLIC_KEY }}" ] && [ -n "${{ secrets.VAPID_PRIVATE_KEY }}" ]; then
               for pair in \
@@ -41,6 +40,10 @@ jobs:
                   echo "${pair}" >> backend/.env
                 fi
               done
-              pm2 restart drawlead-backend --update-env || true
             fi
             /root/deploy-drawlead.sh
+            # deploy-drawlead.sh does its own pm2 restart as part of the normal
+            # deploy, which (without --update-env) can reapply pm2's last-cached
+            # environment snapshot and silently undo the .env edits above. Force
+            # one more restart with --update-env last, so it's the final word.
+            pm2 restart drawlead-backend --update-env || true
