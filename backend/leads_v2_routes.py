@@ -866,6 +866,28 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
             reason = stage_data.get("reason") or ("Rescheduled" if lead and lead.get("appointment_at") else "Initial appointment booked")
             history_entry = await _sync_calendar_and_log_appointment(lead, appointment_at, reason, current_user, update_doc)
 
+    # Full lifecycle timeline: log every actual stage move (Prospect ->
+    # Lead -> ... -> Invoice Raise), who did it and when — separate from
+    # rnr_history/apt_followups/apt_rnr_history above, which log clicks that
+    # don't necessarily change stage_id. Skipped when the stage doesn't
+    # actually change (e.g. an RNR re-click while already on RNR).
+    old_stage_id = lead.get("stage_id") if lead else None
+    final_stage_id = update_doc.get("stage_id")
+    stage_change_entry = None
+    if final_stage_id and final_stage_id != old_stage_id:
+        final_stage = (
+            new_stage if (new_stage and new_stage.get("stage_id") == final_stage_id)
+            else await db.lead_stages.find_one({"stage_id": final_stage_id}, {"_id": 0})
+        )
+        stage_change_entry = {
+            "stage_id": final_stage_id,
+            "stage_name": final_stage.get("name") if final_stage else "",
+            "stage_color": final_stage.get("color") if final_stage else None,
+            "changed_at": datetime.now(timezone.utc).isoformat(),
+            "by_user_id": current_user.get("user_id"),
+            "by_user_name": current_user.get("name"),
+        }
+
     mongo_update = {"$set": update_doc}
     push_doc = {}
     if history_entry:
@@ -876,6 +898,8 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
         push_doc["apt_followups"] = apt_followup_entry
     if apt_rnr_entry:
         push_doc["apt_rnr_history"] = apt_rnr_entry
+    if stage_change_entry:
+        push_doc["stage_history"] = stage_change_entry
     if push_doc:
         mongo_update["$push"] = push_doc
 

@@ -64,6 +64,14 @@ const STAGE_COLORS = [
   '#ec4899', '#06b6d4', '#84cc16', '#f97316'
 ];
 
+const TIMELINE_TYPE_META = {
+  stage_change: { icon: Tag, color: 'text-blue-400' },
+  rnr: { icon: PhoneMissed, color: 'text-red-400' },
+  apt_followup: { icon: MessageSquare, color: 'text-blue-400' },
+  apt_rnr: { icon: PhoneMissed, color: 'text-orange-400' },
+  appointment: { icon: Calendar, color: 'text-purple-400' },
+};
+
 const LeadsPageV2 = () => {
   const { isDark } = useTheme();
   const token = localStorage.getItem('session_token');
@@ -2114,28 +2122,80 @@ const LeadsPageV2 = () => {
 
                     <div>
                       <h4 className={`text-sm font-medium ${textPrimary} mb-3 flex items-center gap-1.5`}>
-                        <History className="h-4 w-4" /> Timeline
+                        <PhoneMissed className="h-4 w-4 text-red-400" /> RNR History
+                        <span className="inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[11px] font-bold bg-red-500 text-white">
+                          {(editingLead.rnr_history || []).length}
+                        </span>
+                        <span className={`text-xs font-normal ${textSecondary}`}>
+                          — contacted {(editingLead.rnr_history || []).length} time{(editingLead.rnr_history || []).length === 1 ? '' : 's'}
+                        </span>
                       </h4>
-                      <div className="space-y-3 max-h-[300px] overflow-y-auto" data-testid="lead-timeline">
-                        {[
-                          ...(editingLead.rnr_history || []).map(h => ({ ...h, _type: 'rnr', _label: 'RNR' })),
-                          ...(editingLead.apt_followups || []).map(h => ({ ...h, _type: 'apt_followup', _label: 'Appointment Follow-up' })),
-                          ...(editingLead.apt_rnr_history || []).map(h => ({ ...h, _type: 'apt_rnr', _label: 'Appointment RNR' })),
-                        ]
-                          .sort((a, b) => new Date(b.clicked_at) - new Date(a.clicked_at))
-                          .map((h, idx) => (
-                            <div key={idx} className={`p-3 rounded-lg ${bgSecondary}`} data-testid={`timeline-${h._type}-${idx}`}>
+                      <div className="space-y-3 max-h-[220px] overflow-y-auto" data-testid="lead-rnr-history">
+                        {(editingLead.rnr_history || []).length === 0 ? (
+                          <p className={`text-sm ${textSecondary} text-center py-4`}>No RNR (ring-no-response) attempts logged yet</p>
+                        ) : (
+                          [...(editingLead.rnr_history || [])].reverse().map((h, idx) => (
+                            <div key={idx} className={`p-3 rounded-lg ${bgSecondary}`} data-testid={`rnr-history-row-${idx}`}>
                               <div className="flex items-center gap-2 mb-1">
                                 <PhoneMissed className="h-4 w-4 text-red-400" />
                                 <span className={`text-xs ${textSecondary}`}>
-                                  Clicked {new Date(h.clicked_at).toLocaleString()} by {h.by_user_name || 'Unknown'}
+                                  Attempt #{(editingLead.rnr_history || []).length - idx} — clicked {new Date(h.clicked_at).toLocaleString()} by {h.by_user_name || 'Unknown'}
                                 </span>
                               </div>
                               <p className={`text-sm ${textPrimary}`}>
-                                {h._label} — retry set for {new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                                Retry set for {new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
                               </p>
                             </div>
-                          ))}
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className={`text-sm font-medium ${textPrimary} mb-3 flex items-center gap-1.5`}>
+                        <History className="h-4 w-4" /> Timeline
+                        <span className={`text-xs font-normal ${textSecondary}`}>— every action on this lead, lead creation to invoice raise</span>
+                      </h4>
+                      <div className="space-y-3 max-h-[400px] overflow-y-auto" data-testid="lead-timeline">
+                        {[
+                          ...(editingLead.stage_history || []).map(h => ({
+                            ...h, _type: 'stage_change', _at: h.changed_at, _by: h.by_user_name,
+                            _text: `Moved to ${h.stage_name || 'a stage'}`,
+                          })),
+                          ...(editingLead.rnr_history || []).map(h => ({
+                            ...h, _type: 'rnr', _at: h.clicked_at, _by: h.by_user_name,
+                            _text: `RNR logged — retry set for ${new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
+                          })),
+                          ...(editingLead.apt_followups || []).map(h => ({
+                            ...h, _type: 'apt_followup', _at: h.clicked_at, _by: h.by_user_name,
+                            _text: `Appointment follow-up logged — next on ${new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
+                          })),
+                          ...(editingLead.apt_rnr_history || []).map(h => ({
+                            ...h, _type: 'apt_rnr', _at: h.clicked_at, _by: h.by_user_name,
+                            _text: `Appointment RNR logged — retry set for ${new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
+                          })),
+                          ...(editingLead.appointment_history || []).map(h => ({
+                            ...h, _type: 'appointment', _at: h.changed_at || h.appointment_at, _by: h.changed_by_name,
+                            _text: h.reason || 'Appointment updated',
+                          })),
+                        ]
+                          .filter(h => h._at)
+                          .sort((a, b) => new Date(b._at) - new Date(a._at))
+                          .map((h, idx) => {
+                            const meta = TIMELINE_TYPE_META[h._type] || TIMELINE_TYPE_META.stage_change;
+                            const Icon = meta.icon;
+                            return (
+                              <div key={idx} className={`p-3 rounded-lg ${bgSecondary}`} data-testid={`timeline-${h._type}-${idx}`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Icon className={`h-4 w-4 ${meta.color}`} />
+                                  <span className={`text-xs ${textSecondary}`}>
+                                    {new Date(h._at).toLocaleString()} by {h._by || 'Unknown'}
+                                  </span>
+                                </div>
+                                <p className={`text-sm ${textPrimary}`}>{h._text}</p>
+                              </div>
+                            );
+                          })}
                         {editingLead.created_at && (
                           <div className={`p-3 rounded-lg ${bgSecondary}`} data-testid="timeline-created">
                             <div className="flex items-center gap-2 mb-1">
@@ -2145,8 +2205,9 @@ const LeadsPageV2 = () => {
                             <p className={`text-sm ${textPrimary}`}>Lead created</p>
                           </div>
                         )}
-                        {(editingLead.rnr_history || []).length === 0 && (editingLead.apt_followups || []).length === 0 &&
-                          (editingLead.apt_rnr_history || []).length === 0 && !editingLead.created_at && (
+                        {(editingLead.stage_history || []).length === 0 && (editingLead.rnr_history || []).length === 0 &&
+                          (editingLead.apt_followups || []).length === 0 && (editingLead.apt_rnr_history || []).length === 0 &&
+                          (editingLead.appointment_history || []).length === 0 && !editingLead.created_at && (
                           <p className={`text-sm ${textSecondary} text-center py-4`}>No timeline events yet</p>
                         )}
                       </div>
