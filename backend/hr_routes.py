@@ -1718,6 +1718,82 @@ async def get_project_hours(request: Request, period: str = "today"):
         "grand_total_cost": round(sum(d["total_cost"] for d in departments), 2),
     }
 
+
+@hr_router.get("/admin/attendance/analytics")
+async def get_attendance_analytics(request: Request, start_date: str, end_date: str):
+    """HR-Admin: Present/Remote/On-Leave/Absent headcount for every day in a
+    date range — powers the Attendance tab's Analytics view (bar chart plus
+    week/month rollups). Absent is only counted for past/current weekdays;
+    future dates and Sundays show 0 rather than a false "everyone absent"."""
+    from server import get_current_user
+    requester = await get_current_user(request)
+    if not await is_hr_admin(requester):
+        raise HTTPException(status_code=403, detail="HR Admin access required")
+
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date/end_date must be YYYY-MM-DD")
+    if end < start:
+        raise HTTPException(status_code=400, detail="end_date must be on/after start_date")
+    if (end - start).days > 366:
+        raise HTTPException(status_code=400, detail="Range too large (max 366 days)")
+
+    total_employees = await db.users.count_documents({})
+
+    records = await db.attendance.find(
+        {"date": {"$gte": start, "$lt": end + timedelta(days=1)}},
+        {"_id": 0, "user_id": 1, "date": 1, "clock_in": 1, "work_location": 1, "work_mode": 1, "leave_type": 1},
+    ).to_list(100000)
+
+    by_date = {}
+    for r in records:
+        d = r.get("date")
+        if isinstance(d, str):
+            d = datetime.fromisoformat(d.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        by_date.setdefault(d.strftime("%Y-%m-%d"), []).append(r)
+
+    today = datetime.now(timezone.utc).date()
+    days = []
+    cur = start
+    while cur <= end:
+        key = cur.strftime("%Y-%m-%d")
+        present = remote = leave = 0
+        for r in by_date.get(key, []):
+            if r.get("leave_type"):
+                leave += 1
+            elif r.get("clock_in"):
+                if r.get("work_location") == "home" or r.get("work_mode") == "wfh":
+                    remote += 1
+                else:
+                    present += 1
+        is_sunday = cur.weekday() == 6
+        if cur.date() <= today and not is_sunday:
+            absent = max(0, total_employees - present - remote - leave)
+        else:
+            absent = 0
+        days.append({
+            "date": key, "present": present, "remote": remote,
+            "leave": leave, "absent": absent, "total": total_employees,
+        })
+        cur += timedelta(days=1)
+
+    workdays = [d for d in days if d["date"] <= today.strftime("%Y-%m-%d") and datetime.strptime(d["date"], "%Y-%m-%d").weekday() != 6]
+    summary = {
+        "total_present": sum(d["present"] for d in days),
+        "total_remote": sum(d["remote"] for d in days),
+        "total_leave": sum(d["leave"] for d in days),
+        "total_absent": sum(d["absent"] for d in days),
+        "avg_attendance_pct": round(
+            (sum(d["present"] + d["remote"] for d in workdays) / (len(workdays) * total_employees)) * 100, 1
+        ) if workdays and total_employees else 0,
+    }
+
+    return {"days": days, "summary": summary, "total_employees": total_employees}
+
 # ============== PERMISSION REQUEST ROUTES ==============
 
 @hr_router.post("/permission/request")
@@ -4094,8 +4170,68 @@ async def admin_update_employee_profile(user_id: str, profile_data: Dict[str, An
     else:
         profile_data["created_at"] = datetime.now(timezone.utc)
         await db.employee_profiles.insert_one(profile_data)
-    
+
     return await db.employee_profiles.find_one({"user_id": user_id}, {"_id": 0})
+
+
+class RelieveEmployeeRequest(BaseModel):
+    relieving_date: str  # YYYY-MM-DD
+    relieving_reason: str
+    password: str
+
+
+@hr_router.post("/admin/employee/{user_id}/relieve")
+async def relieve_employee(user_id: str, payload: RelieveEmployeeRequest, request: Request):
+    """Formally relieve an employee — a stronger, audited version of the
+    soft-delete below. Only a super admin can do this, and they must
+    re-enter their own password to confirm (this is a one-way, high-impact
+    action: the employee stops counting toward attendance, headcount, and
+    future payroll once relieved).
+    """
+    from server import get_current_user, verify_password
+    current_user = await get_current_user(request)
+
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only a super admin can relieve an employee")
+
+    if user_id == current_user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot relieve your own account")
+
+    acting_user = await db.users.find_one({"user_id": current_user.user_id})
+    if not acting_user or not verify_password(payload.password, acting_user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    if user.get("role") == "super_admin":
+        raise HTTPException(status_code=400, detail="Cannot relieve a super admin account")
+
+    if not payload.relieving_reason.strip():
+        raise HTTPException(status_code=400, detail="Relieving reason is required")
+    try:
+        datetime.strptime(payload.relieving_date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="relieving_date must be YYYY-MM-DD")
+
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"status": "inactive"}},
+    )
+    await db.employee_profiles.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "status": "inactive",
+            "relieving_date": payload.relieving_date,
+            "relieving_reason": payload.relieving_reason.strip(),
+            "relieved_by": current_user.user_id,
+            "relieved_by_name": current_user.name,
+            "relieved_at": datetime.now(timezone.utc),
+        }},
+        upsert=True,
+    )
+
+    return {"message": f"{user.get('name')} has been relieved", "user_id": user_id}
 
 
 @hr_router.delete("/admin/employee/{user_id}")

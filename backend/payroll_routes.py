@@ -1124,9 +1124,12 @@ async def get_all_employees_salary(request: Request):
     if not _has_hr_access(current_user):
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # 1) All users — single round trip
+    # 1) All users — single round trip. Excludes relieved/deactivated
+    # employees: once someone is relieved, payroll should stop being
+    # generated for them going forward (their last month's payslip, already
+    # generated before relieving, stays untouched in db.payslips).
     users = await db.users.find(
-        {},
+        {"status": {"$ne": "inactive"}},
         {"_id": 0, "user_id": 1, "name": 1, "email": 1, "designation": 1, "join_date": 1},
     ).to_list(1000)
 

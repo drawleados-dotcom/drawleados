@@ -2293,6 +2293,11 @@ export default function HRAdminPage() {
             employee={selectedEmployee}
             onClose={() => setShowEditModal(false)}
             onSave={handleSaveProfile}
+            onRelieved={() => {
+              setShowEditModal(false);
+              setSelectedEmployee(null);
+              loadEmployees();
+            }}
             onPermanentDelete={async (emp) => {
               if (!window.confirm(`Permanently delete ${emp.name}? This removes the user, profile, attendance, leaves, payslips, salary history. Cannot be undone.`)) return;
               try {
@@ -3195,8 +3200,19 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
   const inactiveEmployees = employees.filter(e => e.status === 'inactive');
   const officeEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location !== 'home');
   const remoteEmployees = activeEmployees.filter(e => e.today_attendance && e.today_attendance.work_location === 'home');
-  
+
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  // Active/Inactive, then within each, All/Full Time/Interns
+  const [employeeStatusTab, setEmployeeStatusTab] = useState('active');
+  const [employeeTypeTab, setEmployeeTypeTab] = useState('all');
+
+  const statusScopedEmployees = employeeStatusTab === 'active' ? activeEmployees : inactiveEmployees;
+  const isEmploymentType = (e, type) => (e.profile?.employment_type || 'full-time') === type;
+  const fullTimeCount = statusScopedEmployees.filter(e => isEmploymentType(e, 'full-time')).length;
+  const internCount = statusScopedEmployees.filter(e => isEmploymentType(e, 'intern')).length;
+  const typeScopedEmployees = employeeTypeTab === 'all'
+    ? statusScopedEmployees
+    : statusScopedEmployees.filter(e => isEmploymentType(e, employeeTypeTab));
   
   // Show loading skeleton
   if (loading) {
@@ -3299,6 +3315,44 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
         </Card>
       </div>
 
+      {/* Active / Inactive */}
+      <div className="flex gap-2">
+        {[
+          { id: 'active', label: 'Active', count: activeEmployees.length },
+          { id: 'inactive', label: 'Inactive', count: inactiveEmployees.length },
+        ].map((t) => (
+          <Button
+            key={t.id}
+            size="sm"
+            onClick={() => { setEmployeeStatusTab(t.id); setEmployeeTypeTab('all'); }}
+            className={employeeStatusTab === t.id ? 'bg-[#6366f1] text-white' : `${bgSecondary} ${textSecondary}`}
+            data-testid={`employees-status-tab-${t.id}`}
+          >
+            {t.label} ({t.count})
+          </Button>
+        ))}
+      </div>
+
+      {/* All / Full Time / Interns — scoped to the Active/Inactive tab above */}
+      <div className="flex gap-2">
+        {[
+          { id: 'all', label: 'All', count: statusScopedEmployees.length },
+          { id: 'full-time', label: 'Full Time', count: fullTimeCount },
+          { id: 'intern', label: 'Interns', count: internCount },
+        ].map((t) => (
+          <Button
+            key={t.id}
+            size="sm"
+            variant="outline"
+            onClick={() => setEmployeeTypeTab(t.id)}
+            className={employeeTypeTab === t.id ? 'border-[#6366f1] text-[#6366f1]' : `${borderColor} ${textSecondary}`}
+            data-testid={`employees-type-tab-${t.id}`}
+          >
+            {t.label} ({t.count})
+          </Button>
+        ))}
+      </div>
+
       {/* Search */}
       <div className="flex gap-4">
         <div className="relative flex-1">
@@ -3334,7 +3388,7 @@ function EmployeesTab({ employees, loading, searchQuery, setSearchQuery, onEdit,
                 </tr>
               </thead>
               <tbody>
-                {employees.filter(e => 
+                {typeScopedEmployees.filter(e =>
                   e.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   e.email?.toLowerCase().includes(searchQuery.toLowerCase())
                 ).map((emp) => (
@@ -3789,7 +3843,7 @@ function AttendanceTab({ overview, formatTime, bgCard, bgSecondary, textPrimary,
 }
 
 // ============== EDIT EMPLOYEE MODAL ==============
-function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark, designations = [], departments = [] }) {
+function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, onRelieved, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark, designations = [], departments = [] }) {
   const [activeTab, setActiveTab] = useState('basic');
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(employee.profile?.profile_picture || employee.picture || '');
   const [uploading, setUploading] = useState(false);
@@ -3798,6 +3852,16 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
   const [newPassword, setNewPassword] = useState('');
   const [is2FAEnabled, setIs2FAEnabled] = useState(!!employee.two_factor_enabled);
   const [disabling2FA, setDisabling2FA] = useState(false);
+  // Relieving — a formal, audited way to deactivate someone (date + reason
+  // captured, only usable by a super admin who re-enters their password).
+  const [relieveForm, setRelieveForm] = useState({
+    relieving_date: new Date().toISOString().split('T')[0],
+    relieving_reason: '',
+  });
+  const [showRelieveConfirm, setShowRelieveConfirm] = useState(false);
+  const [relievePassword, setRelievePassword] = useState('');
+  const [relieving, setRelieving] = useState(false);
+  const alreadyRelieved = !!employee.profile?.relieving_date;
 
   // Compute hoverBg from isDark
   const hoverBg = isDark ? 'hover:bg-[#3f3f46]' : 'hover:bg-gray-200';
@@ -3827,6 +3891,8 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
     designation_id: '', // Will be set when user selects a designation from dropdown
     department: employee.profile?.department || '',
     employment_type: employee.profile?.employment_type || 'full-time',
+    internship_start_date: employee.profile?.internship_start_date ? employee.profile.internship_start_date.split('T')[0] : '',
+    internship_end_date: employee.profile?.internship_end_date ? employee.profile.internship_end_date.split('T')[0] : '',
     joining_date: employee.profile?.joining_date ? employee.profile.joining_date.split('T')[0] : '',
     reporting_manager: employee.profile?.reporting_manager || '',
     work_location: employee.profile?.work_location || 'office',
@@ -3949,7 +4015,45 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
     { id: 'employment', label: 'Employment', icon: Briefcase },
     { id: 'address', label: 'Address & Emergency', icon: Home },
     { id: 'security', label: 'Security', icon: Shield },
+    { id: 'relieving', label: 'Relieving', icon: UserX },
   ];
+
+  const handleRelieve = async () => {
+    if (!relieveForm.relieving_date) {
+      toast.error('Set a relieving date');
+      return;
+    }
+    if (!relieveForm.relieving_reason.trim()) {
+      toast.error('Enter a relieving reason');
+      return;
+    }
+    setShowRelieveConfirm(true);
+  };
+
+  const confirmRelieve = async () => {
+    if (!relievePassword) {
+      toast.error('Enter your password to confirm');
+      return;
+    }
+    setRelieving(true);
+    try {
+      const API = process.env.REACT_APP_BACKEND_URL;
+      const token = localStorage.getItem('session_token');
+      await axios.post(
+        `${API}/api/hr/admin/employee/${employee.user_id}/relieve`,
+        { ...relieveForm, password: relievePassword },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      toast.success(`${employee.name} has been relieved`);
+      setShowRelieveConfirm(false);
+      setRelievePassword('');
+      onRelieved ? onRelieved() : onClose();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to relieve employee');
+    } finally {
+      setRelieving(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -4251,6 +4355,31 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
                       </SelectContent>
                     </Select>
                   </div>
+                  {formData.employment_type === 'intern' && (
+                    <>
+                      <div>
+                        <Label className={textPrimary}>Internship Start Date</Label>
+                        <Input
+                          type="date"
+                          value={formData.internship_start_date}
+                          onChange={(e) => handleChange('internship_start_date', e.target.value)}
+                          className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        />
+                      </div>
+                      <div>
+                        <Label className={textPrimary}>Internship End Date</Label>
+                        <Input
+                          type="date"
+                          value={formData.internship_end_date}
+                          onChange={(e) => handleChange('internship_end_date', e.target.value)}
+                          className={`${bgSecondary} border ${borderColor} ${textPrimary}`}
+                        />
+                        <p className={`text-xs ${textSecondary} mt-1`}>
+                          Once this period ends, relieve them from the Relieving tab (or relieve any time before then).
+                        </p>
+                      </div>
+                    </>
+                  )}
                   <div>
                     <Label className={textPrimary}>Joining Date</Label>
                     <Input
@@ -4539,8 +4668,119 @@ function EditEmployeeModal({ employee, onClose, onSave, onPermanentDelete, bgCar
                 </div>
               </div>
             )}
+
+            {/* Relieving Tab */}
+            {activeTab === 'relieving' && (
+              <div className="space-y-6">
+                {alreadyRelieved ? (
+                  <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`} data-testid="already-relieved-panel">
+                    <h3 className={`font-medium ${textPrimary} mb-3 flex items-center gap-2`}>
+                      <UserX className="h-5 w-5 text-[#ef4444]" />
+                      This employee has been relieved
+                    </h3>
+                    <div className="space-y-1 text-sm">
+                      <p className={textSecondary}>Relieving date: <span className={textPrimary}>{employee.profile.relieving_date?.split('T')[0]}</span></p>
+                      <p className={textSecondary}>Reason: <span className={textPrimary}>{employee.profile.relieving_reason || '-'}</span></p>
+                      <p className={textSecondary}>Relieved by: <span className={textPrimary}>{employee.profile.relieved_by_name || '-'}</span></p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`p-4 rounded-lg border ${borderColor} ${bgSecondary}`}>
+                    <h3 className={`font-medium ${textPrimary} mb-1 flex items-center gap-2`}>
+                      <UserX className="h-5 w-5 text-[#ef4444]" />
+                      Relieve Employee
+                    </h3>
+                    <p className={`text-xs ${textSecondary} mb-4`}>
+                      Marks {employee.name} as inactive from the relieving date onward. They stop appearing in
+                      attendance, employee counts, and future payroll — the month they leave in is still paid
+                      pro-rata for the days actually worked. This cannot be undone from here and requires a
+                      super admin's password to confirm.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label className={textSecondary}>Relieving Date</Label>
+                        <Input
+                          type="date"
+                          value={relieveForm.relieving_date}
+                          onChange={(e) => setRelieveForm((p) => ({ ...p, relieving_date: e.target.value }))}
+                          className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                          data-testid="relieving-date-input"
+                        />
+                      </div>
+                      <div>
+                        <Label className={textSecondary}>Relieving Reason</Label>
+                        <Input
+                          value={relieveForm.relieving_reason}
+                          onChange={(e) => setRelieveForm((p) => ({ ...p, relieving_reason: e.target.value }))}
+                          className={`${bgInput} border ${borderColor} ${textPrimary} mt-1`}
+                          placeholder="e.g. Resigned, End of internship, Terminated"
+                          data-testid="relieving-reason-input"
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleRelieve}
+                      className="bg-[#ef4444] hover:bg-[#dc2626] text-white mt-4"
+                      data-testid="relieve-employee-btn"
+                    >
+                      <UserX className="h-4 w-4 mr-2" />
+                      Relieve Employee
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </form>
         </div>
+
+        {/* Super admin password confirmation — required to actually relieve */}
+        {showRelieveConfirm && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+            <Card className={`${bgCard} border ${borderColor} w-full max-w-sm`}>
+              <CardHeader>
+                <CardTitle className={`${textPrimary} flex items-center gap-2 text-base`}>
+                  <Shield className="h-5 w-5 text-[#ef4444]" />
+                  Confirm with your password
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className={`text-sm ${textSecondary}`}>
+                  Relieving {employee.name} on {relieveForm.relieving_date} is permanent from here. Only a super
+                  admin can confirm this — enter your password.
+                </p>
+                <Input
+                  type="password"
+                  value={relievePassword}
+                  onChange={(e) => setRelievePassword(e.target.value)}
+                  placeholder="Your password"
+                  className={`${bgInput} border ${borderColor} ${textPrimary}`}
+                  data-testid="relieve-password-input"
+                  onKeyDown={(e) => e.key === 'Enter' && confirmRelieve()}
+                />
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setShowRelieveConfirm(false); setRelievePassword(''); }}
+                    className={`flex-1 ${borderColor}`}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={confirmRelieve}
+                    disabled={relieving}
+                    className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white"
+                    data-testid="confirm-relieve-btn"
+                  >
+                    {relieving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirm Relieve'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Actions */}
         <div className={`flex gap-3 p-6 border-t ${borderColor} items-center`}>
@@ -5897,7 +6137,9 @@ function EnhancedAttendanceTab({
     // didn't show up, so it should count as Absent.
     const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const isPastDate = today < todayIST;
-    const employeesWithStatus = employees.map(emp => {
+    // Relieved/deactivated employees shouldn't appear in attendance counts
+    // or the roster at all going forward.
+    const employeesWithStatus = employees.filter(emp => emp.status !== 'inactive').map(emp => {
       // Find attendance record for this employee on selected date
       const record = activeRecords.find(r => {
         const recordDate = r.date?.split('T')[0];
@@ -6026,7 +6268,7 @@ function EnhancedAttendanceTab({
         <CardContent className="p-4">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex gap-2">
-              {['day', 'range', 'month', 'year'].map(filter => (
+              {['day', 'range', 'month', 'year', 'analytics'].map(filter => (
                 <Button
                   key={filter}
                   variant={dateFilter === filter ? 'default' : 'outline'}
@@ -6120,7 +6362,7 @@ function EnhancedAttendanceTab({
       {/* Summary Cards — each one filters the table below; click again to return to that view */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
-          { key: 'total', label: 'Total', value: employees.length, color: '#6366f1' },
+          { key: 'total', label: 'Total', value: employeesWithStatus.length, color: '#6366f1' },
           { key: 'present', label: 'Present today', value: presentCount, color: '#22c55e' },
           { key: 'office', label: 'Office', value: officeCount, color: '#3b82f6' },
           { key: 'remote', label: 'Remote', value: remoteCount, color: '#8b5cf6' },
