@@ -52,6 +52,8 @@ import {
   FileText,
   IndianRupee,
   Tag,
+  History,
+  PhoneMissed,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -2079,6 +2081,39 @@ const LeadsPageV2 = () => {
                         )}
                       </div>
                     </div>
+
+                    <div>
+                      <h4 className={`text-sm font-medium ${textPrimary} mb-3 flex items-center gap-1.5`}>
+                        <History className="h-4 w-4" /> Timeline
+                      </h4>
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto" data-testid="lead-timeline">
+                        {[...(editingLead.rnr_history || [])].reverse().map((h, idx) => (
+                          <div key={idx} className={`p-3 rounded-lg ${bgSecondary}`} data-testid={`timeline-rnr-${idx}`}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <PhoneMissed className="h-4 w-4 text-red-400" />
+                              <span className={`text-xs ${textSecondary}`}>
+                                Clicked {new Date(h.clicked_at).toLocaleString()} by {h.by_user_name || 'Unknown'}
+                              </span>
+                            </div>
+                            <p className={`text-sm ${textPrimary}`}>
+                              RNR — retry set for {new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                            </p>
+                          </div>
+                        ))}
+                        {editingLead.created_at && (
+                          <div className={`p-3 rounded-lg ${bgSecondary}`} data-testid="timeline-created">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Calendar className="h-4 w-4 text-green-400" />
+                              <span className={`text-xs ${textSecondary}`}>{new Date(editingLead.created_at).toLocaleString()}</span>
+                            </div>
+                            <p className={`text-sm ${textPrimary}`}>Lead created</p>
+                          </div>
+                        )}
+                        {(!editingLead.rnr_history || editingLead.rnr_history.length === 0) && !editingLead.created_at && (
+                          <p className={`text-sm ${textSecondary} text-center py-4`}>No timeline events yet</p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className={`text-center py-8 ${textSecondary}`}>
@@ -2104,6 +2139,7 @@ const LeadsPageV2 = () => {
                     const stageNameLower = (stage.name || '').toLowerCase().trim();
                     const needsAppointment = stageNameLower === 'appoinment' || stageNameLower === 'appointment' || stageNameLower === 'appointment reshuedule' || stageNameLower === 'appointment reschedule' || stageNameLower === 'appointment rescheule';
                     const needsFollowup = stageNameLower === 'followup' || stageNameLower === 'follow-up' || stageNameLower === 'prospect followup' || stageNameLower === 'follow up';
+                    const needsRnr = stageNameLower === 'rnr' || stageNameLower === 'followup rnr' || stageNameLower === 'follwup rnr';
                     return (
                       <button
                         key={stage.stage_id}
@@ -2111,11 +2147,13 @@ const LeadsPageV2 = () => {
                         data-testid={`stage-tab-${stage.stage_id}`}
                         onClick={async () => {
                           if (isCurrent) return;
-                          // Open mini date/time popup for Appointment & Followup stages.
-                          if (needsAppointment || needsFollowup) {
+                          // Open mini date/time popup for Appointment, Followup & RNR stages.
+                          if (needsAppointment || needsFollowup || needsRnr) {
                             const existingISO = needsAppointment
                               ? (editingLead?.appointment_at || '')
-                              : (editingLead?.followup_at || '');
+                              : needsFollowup
+                              ? (editingLead?.followup_at || '')
+                              : (editingLead?.rnr_at || '');
                             const ex = existingISO ? new Date(existingISO) : null;
                             const today = new Date();
                             const initialDate = (ex && !isNaN(ex)) ? ex.toISOString().slice(0, 10) : today.toISOString().slice(0, 10);
@@ -2124,7 +2162,7 @@ const LeadsPageV2 = () => {
                               : '10:00';
                             setStageDateValue(initialDate);
                             setStageTimeValue(initialTime);
-                            setStageDateModal({ stage, kind: needsAppointment ? 'appointment' : 'followup' });
+                            setStageDateModal({ stage, kind: needsAppointment ? 'appointment' : needsFollowup ? 'followup' : 'rnr' });
                             return;
                           }
                           try {
@@ -2173,6 +2211,18 @@ const LeadsPageV2 = () => {
                             data-testid="followup-count-badge"
                           >
                             {editingLead.followups.length}
+                          </span>
+                        )}
+                        {needsRnr && (editingLead?.rnr_history?.length > 0) && (
+                          <span
+                            className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                            style={{
+                              backgroundColor: isCurrent ? '#ffffff' : stage.color,
+                              color: isCurrent ? stage.color : '#ffffff',
+                            }}
+                            data-testid="rnr-count-badge"
+                          >
+                            {editingLead.rnr_history.length}
                           </span>
                         )}
                       </button>
@@ -2738,7 +2788,7 @@ const LeadsPageV2 = () => {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Calendar className="h-4 w-4" style={{ color: stageDateModal.stage.color }} />
-                    {stageDateModal.kind === 'appointment' ? 'Set Appointment Date & Time' : 'Set Follow-up Date & Time'}
+                    {stageDateModal.kind === 'appointment' ? 'Set Appointment Date & Time' : stageDateModal.kind === 'followup' ? 'Set Follow-up Date & Time' : 'Set RNR Retry Date & Time'}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
@@ -2774,14 +2824,14 @@ const LeadsPageV2 = () => {
                     onClick={async () => {
                       setStageDateSaving(true);
                       const stage = stageDateModal.stage;
-                      const isAppt = stageDateModal.kind === 'appointment';
+                      const kind = stageDateModal.kind;
                       const iso = new Date(`${stageDateValue}T${stageTimeValue}:00`).toISOString();
                       try {
                         const res = await axios.put(
                           `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
                           {
                             stage_id: stage.stage_id,
-                            ...(isAppt ? { appointment_at: iso } : { followup_at: iso }),
+                            ...(kind === 'appointment' ? { appointment_at: iso } : kind === 'followup' ? { followup_at: iso } : { rnr_at: iso }),
                           },
                           { headers },
                         );

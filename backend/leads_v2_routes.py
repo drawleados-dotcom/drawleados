@@ -747,6 +747,20 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
     if stage_data.get("followup_at"):
         update_doc["followup_at"] = stage_data["followup_at"]
 
+    # RNR (Ring No Response): each click logs an entry — when it was clicked
+    # and the retry date/time the caller entered in the popup — so the RNR
+    # button's count badge and the lead's timeline both reflect every attempt,
+    # not just the latest one.
+    rnr_history_entry = None
+    if stage_data.get("rnr_at"):
+        update_doc["rnr_at"] = stage_data["rnr_at"]
+        rnr_history_entry = {
+            "entered_at": stage_data["rnr_at"],
+            "clicked_at": datetime.now(timezone.utc).isoformat(),
+            "by_user_id": current_user.get("user_id"),
+            "by_user_name": current_user.get("name"),
+        }
+
     new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
     new_stage_name = (new_stage.get("name") or "").strip().lower() if new_stage else ""
     is_appointment_stage = "appoin" in new_stage_name
@@ -782,8 +796,13 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
             history_entry = await _sync_calendar_and_log_appointment(lead, appointment_at, reason, current_user, update_doc)
 
     mongo_update = {"$set": update_doc}
+    push_doc = {}
     if history_entry:
-        mongo_update["$push"] = {"appointment_history": history_entry}
+        push_doc["appointment_history"] = history_entry
+    if rnr_history_entry:
+        push_doc["rnr_history"] = rnr_history_entry
+    if push_doc:
+        mongo_update["$push"] = push_doc
 
     await db.leads_v2.update_one(
         {"lead_id": lead_id},
