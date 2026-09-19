@@ -4780,62 +4780,88 @@ async def get_employee_review_summary(employee_id: str, review_type: str, period
     
     if review_type == "monthly":
         month = int(period.split("-")[1])
-        start_date = datetime(year, month, 1)
+        start_date = datetime(year, month, 1, tzinfo=timezone.utc)
         if month == 12:
-            end_date = datetime(year + 1, 1, 1)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
         else:
-            end_date = datetime(year, month + 1, 1)
+            end_date = datetime(year, month + 1, 1, tzinfo=timezone.utc)
     elif review_type == "quarterly":
         quarter = period.split("-")[1]  # Q1, Q2, Q3, Q4
         quarter_num = int(quarter[1])
         start_month = (quarter_num - 1) * 3 + 1
-        start_date = datetime(year, start_month, 1)
+        start_date = datetime(year, start_month, 1, tzinfo=timezone.utc)
         end_month = start_month + 3
         if end_month > 12:
-            end_date = datetime(year + 1, 1, 1)
+            end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
         else:
-            end_date = datetime(year, end_month, 1)
+            end_date = datetime(year, end_month, 1, tzinfo=timezone.utc)
     else:  # yearly
-        start_date = datetime(year, 1, 1)
-        end_date = datetime(year + 1, 1, 1)
-    
-    # Get attendance stats
+        start_date = datetime(year, 1, 1, tzinfo=timezone.utc)
+        end_date = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+
+    # Get attendance stats. `date` is stored as a real datetime (not a
+    # string) on every attendance record, so the range must be too —
+    # comparing a datetime field against string bounds silently matches
+    # nothing, which is why this always showed 0.
     attendance_records = await db.attendance.find({
         "user_id": employee_id,
-        "date": {"$gte": start_date.strftime("%Y-%m-%d"), "$lt": end_date.strftime("%Y-%m-%d")}
-    }).to_list(400)
-    
+        "date": {"$gte": start_date, "$lt": end_date}
+    }, {"_id": 0}).to_list(400)
+
     present_days = len([a for a in attendance_records if a.get("status") == "present"])
     absent_days = len([a for a in attendance_records if a.get("status") == "absent"])
-    leave_days = len([a for a in attendance_records if a.get("status") in ["casual_leave", "sick_leave", "earned_leave"]])
-    
-    # Calculate working hours
-    total_hours = 0
-    extra_hours = 0
-    less_hours = 0
-    standard_hours = 8.0
-    
+    # Leave is tracked via leave_type on the record (same as attendance
+    # analytics elsewhere), not via a "casual_leave"/etc. status value —
+    # status only ever holds present/absent/half-day/on-leave.
+    leave_days = len([a for a in attendance_records if a.get("leave_type") or a.get("status") == "on-leave"])
+
+    # Working hours: clock_out() already computes each day's total_hours
+    # correctly (lunch/multi-session aware) and stores it on the record —
+    # re-deriving it from raw clock_in/clock_out (which also don't exist
+    # under those field names; they're clock_in/clock_out) would both be
+    # wrong and redundant.
+    hr_settings = await get_hr_settings()
+    standard_hours = hr_settings.get("standard_work_hours") or 8.0
+    total_hours = 0.0
+    extra_hours = 0.0
+    less_hours = 0.0
     for record in attendance_records:
-        if record.get("check_in") and record.get("check_out"):
+        if not record.get("clock_in"):
+            continue  # absent/leave days have no worked hours to compare against standard_hours
+        hours_worked = record.get("total_hours") or 0
+        total_hours += hours_worked
+        if hours_worked > standard_hours:
+            extra_hours += (hours_worked - standard_hours)
+        elif hours_worked < standard_hours:
+            less_hours += (standard_hours - hours_worked)
+
+    def _parse_task_dt(v):
+        if not v:
+            return None
+        if isinstance(v, str):
             try:
-                check_in = datetime.fromisoformat(record["check_in"].replace("Z", "+00:00"))
-                check_out = datetime.fromisoformat(record["check_out"].replace("Z", "+00:00"))
-                hours_worked = (check_out - check_in).total_seconds() / 3600
-                total_hours += hours_worked
-                if hours_worked > standard_hours:
-                    extra_hours += (hours_worked - standard_hours)
-                elif hours_worked < standard_hours:
-                    less_hours += (standard_hours - hours_worked)
-            except:
-                pass
-    
-    # Get tasks for delivery timeline
-    tasks = await db.project_tasks.find({
+                v = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v
+
+    # Our Tasks — the team-wide task system every employee actually uses
+    # day to day (the previous version of this endpoint never looked here
+    # at all, which is the main reason "no of tasks" showed 0).
+    our_tasks_raw = await db.our_tasks.find(
+        {"assigned_to": employee_id}, {"_id": 0},
+    ).to_list(2000)
+    our_tasks = [t for t in our_tasks_raw if (lambda c: c and start_date <= c < end_date)(_parse_task_dt(t.get("created_at")))]
+
+    # Legacy/department-specific task sources some employees' work also
+    # lives in; left as-is (already correctly typed datetime queries).
+    project_tasks = await db.project_tasks.find({
         "assigned_to": employee_id,
         "created_at": {"$gte": start_date, "$lt": end_date}
     }, {"_id": 0}).to_list(500)
-    
-    # Also check website page tasks
+
     website_tasks = await db.website_page_tasks.find({
         "$or": [
             {"wireframe_assignee": employee_id},
@@ -4846,37 +4872,32 @@ async def get_employee_review_summary(employee_id: str, review_type: str, period
         ],
         "created_at": {"$gte": start_date, "$lt": end_date}
     }, {"_id": 0}).to_list(500)
-    
-    # Calculate on-time vs overdue
+
+    # Calculate on-time vs overdue across all task sources.
     on_time_count = 0
     overdue_count = 0
     now = datetime.now(timezone.utc)
-    
-    for task in tasks:
-        due_date = task.get("due_date")
+
+    for task in our_tasks + project_tasks:
+        due = _parse_task_dt(task.get("due_date"))
         status = task.get("status", "pending")
-        if due_date:
-            try:
-                due = datetime.fromisoformat(due_date.replace("Z", "+00:00")) if isinstance(due_date, str) else due_date
-                if status == "completed":
-                    completed_at = task.get("completed_at") or task.get("updated_at")
-                    if completed_at:
-                        completed = datetime.fromisoformat(str(completed_at).replace("Z", "+00:00")) if isinstance(completed_at, str) else completed_at
-                        if completed <= due:
-                            on_time_count += 1
-                        else:
-                            overdue_count += 1
-                    else:
+        if due:
+            if status == "completed":
+                completed = _parse_task_dt(task.get("completed_at") or task.get("updated_at"))
+                if completed:
+                    if completed <= due:
                         on_time_count += 1
-                elif due < now:
-                    overdue_count += 1
+                    else:
+                        overdue_count += 1
                 else:
                     on_time_count += 1
-            except:
+            elif due < now:
+                overdue_count += 1
+            else:
                 on_time_count += 1
         else:
             on_time_count += 1
-    
+
     return {
         "employee_id": employee_id,
         "review_type": review_type,
@@ -4894,7 +4915,7 @@ async def get_employee_review_summary(employee_id: str, review_type: str, period
             "average_daily": round(total_hours / max(present_days, 1), 2)
         },
         "delivery_timeline": {
-            "total_tasks": len(tasks) + len(website_tasks),
+            "total_tasks": len(our_tasks) + len(project_tasks) + len(website_tasks),
             "on_time": on_time_count,
             "overdue": overdue_count
         }
