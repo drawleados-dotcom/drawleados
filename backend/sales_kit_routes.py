@@ -7,6 +7,7 @@ share a public link for a prospect to fill in (no login required), and
 review submissions as rows in a per-form responses table.
 """
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
@@ -67,8 +68,7 @@ class FormResponseSubmit(BaseModel):
 class PortfolioCreate(BaseModel):
     service_name: str
     portfolio_type: str = ""
-    file_name: str = ""
-    file_data: str  # base64 data: URI of the uploaded PDF
+    portfolio_link: str  # external URL the portfolio actually lives at
 
 
 class PortfolioLeadSubmit(BaseModel):
@@ -274,31 +274,41 @@ async def delete_response(response_id: str, request: Request):
 
 
 # ============== PORTFOLIO ==============
-# Same shape as Forms: sales staff upload a PDF behind a shareable link,
-# a prospect trades their name + email to view it, and that becomes a
-# response row here — a lead-gated portfolio instead of a questionnaire.
-
-MAX_PORTFOLIO_FILE_BYTES = 8 * 1024 * 1024  # ~8MB raw file (~11MB as base64), safely under Mongo's 16MB document cap
-
+# Two links per portfolio item, both pointing at an externally-hosted
+# portfolio_link (Drive, Behance, your own site — wherever it actually
+# lives) rather than a file this app stores:
+#   - public link  -> logs a click, then redirects straight there. No
+#     form, no gate — for pasting anywhere (email signature, social post).
+#   - private link -> shows a name + email gate first; only after that
+#     submission does it redirect. Each submission is a "response" row,
+#     same shape as Sales Kit's Form responses.
 
 @sales_kit_router.get("/portfolios")
 async def get_portfolios(request: Request):
     await get_current_user_from_request(request)
     portfolios = await db.sales_kit_portfolios.find(
-        {"is_deleted": {"$ne": True}}, {"_id": 0, "file_data": 0}
+        {"is_deleted": {"$ne": True}}, {"_id": 0}
     ).sort("created_at", -1).to_list(10000)
 
     portfolio_ids = [p["portfolio_id"] for p in portfolios]
-    counts: Dict[str, int] = {}
+    response_counts: Dict[str, int] = {}
+    click_counts: Dict[str, int] = {}
     if portfolio_ids:
         cursor = db.sales_kit_portfolio_responses.aggregate([
             {"$match": {"portfolio_id": {"$in": portfolio_ids}}},
             {"$group": {"_id": "$portfolio_id", "count": {"$sum": 1}}},
         ])
         async for row in cursor:
-            counts[row["_id"]] = row["count"]
+            response_counts[row["_id"]] = row["count"]
+        cursor = db.sales_kit_portfolio_clicks.aggregate([
+            {"$match": {"portfolio_id": {"$in": portfolio_ids}}},
+            {"$group": {"_id": "$portfolio_id", "count": {"$sum": 1}}},
+        ])
+        async for row in cursor:
+            click_counts[row["_id"]] = row["count"]
     for p in portfolios:
-        p["response_count"] = counts.get(p["portfolio_id"], 0)
+        p["response_count"] = response_counts.get(p["portfolio_id"], 0)
+        p["click_count"] = click_counts.get(p["portfolio_id"], 0)
     return portfolios
 
 
@@ -307,27 +317,26 @@ async def create_portfolio(payload: PortfolioCreate, request: Request):
     user = await get_current_user_from_request(request)
     if not payload.service_name.strip():
         raise HTTPException(status_code=400, detail="Service name is required")
-    if not payload.file_data:
-        raise HTTPException(status_code=400, detail="A portfolio file is required")
-    # Rough size check on the base64 payload (~4/3 the raw byte size).
-    if len(payload.file_data) > MAX_PORTFOLIO_FILE_BYTES * 4 // 3:
-        raise HTTPException(status_code=400, detail="File is too large (max 8MB)")
+    if not payload.portfolio_link.strip():
+        raise HTTPException(status_code=400, detail="Portfolio link is required")
+    link = payload.portfolio_link.strip()
+    if not (link.startswith("http://") or link.startswith("https://")):
+        link = f"https://{link}"
 
     now = datetime.now(timezone.utc)
     doc = {
         "portfolio_id": str(uuid.uuid4()),
         "service_name": payload.service_name.strip(),
         "portfolio_type": payload.portfolio_type,
-        "file_name": payload.file_name,
-        "file_data": payload.file_data,
-        "share_token": secrets.token_urlsafe(16),
+        "portfolio_link": link,
+        "share_token": secrets.token_urlsafe(16),    # public link
+        "private_token": secrets.token_urlsafe(16),  # private (lead-gated) link
         "created_by": user.get("user_id"),
         "created_by_name": user.get("name"),
         "created_at": now,
         "is_deleted": False,
     }
     await db.sales_kit_portfolios.insert_one(dict(doc))
-    doc.pop("file_data", None)
     doc.pop("_id", None)
     return doc
 
@@ -348,14 +357,17 @@ async def delete_portfolio(portfolio_id: str, request: Request):
 async def get_portfolio_responses(portfolio_id: str, request: Request):
     await get_current_user_from_request(request)
     portfolio = await db.sales_kit_portfolios.find_one(
-        {"portfolio_id": portfolio_id, "is_deleted": {"$ne": True}}, {"_id": 0, "file_data": 0}
+        {"portfolio_id": portfolio_id, "is_deleted": {"$ne": True}}, {"_id": 0}
     )
     if not portfolio:
         raise HTTPException(status_code=404, detail="Portfolio not found")
     responses = await db.sales_kit_portfolio_responses.find(
         {"portfolio_id": portfolio_id}, {"_id": 0}
     ).sort("submitted_at", -1).to_list(50000)
-    return {"portfolio": portfolio, "responses": responses}
+    clicks = await db.sales_kit_portfolio_clicks.find(
+        {"portfolio_id": portfolio_id}, {"_id": 0}
+    ).sort("clicked_at", -1).to_list(50000)
+    return {"portfolio": portfolio, "responses": responses, "clicks": clicks}
 
 
 @sales_kit_router.delete("/portfolio-responses/{response_id}")
@@ -370,13 +382,31 @@ async def delete_portfolio_response(response_id: str, request: Request):
 # ============== PUBLIC (no auth — respondent-facing) ==============
 
 @sales_kit_router.get("/public/portfolio/{share_token}")
-async def get_public_portfolio(share_token: str):
+async def visit_public_portfolio(share_token: str):
+    """The public link itself — no page, no gate. Logs a click and
+    redirects straight to the real portfolio_link. Safe to paste anywhere."""
     doc = await db.sales_kit_portfolios.find_one(
-        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0, "file_data": 0}
+        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0}
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Portfolio not available")
-    # Name + type only — the file itself is withheld until they submit
+
+    await db.sales_kit_portfolio_clicks.insert_one({
+        "click_id": str(uuid.uuid4()),
+        "portfolio_id": doc["portfolio_id"],
+        "clicked_at": datetime.now(timezone.utc),
+    })
+    return RedirectResponse(url=doc["portfolio_link"])
+
+
+@sales_kit_router.get("/public/portfolio-private/{private_token}")
+async def get_private_portfolio(private_token: str):
+    doc = await db.sales_kit_portfolios.find_one(
+        {"private_token": private_token, "is_deleted": {"$ne": True}}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Portfolio not available")
+    # Name + type only — portfolio_link is withheld until they submit
     # their name + email via /unlock below.
     return {
         "portfolio_id": doc["portfolio_id"],
@@ -385,10 +415,10 @@ async def get_public_portfolio(share_token: str):
     }
 
 
-@sales_kit_router.post("/public/portfolio/{share_token}/unlock")
-async def unlock_public_portfolio(share_token: str, payload: PortfolioLeadSubmit):
+@sales_kit_router.post("/public/portfolio-private/{private_token}/unlock")
+async def unlock_private_portfolio(private_token: str, payload: PortfolioLeadSubmit):
     doc = await db.sales_kit_portfolios.find_one(
-        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0}
+        {"private_token": private_token, "is_deleted": {"$ne": True}}, {"_id": 0}
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Portfolio not available")
@@ -406,8 +436,7 @@ async def unlock_public_portfolio(share_token: str, payload: PortfolioLeadSubmit
 
     return {
         "service_name": doc["service_name"],
-        "file_name": doc.get("file_name", ""),
-        "file_data": doc["file_data"],
+        "portfolio_link": doc["portfolio_link"],
     }
 
 

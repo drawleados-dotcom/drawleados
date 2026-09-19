@@ -4,10 +4,13 @@ import axios from 'axios';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Loader2, FileWarning, FileText, ExternalLink } from 'lucide-react';
+import { Loader2, FileWarning, FileText } from 'lucide-react';
 
 const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// This page is only the PRIVATE (lead-gated) portfolio link. The public
+// link never renders anything here — it's a plain backend URL that logs a
+// click and redirects straight to the portfolio_link server-side.
 const PublicPortfolioPage = () => {
   const { token } = useParams();
   const [loading, setLoading] = useState(true);
@@ -17,17 +20,11 @@ const PublicPortfolioPage = () => {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [unlocked, setUnlocked] = useState(null); // { file_name, blobUrl }
-
-  // Revoke the blob URL when it's replaced or the page unmounts, so the
-  // browser doesn't hold the (possibly 100MB) file in memory forever.
-  useEffect(() => {
-    return () => { if (unlocked?.blobUrl) URL.revokeObjectURL(unlocked.blobUrl); };
-  }, [unlocked]);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    axios.get(`${API_BASE}/sales-kit/public/portfolio/${token}`)
+    axios.get(`${API_BASE}/sales-kit/public/portfolio-private/${token}`)
       .then((res) => { if (!cancelled) setPortfolio(res.data); })
       .catch(() => { if (!cancelled) setNotFound(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -43,14 +40,14 @@ const PublicPortfolioPage = () => {
     setError('');
     setSubmitting(true);
     try {
-      const res = await axios.post(`${API_BASE}/sales-kit/public/portfolio/${token}/unlock`, {
+      const res = await axios.post(`${API_BASE}/sales-kit/public/portfolio-private/${token}/unlock`, {
         name: name.trim(),
         email: email.trim(),
       });
-      setUnlocked(res.data);
+      setRedirecting(true);
+      window.location.href = res.data.portfolio_link;
     } catch (e) {
       setError('Something went wrong. Please try again.');
-    } finally {
       setSubmitting(false);
     }
   };
@@ -75,24 +72,12 @@ const PublicPortfolioPage = () => {
     );
   }
 
-  if (unlocked) {
+  if (redirecting) {
     return (
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
-        <div className="max-w-3xl mx-auto">
-          <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6 mb-4 flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">{portfolio.service_name}</h1>
-              {portfolio.portfolio_type && <p className="text-sm text-gray-500">{portfolio.portfolio_type}</p>}
-            </div>
-            <a href={unlocked.file_data} download={unlocked.file_name || 'portfolio.pdf'} target="_blank" rel="noreferrer">
-              <Button className="bg-[#3b82f6] hover:bg-[#2563eb]">
-                <ExternalLink className="h-4 w-4 mr-1.5" /> Open PDF
-              </Button>
-            </a>
-          </div>
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden" style={{ height: '80vh' }}>
-            <iframe src={unlocked.file_data} title={portfolio.service_name} className="w-full h-full border-0" />
-          </div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white border border-gray-200 rounded-xl p-8 max-w-md w-full text-center">
+          <Loader2 className="h-6 w-6 animate-spin text-[#3b82f6] mx-auto mb-3" />
+          <p className="text-gray-900 font-medium">Taking you to the portfolio…</p>
         </div>
       </div>
     );
@@ -104,7 +89,7 @@ const PublicPortfolioPage = () => {
         <FileText className="h-9 w-9 text-[#3b82f6] mb-3" />
         <h1 className="text-xl font-semibold text-gray-900 mb-1">Explore our portfolio of Drawlead</h1>
         <p className="text-sm text-gray-500 mb-5">
-          {portfolio.service_name}{portfolio.portfolio_type ? ` — ${portfolio.portfolio_type}` : ''}. Enter your name and email to view it.
+          {portfolio.service_name}{portfolio.portfolio_type ? ` — ${portfolio.portfolio_type}` : ''}. Enter your name and email to continue.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">

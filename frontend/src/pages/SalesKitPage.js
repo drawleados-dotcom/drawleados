@@ -15,7 +15,7 @@ import {
   ArrowLeft, Plus, Trash2, Pencil, Copy, Share2, Loader2, GripVertical,
   FileText, Table as TableIcon, X, ChevronLeft, ChevronRight,
   Type, AlignLeft, Hash, Mail, Phone, Calendar, ChevronDown, CircleDot, CheckSquare, Heading,
-  Briefcase, Upload, FileUp,
+  Briefcase, Link2, MousePointerClick, UserCheck,
 } from 'lucide-react';
 
 const TABS = [
@@ -24,7 +24,6 @@ const TABS = [
 ];
 
 const PORTFOLIO_TYPES = ['Website', 'Branding', 'SEO', 'Social Media', 'Meta Ads', 'App Development', 'ERP', 'Other'];
-const MAX_PORTFOLIO_FILE_BYTES = 8 * 1024 * 1024;
 
 const FIELD_TYPE_META = {
   short_text: { label: 'Short Text', icon: Type },
@@ -509,7 +508,7 @@ const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelet
       <div className={`border border-dashed ${borderColor} rounded-xl p-12 text-center`}>
         <Briefcase className={`h-8 w-8 ${textSecondary} mx-auto mb-3`} />
         <p className={`${textPrimary} font-medium mb-1`}>No portfolio items yet</p>
-        <p className={`text-sm ${textSecondary} mb-4`}>Upload a portfolio PDF and share a lead-gated link with prospects.</p>
+        <p className={`text-sm ${textSecondary} mb-4`}>Link to a portfolio and share a public or lead-gated link with prospects.</p>
         <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]"><Plus className="h-4 w-4 mr-1.5" /> Add Portfolio</Button>
       </div>
     );
@@ -532,8 +531,18 @@ const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelet
                 </span>
               )}
             </div>
-            <p className={`text-xs ${textSecondary} mb-3 truncate`}>{p.file_name || 'portfolio.pdf'}</p>
-            <p className={`text-xs ${textSecondary} mb-3`}>{p.response_count} response{p.response_count === 1 ? '' : 's'}</p>
+            <a
+              href={p.portfolio_link}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-[#3b82f6] hover:underline mb-3 truncate inline-flex items-center gap-1"
+            >
+              <Link2 className="h-3 w-3 shrink-0" /> {p.portfolio_link}
+            </a>
+            <div className={`text-xs ${textSecondary} mb-3 flex items-center gap-3`}>
+              <span className="inline-flex items-center gap-1"><MousePointerClick className="h-3 w-3" /> {p.click_count} click{p.click_count === 1 ? '' : 's'}</span>
+              <span className="inline-flex items-center gap-1"><UserCheck className="h-3 w-3" /> {p.response_count} lead{p.response_count === 1 ? '' : 's'}</span>
+            </div>
             <div className="mt-auto flex items-center gap-1.5 flex-wrap">
               <Button size="sm" variant="outline" onClick={() => onResponses(p)} className={`${borderColor} ${textSecondary}`}>
                 <TableIcon className="h-3.5 w-3.5 mr-1" /> Responses
@@ -552,19 +561,27 @@ const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelet
   );
 };
 
-const PortfolioResponsesView = ({ portfolio, responses, onBack, onDeleteResponse, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+const PortfolioResponsesView = ({ portfolio, responses, clicks, onBack, onDeleteResponse, textPrimary, textSecondary, borderColor, bgSecondary }) => {
   return (
     <div>
       <button onClick={onBack} className={`text-sm ${textSecondary} hover:underline mb-3 inline-flex items-center gap-1`}>
         <ArrowLeft className="h-4 w-4" /> Back to Portfolio
       </button>
+
+      <div className={`border ${borderColor} rounded-xl p-3 mb-4 flex items-center gap-2`}>
+        <MousePointerClick className="h-4 w-4 text-[#3b82f6] shrink-0" />
+        <p className={`text-sm ${textSecondary}`}>
+          Public link: <span className={`font-medium ${textPrimary}`}>{(clicks || []).length}</span> click{(clicks || []).length === 1 ? '' : 's'}
+        </p>
+      </div>
+
       <div className="mb-3">
-        <p className={`font-medium ${textPrimary}`}>{portfolio.service_name} — Responses</p>
-        <p className={`text-xs ${textSecondary}`}>{responses.length} view{responses.length === 1 ? '' : 's'}</p>
+        <p className={`font-medium ${textPrimary}`}>{portfolio.service_name} — Private Link Leads</p>
+        <p className={`text-xs ${textSecondary}`}>{responses.length} lead{responses.length === 1 ? '' : 's'}</p>
       </div>
       {responses.length === 0 ? (
         <div className={`border border-dashed ${borderColor} rounded-xl p-10 text-center text-sm ${textSecondary}`}>
-          No one has viewed this portfolio yet. Share the link to start collecting leads.
+          No one has unlocked the private link yet. Share it to start collecting leads.
         </div>
       ) : (
         <div className={`border ${borderColor} rounded-xl overflow-x-auto`}>
@@ -625,8 +642,9 @@ const SalesKitPage = () => {
   const [portfolioView, setPortfolioView] = useState('list'); // list | responses
   const [activePortfolio, setActivePortfolio] = useState(null);
   const [portfolioResponses, setPortfolioResponses] = useState([]);
+  const [portfolioClicks, setPortfolioClicks] = useState([]);
   const [newPortfolioOpen, setNewPortfolioOpen] = useState(false);
-  const [portfolioForm, setPortfolioForm] = useState({ service_name: '', portfolio_type: '', file_name: '', file_data: '' });
+  const [portfolioForm, setPortfolioForm] = useState({ service_name: '', portfolio_type: '', portfolio_link: '' });
   const [creatingPortfolio, setCreatingPortfolio] = useState(false);
   const [deletePortfolioTarget, setDeletePortfolioTarget] = useState(null);
   const [sharePortfolio, setSharePortfolio] = useState(null);
@@ -741,36 +759,18 @@ const SalesKitPage = () => {
 
   // Portfolio handlers
   const openPortfolioCreate = () => {
-    setPortfolioForm({ service_name: '', portfolio_type: '', file_name: '', file_data: '' });
+    setPortfolioForm({ service_name: '', portfolio_type: '', portfolio_link: '' });
     setNewPortfolioOpen(true);
-  };
-
-  const handlePortfolioFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== 'application/pdf') {
-      toast.error('Only PDF files are supported');
-      return;
-    }
-    if (file.size > MAX_PORTFOLIO_FILE_BYTES) {
-      toast.error('File is too large (max 8MB)');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPortfolioForm(prev => ({ ...prev, file_name: file.name, file_data: reader.result }));
-    };
-    reader.readAsDataURL(file);
   };
 
   const createPortfolio = async () => {
     if (!portfolioForm.service_name.trim()) { toast.error('Service name is required'); return; }
-    if (!portfolioForm.file_data) { toast.error('Upload a portfolio PDF'); return; }
+    if (!portfolioForm.portfolio_link.trim()) { toast.error('Portfolio link is required'); return; }
     setCreatingPortfolio(true);
     try {
       const res = await api.post('/sales-kit/portfolios', portfolioForm);
       setNewPortfolioOpen(false);
-      setPortfolios(prev => [{ ...res.data, response_count: 0 }, ...prev]);
+      setPortfolios(prev => [{ ...res.data, response_count: 0, click_count: 0 }, ...prev]);
       setSharePortfolio(res.data);
     } catch (e) {
       toast.error(e.response?.data?.detail || 'Failed to create portfolio');
@@ -784,6 +784,7 @@ const SalesKitPage = () => {
       const res = await api.get(`/sales-kit/portfolios/${p.portfolio_id}/responses`);
       setActivePortfolio(res.data.portfolio);
       setPortfolioResponses(res.data.responses || []);
+      setPortfolioClicks(res.data.clicks || []);
       setPortfolioView('responses');
     } catch (e) {
       toast.error('Failed to load responses');
@@ -916,6 +917,7 @@ const SalesKitPage = () => {
               <PortfolioResponsesView
                 portfolio={activePortfolio}
                 responses={portfolioResponses}
+                clicks={portfolioClicks}
                 onBack={() => setPortfolioView('list')}
                 onDeleteResponse={deletePortfolioResponseRow}
                 textPrimary={textPrimary}
@@ -1012,20 +1014,18 @@ const SalesKitPage = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Upload Portfolio File (PDF, max 8MB)</Label>
-              <label className={`flex items-center gap-2 border border-dashed ${borderColor} rounded-lg p-3 cursor-pointer hover:opacity-80`}>
-                <Upload className={`h-4 w-4 ${textSecondary}`} />
-                <span className={`text-sm ${textSecondary} truncate`}>
-                  {portfolioForm.file_name || 'Choose a PDF file'}
-                </span>
-                <input type="file" accept="application/pdf" className="hidden" onChange={handlePortfolioFileChange} />
-              </label>
+              <Label>Portfolio Link</Label>
+              <Input
+                value={portfolioForm.portfolio_link}
+                onChange={(e) => setPortfolioForm(prev => ({ ...prev, portfolio_link: e.target.value }))}
+                placeholder="https://drive.google.com/... or your portfolio URL"
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewPortfolioOpen(false)}>Cancel</Button>
             <Button onClick={createPortfolio} disabled={creatingPortfolio} className="bg-[#3b82f6] hover:bg-[#2563eb]">
-              {creatingPortfolio ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><FileUp className="h-4 w-4 mr-1.5" /> Save &amp; Generate Link</>)}
+              {creatingPortfolio ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Link2 className="h-4 w-4 mr-1.5" /> Save &amp; Generate Links</>)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1035,17 +1035,43 @@ const SalesKitPage = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Share Portfolio</DialogTitle></DialogHeader>
           {sharePortfolio && (
-            <div className="flex items-center gap-2">
-              <Input readOnly value={`${window.location.origin}/portfolio/${sharePortfolio.share_token}`} className="flex-1" />
-              <Button
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/portfolio/${sharePortfolio.share_token}`);
-                  toast.success('Link copied');
-                }}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-sm">
+                  <MousePointerClick className="h-3.5 w-3.5" /> Public link
+                </Label>
+                <p className="text-xs text-gray-500">No form — click, and straight to the portfolio. Just counts the click.</p>
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={`${process.env.REACT_APP_BACKEND_URL}/api/sales-kit/public/portfolio/${sharePortfolio.share_token}`} className="flex-1" />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${process.env.REACT_APP_BACKEND_URL}/api/sales-kit/public/portfolio/${sharePortfolio.share_token}`);
+                      toast.success('Public link copied');
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5 text-sm">
+                  <UserCheck className="h-3.5 w-3.5" /> Private link
+                </Label>
+                <p className="text-xs text-gray-500">Asks for name + email first, then redirects — each submission is a lead.</p>
+                <div className="flex items-center gap-2">
+                  <Input readOnly value={`${window.location.origin}/portfolio/${sharePortfolio.private_token}`} className="flex-1" />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/portfolio/${sharePortfolio.private_token}`);
+                      toast.success('Private link copied');
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>
