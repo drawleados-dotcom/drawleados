@@ -647,19 +647,43 @@ const PortfolioResponsesView = ({ portfolio, responses, clicks, onBack, onDelete
   );
 };
 
-const WebsitePortfolioListView = ({ items, onCreate, onDelete, onShareGlobal, textPrimary, textSecondary, borderColor, bgCard, bgSecondary }) => {
+const WebsitePortfolioListView = ({ items, settings, onCreate, onDelete, onShareGlobal, onEditSettings, textPrimary, textSecondary, borderColor, bgCard, bgSecondary }) => {
+  const coverBanner = (
+    <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden mb-4`}>
+      <div className={`h-28 md:h-36 ${bgSecondary} flex items-center justify-center overflow-hidden`}>
+        {settings?.cover_image ? (
+          <img src={settings.cover_image} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <ImageIcon className={`h-6 w-6 ${textSecondary}`} />
+        )}
+      </div>
+      <div className="p-3 flex items-center justify-between gap-2">
+        <p className={`text-sm ${textSecondary} line-clamp-2`}>
+          {settings?.description || 'No description set — this is the intro text shown at the top of the public gallery page.'}
+        </p>
+        <Button size="sm" variant="outline" onClick={onEditSettings} className={`${borderColor} ${textSecondary} shrink-0`} data-testid="sk-website-portfolio-edit-cover-btn">
+          <Pencil className="h-3.5 w-3.5 mr-1" /> Edit Cover &amp; Description
+        </Button>
+      </div>
+    </div>
+  );
+
   if (items.length === 0) {
     return (
-      <div className={`border border-dashed ${borderColor} rounded-xl p-12 text-center`}>
-        <Globe className={`h-8 w-8 ${textSecondary} mx-auto mb-3`} />
-        <p className={`${textPrimary} font-medium mb-1`}>No websites added yet</p>
-        <p className={`text-sm ${textSecondary} mb-4`}>Add the websites you've built — they'll all appear together on one shareable gallery page.</p>
-        <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]"><Plus className="h-4 w-4 mr-1.5" /> Add Website</Button>
+      <div>
+        {coverBanner}
+        <div className={`border border-dashed ${borderColor} rounded-xl p-12 text-center`}>
+          <Globe className={`h-8 w-8 ${textSecondary} mx-auto mb-3`} />
+          <p className={`${textPrimary} font-medium mb-1`}>No websites added yet</p>
+          <p className={`text-sm ${textSecondary} mb-4`}>Add the websites you've built — they'll all appear together on one shareable gallery page.</p>
+          <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]"><Plus className="h-4 w-4 mr-1.5" /> Add Website</Button>
+        </div>
       </div>
     );
   }
   return (
     <div>
+      {coverBanner}
       <div className="flex items-center justify-end mb-3 gap-2 flex-wrap">
         <Button variant="outline" onClick={onShareGlobal} className={`${borderColor} ${textSecondary}`} data-testid="sk-website-portfolio-share-btn">
           <Share2 className="h-3.5 w-3.5 mr-1.5" /> Share Gallery Link
@@ -752,6 +776,10 @@ const SalesKitPage = () => {
   const [creatingWebsitePortfolio, setCreatingWebsitePortfolio] = useState(false);
   const [deleteWebsitePortfolioTarget, setDeleteWebsitePortfolioTarget] = useState(null);
   const [shareWebsitePortfolioOpen, setShareWebsitePortfolioOpen] = useState(false);
+  const [websitePortfolioSettings, setWebsitePortfolioSettings] = useState({ cover_image: '', description: '' });
+  const [editSettingsOpen, setEditSettingsOpen] = useState(false);
+  const [settingsForm, setSettingsForm] = useState({ cover_image: '', description: '' });
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const loadForms = useCallback(async () => {
     try {
@@ -795,10 +823,20 @@ const SalesKitPage = () => {
     }
   }, []);
 
+  const loadWebsitePortfolioSettings = useCallback(async () => {
+    try {
+      const res = await api.get('/sales-kit/website-portfolio-settings');
+      setWebsitePortfolioSettings(res.data || { cover_image: '', description: '' });
+    } catch (e) {
+      // Non-fatal — the cover banner just shows empty defaults.
+    }
+  }, []);
+
   useEffect(() => { loadForms(); }, [loadForms]);
   useEffect(() => { loadPortfolios(); }, [loadPortfolios]);
   useEffect(() => { loadServices(); }, [loadServices]);
   useEffect(() => { loadWebsitePortfolios(); }, [loadWebsitePortfolios]);
+  useEffect(() => { loadWebsitePortfolioSettings(); }, [loadWebsitePortfolioSettings]);
 
   const openCreate = () => { setNewFormTitle(''); setNewFormOpen(true); };
 
@@ -975,6 +1013,42 @@ const SalesKitPage = () => {
     }
   };
 
+  const openEditSettings = () => {
+    setSettingsForm({
+      cover_image: websitePortfolioSettings.cover_image || '',
+      description: websitePortfolioSettings.description || '',
+    });
+    setEditSettingsOpen(true);
+  };
+
+  const handleSettingsCoverUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size must be less than 2MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setSettingsForm(prev => ({ ...prev, cover_image: reader.result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveWebsitePortfolioSettings = async () => {
+    setSavingSettings(true);
+    try {
+      const res = await api.put('/sales-kit/website-portfolio-settings', settingsForm);
+      setWebsitePortfolioSettings(res.data);
+      setEditSettingsOpen(false);
+      toast.success('Gallery page updated');
+    } catch (e) {
+      toast.error('Failed to save');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const confirmDeleteWebsitePortfolio = async () => {
     if (!deleteWebsitePortfolioTarget) return;
     try {
@@ -1109,9 +1183,11 @@ const SalesKitPage = () => {
         {activeTab === 'website_portfolio' && (
           <WebsitePortfolioListView
             items={websitePortfolios}
+            settings={websitePortfolioSettings}
             onCreate={openWebsitePortfolioCreate}
             onDelete={setDeleteWebsitePortfolioTarget}
             onShareGlobal={() => setShareWebsitePortfolioOpen(true)}
+            onEditSettings={openEditSettings}
             textPrimary={textPrimary}
             textSecondary={textSecondary}
             borderColor={borderColor}
@@ -1381,6 +1457,37 @@ const SalesKitPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteWebsitePortfolioTarget(null)}>Cancel</Button>
             <Button onClick={confirmDeleteWebsitePortfolio} className="bg-[#ef4444] hover:bg-[#dc2626]">Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editSettingsOpen} onOpenChange={setEditSettingsOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Cover &amp; Description</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Cover Image</Label>
+              <p className="text-xs text-gray-500">Shown as a banner at the top of the public gallery page — same idea as a Google Form cover image.</p>
+              <input type="file" accept="image/*" onChange={handleSettingsCoverUpload} className={`text-sm ${textSecondary}`} />
+              {settingsForm.cover_image && (
+                <img src={settingsForm.cover_image} alt="" className={`h-24 w-full rounded-lg border ${borderColor} object-cover`} />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={settingsForm.description}
+                onChange={(e) => setSettingsForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="A look at websites we've built for our clients — business websites, e-commerce stores, and landing pages."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditSettingsOpen(false)}>Cancel</Button>
+            <Button onClick={saveWebsitePortfolioSettings} disabled={savingSettings} className="bg-[#3b82f6] hover:bg-[#2563eb]">
+              {savingSettings ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

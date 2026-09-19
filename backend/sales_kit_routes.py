@@ -99,6 +99,11 @@ class WebsitePortfolioBooking(BaseModel):
     budget: str = ""
 
 
+class WebsitePortfolioSettingsUpdate(BaseModel):
+    cover_image: str = ""  # base64 data URL — banner shown atop the public gallery page
+    description: str = ""  # replaces the default intro line on the public gallery page
+
+
 # ============== AUTH HELPER ==============
 
 async def get_current_user_from_request(request: Request) -> dict:
@@ -472,6 +477,32 @@ async def get_website_portfolio_bookings(request: Request):
     return leads
 
 
+@sales_kit_router.get("/website-portfolio-settings")
+async def get_website_portfolio_settings(request: Request):
+    """The public gallery page's banner — one cover image + description,
+    same idea as a Google Form's header image, shared by the whole page
+    rather than any single website card."""
+    await get_current_user_from_request(request)
+    doc = await db.website_portfolio_settings.find_one({"setting_id": "default"}, {"_id": 0})
+    return doc or {"cover_image": "", "description": ""}
+
+
+@sales_kit_router.put("/website-portfolio-settings")
+async def update_website_portfolio_settings(payload: WebsitePortfolioSettingsUpdate, request: Request):
+    await get_current_user_from_request(request)
+    update = {
+        "setting_id": "default",
+        "cover_image": payload.cover_image,
+        "description": payload.description,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    await db.website_portfolio_settings.update_one(
+        {"setting_id": "default"}, {"$set": update}, upsert=True
+    )
+    update.pop("_id", None)
+    return update
+
+
 # ============== PUBLIC (no auth — respondent-facing) ==============
 
 @sales_kit_router.get("/public/portfolio/{share_token}")
@@ -532,6 +563,15 @@ async def unlock_private_portfolio(private_token: str, payload: PortfolioLeadSub
         "service_name": doc["service_name"],
         "portfolio_link": doc["portfolio_link"],
     }
+
+
+@sales_kit_router.get("/public/website-portfolio-settings")
+async def get_public_website_portfolio_settings():
+    """Cover image + description banner for the public gallery page.
+    Registered before the generic /public/{share_token} form route below,
+    otherwise that route would swallow this literal path first."""
+    doc = await db.website_portfolio_settings.find_one({"setting_id": "default"}, {"_id": 0})
+    return doc or {"cover_image": "", "description": ""}
 
 
 @sales_kit_router.get("/public/website-portfolios")

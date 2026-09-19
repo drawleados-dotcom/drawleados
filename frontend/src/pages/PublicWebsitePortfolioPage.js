@@ -16,6 +16,7 @@ const emptyBooking = { name: '', email: '', phone: '', city: '', company: '', bu
 const PublicWebsitePortfolioPage = () => {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState([]);
+  const [settings, setSettings] = useState({ cover_image: '', description: '' });
   const [bookingOpen, setBookingOpen] = useState(false);
   const [booking, setBooking] = useState(emptyBooking);
   const [submitting, setSubmitting] = useState(false);
@@ -24,6 +25,9 @@ const PublicWebsitePortfolioPage = () => {
 
   useEffect(() => {
     let cancelled = false;
+    axios.get(`${API_BASE}/sales-kit/public/website-portfolio-settings`)
+      .then((res) => { if (!cancelled) setSettings(res.data || {}); })
+      .catch(() => {});
     axios.get(`${API_BASE}/sales-kit/public/website-portfolios`)
       .then((res) => { if (!cancelled) setItems(res.data || []); })
       .catch(() => {})
@@ -58,14 +62,21 @@ const PublicWebsitePortfolioPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-28">
+      {settings.cover_image && (
+        <div className="w-full h-40 md:h-56 bg-gray-100 overflow-hidden">
+          <img src={settings.cover_image} alt="" className="w-full h-full object-cover" />
+        </div>
+      )}
       <div className="max-w-5xl mx-auto px-4 py-8 md:py-12">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-11 w-11 rounded-xl bg-[#3b82f6]/10 mb-3">
-            <Globe className="h-5 w-5 text-[#3b82f6]" />
-          </div>
+          {!settings.cover_image && (
+            <div className="inline-flex items-center justify-center h-11 w-11 rounded-xl bg-[#3b82f6]/10 mb-3">
+              <Globe className="h-5 w-5 text-[#3b82f6]" />
+            </div>
+          )}
           <h1 className="text-2xl md:text-3xl font-semibold text-gray-900 mb-1.5">Our Website Portfolio</h1>
           <p className="text-sm md:text-base text-gray-500 max-w-xl mx-auto">
-            A look at websites we've built for our clients — business websites, e-commerce stores, and landing pages.
+            {settings.description || "A look at websites we've built for our clients — business websites, e-commerce stores, and landing pages."}
           </p>
         </div>
 
