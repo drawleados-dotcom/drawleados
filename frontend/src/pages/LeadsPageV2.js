@@ -113,6 +113,7 @@ const LeadsPageV2 = () => {
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
   const [dateRange, setDateRange] = useState({ from: undefined, to: undefined }); // Default: All Time
+  const [quickRangeKey, setQuickRangeKey] = useState(null); // 'today' | 'yesterday' | 'week' | 'month' | null — highlights the quick-filter pill matching the active dateRange
   const [showDatePopover, setShowDatePopover] = useState(false);
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [showStagesModal, setShowStagesModal] = useState(false);
@@ -1343,6 +1344,29 @@ const LeadsPageV2 = () => {
           />
         ) : (
         <>
+        {/* Quick Date Filter — same pill style as the Overview tab */}
+        <div className="px-4 pt-4 flex items-center gap-2" data-testid="quick-date-filter-bar">
+          <span className={`text-xs ${textSecondary} uppercase tracking-wide`}>Date Filter:</span>
+          <div className="flex gap-1">
+            {OVERVIEW_RANGES.map(opt => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => {
+                  setDateRange(getOverviewDateRange(opt.key));
+                  setQuickRangeKey(opt.key);
+                }}
+                data-testid={`quick-date-range-${opt.key}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  quickRangeKey === opt.key ? 'bg-[#3b82f6] text-white' : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Date Range Filter */}
         <div className={`px-4 pt-4 flex items-center gap-2 flex-wrap`} data-testid="date-filter-bar">
           <span className={`text-xs ${textSecondary} uppercase tracking-wide mr-1`}>Date Range:</span>
@@ -1375,7 +1399,7 @@ const LeadsPageV2 = () => {
                 mode="range"
                 numberOfMonths={2}
                 selected={dateRange}
-                onSelect={(range) => setDateRange(range || { from: undefined, to: undefined })}
+                onSelect={(range) => { setDateRange(range || { from: undefined, to: undefined }); setQuickRangeKey(null); }}
                 initialFocus
                 data-testid="date-range-calendar"
               />
@@ -1388,6 +1412,7 @@ const LeadsPageV2 = () => {
                     onClick={() => {
                       const t = new Date();
                       setDateRange({ from: t, to: t });
+                      setQuickRangeKey(null);
                     }}
                   >Today</Button>
                   <Button
@@ -1406,6 +1431,7 @@ const LeadsPageV2 = () => {
                       to.setDate(from.getDate() + 6);
                       to.setHours(23, 59, 59, 999);
                       setDateRange({ from, to });
+                      setQuickRangeKey(null);
                     }}
                   >This Week (Tue–Mon)</Button>
                   <Button
@@ -1416,6 +1442,7 @@ const LeadsPageV2 = () => {
                       const t = new Date();
                       const w = new Date(t.getTime() - 6 * 24 * 60 * 60 * 1000);
                       setDateRange({ from: w, to: t });
+                      setQuickRangeKey(null);
                     }}
                   >Last 7 Days</Button>
                   <Button
@@ -1426,13 +1453,14 @@ const LeadsPageV2 = () => {
                       const t = new Date();
                       const m = new Date(t.getFullYear(), t.getMonth(), 1);
                       setDateRange({ from: m, to: t });
+                      setQuickRangeKey(null);
                     }}
                   >This Month</Button>
                   <Button
                     size="sm"
                     variant="ghost"
                     data-testid="date-preset-all"
-                    onClick={() => setDateRange({ from: undefined, to: undefined })}
+                    onClick={() => { setDateRange({ from: undefined, to: undefined }); setQuickRangeKey(null); }}
                   >All Time</Button>
                 </div>
                 <div className="flex gap-1">
@@ -1440,7 +1468,7 @@ const LeadsPageV2 = () => {
                     size="sm"
                     variant="ghost"
                     data-testid="date-clear"
-                    onClick={() => setDateRange({ from: undefined, to: undefined })}
+                    onClick={() => { setDateRange({ from: undefined, to: undefined }); setQuickRangeKey(null); }}
                   >Clear</Button>
                   <Button
                     size="sm"
@@ -1464,7 +1492,7 @@ const LeadsPageV2 = () => {
           {(dateRange.from || dateRange.to) && (
             <Badge
               className="bg-[#3b82f6]/20 text-[#3b82f6] cursor-pointer gap-1"
-              onClick={() => setDateRange({ from: undefined, to: undefined })}
+              onClick={() => { setDateRange({ from: undefined, to: undefined }); setQuickRangeKey(null); }}
             >
               {filteredLeads.length} in range <X className="h-3 w-3" />
             </Badge>
