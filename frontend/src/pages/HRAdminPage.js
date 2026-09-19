@@ -6054,8 +6054,12 @@ function bucketAnalyticsDays(days, granularity) {
       const monday = new Date(dt);
       const dow = (dt.getDay() + 6) % 7; // Mon=0..Sun=6
       monday.setDate(dt.getDate() - dow);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
       key = monday.toISOString().split('T')[0];
-      label = monday.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      const startStr = monday.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      const endStr = sunday.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      label = `${startStr} – ${endStr}`;
     } else {
       key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
       label = dt.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
