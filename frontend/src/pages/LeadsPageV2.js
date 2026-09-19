@@ -1624,24 +1624,23 @@ const LeadsPageV2 = () => {
           };
 
           if (pipeline !== 'pre_sales') {
-            // Sales: same three-line split as the Move to Stage buttons in
-            // the Edit Lead popup — Appointment & Discovery, Proposal,
-            // Invoice — via the shared classifySalesStageGroup helper. Any
-            // card matching none of them still shows, in an "Other" line.
-            const salesCardLines = [
-              { label: 'Appointment & Discovery', items: stageCards.filter(c => classifySalesStageGroup(c) === 'appointment') },
-              { label: 'Proposal', items: stageCards.filter(c => classifySalesStageGroup(c) === 'proposal') },
-              { label: 'Invoice', items: stageCards.filter(c => classifySalesStageGroup(c) === 'invoice') },
-              { label: 'Other', items: stageCards.filter(c => classifySalesStageGroup(c) === 'other') },
-            ].filter(line => line.items.length > 0);
+            // Sales: same two-group divider layout as Pre-sales below —
+            // Appointment (Appointment & Discovery Call) alongside Closing
+            // (Quotation/Proposal, Lost, Invoice Raise and anything else),
+            // via the shared classifySalesStageGroup helper.
+            const salesAppointmentGroup = stageCards.filter(c => classifySalesStageGroup(c) === 'appointment');
+            const salesClosingGroup = stageCards.filter(c => classifySalesStageGroup(c) !== 'appointment');
             return (
-              <div className="px-4 pt-4 space-y-3" data-testid="stage-summary-row">
-                {salesCardLines.map(line => (
-                  <div key={line.label}>
-                    <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>{line.label}</p>
-                    <div className="flex gap-2 flex-wrap">{line.items.map(renderStageCard)}</div>
-                  </div>
-                ))}
+              <div className="px-4 pt-4 flex items-start gap-3" data-testid="stage-summary-row">
+                <div className="flex-1 min-w-0">
+                  <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Appointment</p>
+                  <div className="flex gap-2">{salesAppointmentGroup.map(renderStageCard)}</div>
+                </div>
+                <div className={`w-px self-stretch ${borderColor} border-l`} />
+                <div className="flex-1 min-w-0">
+                  <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Closing</p>
+                  <div className="flex gap-2">{salesClosingGroup.map(renderStageCard)}</div>
+                </div>
               </div>
             );
           }
@@ -2577,20 +2576,22 @@ const LeadsPageV2 = () => {
                   const otherStages = stages.filter(s => classifyStageGroup(s) === 'other');
 
                   if (pipeline !== 'pre_sales') {
-                    const salesLines = [
-                      { label: 'Appointment & Discovery', items: stages.filter(s => classifySalesStageGroup(s) === 'appointment') },
-                      { label: 'Proposal', items: stages.filter(s => classifySalesStageGroup(s) === 'proposal') },
-                      { label: 'Invoice', items: stages.filter(s => classifySalesStageGroup(s) === 'invoice') },
-                      { label: 'Other', items: stages.filter(s => classifySalesStageGroup(s) === 'other') },
-                    ].filter(line => line.items.length > 0);
+                    // Same two-group divider layout as Pre-sales below —
+                    // Appointment (Appointment & Discovery Call) alongside
+                    // Closing (Quotation/Proposal, Lost, Invoice Raise, rest).
+                    const salesAppointmentStages = stages.filter(s => classifySalesStageGroup(s) === 'appointment');
+                    const salesClosingStages = stages.filter(s => classifySalesStageGroup(s) !== 'appointment');
                     return (
-                      <div className="space-y-3">
-                        {salesLines.map(line => (
-                          <div key={line.label}>
-                            <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>{line.label}</p>
-                            <div className="flex flex-wrap gap-2">{line.items.map(renderStageButton)}</div>
-                          </div>
-                        ))}
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Appointment</p>
+                          <div className="flex flex-wrap gap-2">{salesAppointmentStages.map(renderStageButton)}</div>
+                        </div>
+                        <div className={`w-px self-stretch border-l ${borderColor}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Closing</p>
+                          <div className="flex flex-wrap gap-2">{salesClosingStages.map(renderStageButton)}</div>
+                        </div>
                       </div>
                     );
                   }
