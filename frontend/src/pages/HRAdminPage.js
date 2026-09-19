@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import PayrollManagementTab from '../components/hr/PayrollManagementTab';
 import useAutoRefresh from '../hooks/useAutoRefresh';
 
@@ -6030,6 +6031,145 @@ function WorkSettingsTab({ settings, onUpdate, onRefresh, bgCard, bgSecondary, t
 
 
 
+// ============ Attendance Analytics (Attendance tab > Analytics) ============
+// Present/Remote/Leave/Absent trends across a date range, bucketed by
+// day, week, or month — a bar chart plus summary cards, distinct from the
+// single-day/range table views the other date filters show.
+const GRANULARITY_DAYS = { day: 30, week: 84, month: 365 };
+
+function bucketAnalyticsDays(days, granularity) {
+  if (granularity === 'day') {
+    return days.map(d => ({
+      label: new Date(d.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+      present: d.present, remote: d.remote, leave: d.leave, absent: d.absent,
+    }));
+  }
+  const buckets = new Map();
+  for (const d of days) {
+    const dt = new Date(d.date);
+    let key, label;
+    if (granularity === 'week') {
+      const monday = new Date(dt);
+      const dow = (dt.getDay() + 6) % 7; // Mon=0..Sun=6
+      monday.setDate(dt.getDate() - dow);
+      key = monday.toISOString().split('T')[0];
+      label = monday.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+    } else {
+      key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+      label = dt.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
+    }
+    const b = buckets.get(key) || { key, label, present: 0, remote: 0, leave: 0, absent: 0 };
+    b.present += d.present; b.remote += d.remote; b.leave += d.leave; b.absent += d.absent;
+    buckets.set(key, b);
+  }
+  return Array.from(buckets.values()).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, textSecondary, borderColor, isDark }) {
+  const [granularity, setGranularity] = useState('day');
+  const today = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(
+    new Date(Date.now() - GRANULARITY_DAYS.day * 86400000).toISOString().split('T')[0]
+  );
+  const [endDate, setEndDate] = useState(today);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const changeGranularity = (g) => {
+    setGranularity(g);
+    setStartDate(new Date(Date.now() - GRANULARITY_DAYS[g] * 86400000).toISOString().split('T')[0]);
+    setEndDate(today);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    axios.get(`${API}/api/hr/admin/attendance/analytics`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { start_date: startDate, end_date: endDate },
+    })
+      .then(res => { if (!cancelled) setData(res.data); })
+      .catch(() => { if (!cancelled) toast.error('Failed to load attendance analytics'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, startDate, endDate]);
+
+  const chartData = useMemo(() => bucketAnalyticsDays(data?.days || [], granularity), [data, granularity]);
+  const summary = data?.summary || { total_present: 0, total_remote: 0, total_leave: 0, total_absent: 0, avg_attendance_pct: 0 };
+
+  const gridColor = isDark ? '#27272a' : '#e5e7eb';
+  const tickColor = isDark ? '#a1a1aa' : '#6b7280';
+
+  return (
+    <div className="space-y-4">
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4 flex flex-wrap items-center gap-3">
+          <div className="flex gap-2">
+            {['day', 'week', 'month'].map(g => (
+              <Button
+                key={g}
+                size="sm"
+                onClick={() => changeGranularity(g)}
+                className={granularity === g ? 'bg-[#6366f1]' : `${bgSecondary} ${textSecondary}`}
+                data-testid={`attendance-analytics-gran-${g}`}
+              >
+                {g === 'day' ? 'Day wise' : g === 'week' ? 'Week wise' : 'Month wise'}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={`w-40 ${bgSecondary} ${borderColor}`} />
+            <span className={textSecondary}>to</span>
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={`w-40 ${bgSecondary} ${borderColor}`} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {[
+          { label: 'Total Present', value: summary.total_present, color: '#22c55e' },
+          { label: 'Total Remote', value: summary.total_remote, color: '#8b5cf6' },
+          { label: 'Total Leave', value: summary.total_leave, color: '#f59e0b' },
+          { label: 'Total Absent', value: summary.total_absent, color: '#ef4444' },
+          { label: 'Avg Attendance', value: `${summary.avg_attendance_pct}%`, color: '#3b82f6' },
+        ].map(c => (
+          <Card key={c.label} className={`${bgCard} border ${borderColor}`}>
+            <CardContent className="p-4 text-center">
+              <div className="text-2xl font-bold" style={{ color: c.color }}>{c.value}</div>
+              <div className={`text-xs ${textSecondary} mt-1`}>{c.label}</div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className={`${bgCard} border ${borderColor}`}>
+        <CardContent className="p-4">
+          {loading ? (
+            <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin" /></div>
+          ) : chartData.length === 0 ? (
+            <p className={`text-sm ${textSecondary} text-center py-16`}>No attendance data for this range.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={360}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <XAxis dataKey="label" tick={{ fill: tickColor, fontSize: 11 }} />
+                <YAxis tick={{ fill: tickColor, fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ backgroundColor: isDark ? '#18181b' : '#fff', border: `1px solid ${gridColor}`, fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="present" name="Present" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="remote" name="Remote" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="leave" name="Leave" fill="#f59e0b" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="absent" name="Absent" fill="#ef4444" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ============ Enhanced Attendance Tab with Date Filters ============
 function EnhancedAttendanceTab({ 
   records, employees, stats, month, year, setMonth, setYear, onRefresh, 
@@ -6359,6 +6499,20 @@ function EnhancedAttendanceTab({
         </CardContent>
       </Card>
 
+      {dateFilter === 'analytics' && (
+        <AttendanceAnalyticsPanel
+          token={token}
+          bgCard={bgCard}
+          bgSecondary={bgSecondary}
+          textPrimary={textPrimary}
+          textSecondary={textSecondary}
+          borderColor={borderColor}
+          isDark={isDark}
+        />
+      )}
+
+      {dateFilter !== 'analytics' && (
+      <>
       {/* Summary Cards — each one filters the table below; click again to return to that view */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
@@ -6483,6 +6637,8 @@ function EnhancedAttendanceTab({
           </div>
         </CardContent>
       </Card>
+      </>
+      )}
 
       {/* Segregated Breaks View Modal */}
       <Dialog open={!!breakDetail} onOpenChange={(o) => !o && setBreakDetail(null)}>
