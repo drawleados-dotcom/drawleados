@@ -167,9 +167,17 @@ def _pipeline_match(pipeline: str) -> Dict[str, Any]:
 # flow, LeadQuotationModal — trigger is name-based, any stage matching
 # /quot/i) to the only two outcomes: Lost or Invoice Raise. Quotation isn't
 # fixed/protected like the terminal two — it's just seeded by default.
+#
+# Discovery Call sits right after Appointment in Sales, and is mirrored
+# read-only into Pre-sales the same way Appointment is (see
+# _pre_sales_promoted_discovery_stages / get_leads) — Pre-sales can see a
+# lead land there but can never move one there itself (see update_lead_stage).
 PIPELINE_STAGE_BACKFILL = {
-    "pre_sales": [],
+    "pre_sales": [
+        {"name": "Discovery Call", "color": "#06b6d4", "is_fixed": False},
+    ],
     "sales": [
+        {"name": "Discovery Call", "color": "#06b6d4", "is_fixed": False},
         {"name": "Quotation", "color": "#f59e0b", "is_fixed": False},
         {"name": "Lost", "color": "#ef4444", "is_fixed": True},
         {"name": "Invoice Raise", "color": "#a855f7", "is_fixed": True},
@@ -511,20 +519,22 @@ async def get_leads(
     # long as Sales hasn't moved it past that first Appointment step yet, it's
     # merged back into the Pre-sales list here (read-only: its stage_id is
     # remapped to Pre-sales' own Appointment stage so it slots into that
-    # bucket/card count instead of vanishing from Pre-sales entirely).
+    # bucket/card count instead of vanishing from Pre-sales entirely). Same
+    # mirroring applies once Sales moves the lead on to Discovery Call.
     if pipeline == "pre_sales":
-        pre_sales_appt_stage, sales_appt_stage = await _pre_sales_promoted_appointment_stages(request)
-        if pre_sales_appt_stage and sales_appt_stage and (not stage_id or stage_id == pre_sales_appt_stage["stage_id"]):
-            promo_query = {"is_deleted": {"$ne": True}, "stage_id": sales_appt_stage["stage_id"]}
-            if lead_owner:
-                promo_query["lead_owner"] = lead_owner
-            promo_query["$and"] = [{"pipeline": "sales"}] + _search_clause(search)
-            promoted = await db.leads_v2.find(promo_query, {"_id": 0}).to_list(10000)
-            if promoted:
-                for p in promoted:
-                    p["stage_id"] = pre_sales_appt_stage["stage_id"]
-                    p["promoted_to_sales"] = True
-                leads = sorted(leads + promoted, key=_leads_sort_key, reverse=True)
+        for get_mirrored_pair in (_pre_sales_promoted_appointment_stages, _pre_sales_promoted_discovery_stages):
+            pre_sales_stage, sales_stage = await get_mirrored_pair(request)
+            if pre_sales_stage and sales_stage and (not stage_id or stage_id == pre_sales_stage["stage_id"]):
+                promo_query = {"is_deleted": {"$ne": True}, "stage_id": sales_stage["stage_id"]}
+                if lead_owner:
+                    promo_query["lead_owner"] = lead_owner
+                promo_query["$and"] = [{"pipeline": "sales"}] + _search_clause(search)
+                promoted = await db.leads_v2.find(promo_query, {"_id": 0}).to_list(10000)
+                if promoted:
+                    for p in promoted:
+                        p["stage_id"] = pre_sales_stage["stage_id"]
+                        p["promoted_to_sales"] = True
+                    leads = sorted(leads + promoted, key=_leads_sort_key, reverse=True)
 
     # Enrich leads with lead_owner_name
     user_ids = list(set([lead.get("lead_owner") for lead in leads if lead.get("lead_owner")]))
@@ -587,6 +597,14 @@ async def update_lead(lead_id: str, update_data: Dict[str, Any], request: Reques
         role = (current_user.get("role") or "").lower()
         if current_user.get("user_id") != old_lead.get("created_by") and role not in ("super_admin", "admin"):
             raise HTTPException(status_code=403, detail="Only the lead's creator can change the Lead Owner")
+
+    # This generic edit form can also carry a stage_id change (e.g. the Stage
+    # dropdown) — apply the same Discovery Call restriction as
+    # update_lead_stage instead of leaving it reachable through this endpoint.
+    if update_data.get("stage_id"):
+        target_stage = await db.lead_stages.find_one({"stage_id": update_data["stage_id"]}, {"_id": 0})
+        if target_stage and target_stage.get("pipeline") == "pre_sales" and "discovery" in (target_stage.get("name") or "").lower():
+            raise HTTPException(status_code=400, detail="Discovery Call can only be set from the Sales tab.")
 
     update_data["updated_at"] = datetime.now(timezone.utc)
     
@@ -700,6 +718,30 @@ async def _pre_sales_promoted_appointment_stages(request: Request):
     sales_appt_stage = await _get_sales_appointment_stage(request)
     return pre_sales_appt_stage, sales_appt_stage
 
+async def _pre_sales_promoted_discovery_stages(request: Request):
+    """Same read-only mirroring as _pre_sales_promoted_appointment_stages,
+    but for Discovery Call: a lead Sales has moved into its Discovery Call
+    stage is shown back in Pre-sales under Pre-sales' own Discovery Call
+    stage (see get_leads / get_lead_stats), without ever really holding it —
+    Pre-sales can't move a lead there directly (see update_lead_stage)."""
+    pre_sales_stage = await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "$and": [_pipeline_match("pre_sales")], "name": {"$regex": "discovery", "$options": "i"}},
+        {"_id": 0},
+    )
+    sales_stage = await db.lead_stages.find_one(
+        {"is_deleted": {"$ne": True}, "pipeline": "sales", "name": {"$regex": "discovery", "$options": "i"}},
+        {"_id": 0},
+        sort=[("order", 1)],
+    )
+    if not sales_stage:
+        await get_stages(request, pipeline="sales")
+        sales_stage = await db.lead_stages.find_one(
+            {"is_deleted": {"$ne": True}, "pipeline": "sales", "name": {"$regex": "discovery", "$options": "i"}},
+            {"_id": 0},
+            sort=[("order", 1)],
+        )
+    return pre_sales_stage, sales_stage
+
 async def _sync_calendar_and_log_appointment(
     lead: Dict[str, Any], appointment_at: str, reason: str, current_user: Dict[str, Any], update_doc: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -761,9 +803,39 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
             "by_user_name": current_user.get("name"),
         }
 
+    # Apt. Followup / Apt. RNR: quick actions available while a lead sits on
+    # the Appointment stage — same click-to-log-an-entry pattern as RNR
+    # above, but the lead's stage_id never changes (stage_data["stage_id"]
+    # is the Appointment stage itself), so these are purely history/badges.
+    apt_followup_entry = None
+    if stage_data.get("apt_followup_at"):
+        update_doc["apt_followup_at"] = stage_data["apt_followup_at"]
+        apt_followup_entry = {
+            "entered_at": stage_data["apt_followup_at"],
+            "clicked_at": datetime.now(timezone.utc).isoformat(),
+            "by_user_id": current_user.get("user_id"),
+            "by_user_name": current_user.get("name"),
+        }
+    apt_rnr_entry = None
+    if stage_data.get("apt_rnr_at"):
+        update_doc["apt_rnr_at"] = stage_data["apt_rnr_at"]
+        apt_rnr_entry = {
+            "entered_at": stage_data["apt_rnr_at"],
+            "clicked_at": datetime.now(timezone.utc).isoformat(),
+            "by_user_id": current_user.get("user_id"),
+            "by_user_name": current_user.get("name"),
+        }
+
     new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
     new_stage_name = (new_stage.get("name") or "").strip().lower() if new_stage else ""
     is_appointment_stage = "appoin" in new_stage_name
+    new_stage_pipeline = new_stage.get("pipeline") if new_stage else None
+
+    # Discovery Call is Sales-owned — Pre-sales only ever sees it read-only,
+    # merged back in get_leads() the same way Appointment is. Block any
+    # direct move into Pre-sales' own mirror of that stage.
+    if new_stage_pipeline == "pre_sales" and "discovery" in new_stage_name:
+        raise HTTPException(status_code=400, detail="Discovery Call can only be set from the Sales tab.")
 
     # Once a lead is actually promoted into Sales, it's shown back in
     # Pre-sales read-only (see get_leads) — block any attempt to move it into
@@ -771,7 +843,6 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
     # a stage_id that belongs to a pipeline it's no longer in. The one
     # legitimate cross-pipeline move is the promotion itself, handled below.
     lead_pipeline = _lead_pipeline(lead) if lead else None
-    new_stage_pipeline = new_stage.get("pipeline") if new_stage else None
     is_promotion_transition = is_appointment_stage and lead_pipeline == "pre_sales" and bool(stage_data.get("appointment_at"))
     if new_stage_pipeline and lead_pipeline and new_stage_pipeline != lead_pipeline and not is_promotion_transition:
         raise HTTPException(
@@ -801,6 +872,10 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
         push_doc["appointment_history"] = history_entry
     if rnr_history_entry:
         push_doc["rnr_history"] = rnr_history_entry
+    if apt_followup_entry:
+        push_doc["apt_followups"] = apt_followup_entry
+    if apt_rnr_entry:
+        push_doc["apt_rnr_history"] = apt_rnr_entry
     if push_doc:
         mongo_update["$push"] = push_doc
 
@@ -997,11 +1072,12 @@ async def get_lead_stats(request: Request, pipeline: str = "pre_sales"):
     # Keep this in sync with the promoted-lead merge in get_leads() so the
     # header total matches the number of rows Pre-sales actually sees.
     if pipeline == "pre_sales":
-        pre_sales_appt_stage, sales_appt_stage = await _pre_sales_promoted_appointment_stages(request)
-        if pre_sales_appt_stage and sales_appt_stage:
-            total_leads += await db.leads_v2.count_documents(
-                {"is_deleted": {"$ne": True}, "pipeline": "sales", "stage_id": sales_appt_stage["stage_id"]}
-            )
+        for get_mirrored_pair in (_pre_sales_promoted_appointment_stages, _pre_sales_promoted_discovery_stages):
+            pre_sales_stage, sales_stage = await get_mirrored_pair(request)
+            if pre_sales_stage and sales_stage:
+                total_leads += await db.leads_v2.count_documents(
+                    {"is_deleted": {"$ne": True}, "pipeline": "sales", "stage_id": sales_stage["stage_id"]}
+                )
 
     stats = {
         "total": total_leads,

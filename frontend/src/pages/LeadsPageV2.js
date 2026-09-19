@@ -54,6 +54,7 @@ import {
   Tag,
   History,
   PhoneMissed,
+  Lock,
 } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -495,7 +496,7 @@ const LeadsPageV2 = () => {
       loadStats();
       if (showOverview) loadOverview();
     } catch (error) {
-      toast.error('Failed to update lead stage');
+      toast.error(error.response?.data?.detail || 'Failed to update lead stage');
     }
   };
 
@@ -1760,7 +1761,9 @@ const LeadsPageV2 = () => {
                     >
                       <SelectTrigger className={bgSecondary}><SelectValue placeholder="Select stage" /></SelectTrigger>
                       <SelectContent>
-                        {stages.map(s => (
+                        {/* Discovery Call is Sales-owned — hide it here in Pre-sales
+                            rather than let it be picked and rejected on save. */}
+                        {stages.filter(s => !(pipeline === 'pre_sales' && (s.name || '').toLowerCase().trim() === 'discovery call')).map(s => (
                           <SelectItem key={s.stage_id} value={s.stage_id}>
                             <div className="flex items-center gap-2">
                               <div className="w-3 h-3 rounded" style={{ backgroundColor: s.color }} />
@@ -2114,19 +2117,25 @@ const LeadsPageV2 = () => {
                         <History className="h-4 w-4" /> Timeline
                       </h4>
                       <div className="space-y-3 max-h-[300px] overflow-y-auto" data-testid="lead-timeline">
-                        {[...(editingLead.rnr_history || [])].reverse().map((h, idx) => (
-                          <div key={idx} className={`p-3 rounded-lg ${bgSecondary}`} data-testid={`timeline-rnr-${idx}`}>
-                            <div className="flex items-center gap-2 mb-1">
-                              <PhoneMissed className="h-4 w-4 text-red-400" />
-                              <span className={`text-xs ${textSecondary}`}>
-                                Clicked {new Date(h.clicked_at).toLocaleString()} by {h.by_user_name || 'Unknown'}
-                              </span>
+                        {[
+                          ...(editingLead.rnr_history || []).map(h => ({ ...h, _type: 'rnr', _label: 'RNR' })),
+                          ...(editingLead.apt_followups || []).map(h => ({ ...h, _type: 'apt_followup', _label: 'Appointment Follow-up' })),
+                          ...(editingLead.apt_rnr_history || []).map(h => ({ ...h, _type: 'apt_rnr', _label: 'Appointment RNR' })),
+                        ]
+                          .sort((a, b) => new Date(b.clicked_at) - new Date(a.clicked_at))
+                          .map((h, idx) => (
+                            <div key={idx} className={`p-3 rounded-lg ${bgSecondary}`} data-testid={`timeline-${h._type}-${idx}`}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <PhoneMissed className="h-4 w-4 text-red-400" />
+                                <span className={`text-xs ${textSecondary}`}>
+                                  Clicked {new Date(h.clicked_at).toLocaleString()} by {h.by_user_name || 'Unknown'}
+                                </span>
+                              </div>
+                              <p className={`text-sm ${textPrimary}`}>
+                                {h._label} — retry set for {new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
+                              </p>
                             </div>
-                            <p className={`text-sm ${textPrimary}`}>
-                              RNR — retry set for {new Date(h.entered_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}
-                            </p>
-                          </div>
-                        ))}
+                          ))}
                         {editingLead.created_at && (
                           <div className={`p-3 rounded-lg ${bgSecondary}`} data-testid="timeline-created">
                             <div className="flex items-center gap-2 mb-1">
@@ -2136,7 +2145,8 @@ const LeadsPageV2 = () => {
                             <p className={`text-sm ${textPrimary}`}>Lead created</p>
                           </div>
                         )}
-                        {(!editingLead.rnr_history || editingLead.rnr_history.length === 0) && !editingLead.created_at && (
+                        {(editingLead.rnr_history || []).length === 0 && (editingLead.apt_followups || []).length === 0 &&
+                          (editingLead.apt_rnr_history || []).length === 0 && !editingLead.created_at && (
                           <p className={`text-sm ${textSecondary} text-center py-4`}>No timeline events yet</p>
                         )}
                       </div>
@@ -2167,95 +2177,156 @@ const LeadsPageV2 = () => {
                     const needsAppointment = stageNameLower === 'appoinment' || stageNameLower === 'appointment' || stageNameLower === 'appointment reshuedule' || stageNameLower === 'appointment reschedule' || stageNameLower === 'appointment rescheule';
                     const needsFollowup = stageNameLower === 'followup' || stageNameLower === 'follow-up' || stageNameLower === 'prospect followup' || stageNameLower === 'follow up';
                     const needsRnr = stageNameLower === 'rnr' || stageNameLower === 'followup rnr' || stageNameLower === 'follwup rnr';
+                    const needsDiscoveryCall = stageNameLower === 'discovery call';
+                    // Discovery Call is Sales-owned — Pre-sales sees it read-only
+                    // (see get_leads' merge-back) and can never move a lead there.
+                    const isLockedDiscoveryCall = needsDiscoveryCall && pipeline === 'pre_sales';
+
+                    const openStageDatePopup = (kind, existingISO) => {
+                      const ex = existingISO ? new Date(existingISO) : null;
+                      const today = new Date();
+                      const initialDate = (ex && !isNaN(ex)) ? ex.toISOString().slice(0, 10) : today.toISOString().slice(0, 10);
+                      const initialTime = (ex && !isNaN(ex))
+                        ? `${String(ex.getHours()).padStart(2, '0')}:${String(ex.getMinutes()).padStart(2, '0')}`
+                        : '10:00';
+                      setStageDateValue(initialDate);
+                      setStageTimeValue(initialTime);
+                      setStageDateModal({ stage, kind });
+                    };
+
                     return (
-                      <button
-                        key={stage.stage_id}
-                        type="button"
-                        data-testid={`stage-tab-${stage.stage_id}`}
-                        onClick={async () => {
-                          // RNR can be clicked again even while already on the RNR
-                          // stage — every ring-no-response attempt is its own logged
-                          // entry, not just the first one that moved the stage here.
-                          if (isCurrent && !needsRnr) return;
-                          // Open mini date/time popup for Appointment, Followup & RNR stages.
-                          if (needsAppointment || needsFollowup || needsRnr) {
-                            const existingISO = needsAppointment
-                              ? (editingLead?.appointment_at || '')
-                              : needsFollowup
-                              ? (editingLead?.followup_at || '')
-                              : (editingLead?.rnr_at || '');
-                            const ex = existingISO ? new Date(existingISO) : null;
-                            const today = new Date();
-                            const initialDate = (ex && !isNaN(ex)) ? ex.toISOString().slice(0, 10) : today.toISOString().slice(0, 10);
-                            const initialTime = (ex && !isNaN(ex))
-                              ? `${String(ex.getHours()).padStart(2, '0')}:${String(ex.getMinutes()).padStart(2, '0')}`
-                              : '10:00';
-                            setStageDateValue(initialDate);
-                            setStageTimeValue(initialTime);
-                            setStageDateModal({ stage, kind: needsAppointment ? 'appointment' : needsFollowup ? 'followup' : 'rnr' });
-                            return;
-                          }
-                          try {
-                            await axios.put(
-                              `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
-                              { stage_id: stage.stage_id },
-                              { headers }
-                            );
-                            setLeadForm({ ...leadForm, stage_id: stage.stage_id });
-                            setEditingLead({ ...editingLead, stage_id: stage.stage_id });
-                            toast.success(`Moved to ${stage.name}`);
-                            loadLeads();
-                            loadStats();
-                            const stageName = (stage.name || '').toLowerCase().trim();
-                            if (stageName === 'invoice raise' || stageName === 'invoice_raise' || stageName === 'invoiceraise') {
-                              const leadForRaise = { ...editingLead, stage_id: stage.stage_id };
-                              setEditingLead(null);
-                              setInvoiceRaiseLead(leadForRaise);
+                      <React.Fragment key={stage.stage_id}>
+                        <button
+                          type="button"
+                          data-testid={`stage-tab-${stage.stage_id}`}
+                          disabled={isLockedDiscoveryCall}
+                          title={isLockedDiscoveryCall ? 'Only Sales can move a lead to Discovery Call' : undefined}
+                          onClick={async () => {
+                            if (isLockedDiscoveryCall) {
+                              toast.error('Discovery Call can only be set from the Sales tab');
+                              return;
                             }
-                            if (isQuotationStageName(stageName)) {
-                              const leadForQuotation = { ...editingLead, stage_id: stage.stage_id };
-                              setEditingLead(null);
-                              setQuotationLead(leadForQuotation);
+                            // RNR can be clicked again even while already on the RNR
+                            // stage — every ring-no-response attempt is its own logged
+                            // entry, not just the first one that moved the stage here.
+                            if (isCurrent && !needsRnr) return;
+                            // Open mini date/time popup for Appointment, Followup & RNR stages.
+                            if (needsAppointment || needsFollowup || needsRnr) {
+                              const existingISO = needsAppointment
+                                ? (editingLead?.appointment_at || '')
+                                : needsFollowup
+                                ? (editingLead?.followup_at || '')
+                                : (editingLead?.rnr_at || '');
+                              openStageDatePopup(needsAppointment ? 'appointment' : needsFollowup ? 'followup' : 'rnr', existingISO);
+                              return;
                             }
-                          } catch (e) {
-                            toast.error('Failed to change stage');
-                          }
-                        }}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${
-                          isCurrent ? 'text-white' : `${textSecondary} hover:opacity-80`
-                        }`}
-                        style={{
-                          borderColor: stage.color,
-                          backgroundColor: isCurrent ? stage.color : 'transparent',
-                          color: isCurrent ? '#fff' : stage.color,
-                        }}
-                      >
-                        {stage.name}
-                        {needsFollowup && (editingLead?.followups?.length > 0) && (
-                          <span
-                            className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
-                            style={{
-                              backgroundColor: isCurrent ? '#ffffff' : stage.color,
-                              color: isCurrent ? stage.color : '#ffffff',
-                            }}
-                            data-testid="followup-count-badge"
-                          >
-                            {editingLead.followups.length}
-                          </span>
+                            try {
+                              await axios.put(
+                                `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
+                                { stage_id: stage.stage_id },
+                                { headers }
+                              );
+                              setLeadForm({ ...leadForm, stage_id: stage.stage_id });
+                              setEditingLead({ ...editingLead, stage_id: stage.stage_id });
+                              toast.success(`Moved to ${stage.name}`);
+                              loadLeads();
+                              loadStats();
+                              const stageName = (stage.name || '').toLowerCase().trim();
+                              if (stageName === 'invoice raise' || stageName === 'invoice_raise' || stageName === 'invoiceraise') {
+                                const leadForRaise = { ...editingLead, stage_id: stage.stage_id };
+                                setEditingLead(null);
+                                setInvoiceRaiseLead(leadForRaise);
+                              }
+                              if (isQuotationStageName(stageName)) {
+                                const leadForQuotation = { ...editingLead, stage_id: stage.stage_id };
+                                setEditingLead(null);
+                                setQuotationLead(leadForQuotation);
+                              }
+                            } catch (e) {
+                              toast.error(e?.response?.data?.detail || 'Failed to change stage');
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${
+                            isCurrent ? 'text-white' : `${textSecondary} hover:opacity-80`
+                          } ${isLockedDiscoveryCall ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          style={{
+                            borderColor: stage.color,
+                            backgroundColor: isCurrent ? stage.color : 'transparent',
+                            color: isCurrent ? '#fff' : stage.color,
+                          }}
+                        >
+                          {isLockedDiscoveryCall && <Lock className="inline h-3 w-3 mr-1 -mt-0.5" />}
+                          {stage.name}
+                          {needsFollowup && (editingLead?.followups?.length > 0) && (
+                            <span
+                              className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                              style={{
+                                backgroundColor: isCurrent ? '#ffffff' : stage.color,
+                                color: isCurrent ? stage.color : '#ffffff',
+                              }}
+                              data-testid="followup-count-badge"
+                            >
+                              {editingLead.followups.length}
+                            </span>
+                          )}
+                          {needsRnr && (editingLead?.rnr_history?.length > 0) && (
+                            <span
+                              className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                              style={{
+                                backgroundColor: isCurrent ? '#ffffff' : stage.color,
+                                color: isCurrent ? stage.color : '#ffffff',
+                              }}
+                              data-testid="rnr-count-badge"
+                            >
+                              {editingLead.rnr_history.length}
+                            </span>
+                          )}
+                        </button>
+                        {/* Apt. Followup / Apt. RNR — quick actions available once the
+                            lead is actually on the Appointment stage. Logging either
+                            keeps the lead on Appointment (same stage_id); only
+                            Discovery Call (above) advances it further, Sales-only. */}
+                        {needsAppointment && isCurrent && (
+                          <>
+                            <button
+                              type="button"
+                              data-testid="apt-followup-btn"
+                              onClick={() => openStageDatePopup('apt_followup', editingLead?.apt_followup_at || '')}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
+                              style={{ borderColor: stage.color, color: stage.color }}
+                            >
+                              Apt. Followup
+                              {editingLead?.apt_followups?.length > 0 && (
+                                <span
+                                  className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                                  style={{ backgroundColor: stage.color, color: '#ffffff' }}
+                                  data-testid="apt-followup-count-badge"
+                                >
+                                  {editingLead.apt_followups.length}
+                                </span>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              data-testid="apt-rnr-btn"
+                              onClick={() => openStageDatePopup('apt_rnr', editingLead?.apt_rnr_at || '')}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
+                              style={{ borderColor: stage.color, color: stage.color }}
+                            >
+                              Apt. RNR
+                              {editingLead?.apt_rnr_history?.length > 0 && (
+                                <span
+                                  className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                                  style={{ backgroundColor: stage.color, color: '#ffffff' }}
+                                  data-testid="apt-rnr-count-badge"
+                                >
+                                  {editingLead.apt_rnr_history.length}
+                                </span>
+                              )}
+                            </button>
+                          </>
                         )}
-                        {needsRnr && (editingLead?.rnr_history?.length > 0) && (
-                          <span
-                            className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
-                            style={{
-                              backgroundColor: isCurrent ? '#ffffff' : stage.color,
-                              color: isCurrent ? stage.color : '#ffffff',
-                            }}
-                            data-testid="rnr-count-badge"
-                          >
-                            {editingLead.rnr_history.length}
-                          </span>
-                        )}
-                      </button>
+                      </React.Fragment>
                     );
                   })}
                 </div>
@@ -2818,7 +2889,11 @@ const LeadsPageV2 = () => {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Calendar className="h-4 w-4" style={{ color: stageDateModal.stage.color }} />
-                    {stageDateModal.kind === 'appointment' ? 'Set Appointment Date & Time' : stageDateModal.kind === 'followup' ? 'Set Follow-up Date & Time' : 'Set RNR Retry Date & Time'}
+                    {stageDateModal.kind === 'appointment' ? 'Set Appointment Date & Time'
+                      : stageDateModal.kind === 'followup' ? 'Set Follow-up Date & Time'
+                      : stageDateModal.kind === 'rnr' ? 'Set RNR Retry Date & Time'
+                      : stageDateModal.kind === 'apt_followup' ? 'Set Appointment Follow-up Date & Time'
+                      : 'Set Appointment RNR Retry Date & Time'}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
@@ -2861,7 +2936,11 @@ const LeadsPageV2 = () => {
                           `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
                           {
                             stage_id: stage.stage_id,
-                            ...(kind === 'appointment' ? { appointment_at: iso } : kind === 'followup' ? { followup_at: iso } : { rnr_at: iso }),
+                            ...(kind === 'appointment' ? { appointment_at: iso }
+                              : kind === 'followup' ? { followup_at: iso }
+                              : kind === 'rnr' ? { rnr_at: iso }
+                              : kind === 'apt_followup' ? { apt_followup_at: iso }
+                              : { apt_rnr_at: iso }),
                           },
                           { headers },
                         );
@@ -2873,6 +2952,10 @@ const LeadsPageV2 = () => {
                         setEditingLead(res.data);
                         if (res.data.pipeline === 'sales' && pipeline === 'pre_sales') {
                           toast.success(`Appointment booked — moved to Sales`);
+                        } else if (kind === 'apt_followup') {
+                          toast.success('Appointment follow-up logged');
+                        } else if (kind === 'apt_rnr') {
+                          toast.success('Appointment RNR logged');
                         } else {
                           toast.success(`Moved to ${stage.name}`);
                         }
