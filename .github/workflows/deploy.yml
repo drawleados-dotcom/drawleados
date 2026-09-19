@@ -29,4 +29,18 @@ jobs:
               fi
               pm2 restart drawlead-backend --update-env || true
             fi
+            if [ -n "${{ secrets.VAPID_PUBLIC_KEY }}" ] && [ -n "${{ secrets.VAPID_PRIVATE_KEY }}" ]; then
+              for pair in \
+                "VAPID_PUBLIC_KEY=${{ secrets.VAPID_PUBLIC_KEY }}" \
+                "VAPID_PRIVATE_KEY=${{ secrets.VAPID_PRIVATE_KEY }}" \
+                "VAPID_CLAIMS_EMAIL=${{ secrets.VAPID_CLAIMS_EMAIL || 'admin@drawlead.com' }}"; do
+                key="${pair%%=*}"
+                if grep -q "^${key}=" backend/.env 2>/dev/null; then
+                  sed -i "s|^${key}=.*|${pair}|" backend/.env
+                else
+                  echo "${pair}" >> backend/.env
+                fi
+              done
+              pm2 restart drawlead-backend --update-env || true
+            fi
             /root/deploy-drawlead.sh
