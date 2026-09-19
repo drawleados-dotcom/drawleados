@@ -6107,22 +6107,29 @@ function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, tex
   // Sundays/declared holidays with the holiday's name underneath —
   // e.g. "Mon" in normal color for a working day, "Mon" + "Vinayagar
   // Chathurthi" in red for a holiday, "Sun" + "Sunday" in red otherwise.
+  // Angled (not horizontal) so adjacent labels — e.g. a holiday Saturday
+  // right next to a Sunday — don't overlap each other; each label's own
+  // diagonal footprint stays within its tick's lane instead of bleeding
+  // sideways into the neighbor's.
   const DayOfWeekTick = (props) => {
     const { x, y, payload } = props;
     const day = chartData[payload.index];
     if (!day) return null;
     const dow = new Date(day.date).toLocaleDateString('en-IN', { weekday: 'short' });
     const holidayColor = '#ef4444';
+    const name = day.is_holiday && day.holiday_name
+      ? (day.holiday_name.length > 12 ? `${day.holiday_name.slice(0, 11)}…` : day.holiday_name)
+      : null;
     return (
-      <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={12} textAnchor="middle" fontSize={11} fontWeight={day.is_holiday ? 600 : 400} fill={day.is_holiday ? holidayColor : tickColor}>
-          {dow}
+      <g transform={`translate(${x},${y}) rotate(-45)`}>
+        <text
+          textAnchor="end"
+          fontWeight={day.is_holiday ? 600 : 400}
+          fill={day.is_holiday ? holidayColor : tickColor}
+        >
+          <tspan x={0} dy={10} fontSize={10}>{dow}</tspan>
+          {name && <tspan x={0} dy={12} fontSize={8.5} fill={holidayColor}>{name}</tspan>}
         </text>
-        {day.is_holiday && day.holiday_name && (
-          <text x={0} y={0} dy={25} textAnchor="middle" fontSize={9} fill={holidayColor}>
-            {day.holiday_name.length > 16 ? `${day.holiday_name.slice(0, 15)}…` : day.holiday_name}
-          </text>
-        )}
       </g>
     );
   };
@@ -6176,11 +6183,11 @@ function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, tex
           ) : chartData.length === 0 ? (
             <p className={`text-sm ${textSecondary} text-center py-16`}>No attendance data for this range.</p>
           ) : (
-            <ResponsiveContainer width="100%" height={granularity === 'day' ? 400 : 360}>
-              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: granularity === 'day' ? 32 : 8 }}>
+            <ResponsiveContainer width="100%" height={granularity === 'day' ? 420 : 360}>
+              <BarChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: granularity === 'day' ? 50 : 8 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                 {granularity === 'day' ? (
-                  <XAxis dataKey="label" height={48} interval={0} tick={<DayOfWeekTick />} />
+                  <XAxis dataKey="label" height={70} interval={0} tick={<DayOfWeekTick />} />
                 ) : (
                   <XAxis dataKey="label" tick={{ fill: tickColor, fontSize: 11 }} />
                 )}
