@@ -1096,11 +1096,16 @@ const LeadsPageV2 = () => {
     if (filterLeadOwner && lead.lead_owner !== filterLeadOwner) return false;
     if (filterService && lead.service !== filterService) return false;
 
-    // Filter by date range — match if any of created_at / appointment_at /
-    // followup_at falls inside the selected window. This way picking "this
-    // week" surfaces leads that have meetings/follow-ups scheduled there too.
+    // Filter by date range — match if any of date_of_lead / created_at /
+    // appointment_at / followup_at falls inside the selected window. This
+    // way picking "this week" surfaces leads that have meetings/follow-ups
+    // scheduled there too. date_of_lead is the user-editable "when this
+    // lead actually came in" date (defaults to today, but is backdatable on
+    // import/manual entry) — without it, a backdated lead's real created_at
+    // (DB insert time) never lines up with the date the business considers
+    // it created, so it silently disappears from Today/This Week/etc.
     if (dateRange.from || dateRange.to) {
-      const candidates = [lead.created_at, lead.appointment_at, lead.followup_at].filter(Boolean);
+      const candidates = [lead.date_of_lead, lead.created_at, lead.appointment_at, lead.followup_at].filter(Boolean);
       const from = dateRange.from ? new Date(dateRange.from) : null;
       if (from) from.setHours(0, 0, 0, 0);
       const to = dateRange.to ? new Date(dateRange.to) : null;

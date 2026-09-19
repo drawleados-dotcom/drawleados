@@ -1,12 +1,14 @@
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel, field_validator
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 import httpx
 import asyncio
 
 from access import is_admin
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 # Import notification service
 from notification_service import (
@@ -505,7 +507,15 @@ async def get_leads(
             created_filter["$gte"] = _parse_iso(date_from)
         if date_to:
             created_filter["$lte"] = _parse_iso(date_to)
-        query["created_at"] = created_filter
+        # Also match date_of_lead (user-editable, backdatable "when this
+        # lead came in" date, plain "YYYY-MM-DD" string in IST) — see the
+        # matching comment in get_overview above for why.
+        date_of_lead_filter = {}
+        if date_from:
+            date_of_lead_filter["$gte"] = _parse_iso(date_from).astimezone(IST).strftime("%Y-%m-%d")
+        if date_to:
+            date_of_lead_filter["$lte"] = _parse_iso(date_to).astimezone(IST).strftime("%Y-%m-%d")
+        and_clauses.append({"$or": [{"created_at": created_filter}, {"date_of_lead": date_of_lead_filter}]})
 
     query["$and"] = and_clauses
 
@@ -1181,7 +1191,19 @@ async def get_overview(request: Request, date_from: Optional[str] = None, date_t
     if date_to:
         created_filter["$lte"] = _parse_iso(date_to)
     if created_filter:
-        query["created_at"] = created_filter
+        # Also match on date_of_lead — the user-editable "when this lead
+        # actually came in" date (defaults to today, but is backdatable on
+        # import/manual entry). Without this, a backdated lead's real
+        # created_at (DB insert time) never lines up with the date the
+        # business considers it created, so it silently drops out of the
+        # funnel for that window. date_of_lead is a plain "YYYY-MM-DD"
+        # string in IST, so the datetime bounds are converted to match.
+        date_of_lead_filter = {}
+        if date_from:
+            date_of_lead_filter["$gte"] = _parse_iso(date_from).astimezone(IST).strftime("%Y-%m-%d")
+        if date_to:
+            date_of_lead_filter["$lte"] = _parse_iso(date_to).astimezone(IST).strftime("%Y-%m-%d")
+        query["$or"] = [{"created_at": created_filter}, {"date_of_lead": date_of_lead_filter}]
 
     leads = await db.leads_v2.find(
         query, {"_id": 0, "appointment_at": 1, "quotation_id": 1, "stage_id": 1, "estimation": 1}
