@@ -534,49 +534,11 @@ async def unlock_private_portfolio(private_token: str, payload: PortfolioLeadSub
     }
 
 
-@sales_kit_router.get("/public/{share_token}")
-async def get_public_form(share_token: str):
-    doc = await db.sales_kit_forms.find_one(
-        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0}
-    )
-    if not doc or doc.get("status") != "published":
-        raise HTTPException(status_code=404, detail="Form not available")
-    # Respondents only need the structure, not internal ownership metadata.
-    return {
-        "form_id": doc["form_id"],
-        "title": doc["title"],
-        "description": doc.get("description", ""),
-        "pages": doc.get("pages", []),
-    }
-
-
-@sales_kit_router.post("/public/{share_token}/submit")
-async def submit_public_form(share_token: str, payload: FormResponseSubmit):
-    form = await db.sales_kit_forms.find_one(
-        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0}
-    )
-    if not form or form.get("status") != "published":
-        raise HTTPException(status_code=404, detail="Form not available")
-
-    valid_field_ids = {
-        f["field_id"] for p in form.get("pages") or [] for f in p.get("fields") or []
-        if f.get("type") != "section_heading"
-    }
-    answers = {k: v for k, v in (payload.answers or {}).items() if k in valid_field_ids}
-
-    doc = {
-        "response_id": str(uuid.uuid4()),
-        "form_id": form["form_id"],
-        "answers": answers,
-        "submitted_at": datetime.now(timezone.utc),
-    }
-    await db.sales_kit_responses.insert_one(dict(doc))
-    return {"message": "Response submitted", "response_id": doc["response_id"]}
-
-
 @sales_kit_router.get("/public/website-portfolios")
 async def get_public_website_portfolios():
-    """The single global gallery link — lists every active website card."""
+    """The single global gallery link — lists every active website card.
+    Registered before the generic /public/{share_token} form route below,
+    otherwise that route would swallow this literal path first."""
     items = await db.website_portfolios.find(
         {"is_deleted": {"$ne": True}},
         {"_id": 0, "created_by": 0, "created_by_name": 0},
@@ -644,3 +606,43 @@ async def book_website_portfolio_appointment(payload: WebsitePortfolioBooking):
     }
     await db.leads_v2.insert_one(dict(lead_doc))
     return {"message": "Thanks! We'll reach out to you shortly."}
+
+
+@sales_kit_router.get("/public/{share_token}")
+async def get_public_form(share_token: str):
+    doc = await db.sales_kit_forms.find_one(
+        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0}
+    )
+    if not doc or doc.get("status") != "published":
+        raise HTTPException(status_code=404, detail="Form not available")
+    # Respondents only need the structure, not internal ownership metadata.
+    return {
+        "form_id": doc["form_id"],
+        "title": doc["title"],
+        "description": doc.get("description", ""),
+        "pages": doc.get("pages", []),
+    }
+
+
+@sales_kit_router.post("/public/{share_token}/submit")
+async def submit_public_form(share_token: str, payload: FormResponseSubmit):
+    form = await db.sales_kit_forms.find_one(
+        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0}
+    )
+    if not form or form.get("status") != "published":
+        raise HTTPException(status_code=404, detail="Form not available")
+
+    valid_field_ids = {
+        f["field_id"] for p in form.get("pages") or [] for f in p.get("fields") or []
+        if f.get("type") != "section_heading"
+    }
+    answers = {k: v for k, v in (payload.answers or {}).items() if k in valid_field_ids}
+
+    doc = {
+        "response_id": str(uuid.uuid4()),
+        "form_id": form["form_id"],
+        "answers": answers,
+        "submitted_at": datetime.now(timezone.utc),
+    }
+    await db.sales_kit_responses.insert_one(dict(doc))
+    return {"message": "Response submitted", "response_id": doc["response_id"]}
