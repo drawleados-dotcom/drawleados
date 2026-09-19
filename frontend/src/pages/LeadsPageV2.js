@@ -70,10 +70,16 @@ const STAGE_COLORS = [
 // Shared by the Stage Summary Cards row and the Move to Stage buttons in the
 // Edit Lead popup so both split into the same three lines.
 const classifySalesStageGroup = (stage) => {
+  // Synthetic quick-action cards (see stageCards/renderStageButton) carry a
+  // fixed stage_id rather than a configurable name — match those directly
+  // instead of by substring, which is what real stages get matched by below.
+  if (stage.stage_id === '__apt_followup__' || stage.stage_id === '__apt_rnr__') return 'appointment';
+  if (stage.stage_id === '__proposal_followup__' || stage.stage_id === '__proposal_rnr__') return 'proposal';
+  if (stage.stage_id === '__invoice_followup__' || stage.stage_id === '__invoice_rnr__') return 'invoice';
   const n = (stage.name || '').toLowerCase().trim();
-  if (n.includes('proposal')) return 'proposal';
   if (n.includes('invoice')) return 'invoice';
-  if (n.includes('appoint') || n.includes('apt.') || n.includes('apt ') || n.includes('discovery') || n.includes('requirement') || n === 'apt') return 'appointment';
+  if (n.includes('proposal') || n.includes('quot')) return 'proposal';
+  if (n.includes('appoint') || n.includes('discovery') || n.includes('requirement')) return 'appointment';
   return 'other';
 };
 
@@ -144,6 +150,7 @@ const LeadsPageV2 = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState(null); // Filter by stage when clicking stats cards
   const [filterLeadOwner, setFilterLeadOwner] = useState(null); // Filter by lead owner
+  const [filterService, setFilterService] = useState(null); // Filter by service
   const [dateRange, setDateRange] = useState({ from: undefined, to: undefined }); // Default: All Time
   const [quickRangeKey, setQuickRangeKey] = useState(null); // 'today' | 'yesterday' | 'week' | 'month' | null — highlights the quick-filter pill matching the active dateRange
   const [showDatePopover, setShowDatePopover] = useState(false);
@@ -1087,6 +1094,7 @@ const LeadsPageV2 = () => {
   // (if any) is currently selected as the table filter.
   const passesNonStageFilters = (lead) => {
     if (filterLeadOwner && lead.lead_owner !== filterLeadOwner) return false;
+    if (filterService && lead.service !== filterService) return false;
 
     // Filter by date range — match if any of created_at / appointment_at /
     // followup_at falls inside the selected window. This way picking "this
@@ -1177,38 +1185,44 @@ const LeadsPageV2 = () => {
     };
   });
 
-  // Apt. Followup / Apt. RNR aren't real stages (see the quick-action
-  // buttons in the Edit Lead popup — they log history without moving the
-  // lead off Appointment), so these two cards are synthetic: counted
-  // straight from the Appointment-stage leads already in baseFilteredLeads
-  // (which, in Pre-sales, already includes the Sales-side merge-back —
-  // same source the real Appointment card above uses). Inserted right after
-  // the Appointment card, wherever that lands (last in Pre-sales, first in Sales).
-  if (appointmentStage) {
-    const apptLeads = baseFilteredLeads.filter(l => l.stage_id === appointmentStage.stage_id);
-    const aptCards = [
+  // Apt./Proposal/Invoice Followup & RNR aren't real stages (see the
+  // quick-action buttons in the Edit Lead popup — they log history without
+  // moving the lead off the anchor stage), so these are synthetic cards:
+  // counted straight from the anchor-stage leads already in
+  // baseFilteredLeads (which, in Pre-sales, already includes the Sales-side
+  // merge-back for Appointment — same source the real Appointment card
+  // above uses). Each pair is inserted right after its anchor stage's card,
+  // wherever that lands.
+  const insertQuickActionCards = (anchorStage, idPrefix, followupLabel, rnrLabel, followupField, rnrField) => {
+    if (!anchorStage) return;
+    const anchorLeads = baseFilteredLeads.filter(l => l.stage_id === anchorStage.stage_id);
+    const cards = [
       {
-        stage_id: '__apt_followup__',
-        name: 'Apnt. Followup',
+        stage_id: `__${idPrefix}_followup__`,
+        name: followupLabel,
         color: '#3b82f6',
-        count: apptLeads.filter(l => (l.apt_followups || []).length > 0).length,
+        count: anchorLeads.filter(l => (l[followupField] || []).length > 0).length,
         amount: 0,
         isHighlighted: false,
         clickable: false,
       },
       {
-        stage_id: '__apt_rnr__',
-        name: 'Apnt RNR',
+        stage_id: `__${idPrefix}_rnr__`,
+        name: rnrLabel,
         color: '#ef4444',
-        count: apptLeads.filter(l => (l.apt_rnr_history || []).length > 0).length,
+        count: anchorLeads.filter(l => (l[rnrField] || []).length > 0).length,
         amount: 0,
         isHighlighted: false,
         clickable: false,
       },
     ];
-    const apptIdx = stageCards.findIndex(c => c.stage_id === appointmentStage.stage_id);
-    stageCards.splice(apptIdx + 1, 0, ...aptCards);
-  }
+    const anchorIdx = stageCards.findIndex(c => c.stage_id === anchorStage.stage_id);
+    if (anchorIdx !== -1) stageCards.splice(anchorIdx + 1, 0, ...cards);
+  };
+
+  insertQuickActionCards(appointmentStage, 'apt', 'Apnt. Followup', 'Apnt RNR', 'apt_followups', 'apt_rnr_history');
+  insertQuickActionCards(findStageByName(/^proposal sent$/i), 'proposal', 'Proposal Followup', 'Proposal RNR', 'proposal_followups', 'proposal_rnr_history');
+  insertQuickActionCards(findStageByName(/^invoice req$/i), 'invoice', 'Invoice Followup', 'Invoice RNR', 'invoice_followups', 'invoice_rnr_history');
 
   const getLeadsByStage = (stageId) => {
     return filteredLeads.filter(l => l.stage_id === stageId);
@@ -1425,7 +1439,7 @@ const LeadsPageV2 = () => {
         ) : (
         <>
         {/* Quick Date Filter — same pill style as the Overview tab */}
-        <div className="px-4 pt-4 flex items-center gap-2" data-testid="quick-date-filter-bar">
+        <div className="px-4 pt-4 flex items-center gap-2 flex-wrap" data-testid="quick-date-filter-bar">
           <span className={`text-xs ${textSecondary} uppercase tracking-wide`}>Date Filter:</span>
           <div className="flex gap-1">
             {OVERVIEW_RANGES.map(opt => (
@@ -1445,11 +1459,6 @@ const LeadsPageV2 = () => {
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Date Range Filter */}
-        <div className={`px-4 pt-4 flex items-center gap-2 flex-wrap`} data-testid="date-filter-bar">
-          <span className={`text-xs ${textSecondary} uppercase tracking-wide mr-1`}>Date Range:</span>
           <Popover open={showDatePopover} onOpenChange={setShowDatePopover}>
             <PopoverTrigger asChild>
               <Button
@@ -1624,23 +1633,51 @@ const LeadsPageV2 = () => {
           };
 
           if (pipeline !== 'pre_sales') {
-            // Sales: same two-group divider layout as Pre-sales below —
-            // Appointment (Appointment & Discovery Call) alongside Closing
-            // (Quotation/Proposal, Lost, Invoice Raise and anything else),
-            // via the shared classifySalesStageGroup helper.
-            const salesAppointmentGroup = stageCards.filter(c => classifySalesStageGroup(c) === 'appointment');
-            const salesClosingGroup = stageCards.filter(c => classifySalesStageGroup(c) !== 'appointment');
+            // Sales: three full-width groups with dividers — Appointment
+            // (Appointment, Apnt. Followup/RNR, Discovery Call), Proposal
+            // (Proposal Req/Sent, Proposal Followup/RNR, Quotation) and
+            // Invoice (Invoice Req, Invoice Followup/RNR, Invoice Raise).
+            // Explicit order per group (not just a filter) since raw stage
+            // order doesn't follow this grouping. Anything unmatched (e.g.
+            // Lost) trails onto the Invoice group.
+            const findSalesCard = (n) => stageCards.find(c => (c.name || '').toLowerCase().trim() === n);
+            const salesAppointmentGroup = [
+              stageCards.find(c => c.isAppointment),
+              stageCards.find(c => c.stage_id === '__apt_followup__'),
+              stageCards.find(c => c.stage_id === '__apt_rnr__'),
+              findSalesCard('discovery call'),
+            ].filter(Boolean);
+            const salesProposalGroup = [
+              findSalesCard('proposal req'),
+              findSalesCard('proposal sent'),
+              stageCards.find(c => c.stage_id === '__proposal_followup__'),
+              stageCards.find(c => c.stage_id === '__proposal_rnr__'),
+              findSalesCard('quotation'),
+            ].filter(Boolean);
+            const salesInvoiceGroup = [
+              findSalesCard('invoice req'),
+              stageCards.find(c => c.stage_id === '__invoice_followup__'),
+              stageCards.find(c => c.stage_id === '__invoice_rnr__'),
+              findSalesCard('invoice raise'),
+            ].filter(Boolean);
+            const salesGroupedIds = new Set([...salesAppointmentGroup, ...salesProposalGroup, ...salesInvoiceGroup].map(c => c.stage_id));
+            const salesOtherCards = stageCards.filter(c => !salesGroupedIds.has(c.stage_id));
+
+            const salesGroupCol = (label, items) => (
+              <div className="flex-1 min-w-0" key={label}>
+                <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>{label}</p>
+                <div className="flex gap-2">{items.map(renderStageCard)}</div>
+              </div>
+            );
+            const salesDivider = <div className={`w-px self-stretch ${borderColor} border-l`} />;
+
             return (
               <div className="px-4 pt-4 flex items-start gap-3" data-testid="stage-summary-row">
-                <div className="flex-1 min-w-0">
-                  <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Appointment</p>
-                  <div className="flex gap-2">{salesAppointmentGroup.map(renderStageCard)}</div>
-                </div>
-                <div className={`w-px self-stretch ${borderColor} border-l`} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Closing</p>
-                  <div className="flex gap-2">{salesClosingGroup.map(renderStageCard)}</div>
-                </div>
+                {salesGroupCol('Appointment', salesAppointmentGroup)}
+                {salesDivider}
+                {salesGroupCol('Proposal', salesProposalGroup)}
+                {salesDivider}
+                {salesGroupCol('Invoice', [...salesInvoiceGroup, ...salesOtherCards])}
               </div>
             );
           }
@@ -1709,6 +1746,24 @@ const LeadsPageV2 = () => {
               </SelectContent>
             </Select>
 
+            {/* Service Filter — Pre-sales and Sales both use the same
+                services list (Settings > Services), matched against the
+                lead's `service` field. */}
+            <Select
+              value={filterService || ''}
+              onValueChange={(v) => setFilterService(v === 'all' ? null : v)}
+            >
+              <SelectTrigger className={`w-[180px] ${bgSecondary}`} data-testid="service-filter">
+                <SelectValue placeholder="All Services" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Services</SelectItem>
+                {services.map(s => (
+                  <SelectItem key={s.service_id} value={s.name}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             {/* Lost Reason Type Filter — only shown while viewing the Lost stage */}
             {isViewingLostStage && (
               <Select
@@ -1728,11 +1783,11 @@ const LeadsPageV2 = () => {
             )}
 
             {/* Active Filters */}
-            {(filterStage || filterLeadOwner) && (
+            {(filterStage || filterLeadOwner || filterService) && (
               <div className="flex items-center gap-2">
                 <span className={`text-sm ${textSecondary}`}>Filters:</span>
                 {filterStage && (
-                  <Badge 
+                  <Badge
                     className="flex items-center gap-1 cursor-pointer hover:opacity-80"
                     style={{ backgroundColor: stages.find(s => s.stage_id === filterStage)?.color || '#3b82f6' }}
                     onClick={() => setFilterStage(null)}
@@ -1742,11 +1797,20 @@ const LeadsPageV2 = () => {
                   </Badge>
                 )}
                 {filterLeadOwner && (
-                  <Badge 
+                  <Badge
                     className="flex items-center gap-1 cursor-pointer hover:opacity-80 bg-purple-500"
                     onClick={() => setFilterLeadOwner(null)}
                   >
                     {teamMembers.find(m => m.user_id === filterLeadOwner)?.name || 'Owner'}
+                    <X className="h-3 w-3" />
+                  </Badge>
+                )}
+                {filterService && (
+                  <Badge
+                    className="flex items-center gap-1 cursor-pointer hover:opacity-80 bg-teal-500"
+                    onClick={() => setFilterService(null)}
+                  >
+                    {filterService}
                     <X className="h-3 w-3" />
                   </Badge>
                 )}
@@ -2415,6 +2479,11 @@ const LeadsPageV2 = () => {
                     const isLockedDiscoveryCall = needsDiscoveryCall && pipeline === 'pre_sales';
                     // Moving to Lost asks why first — Pre-sales only for now.
                     const needsLostReason = stageNameLower === 'lost' && pipeline === 'pre_sales';
+                    // Proposal/Invoice Followup & RNR quick actions attach to
+                    // these two anchor stages the same way Apt. Followup/RNR
+                    // attach to Appointment.
+                    const needsProposalSent = stageNameLower === 'proposal sent';
+                    const needsInvoiceReq = stageNameLower === 'invoice req';
 
                     const openStageDatePopup = (kind, existingISO) => {
                       const ex = existingISO ? new Date(existingISO) : null;
@@ -2427,6 +2496,51 @@ const LeadsPageV2 = () => {
                       setStageTimeValue(initialTime);
                       setStageDateModal({ stage, kind });
                     };
+
+                    // Renders a Followup/RNR quick-action button pair for the
+                    // given anchor stage's kind prefix — click-to-log an
+                    // attempt via the same date/time popup, without moving
+                    // the lead off `stage`. Shared by Apt./Proposal/Invoice.
+                    const renderQuickActionPair = (idPrefix, followupLabel, rnrLabel, followupField, rnrField) => (
+                      <>
+                        <button
+                          type="button"
+                          data-testid={`${idPrefix}-followup-btn`}
+                          onClick={() => openStageDatePopup(`${idPrefix}_followup`, editingLead?.[`${idPrefix}_followup_at`] || '')}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
+                          style={{ borderColor: stage.color, color: stage.color }}
+                        >
+                          {followupLabel}
+                          {(editingLead?.[followupField]?.length > 0) && (
+                            <span
+                              className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                              style={{ backgroundColor: stage.color, color: '#ffffff' }}
+                              data-testid={`${idPrefix}-followup-count-badge`}
+                            >
+                              {editingLead[followupField].length}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`${idPrefix}-rnr-btn`}
+                          onClick={() => openStageDatePopup(`${idPrefix}_rnr`, editingLead?.[`${idPrefix}_rnr_at`] || '')}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
+                          style={{ borderColor: stage.color, color: stage.color }}
+                        >
+                          {rnrLabel}
+                          {(editingLead?.[rnrField]?.length > 0) && (
+                            <span
+                              className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                              style={{ backgroundColor: stage.color, color: '#ffffff' }}
+                              data-testid={`${idPrefix}-rnr-count-badge`}
+                            >
+                              {editingLead[rnrField].length}
+                            </span>
+                          )}
+                        </button>
+                      </>
+                    );
 
                     return (
                       <React.Fragment key={stage.stage_id}>
@@ -2523,50 +2637,13 @@ const LeadsPageV2 = () => {
                             </span>
                           )}
                         </button>
-                        {/* Apt. Followup / Apt. RNR — quick actions available once the
-                            lead is actually on the Appointment stage. Logging either
-                            keeps the lead on Appointment (same stage_id); only
-                            Discovery Call (above) advances it further, Sales-only. */}
-                        {needsAppointment && isCurrent && (
-                          <>
-                            <button
-                              type="button"
-                              data-testid="apt-followup-btn"
-                              onClick={() => openStageDatePopup('apt_followup', editingLead?.apt_followup_at || '')}
-                              className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
-                              style={{ borderColor: stage.color, color: stage.color }}
-                            >
-                              Apt. Followup
-                              {editingLead?.apt_followups?.length > 0 && (
-                                <span
-                                  className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
-                                  style={{ backgroundColor: stage.color, color: '#ffffff' }}
-                                  data-testid="apt-followup-count-badge"
-                                >
-                                  {editingLead.apt_followups.length}
-                                </span>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              data-testid="apt-rnr-btn"
-                              onClick={() => openStageDatePopup('apt_rnr', editingLead?.apt_rnr_at || '')}
-                              className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
-                              style={{ borderColor: stage.color, color: stage.color }}
-                            >
-                              Apt. RNR
-                              {editingLead?.apt_rnr_history?.length > 0 && (
-                                <span
-                                  className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
-                                  style={{ backgroundColor: stage.color, color: '#ffffff' }}
-                                  data-testid="apt-rnr-count-badge"
-                                >
-                                  {editingLead.apt_rnr_history.length}
-                                </span>
-                              )}
-                            </button>
-                          </>
-                        )}
+                        {/* Followup / RNR quick actions — available once the lead is
+                            actually on the relevant anchor stage (Appointment,
+                            Proposal Sent, Invoice Req). Logging either keeps the
+                            lead on that same stage_id; they don't move it forward. */}
+                        {needsAppointment && isCurrent && renderQuickActionPair('apt', 'Apt. Followup', 'Apt. RNR', 'apt_followups', 'apt_rnr_history')}
+                        {needsProposalSent && isCurrent && renderQuickActionPair('proposal', 'Proposal Followup', 'Proposal RNR', 'proposal_followups', 'proposal_rnr_history')}
+                        {needsInvoiceReq && isCurrent && renderQuickActionPair('invoice', 'Invoice Followup', 'Invoice RNR', 'invoice_followups', 'invoice_rnr_history')}
                       </React.Fragment>
                     );
                   };
@@ -2576,22 +2653,42 @@ const LeadsPageV2 = () => {
                   const otherStages = stages.filter(s => classifyStageGroup(s) === 'other');
 
                   if (pipeline !== 'pre_sales') {
-                    // Same two-group divider layout as Pre-sales below —
-                    // Appointment (Appointment & Discovery Call) alongside
-                    // Closing (Quotation/Proposal, Lost, Invoice Raise, rest).
-                    const salesAppointmentStages = stages.filter(s => classifySalesStageGroup(s) === 'appointment');
-                    const salesClosingStages = stages.filter(s => classifySalesStageGroup(s) !== 'appointment');
+                    // Three full-width groups matching the stage summary
+                    // cards row — Appointment, Proposal, Invoice — same
+                    // explicit per-group order, anything unmatched (Lost)
+                    // trailing onto Invoice.
+                    const findSalesStage = (n) => stages.find(s => (s.name || '').toLowerCase().trim() === n);
+                    const salesAppointmentStages = [
+                      stages.find(s => classifySalesStageGroup(s) === 'appointment' && (s.name || '').toLowerCase().includes('appoint')),
+                      findSalesStage('discovery call'),
+                    ].filter(Boolean);
+                    const salesProposalStages = [
+                      findSalesStage('proposal req'),
+                      findSalesStage('proposal sent'),
+                      findSalesStage('quotation'),
+                    ].filter(Boolean);
+                    const salesInvoiceStages = [
+                      findSalesStage('invoice req'),
+                      findSalesStage('invoice raise'),
+                    ].filter(Boolean);
+                    const salesGroupedIds = new Set([...salesAppointmentStages, ...salesProposalStages, ...salesInvoiceStages].map(s => s.stage_id));
+                    const salesOtherStages = stages.filter(s => !salesGroupedIds.has(s.stage_id));
+
+                    const salesStageCol = (label, items) => (
+                      <div className="flex-1 min-w-0" key={label}>
+                        <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>{label}</p>
+                        <div className="flex flex-wrap gap-2">{items.map(renderStageButton)}</div>
+                      </div>
+                    );
+                    const salesStageDivider = <div className={`w-px self-stretch border-l ${borderColor}`} />;
+
                     return (
                       <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Appointment</p>
-                          <div className="flex flex-wrap gap-2">{salesAppointmentStages.map(renderStageButton)}</div>
-                        </div>
-                        <div className={`w-px self-stretch border-l ${borderColor}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Closing</p>
-                          <div className="flex flex-wrap gap-2">{salesClosingStages.map(renderStageButton)}</div>
-                        </div>
+                        {salesStageCol('Appointment', salesAppointmentStages)}
+                        {salesStageDivider}
+                        {salesStageCol('Proposal', salesProposalStages)}
+                        {salesStageDivider}
+                        {salesStageCol('Invoice', [...salesInvoiceStages, ...salesOtherStages])}
                       </div>
                     );
                   }
@@ -3169,11 +3266,17 @@ const LeadsPageV2 = () => {
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <Calendar className="h-4 w-4" style={{ color: stageDateModal.stage.color }} />
-                    {stageDateModal.kind === 'appointment' ? 'Set Appointment Date & Time'
-                      : stageDateModal.kind === 'followup' ? 'Set Follow-up Date & Time'
-                      : stageDateModal.kind === 'rnr' ? 'Set RNR Retry Date & Time'
-                      : stageDateModal.kind === 'apt_followup' ? 'Set Appointment Follow-up Date & Time'
-                      : 'Set Appointment RNR Retry Date & Time'}
+                    {({
+                      appointment: 'Set Appointment Date & Time',
+                      followup: 'Set Follow-up Date & Time',
+                      rnr: 'Set RNR Retry Date & Time',
+                      apt_followup: 'Set Appointment Follow-up Date & Time',
+                      apt_rnr: 'Set Appointment RNR Retry Date & Time',
+                      proposal_followup: 'Set Proposal Follow-up Date & Time',
+                      proposal_rnr: 'Set Proposal RNR Retry Date & Time',
+                      invoice_followup: 'Set Invoice Follow-up Date & Time',
+                      invoice_rnr: 'Set Invoice RNR Retry Date & Time',
+                    })[stageDateModal.kind] || 'Set Date & Time'}
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
@@ -3211,16 +3314,23 @@ const LeadsPageV2 = () => {
                       const stage = stageDateModal.stage;
                       const kind = stageDateModal.kind;
                       const iso = new Date(`${stageDateValue}T${stageTimeValue}:00`).toISOString();
+                      const QUICK_ACTION_FIELD_BY_KIND = {
+                        appointment: 'appointment_at', followup: 'followup_at', rnr: 'rnr_at',
+                        apt_followup: 'apt_followup_at', apt_rnr: 'apt_rnr_at',
+                        proposal_followup: 'proposal_followup_at', proposal_rnr: 'proposal_rnr_at',
+                        invoice_followup: 'invoice_followup_at', invoice_rnr: 'invoice_rnr_at',
+                      };
+                      const QUICK_ACTION_LOGGED_MSG = {
+                        apt_followup: 'Appointment follow-up logged', apt_rnr: 'Appointment RNR logged',
+                        proposal_followup: 'Proposal follow-up logged', proposal_rnr: 'Proposal RNR logged',
+                        invoice_followup: 'Invoice follow-up logged', invoice_rnr: 'Invoice RNR logged',
+                      };
                       try {
                         const res = await axios.put(
                           `${API}/api/leads-v2/leads/${editingLead.lead_id}/stage`,
                           {
                             stage_id: stage.stage_id,
-                            ...(kind === 'appointment' ? { appointment_at: iso }
-                              : kind === 'followup' ? { followup_at: iso }
-                              : kind === 'rnr' ? { rnr_at: iso }
-                              : kind === 'apt_followup' ? { apt_followup_at: iso }
-                              : { apt_rnr_at: iso }),
+                            [QUICK_ACTION_FIELD_BY_KIND[kind] || 'rnr_at']: iso,
                           },
                           { headers },
                         );
@@ -3232,10 +3342,8 @@ const LeadsPageV2 = () => {
                         setEditingLead(res.data);
                         if (res.data.pipeline === 'sales' && pipeline === 'pre_sales') {
                           toast.success(`Appointment booked — moved to Sales`);
-                        } else if (kind === 'apt_followup') {
-                          toast.success('Appointment follow-up logged');
-                        } else if (kind === 'apt_rnr') {
-                          toast.success('Appointment RNR logged');
+                        } else if (QUICK_ACTION_LOGGED_MSG[kind]) {
+                          toast.success(QUICK_ACTION_LOGGED_MSG[kind]);
                         } else {
                           toast.success(`Moved to ${stage.name}`);
                         }
@@ -3243,7 +3351,7 @@ const LeadsPageV2 = () => {
                         loadLeads();
                         loadStats();
                       } catch (e) {
-                        toast.error('Failed to change stage');
+                        toast.error(e?.response?.data?.detail || 'Failed to change stage');
                       } finally {
                         setStageDateSaving(false);
                       }

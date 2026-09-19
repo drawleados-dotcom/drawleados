@@ -178,7 +178,10 @@ PIPELINE_STAGE_BACKFILL = {
     ],
     "sales": [
         {"name": "Discovery Call", "color": "#06b6d4", "is_fixed": False},
+        {"name": "Proposal Req", "color": "#f59e0b", "is_fixed": False},
+        {"name": "Proposal Sent", "color": "#f59e0b", "is_fixed": False},
         {"name": "Quotation", "color": "#f59e0b", "is_fixed": False},
+        {"name": "Invoice Req", "color": "#a855f7", "is_fixed": False},
         {"name": "Lost", "color": "#ef4444", "is_fixed": True},
         {"name": "Invoice Raise", "color": "#a855f7", "is_fixed": True},
     ],
@@ -812,28 +815,45 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
             "by_user_name": current_user.get("name"),
         }
 
-    # Apt. Followup / Apt. RNR: quick actions available while a lead sits on
-    # the Appointment stage — same click-to-log-an-entry pattern as RNR
-    # above, but the lead's stage_id never changes (stage_data["stage_id"]
-    # is the Appointment stage itself), so these are purely history/badges.
+    # Apt./Proposal/Invoice Followup & RNR: quick actions available while a
+    # lead sits on Appointment / Proposal Sent / Invoice Req — click to log
+    # an attempt (who, when, and the retry date/time entered), same pattern
+    # as RNR above, but the lead's stage_id never changes, so these are
+    # purely history/badges rather than real stage moves.
+    def _click_log_entry(at_value):
+        return {
+            "entered_at": at_value,
+            "clicked_at": datetime.now(timezone.utc).isoformat(),
+            "by_user_id": current_user.get("user_id"),
+            "by_user_name": current_user.get("name"),
+        }
+
     apt_followup_entry = None
     if stage_data.get("apt_followup_at"):
         update_doc["apt_followup_at"] = stage_data["apt_followup_at"]
-        apt_followup_entry = {
-            "entered_at": stage_data["apt_followup_at"],
-            "clicked_at": datetime.now(timezone.utc).isoformat(),
-            "by_user_id": current_user.get("user_id"),
-            "by_user_name": current_user.get("name"),
-        }
+        apt_followup_entry = _click_log_entry(stage_data["apt_followup_at"])
     apt_rnr_entry = None
     if stage_data.get("apt_rnr_at"):
         update_doc["apt_rnr_at"] = stage_data["apt_rnr_at"]
-        apt_rnr_entry = {
-            "entered_at": stage_data["apt_rnr_at"],
-            "clicked_at": datetime.now(timezone.utc).isoformat(),
-            "by_user_id": current_user.get("user_id"),
-            "by_user_name": current_user.get("name"),
-        }
+        apt_rnr_entry = _click_log_entry(stage_data["apt_rnr_at"])
+
+    proposal_followup_entry = None
+    if stage_data.get("proposal_followup_at"):
+        update_doc["proposal_followup_at"] = stage_data["proposal_followup_at"]
+        proposal_followup_entry = _click_log_entry(stage_data["proposal_followup_at"])
+    proposal_rnr_entry = None
+    if stage_data.get("proposal_rnr_at"):
+        update_doc["proposal_rnr_at"] = stage_data["proposal_rnr_at"]
+        proposal_rnr_entry = _click_log_entry(stage_data["proposal_rnr_at"])
+
+    invoice_followup_entry = None
+    if stage_data.get("invoice_followup_at"):
+        update_doc["invoice_followup_at"] = stage_data["invoice_followup_at"]
+        invoice_followup_entry = _click_log_entry(stage_data["invoice_followup_at"])
+    invoice_rnr_entry = None
+    if stage_data.get("invoice_rnr_at"):
+        update_doc["invoice_rnr_at"] = stage_data["invoice_rnr_at"]
+        invoice_rnr_entry = _click_log_entry(stage_data["invoice_rnr_at"])
 
     new_stage = await db.lead_stages.find_one({"stage_id": stage_data["stage_id"]}, {"_id": 0})
     new_stage_name = (new_stage.get("name") or "").strip().lower() if new_stage else ""
@@ -907,6 +927,14 @@ async def update_lead_stage(lead_id: str, stage_data: Dict[str, Any], request: R
         push_doc["apt_followups"] = apt_followup_entry
     if apt_rnr_entry:
         push_doc["apt_rnr_history"] = apt_rnr_entry
+    if proposal_followup_entry:
+        push_doc["proposal_followups"] = proposal_followup_entry
+    if proposal_rnr_entry:
+        push_doc["proposal_rnr_history"] = proposal_rnr_entry
+    if invoice_followup_entry:
+        push_doc["invoice_followups"] = invoice_followup_entry
+    if invoice_rnr_entry:
+        push_doc["invoice_rnr_history"] = invoice_rnr_entry
     if stage_change_entry:
         push_doc["stage_history"] = stage_change_entry
     if push_doc:
