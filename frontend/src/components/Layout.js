@@ -15,6 +15,7 @@ import { Label } from './ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { toast } from 'sonner';
 import axios from 'axios';
+import { setupPushNotifications } from '../utils/pushNotifications';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -235,6 +236,14 @@ const Layout = ({ children }) => {
     loadTodayAttendance();
     loadWorkSettings();
   }, [loadTodayAttendance, loadWorkSettings]);
+
+  // Register the push service worker + subscribe this browser once per
+  // login. No-ops quietly if the browser doesn't support push, the user
+  // hasn't granted permission, or VAPID keys aren't set up on the server
+  // yet — see utils/pushNotifications.js.
+  useEffect(() => {
+    setupPushNotifications(token);
+  }, [token]);
 
   // Check if current time is outside working hours
   const isOutsideWorkingHours = () => {

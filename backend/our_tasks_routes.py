@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
 import uuid
+import asyncio
 
 from access import has_hr_access, has_operations_access
 
@@ -369,6 +370,18 @@ async def create_task(task_data: TaskCreate, request: Request):
         
         await db.our_tasks.insert_one(task)
         task.pop("_id", None)
+
+        if task["assigned_to"] and task["assigned_to"] != user.user_id:
+            try:
+                from push_routes import send_push_notification
+                asyncio.create_task(send_push_notification(
+                    task["assigned_to"],
+                    "New task assigned",
+                    task_data.task_name,
+                    url="/our-tasks",
+                ))
+            except Exception:
+                pass
 
         # Bridge: if this task is a Meeting tied to a Project, also create a corresponding
         # entry in the meetings collection so it shows up in the project's Meeting tab.

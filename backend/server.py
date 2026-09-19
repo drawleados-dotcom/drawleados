@@ -47,6 +47,7 @@ from recruitment_routes import recruitment_router, init_recruitment_db
 from sales_kit_routes import sales_kit_router, init_sales_kit_db
 from client_portal_routes import client_portal_router, init_client_portal_db
 from payroll_routes import payroll_router
+from push_routes import push_router, init_push_db, push_scheduler_loop
 from department_routes import department_router
 from approvals_routes import approvals_router, set_db as set_approvals_db
 from additional_tasks_routes import additional_tasks_router, init_additional_tasks_db
@@ -113,6 +114,7 @@ init_additional_tasks_db(db)
 init_meetings_db(db)
 init_org_tree_db(db)
 init_db_admin(db)
+init_push_db(db)
 
 # Create the main app
 app = FastAPI()
@@ -165,6 +167,8 @@ async def startup_tasks():
             ("leads_v2", [("stage_id", 1)], {}),
             ("leads_v2", [("pipeline", 1)], {}),
             ("leads_v2", [("lead_owner", 1)], {}),
+            ("push_subscriptions", [("user_id", 1)], {}),
+            ("push_subscriptions", [("endpoint", 1)], {"unique": True}),
         ]
         for coll_name, keys, opts in idx_targets:
             try:
@@ -351,6 +355,10 @@ async def startup_tasks():
             logging.info(f"[startup] Backfilled onboarding_month/onboarding_year on {backfilled} Client Master docs")
     except Exception as _e:
         logging.warning(f"[startup] Client Master onboarding_month/year backfill skipped: {_e}")
+
+    # Daily work/lunch/logout reminders + long-break nudges via Web Push.
+    # No-op forever if VAPID keys aren't configured (see push_routes.py).
+    asyncio.create_task(push_scheduler_loop())
 
 # Health check endpoint for Kubernetes (root level)
 @app.get("/health")
@@ -3003,6 +3011,7 @@ api_router.include_router(vendors_router)
 api_router.include_router(expense_forecast_router)
 api_router.include_router(operations_router)
 api_router.include_router(hr_router)
+api_router.include_router(push_router)
 api_router.include_router(notion_router)
 api_router.include_router(chat_router)
 api_router.include_router(ai_router)
