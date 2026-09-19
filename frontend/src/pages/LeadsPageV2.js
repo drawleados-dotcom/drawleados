@@ -64,6 +64,19 @@ const STAGE_COLORS = [
   '#ec4899', '#06b6d4', '#84cc16', '#f97316'
 ];
 
+// Sales pipeline stage grouping — Appointment/Discovery, Proposal, Invoice —
+// by keyword match on stage name rather than exact names, since stage names
+// get typo'd/edited over time (e.g. "appoinment", "follwup rnr" elsewhere).
+// Shared by the Stage Summary Cards row and the Move to Stage buttons in the
+// Edit Lead popup so both split into the same three lines.
+const classifySalesStageGroup = (stage) => {
+  const n = (stage.name || '').toLowerCase().trim();
+  if (n.includes('proposal')) return 'proposal';
+  if (n.includes('invoice')) return 'invoice';
+  if (n.includes('appoint') || n.includes('apt.') || n.includes('apt ') || n.includes('discovery') || n.includes('requirement') || n === 'apt') return 'appointment';
+  return 'other';
+};
+
 const TIMELINE_TYPE_META = {
   stage_change: { icon: Tag, color: 'text-blue-400' },
   rnr: { icon: PhoneMissed, color: 'text-red-400' },
@@ -1586,9 +1599,24 @@ const LeadsPageV2 = () => {
           };
 
           if (pipeline !== 'pre_sales') {
+            // Sales: same three-line split as the Move to Stage buttons in
+            // the Edit Lead popup — Appointment & Discovery, Proposal,
+            // Invoice — via the shared classifySalesStageGroup helper. Any
+            // card matching none of them still shows, in an "Other" line.
+            const salesCardLines = [
+              { label: 'Appointment & Discovery', items: stageCards.filter(c => classifySalesStageGroup(c) === 'appointment') },
+              { label: 'Proposal', items: stageCards.filter(c => classifySalesStageGroup(c) === 'proposal') },
+              { label: 'Invoice', items: stageCards.filter(c => classifySalesStageGroup(c) === 'invoice') },
+              { label: 'Other', items: stageCards.filter(c => classifySalesStageGroup(c) === 'other') },
+            ].filter(line => line.items.length > 0);
             return (
-              <div className="px-4 pt-4 flex gap-2" data-testid="stage-summary-row">
-                {stageCards.map(renderStageCard)}
+              <div className="px-4 pt-4 space-y-3" data-testid="stage-summary-row">
+                {salesCardLines.map(line => (
+                  <div key={line.label}>
+                    <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>{line.label}</p>
+                    <div className="flex gap-2 flex-wrap">{line.items.map(renderStageCard)}</div>
+                  </div>
+                ))}
               </div>
             );
           }
@@ -2322,17 +2350,10 @@ const LeadsPageV2 = () => {
                   };
 
                   // Sales pipeline: same idea, split into its own three lines —
-                  // Appointment/Discovery, Proposal, Invoice — by keyword match
-                  // rather than exact names, since stage names get typo'd/edited
-                  // over time (e.g. "appoinment", "follwup rnr" elsewhere). Any
-                  // stage that matches none of them still shows, in an "Other" line.
-                  const classifySalesStageGroup = (stage) => {
-                    const n = (stage.name || '').toLowerCase().trim();
-                    if (n.includes('proposal')) return 'proposal';
-                    if (n.includes('invoice')) return 'invoice';
-                    if (n.includes('appoint') || n.includes('apt.') || n.includes('apt ') || n.includes('discovery') || n.includes('requirement') || n === 'apt' ) return 'appointment';
-                    return 'other';
-                  };
+                  // Appointment/Discovery, Proposal, Invoice — via the shared
+                  // classifySalesStageGroup helper (module scope, also used by
+                  // the Stage Summary Cards row above). Any stage that matches
+                  // none of them still shows, in a trailing "Other" line.
 
                   const renderStageButton = (stage) => {
                     const isCurrent = leadForm.stage_id === stage.stage_id;
