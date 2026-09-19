@@ -6113,6 +6113,27 @@ function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, tex
 
   const gridColor = isDark ? '#27272a' : '#e5e7eb';
   const tickColor = isDark ? '#a1a1aa' : '#6b7280';
+  const labelColor = isDark ? '#fafafa' : '#111827';
+
+  // Adds a computed Total (Present + Remote + Leave + Absent) row below
+  // the per-series values recharts' default tooltip already shows —
+  // "how many were present, how many absent, and out of how many total".
+  const AnalyticsTooltip = ({ active, payload, label }) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const val = (key) => payload.find(p => p.dataKey === key)?.value ?? 0;
+    const total = val('present') + val('remote') + val('leave') + val('absent');
+    return (
+      <div style={{ backgroundColor: isDark ? '#18181b' : '#fff', border: `1px solid ${gridColor}`, borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
+        <p style={{ fontWeight: 600, marginBottom: 4, color: labelColor }}>{label}</p>
+        {payload.map((p, i) => (
+          <p key={i} style={{ color: p.color, margin: '2px 0' }}>{p.name} : {p.value}{p.unit || ''}</p>
+        ))}
+        <p style={{ marginTop: 4, paddingTop: 4, borderTop: `1px solid ${gridColor}`, fontWeight: 600, color: labelColor }}>
+          Total : {total}
+        </p>
+      </div>
+    );
+  };
 
   // Day-wise only: label each bar with its weekday, red-highlighting
   // Sundays/declared holidays with the holiday's name underneath —
@@ -6206,7 +6227,7 @@ function AttendanceAnalyticsPanel({ token, bgCard, bgSecondary, textPrimary, tex
                 {granularity === 'week' && (
                   <YAxis yAxisId="right" orientation="right" tick={{ fill: tickColor, fontSize: 11 }} unit="%" domain={[0, 100]} />
                 )}
-                <Tooltip contentStyle={{ backgroundColor: isDark ? '#18181b' : '#fff', border: `1px solid ${gridColor}`, fontSize: 12 }} />
+                <Tooltip content={<AnalyticsTooltip />} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar yAxisId="left" dataKey="present" name="Present" fill="#22c55e" radius={[3, 3, 0, 0]} />
                 <Bar yAxisId="left" dataKey="remote" name="Remote" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
