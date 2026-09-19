@@ -64,6 +64,18 @@ class FormResponseSubmit(BaseModel):
     answers: Dict[str, Any] = {}  # field_id -> value
 
 
+class PortfolioCreate(BaseModel):
+    service_name: str
+    portfolio_type: str = ""
+    file_name: str = ""
+    file_data: str  # base64 data: URI of the uploaded PDF
+
+
+class PortfolioLeadSubmit(BaseModel):
+    name: str
+    email: str
+
+
 # ============== AUTH HELPER ==============
 
 async def get_current_user_from_request(request: Request) -> dict:
@@ -261,7 +273,143 @@ async def delete_response(response_id: str, request: Request):
     return {"message": "Response deleted"}
 
 
+# ============== PORTFOLIO ==============
+# Same shape as Forms: sales staff upload a PDF behind a shareable link,
+# a prospect trades their name + email to view it, and that becomes a
+# response row here — a lead-gated portfolio instead of a questionnaire.
+
+MAX_PORTFOLIO_FILE_BYTES = 8 * 1024 * 1024  # ~8MB raw file (~11MB as base64), safely under Mongo's 16MB document cap
+
+
+@sales_kit_router.get("/portfolios")
+async def get_portfolios(request: Request):
+    await get_current_user_from_request(request)
+    portfolios = await db.sales_kit_portfolios.find(
+        {"is_deleted": {"$ne": True}}, {"_id": 0, "file_data": 0}
+    ).sort("created_at", -1).to_list(10000)
+
+    portfolio_ids = [p["portfolio_id"] for p in portfolios]
+    counts: Dict[str, int] = {}
+    if portfolio_ids:
+        cursor = db.sales_kit_portfolio_responses.aggregate([
+            {"$match": {"portfolio_id": {"$in": portfolio_ids}}},
+            {"$group": {"_id": "$portfolio_id", "count": {"$sum": 1}}},
+        ])
+        async for row in cursor:
+            counts[row["_id"]] = row["count"]
+    for p in portfolios:
+        p["response_count"] = counts.get(p["portfolio_id"], 0)
+    return portfolios
+
+
+@sales_kit_router.post("/portfolios")
+async def create_portfolio(payload: PortfolioCreate, request: Request):
+    user = await get_current_user_from_request(request)
+    if not payload.service_name.strip():
+        raise HTTPException(status_code=400, detail="Service name is required")
+    if not payload.file_data:
+        raise HTTPException(status_code=400, detail="A portfolio file is required")
+    # Rough size check on the base64 payload (~4/3 the raw byte size).
+    if len(payload.file_data) > MAX_PORTFOLIO_FILE_BYTES * 4 // 3:
+        raise HTTPException(status_code=400, detail="File is too large (max 8MB)")
+
+    now = datetime.now(timezone.utc)
+    doc = {
+        "portfolio_id": str(uuid.uuid4()),
+        "service_name": payload.service_name.strip(),
+        "portfolio_type": payload.portfolio_type,
+        "file_name": payload.file_name,
+        "file_data": payload.file_data,
+        "share_token": secrets.token_urlsafe(16),
+        "created_by": user.get("user_id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+        "is_deleted": False,
+    }
+    await db.sales_kit_portfolios.insert_one(dict(doc))
+    doc.pop("file_data", None)
+    doc.pop("_id", None)
+    return doc
+
+
+@sales_kit_router.delete("/portfolios/{portfolio_id}")
+async def delete_portfolio(portfolio_id: str, request: Request):
+    await get_current_user_from_request(request)
+    result = await db.sales_kit_portfolios.update_one(
+        {"portfolio_id": portfolio_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    return {"message": "Portfolio deleted"}
+
+
+@sales_kit_router.get("/portfolios/{portfolio_id}/responses")
+async def get_portfolio_responses(portfolio_id: str, request: Request):
+    await get_current_user_from_request(request)
+    portfolio = await db.sales_kit_portfolios.find_one(
+        {"portfolio_id": portfolio_id, "is_deleted": {"$ne": True}}, {"_id": 0, "file_data": 0}
+    )
+    if not portfolio:
+        raise HTTPException(status_code=404, detail="Portfolio not found")
+    responses = await db.sales_kit_portfolio_responses.find(
+        {"portfolio_id": portfolio_id}, {"_id": 0}
+    ).sort("submitted_at", -1).to_list(50000)
+    return {"portfolio": portfolio, "responses": responses}
+
+
+@sales_kit_router.delete("/portfolio-responses/{response_id}")
+async def delete_portfolio_response(response_id: str, request: Request):
+    await get_current_user_from_request(request)
+    result = await db.sales_kit_portfolio_responses.delete_one({"response_id": response_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Response not found")
+    return {"message": "Response deleted"}
+
+
 # ============== PUBLIC (no auth — respondent-facing) ==============
+
+@sales_kit_router.get("/public/portfolio/{share_token}")
+async def get_public_portfolio(share_token: str):
+    doc = await db.sales_kit_portfolios.find_one(
+        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0, "file_data": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Portfolio not available")
+    # Name + type only — the file itself is withheld until they submit
+    # their name + email via /unlock below.
+    return {
+        "portfolio_id": doc["portfolio_id"],
+        "service_name": doc["service_name"],
+        "portfolio_type": doc.get("portfolio_type", ""),
+    }
+
+
+@sales_kit_router.post("/public/portfolio/{share_token}/unlock")
+async def unlock_public_portfolio(share_token: str, payload: PortfolioLeadSubmit):
+    doc = await db.sales_kit_portfolios.find_one(
+        {"share_token": share_token, "is_deleted": {"$ne": True}}, {"_id": 0}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Portfolio not available")
+    if not payload.name.strip() or not payload.email.strip():
+        raise HTTPException(status_code=400, detail="Name and email are required")
+
+    response_doc = {
+        "response_id": str(uuid.uuid4()),
+        "portfolio_id": doc["portfolio_id"],
+        "name": payload.name.strip(),
+        "email": payload.email.strip(),
+        "submitted_at": datetime.now(timezone.utc),
+    }
+    await db.sales_kit_portfolio_responses.insert_one(dict(response_doc))
+
+    return {
+        "service_name": doc["service_name"],
+        "file_name": doc.get("file_name", ""),
+        "file_data": doc["file_data"],
+    }
+
 
 @sales_kit_router.get("/public/{share_token}")
 async def get_public_form(share_token: str):

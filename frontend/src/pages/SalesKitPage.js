@@ -10,15 +10,21 @@ import { Textarea } from '../components/ui/textarea';
 import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { toast } from 'sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import {
   ArrowLeft, Plus, Trash2, Pencil, Copy, Share2, Loader2, GripVertical,
   FileText, Table as TableIcon, X, ChevronLeft, ChevronRight,
   Type, AlignLeft, Hash, Mail, Phone, Calendar, ChevronDown, CircleDot, CheckSquare, Heading,
+  Briefcase, Upload, FileUp,
 } from 'lucide-react';
 
 const TABS = [
   { key: 'forms', label: 'Form Creation', icon: FileText },
+  { key: 'portfolio', label: 'Portfolio', icon: Briefcase },
 ];
+
+const PORTFOLIO_TYPES = ['Website', 'Branding', 'SEO', 'Social Media', 'Meta Ads', 'App Development', 'ERP', 'Other'];
+const MAX_PORTFOLIO_FILE_BYTES = 8 * 1024 * 1024;
 
 const FIELD_TYPE_META = {
   short_text: { label: 'Short Text', icon: Type },
@@ -495,6 +501,103 @@ const ResponsesView = ({ form, responses, onBack, onDeleteResponse, textPrimary,
   );
 };
 
+// ============== PORTFOLIO LIST ==============
+
+const PortfolioListView = ({ portfolios, onCreate, onResponses, onShare, onDelete, textPrimary, textSecondary, borderColor, bgCard }) => {
+  if (portfolios.length === 0) {
+    return (
+      <div className={`border border-dashed ${borderColor} rounded-xl p-12 text-center`}>
+        <Briefcase className={`h-8 w-8 ${textSecondary} mx-auto mb-3`} />
+        <p className={`${textPrimary} font-medium mb-1`}>No portfolio items yet</p>
+        <p className={`text-sm ${textSecondary} mb-4`}>Upload a portfolio PDF and share a lead-gated link with prospects.</p>
+        <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]"><Plus className="h-4 w-4 mr-1.5" /> Add Portfolio</Button>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="flex justify-end mb-3">
+        <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]" data-testid="sk-new-portfolio-btn">
+          <Plus className="h-4 w-4 mr-1.5" /> Add Portfolio
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {portfolios.map(p => (
+          <div key={p.portfolio_id} className={`${bgCard} border ${borderColor} rounded-xl p-4 flex flex-col`} data-testid={`sk-portfolio-card-${p.portfolio_id}`}>
+            <div className="flex items-start justify-between mb-2 gap-2">
+              <p className={`font-medium ${textPrimary}`}>{p.service_name}</p>
+              {p.portfolio_type && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#3b82f6]/40 text-[#3b82f6] whitespace-nowrap">
+                  {p.portfolio_type}
+                </span>
+              )}
+            </div>
+            <p className={`text-xs ${textSecondary} mb-3 truncate`}>{p.file_name || 'portfolio.pdf'}</p>
+            <p className={`text-xs ${textSecondary} mb-3`}>{p.response_count} response{p.response_count === 1 ? '' : 's'}</p>
+            <div className="mt-auto flex items-center gap-1.5 flex-wrap">
+              <Button size="sm" variant="outline" onClick={() => onResponses(p)} className={`${borderColor} ${textSecondary}`}>
+                <TableIcon className="h-3.5 w-3.5 mr-1" /> Responses
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => onShare(p)} className={`${borderColor} ${textSecondary}`} title="Share">
+                <Share2 className="h-3.5 w-3.5" />
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => onDelete(p)} className="border-[#ef4444]/40 text-[#ef4444]" title="Delete">
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const PortfolioResponsesView = ({ portfolio, responses, onBack, onDeleteResponse, textPrimary, textSecondary, borderColor, bgSecondary }) => {
+  return (
+    <div>
+      <button onClick={onBack} className={`text-sm ${textSecondary} hover:underline mb-3 inline-flex items-center gap-1`}>
+        <ArrowLeft className="h-4 w-4" /> Back to Portfolio
+      </button>
+      <div className="mb-3">
+        <p className={`font-medium ${textPrimary}`}>{portfolio.service_name} — Responses</p>
+        <p className={`text-xs ${textSecondary}`}>{responses.length} view{responses.length === 1 ? '' : 's'}</p>
+      </div>
+      {responses.length === 0 ? (
+        <div className={`border border-dashed ${borderColor} rounded-xl p-10 text-center text-sm ${textSecondary}`}>
+          No one has viewed this portfolio yet. Share the link to start collecting leads.
+        </div>
+      ) : (
+        <div className={`border ${borderColor} rounded-xl overflow-x-auto`}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className={`${bgSecondary} ${textSecondary} text-left`}>
+                <th className="px-3 py-2 font-medium whitespace-nowrap">Viewed At</th>
+                <th className="px-3 py-2 font-medium whitespace-nowrap">Name</th>
+                <th className="px-3 py-2 font-medium whitespace-nowrap">Email</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {responses.map(r => (
+                <tr key={r.response_id} className={`border-t ${borderColor}`} data-testid={`sk-portfolio-response-row-${r.response_id}`}>
+                  <td className={`px-3 py-2 ${textSecondary} whitespace-nowrap`}>{new Date(r.submitted_at).toLocaleString()}</td>
+                  <td className={`px-3 py-2 ${textPrimary}`}>{r.name}</td>
+                  <td className={`px-3 py-2 ${textPrimary}`}>{r.email}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => onDeleteResponse(r.response_id)} className="text-[#ef4444] hover:opacity-70" title="Delete response">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============== MAIN PAGE ==============
 
 const SalesKitPage = () => {
@@ -517,6 +620,17 @@ const SalesKitPage = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [shareForm, setShareForm] = useState(null);
 
+  // Portfolio
+  const [portfolios, setPortfolios] = useState([]);
+  const [portfolioView, setPortfolioView] = useState('list'); // list | responses
+  const [activePortfolio, setActivePortfolio] = useState(null);
+  const [portfolioResponses, setPortfolioResponses] = useState([]);
+  const [newPortfolioOpen, setNewPortfolioOpen] = useState(false);
+  const [portfolioForm, setPortfolioForm] = useState({ service_name: '', portfolio_type: '', file_name: '', file_data: '' });
+  const [creatingPortfolio, setCreatingPortfolio] = useState(false);
+  const [deletePortfolioTarget, setDeletePortfolioTarget] = useState(null);
+  const [sharePortfolio, setSharePortfolio] = useState(null);
+
   const loadForms = useCallback(async () => {
     try {
       const res = await api.get('/sales-kit/forms');
@@ -528,7 +642,19 @@ const SalesKitPage = () => {
     }
   }, []);
 
+  const loadPortfolios = useCallback(async () => {
+    try {
+      const res = await api.get('/sales-kit/portfolios');
+      setPortfolios(res.data || []);
+    } catch (e) {
+      toast.error('Failed to load portfolio');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => { loadForms(); }, [loadForms]);
+  useEffect(() => { loadPortfolios(); }, [loadPortfolios]);
 
   const openCreate = () => { setNewFormTitle(''); setNewFormOpen(true); };
 
@@ -613,6 +739,79 @@ const SalesKitPage = () => {
     });
   };
 
+  // Portfolio handlers
+  const openPortfolioCreate = () => {
+    setPortfolioForm({ service_name: '', portfolio_type: '', file_name: '', file_data: '' });
+    setNewPortfolioOpen(true);
+  };
+
+  const handlePortfolioFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      toast.error('Only PDF files are supported');
+      return;
+    }
+    if (file.size > MAX_PORTFOLIO_FILE_BYTES) {
+      toast.error('File is too large (max 8MB)');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPortfolioForm(prev => ({ ...prev, file_name: file.name, file_data: reader.result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const createPortfolio = async () => {
+    if (!portfolioForm.service_name.trim()) { toast.error('Service name is required'); return; }
+    if (!portfolioForm.file_data) { toast.error('Upload a portfolio PDF'); return; }
+    setCreatingPortfolio(true);
+    try {
+      const res = await api.post('/sales-kit/portfolios', portfolioForm);
+      setNewPortfolioOpen(false);
+      setPortfolios(prev => [{ ...res.data, response_count: 0 }, ...prev]);
+      setSharePortfolio(res.data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to create portfolio');
+    } finally {
+      setCreatingPortfolio(false);
+    }
+  };
+
+  const openPortfolioResponses = async (p) => {
+    try {
+      const res = await api.get(`/sales-kit/portfolios/${p.portfolio_id}/responses`);
+      setActivePortfolio(res.data.portfolio);
+      setPortfolioResponses(res.data.responses || []);
+      setPortfolioView('responses');
+    } catch (e) {
+      toast.error('Failed to load responses');
+    }
+  };
+
+  const confirmDeletePortfolio = async () => {
+    if (!deletePortfolioTarget) return;
+    try {
+      await api.delete(`/sales-kit/portfolios/${deletePortfolioTarget.portfolio_id}`);
+      toast.success('Portfolio deleted');
+      setPortfolios(prev => prev.filter(x => x.portfolio_id !== deletePortfolioTarget.portfolio_id));
+      setDeletePortfolioTarget(null);
+    } catch (e) {
+      toast.error('Failed to delete portfolio');
+    }
+  };
+
+  const deletePortfolioResponseRow = async (responseId) => {
+    try {
+      await api.delete(`/sales-kit/portfolio-responses/${responseId}`);
+      setPortfolioResponses(prev => prev.filter(r => r.response_id !== responseId));
+      toast.success('Response deleted');
+    } catch (e) {
+      toast.error('Failed to delete response');
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -642,7 +841,7 @@ const SalesKitPage = () => {
             return (
               <button
                 key={tab.key}
-                onClick={() => { setActiveTab(tab.key); setView('list'); }}
+                onClick={() => { setActiveTab(tab.key); setView('list'); setPortfolioView('list'); }}
                 className={`px-4 py-1.5 rounded-lg text-sm font-medium inline-flex items-center gap-1.5 transition-colors ${
                   isActive ? 'bg-[#3b82f6] text-white' : `${bgSecondary} ${textSecondary} hover:${textPrimary}`
                 }`}
@@ -689,6 +888,36 @@ const SalesKitPage = () => {
                 responses={responses}
                 onBack={() => setView('list')}
                 onDeleteResponse={deleteResponseRow}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+                bgSecondary={bgSecondary}
+              />
+            )}
+          </>
+        )}
+
+        {activeTab === 'portfolio' && (
+          <>
+            {portfolioView === 'list' && (
+              <PortfolioListView
+                portfolios={portfolios}
+                onCreate={openPortfolioCreate}
+                onResponses={openPortfolioResponses}
+                onShare={setSharePortfolio}
+                onDelete={setDeletePortfolioTarget}
+                textPrimary={textPrimary}
+                textSecondary={textSecondary}
+                borderColor={borderColor}
+                bgCard={bgCard}
+              />
+            )}
+            {portfolioView === 'responses' && activePortfolio && (
+              <PortfolioResponsesView
+                portfolio={activePortfolio}
+                responses={portfolioResponses}
+                onBack={() => setPortfolioView('list')}
+                onDeleteResponse={deletePortfolioResponseRow}
                 textPrimary={textPrimary}
                 textSecondary={textSecondary}
                 borderColor={borderColor}
@@ -753,6 +982,82 @@ const SalesKitPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button onClick={confirmDelete} className="bg-[#ef4444] hover:bg-[#dc2626]">Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={newPortfolioOpen} onOpenChange={setNewPortfolioOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Portfolio</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Service Name</Label>
+              <Input
+                value={portfolioForm.service_name}
+                onChange={(e) => setPortfolioForm(prev => ({ ...prev, service_name: e.target.value }))}
+                placeholder="e.g. E-commerce Website Development"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Portfolio Type</Label>
+              <Select
+                value={portfolioForm.portfolio_type}
+                onValueChange={(v) => setPortfolioForm(prev => ({ ...prev, portfolio_type: v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger>
+                <SelectContent>
+                  {PORTFOLIO_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Upload Portfolio File (PDF, max 8MB)</Label>
+              <label className={`flex items-center gap-2 border border-dashed ${borderColor} rounded-lg p-3 cursor-pointer hover:opacity-80`}>
+                <Upload className={`h-4 w-4 ${textSecondary}`} />
+                <span className={`text-sm ${textSecondary} truncate`}>
+                  {portfolioForm.file_name || 'Choose a PDF file'}
+                </span>
+                <input type="file" accept="application/pdf" className="hidden" onChange={handlePortfolioFileChange} />
+              </label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewPortfolioOpen(false)}>Cancel</Button>
+            <Button onClick={createPortfolio} disabled={creatingPortfolio} className="bg-[#3b82f6] hover:bg-[#2563eb]">
+              {creatingPortfolio ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><FileUp className="h-4 w-4 mr-1.5" /> Save &amp; Generate Link</>)}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!sharePortfolio} onOpenChange={(o) => !o && setSharePortfolio(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Share Portfolio</DialogTitle></DialogHeader>
+          {sharePortfolio && (
+            <div className="flex items-center gap-2">
+              <Input readOnly value={`${window.location.origin}/portfolio/${sharePortfolio.share_token}`} className="flex-1" />
+              <Button
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/portfolio/${sharePortfolio.share_token}`);
+                  toast.success('Link copied');
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deletePortfolioTarget} onOpenChange={(o) => !o && setDeletePortfolioTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Delete Portfolio</DialogTitle></DialogHeader>
+          <p className={`text-sm ${textSecondary}`}>Delete "{deletePortfolioTarget?.service_name}"? This also hides its collected responses.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePortfolioTarget(null)}>Cancel</Button>
+            <Button onClick={confirmDeletePortfolio} className="bg-[#ef4444] hover:bg-[#dc2626]">Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
