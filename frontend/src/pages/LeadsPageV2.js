@@ -1109,12 +1109,21 @@ const LeadsPageV2 = () => {
   const findStageByName = (re) => stages.find(s => re.test(s.name || ''));
   const appointmentStage = findStageByName(/appoin/i);
 
-  let orderedStages = stages;
+  // "Appoint Followup" / "RNR Appnt" were an earlier, unused attempt at
+  // separate stages for this (leads never actually moved into them — see
+  // Apt. Followup/RNR below, which log history without changing stage).
+  // Hidden from the summary row so they don't show two near-duplicate,
+  // confusingly-different cards next to each other.
+  const orphanedAptStageIds = new Set(
+    stages.filter(s => ['appoint followup', 'rnr appnt'].includes((s.name || '').toLowerCase().trim())).map(s => s.stage_id)
+  );
+
+  let orderedStages = stages.filter(s => !orphanedAptStageIds.has(s.stage_id));
   let highlightStageId = null;
   if (pipeline === 'sales') {
     const invoiceRaiseStage = findStageByName(/invoice.?rais/i);
     const excludeIds = new Set([appointmentStage?.stage_id, invoiceRaiseStage?.stage_id].filter(Boolean));
-    const middleStages = stages.filter(s => !excludeIds.has(s.stage_id));
+    const middleStages = orderedStages.filter(s => !excludeIds.has(s.stage_id));
     orderedStages = [
       ...(appointmentStage ? [appointmentStage] : []),
       ...middleStages,
@@ -1122,7 +1131,7 @@ const LeadsPageV2 = () => {
     ];
     highlightStageId = invoiceRaiseStage?.stage_id || null;
   } else if (appointmentStage) {
-    orderedStages = [...stages.filter(s => s.stage_id !== appointmentStage.stage_id), appointmentStage];
+    orderedStages = [...orderedStages.filter(s => s.stage_id !== appointmentStage.stage_id), appointmentStage];
     highlightStageId = appointmentStage.stage_id;
   }
 
@@ -1135,8 +1144,42 @@ const LeadsPageV2 = () => {
       count: stageLeads.length,
       amount: sumAmount(stageLeads),
       isHighlighted: s.stage_id === highlightStageId,
+      isAppointment: appointmentStage && s.stage_id === appointmentStage.stage_id,
     };
   });
+
+  // Apt. Followup / Apt. RNR aren't real stages (see the quick-action
+  // buttons in the Edit Lead popup — they log history without moving the
+  // lead off Appointment), so these two cards are synthetic: counted
+  // straight from the Appointment-stage leads already in baseFilteredLeads
+  // (which, in Pre-sales, already includes the Sales-side merge-back —
+  // same source the real Appointment card above uses). Inserted right after
+  // the Appointment card, wherever that lands (last in Pre-sales, first in Sales).
+  if (appointmentStage) {
+    const apptLeads = baseFilteredLeads.filter(l => l.stage_id === appointmentStage.stage_id);
+    const aptCards = [
+      {
+        stage_id: '__apt_followup__',
+        name: 'Apnt. Followup',
+        color: '#3b82f6',
+        count: apptLeads.filter(l => (l.apt_followups || []).length > 0).length,
+        amount: 0,
+        isHighlighted: false,
+        clickable: false,
+      },
+      {
+        stage_id: '__apt_rnr__',
+        name: 'Apnt RNR',
+        color: '#ef4444',
+        count: apptLeads.filter(l => (l.apt_rnr_history || []).length > 0).length,
+        amount: 0,
+        isHighlighted: false,
+        clickable: false,
+      },
+    ];
+    const apptIdx = stageCards.findIndex(c => c.stage_id === appointmentStage.stage_id);
+    stageCards.splice(apptIdx + 1, 0, ...aptCards);
+  }
 
   const getLeadsByStage = (stageId) => {
     return filteredLeads.filter(l => l.stage_id === stageId);
@@ -1510,19 +1553,22 @@ const LeadsPageV2 = () => {
         {/* Stage Summary Cards — one small clickable card per actual stage of
             the active pipeline (Pre-sales / Sales). Click to filter the list
             below to that stage; click again to clear. Appointment (if this
-            pipeline has one) always renders last with a stronger highlight. */}
-        <div className="px-4 pt-4 flex gap-2" data-testid="stage-summary-row">
-          {stageCards.map(card => {
-            const isActive = filterStage === card.stage_id;
+            pipeline has one) always renders last with a stronger highlight.
+            In Pre-sales, split into a "Pre-Sales" group and an "Appointment"
+            group (Appointment, Apnt. Followup/RNR, Discovery Call) with a
+            divider between — mirrors how those stages actually flow. */}
+        {(() => {
+          const renderStageCard = (card) => {
+            const isActive = card.clickable !== false && filterStage === card.stage_id;
             return (
               <button
                 type="button"
                 key={card.stage_id}
                 data-testid={`stage-summary-card-${card.stage_id}`}
-                onClick={() => setFilterStage(prev => prev === card.stage_id ? null : card.stage_id)}
+                onClick={card.clickable === false ? undefined : () => setFilterStage(prev => prev === card.stage_id ? null : card.stage_id)}
                 className={`flex-1 min-w-0 text-left px-3 py-2 rounded-lg border transition-all ${
                   card.isHighlighted ? 'shadow-md' : `${bgSecondary} ${borderColor}`
-                }`}
+                } ${card.clickable === false ? 'cursor-default' : ''}`}
                 style={{
                   ...(card.isHighlighted
                     ? { backgroundColor: card.color, borderColor: card.color }
@@ -1546,8 +1592,41 @@ const LeadsPageV2 = () => {
                 )}
               </button>
             );
-          })}
-        </div>
+          };
+
+          if (pipeline !== 'pre_sales') {
+            return (
+              <div className="px-4 pt-4 flex gap-2" data-testid="stage-summary-row">
+                {stageCards.map(renderStageCard)}
+              </div>
+            );
+          }
+
+          const PRESALES_GROUP_NAMES = new Set(['prospect', 'lead', 'rnr', 'qualified', 'followup', 'followup rnr', 'follwup rnr']);
+          // Explicit order (not just a filter) so Discovery Call — which
+          // sits earlier in stageCards' underlying stage order — still
+          // renders last within this group, as asked: Appointment, Apnt.
+          // Followup, Apnt RNR, then Discovery Call.
+          const discoveryCard = stageCards.find(c => (c.name || '').toLowerCase().trim() === 'discovery call');
+          const appointmentCoreCards = stageCards.filter(c => c.isAppointment || c.stage_id === '__apt_followup__' || c.stage_id === '__apt_rnr__');
+          const appointmentGroup = [...appointmentCoreCards, ...(discoveryCard ? [discoveryCard] : [])];
+          const presalesGroup = stageCards.filter(c => c !== discoveryCard && !appointmentCoreCards.includes(c) && (PRESALES_GROUP_NAMES.has((c.name || '').toLowerCase().trim()) || (c.name || '').toLowerCase().startsWith('portfolio')));
+          const otherCards = stageCards.filter(c => !presalesGroup.includes(c) && c !== discoveryCard && !appointmentCoreCards.includes(c));
+
+          return (
+            <div className="px-4 pt-4 flex items-start gap-3" data-testid="stage-summary-row">
+              <div className="flex-1 min-w-0">
+                <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Pre-Sales</p>
+                <div className="flex gap-2">{presalesGroup.map(renderStageCard)}</div>
+              </div>
+              <div className={`w-px self-stretch ${borderColor} border-l`} />
+              <div className="flex-1 min-w-0">
+                <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>Appointment</p>
+                <div className="flex gap-2">{[...appointmentGroup, ...otherCards].map(renderStageCard)}</div>
+              </div>
+            </div>
+          );
+        })()}
 
 
         {/* Search + Active Filter */}
