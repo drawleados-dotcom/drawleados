@@ -2146,7 +2146,10 @@ const LeadsPageV2 = () => {
                         type="button"
                         data-testid={`stage-tab-${stage.stage_id}`}
                         onClick={async () => {
-                          if (isCurrent) return;
+                          // RNR can be clicked again even while already on the RNR
+                          // stage — every ring-no-response attempt is its own logged
+                          // entry, not just the first one that moved the stage here.
+                          if (isCurrent && !needsRnr) return;
                           // Open mini date/time popup for Appointment, Followup & RNR stages.
                           if (needsAppointment || needsFollowup || needsRnr) {
                             const existingISO = needsAppointment
