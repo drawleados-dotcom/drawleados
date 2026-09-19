@@ -2321,6 +2321,19 @@ const LeadsPageV2 = () => {
                     return 'other';
                   };
 
+                  // Sales pipeline: same idea, split into its own three lines —
+                  // Appointment/Discovery, Proposal, Invoice — by keyword match
+                  // rather than exact names, since stage names get typo'd/edited
+                  // over time (e.g. "appoinment", "follwup rnr" elsewhere). Any
+                  // stage that matches none of them still shows, in an "Other" line.
+                  const classifySalesStageGroup = (stage) => {
+                    const n = (stage.name || '').toLowerCase().trim();
+                    if (n.includes('proposal')) return 'proposal';
+                    if (n.includes('invoice')) return 'invoice';
+                    if (n.includes('appoint') || n.includes('apt.') || n.includes('apt ') || n.includes('discovery') || n.includes('requirement') || n === 'apt' ) return 'appointment';
+                    return 'other';
+                  };
+
                   const renderStageButton = (stage) => {
                     const isCurrent = leadForm.stage_id === stage.stage_id;
                     const stageNameLower = (stage.name || '').toLowerCase().trim();
@@ -2485,7 +2498,22 @@ const LeadsPageV2 = () => {
                   const otherStages = stages.filter(s => classifyStageGroup(s) === 'other');
 
                   if (pipeline !== 'pre_sales') {
-                    return <div className="flex flex-wrap gap-2">{stages.map(renderStageButton)}</div>;
+                    const salesLines = [
+                      { label: 'Appointment & Discovery', items: stages.filter(s => classifySalesStageGroup(s) === 'appointment') },
+                      { label: 'Proposal', items: stages.filter(s => classifySalesStageGroup(s) === 'proposal') },
+                      { label: 'Invoice', items: stages.filter(s => classifySalesStageGroup(s) === 'invoice') },
+                      { label: 'Other', items: stages.filter(s => classifySalesStageGroup(s) === 'other') },
+                    ].filter(line => line.items.length > 0);
+                    return (
+                      <div className="space-y-3">
+                        {salesLines.map(line => (
+                          <div key={line.label}>
+                            <p className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${textSecondary}`}>{line.label}</p>
+                            <div className="flex flex-wrap gap-2">{line.items.map(renderStageButton)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
                   }
 
                   return (
