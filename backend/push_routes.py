@@ -92,6 +92,23 @@ async def unsubscribe(payload: Dict[str, Any], request: Request):
     return {"message": "Unsubscribed"}
 
 
+@push_router.post("/test")
+async def send_test_push(request: Request):
+    """Fires one push at the current user's own subscription(s) right now —
+    lets Settings' "Send Test Notification" button verify the whole chain
+    (VAPID keys, service worker, browser permission) without waiting for a
+    scheduled reminder or a real task assignment."""
+    from server import get_current_user
+    user = await get_current_user(request)
+    if not PUSH_ENABLED:
+        raise HTTPException(status_code=400, detail="VAPID keys aren't configured on the server yet")
+    sub_count = await db.push_subscriptions.count_documents({"user_id": user.user_id})
+    if sub_count == 0:
+        raise HTTPException(status_code=400, detail="No active subscription found for this browser — allow notifications first")
+    await send_push_notification(user.user_id, "Test notification", "If you can see this, push notifications are working!", url="/settings")
+    return {"message": f"Sent to {sub_count} subscription(s)"}
+
+
 async def _send_to_subscription(sub: dict, title: str, body: str, url: str):
     if not PUSH_ENABLED or webpush is None:
         return
