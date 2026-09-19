@@ -1654,14 +1654,14 @@ const LeadsPageV2 = () => {
               stageCards.find(c => c.stage_id === '__proposal_rnr__'),
               findSalesCard('quotation'),
             ].filter(Boolean);
+            // Invoice group is capped to exactly these 4 — no RNR card, no
+            // other/leftover stages trailing on — per explicit request.
             const salesInvoiceGroup = [
               findSalesCard('invoice req'),
               stageCards.find(c => c.stage_id === '__invoice_followup__'),
-              stageCards.find(c => c.stage_id === '__invoice_rnr__'),
               findSalesCard('invoice raise'),
+              findSalesCard('lost'),
             ].filter(Boolean);
-            const salesGroupedIds = new Set([...salesAppointmentGroup, ...salesProposalGroup, ...salesInvoiceGroup].map(c => c.stage_id));
-            const salesOtherCards = stageCards.filter(c => !salesGroupedIds.has(c.stage_id));
 
             const salesGroupCol = (label, items) => (
               <div className="flex-1 min-w-0" key={label}>
@@ -1677,7 +1677,7 @@ const LeadsPageV2 = () => {
                 {salesDivider}
                 {salesGroupCol('Proposal', salesProposalGroup)}
                 {salesDivider}
-                {salesGroupCol('Invoice', [...salesInvoiceGroup, ...salesOtherCards])}
+                {salesGroupCol('Invoice', salesInvoiceGroup)}
               </div>
             );
           }
@@ -2501,7 +2501,7 @@ const LeadsPageV2 = () => {
                     // given anchor stage's kind prefix — click-to-log an
                     // attempt via the same date/time popup, without moving
                     // the lead off `stage`. Shared by Apt./Proposal/Invoice.
-                    const renderQuickActionPair = (idPrefix, followupLabel, rnrLabel, followupField, rnrField) => (
+                    const renderQuickActionPair = (idPrefix, followupLabel, rnrLabel, followupField, rnrField, includeRnr = true) => (
                       <>
                         <button
                           type="button"
@@ -2521,24 +2521,26 @@ const LeadsPageV2 = () => {
                             </span>
                           )}
                         </button>
-                        <button
-                          type="button"
-                          data-testid={`${idPrefix}-rnr-btn`}
-                          onClick={() => openStageDatePopup(`${idPrefix}_rnr`, editingLead?.[`${idPrefix}_rnr_at`] || '')}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
-                          style={{ borderColor: stage.color, color: stage.color }}
-                        >
-                          {rnrLabel}
-                          {(editingLead?.[rnrField]?.length > 0) && (
-                            <span
-                              className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
-                              style={{ backgroundColor: stage.color, color: '#ffffff' }}
-                              data-testid={`${idPrefix}-rnr-count-badge`}
-                            >
-                              {editingLead[rnrField].length}
-                            </span>
-                          )}
-                        </button>
+                        {includeRnr && (
+                          <button
+                            type="button"
+                            data-testid={`${idPrefix}-rnr-btn`}
+                            onClick={() => openStageDatePopup(`${idPrefix}_rnr`, editingLead?.[`${idPrefix}_rnr_at`] || '')}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed transition-all ${textSecondary} hover:opacity-80`}
+                            style={{ borderColor: stage.color, color: stage.color }}
+                          >
+                            {rnrLabel}
+                            {(editingLead?.[rnrField]?.length > 0) && (
+                              <span
+                                className="ml-1.5 inline-flex items-center justify-center h-4 w-4 rounded-full text-[10px] font-bold"
+                                style={{ backgroundColor: stage.color, color: '#ffffff' }}
+                                data-testid={`${idPrefix}-rnr-count-badge`}
+                              >
+                                {editingLead[rnrField].length}
+                              </span>
+                            )}
+                          </button>
+                        )}
                       </>
                     );
 
@@ -2643,7 +2645,7 @@ const LeadsPageV2 = () => {
                             lead on that same stage_id; they don't move it forward. */}
                         {needsAppointment && isCurrent && renderQuickActionPair('apt', 'Apt. Followup', 'Apt. RNR', 'apt_followups', 'apt_rnr_history')}
                         {needsProposalSent && isCurrent && renderQuickActionPair('proposal', 'Proposal Followup', 'Proposal RNR', 'proposal_followups', 'proposal_rnr_history')}
-                        {needsInvoiceReq && isCurrent && renderQuickActionPair('invoice', 'Invoice Followup', 'Invoice RNR', 'invoice_followups', 'invoice_rnr_history')}
+                        {needsInvoiceReq && isCurrent && renderQuickActionPair('invoice', 'Invoice Followup', 'Invoice RNR', 'invoice_followups', 'invoice_rnr_history', false)}
                       </React.Fragment>
                     );
                   };
@@ -2667,12 +2669,13 @@ const LeadsPageV2 = () => {
                       findSalesStage('proposal sent'),
                       findSalesStage('quotation'),
                     ].filter(Boolean);
+                    // Capped to exactly these 4 (no other/leftover stages
+                    // trailing on) — per explicit request.
                     const salesInvoiceStages = [
                       findSalesStage('invoice req'),
                       findSalesStage('invoice raise'),
+                      findSalesStage('lost'),
                     ].filter(Boolean);
-                    const salesGroupedIds = new Set([...salesAppointmentStages, ...salesProposalStages, ...salesInvoiceStages].map(s => s.stage_id));
-                    const salesOtherStages = stages.filter(s => !salesGroupedIds.has(s.stage_id));
 
                     const salesStageCol = (label, items) => (
                       <div className="flex-1 min-w-0" key={label}>
@@ -2688,7 +2691,7 @@ const LeadsPageV2 = () => {
                         {salesStageDivider}
                         {salesStageCol('Proposal', salesProposalStages)}
                         {salesStageDivider}
-                        {salesStageCol('Invoice', [...salesInvoiceStages, ...salesOtherStages])}
+                        {salesStageCol('Invoice', salesInvoiceStages)}
                       </div>
                     );
                   }
