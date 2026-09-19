@@ -34,6 +34,7 @@ import RecruitmentPage from './pages/RecruitmentPage';
 import SalesKitPage from './pages/SalesKitPage';
 import PublicFormPage from './pages/PublicFormPage';
 import PublicPortfolioPage from './pages/PublicPortfolioPage';
+import PublicWebsitePortfolioPage from './pages/PublicWebsitePortfolioPage';
 import EmployeeAttendanceViewPage from './pages/EmployeeAttendanceViewPage';
 import ClientPortalLoginPage from './pages/ClientPortalLoginPage';
 import ClientPortalViewPage from './pages/ClientPortalViewPage';
@@ -68,6 +69,7 @@ function AppRouter() {
       {/* Sales Kit public form fill — respondents are never logged in, no ProtectedRoute */}
       <Route path="/form/:token" element={<PublicFormPage />} />
       <Route path="/portfolio/:token" element={<PublicPortfolioPage />} />
+      <Route path="/website-portfolio" element={<PublicWebsitePortfolioPage />} />
       <Route
         path="/dashboard"
         element={

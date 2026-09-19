@@ -10,9 +10,11 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 import secrets
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 sales_kit_router = APIRouter(prefix="/sales-kit", tags=["Sales Kit"])
 db = None
@@ -75,6 +77,26 @@ class PortfolioCreate(BaseModel):
 class PortfolioLeadSubmit(BaseModel):
     name: str
     email: str
+
+
+WEBSITE_TYPES = ["Business Website", "E-commerce", "Landing Page"]
+
+
+class WebsitePortfolioCreate(BaseModel):
+    website_name: str
+    website_link: str
+    website_type: str = ""  # Business Website | E-commerce | Landing Page
+    summary: str = ""
+    cover_image: str = ""  # base64 data URL, small cover thumbnail
+
+
+class WebsitePortfolioBooking(BaseModel):
+    name: str
+    email: str
+    phone: str = ""
+    city: str = ""
+    company: str = ""
+    budget: str = ""
 
 
 # ============== AUTH HELPER ==============
@@ -381,6 +403,75 @@ async def delete_portfolio_response(response_id: str, request: Request):
     return {"message": "Response deleted"}
 
 
+# ============== WEBSITE PORTFOLIO ==============
+# A separate, gallery-style portfolio just for showcased websites. Unlike
+# the link-based Portfolio above (one link per item), this has a single
+# global public page listing every active item as a card (cover image,
+# name, type, summary, View Website). That page carries a fixed "Book an
+# Appointment to build my website" CTA — submissions become a Lead in the
+# Pre-sales pipeline, tagged with the "Website Portfolio" source.
+
+@sales_kit_router.get("/website-portfolios")
+async def get_website_portfolios(request: Request):
+    await get_current_user_from_request(request)
+    items = await db.website_portfolios.find(
+        {"is_deleted": {"$ne": True}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(10000)
+    return items
+
+
+@sales_kit_router.post("/website-portfolios")
+async def create_website_portfolio(payload: WebsitePortfolioCreate, request: Request):
+    user = await get_current_user_from_request(request)
+    if not payload.website_name.strip():
+        raise HTTPException(status_code=400, detail="Website name is required")
+    if not payload.website_link.strip():
+        raise HTTPException(status_code=400, detail="Website link is required")
+    link = payload.website_link.strip()
+    if not (link.startswith("http://") or link.startswith("https://")):
+        link = f"https://{link}"
+
+    now = datetime.now(timezone.utc)
+    doc = {
+        "website_id": str(uuid.uuid4()),
+        "website_name": payload.website_name.strip(),
+        "website_link": link,
+        "website_type": payload.website_type,
+        "summary": payload.summary,
+        "cover_image": payload.cover_image,
+        "created_by": user.get("user_id"),
+        "created_by_name": user.get("name"),
+        "created_at": now,
+        "is_deleted": False,
+    }
+    await db.website_portfolios.insert_one(dict(doc))
+    doc.pop("_id", None)
+    return doc
+
+
+@sales_kit_router.delete("/website-portfolios/{website_id}")
+async def delete_website_portfolio(website_id: str, request: Request):
+    await get_current_user_from_request(request)
+    result = await db.website_portfolios.update_one(
+        {"website_id": website_id},
+        {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Website portfolio item not found")
+    return {"message": "Website portfolio item deleted"}
+
+
+@sales_kit_router.get("/website-portfolio-bookings")
+async def get_website_portfolio_bookings(request: Request):
+    """Leads captured off the public Website Portfolio page's booking form,
+    for a quick view right here (they also live in Leads > Pre-sales)."""
+    await get_current_user_from_request(request)
+    leads = await db.leads_v2.find(
+        {"source": "Website Portfolio", "is_deleted": {"$ne": True}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(5000)
+    return leads
+
+
 # ============== PUBLIC (no auth — respondent-facing) ==============
 
 @sales_kit_router.get("/public/portfolio/{share_token}")
@@ -481,3 +572,75 @@ async def submit_public_form(share_token: str, payload: FormResponseSubmit):
     }
     await db.sales_kit_responses.insert_one(dict(doc))
     return {"message": "Response submitted", "response_id": doc["response_id"]}
+
+
+@sales_kit_router.get("/public/website-portfolios")
+async def get_public_website_portfolios():
+    """The single global gallery link — lists every active website card."""
+    items = await db.website_portfolios.find(
+        {"is_deleted": {"$ne": True}},
+        {"_id": 0, "created_by": 0, "created_by_name": 0},
+    ).sort("created_at", -1).to_list(10000)
+    return items
+
+
+@sales_kit_router.post("/public/website-portfolio/book")
+async def book_website_portfolio_appointment(payload: WebsitePortfolioBooking):
+    """The gallery page's fixed 'Book an Appointment to build my website'
+    CTA. Creates a Pre-sales lead tagged with the 'Website Portfolio'
+    source — no login, no per-item token, since this is the same form
+    regardless of which card the visitor was looking at."""
+    if not payload.name.strip() or not payload.email.strip():
+        raise HTTPException(status_code=400, detail="Name and email are required")
+
+    existing_source = await db.lead_sources.find_one({"name": "Website Portfolio", "is_deleted": {"$ne": True}})
+    if not existing_source:
+        await db.lead_sources.insert_one({
+            "source_id": f"src_{uuid.uuid4().hex[:8]}",
+            "name": "Website Portfolio",
+            "created_at": datetime.now(timezone.utc),
+            "is_deleted": False,
+        })
+
+    first_stage = await db.lead_stages.find_one(
+        {
+            "$or": [{"pipeline": "pre_sales"}, {"pipeline": {"$exists": False}}],
+            "is_deleted": {"$ne": True},
+        },
+        {"_id": 0},
+        sort=[("order", 1)],
+    )
+
+    now = datetime.now(timezone.utc)
+    budget = payload.budget.strip()
+    lead_doc = {
+        "lead_id": f"lead_{uuid.uuid4().hex[:12]}",
+        "name": payload.name.strip(),
+        "email": payload.email.strip(),
+        "phone": payload.phone.strip(),
+        "location": payload.city.strip(),
+        "website": "",
+        "social_media": "",
+        "company_name": payload.company.strip(),
+        "what_do_you_do": "",
+        "source": "Website Portfolio",
+        "lead_owner": "",
+        "service": "",
+        "priority": "Medium",
+        "lead_type": "Inbound",
+        "date_of_lead": now.astimezone(IST).strftime("%Y-%m-%d"),
+        "industry": "",
+        "estimation": 0,
+        "quotation_link": "",
+        "proposal_link": "",
+        "notes": f"Budget: {budget}" if budget else "",
+        "stage_id": first_stage["stage_id"] if first_stage else "",
+        "custom_fields": {"Budget": budget} if budget else {},
+        "pipeline": "pre_sales",
+        "created_by": "public_website_portfolio_form",
+        "created_at": now,
+        "updated_at": now,
+        "is_deleted": False,
+    }
+    await db.leads_v2.insert_one(dict(lead_doc))
+    return {"message": "Thanks! We'll reach out to you shortly."}

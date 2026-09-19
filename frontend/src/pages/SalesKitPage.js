@@ -15,15 +15,17 @@ import {
   ArrowLeft, Plus, Trash2, Pencil, Copy, Share2, Loader2, GripVertical,
   FileText, Table as TableIcon, X, ChevronLeft, ChevronRight,
   Type, AlignLeft, Hash, Mail, Phone, Calendar, ChevronDown, CircleDot, CheckSquare, Heading,
-  Briefcase, Link2, MousePointerClick, UserCheck,
+  Briefcase, Link2, MousePointerClick, UserCheck, Globe, Image as ImageIcon,
 } from 'lucide-react';
 
 const TABS = [
   { key: 'forms', label: 'Form Creation', icon: FileText },
   { key: 'portfolio', label: 'Portfolio', icon: Briefcase },
+  { key: 'website_portfolio', label: 'Website Portfolio', icon: Globe },
 ];
 
 const LINK_TYPES = ['Portfolio', 'Case Study', 'Testimonials', 'Proposal Template'];
+const WEBSITE_TYPES = ['Business Website', 'E-commerce', 'Landing Page'];
 
 const FIELD_TYPE_META = {
   short_text: { label: 'Short Text', icon: Type },
@@ -645,6 +647,68 @@ const PortfolioResponsesView = ({ portfolio, responses, clicks, onBack, onDelete
   );
 };
 
+const WebsitePortfolioListView = ({ items, onCreate, onDelete, onShareGlobal, textPrimary, textSecondary, borderColor, bgCard, bgSecondary }) => {
+  if (items.length === 0) {
+    return (
+      <div className={`border border-dashed ${borderColor} rounded-xl p-12 text-center`}>
+        <Globe className={`h-8 w-8 ${textSecondary} mx-auto mb-3`} />
+        <p className={`${textPrimary} font-medium mb-1`}>No websites added yet</p>
+        <p className={`text-sm ${textSecondary} mb-4`}>Add the websites you've built — they'll all appear together on one shareable gallery page.</p>
+        <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]"><Plus className="h-4 w-4 mr-1.5" /> Add Website</Button>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <div className="flex items-center justify-end mb-3 gap-2 flex-wrap">
+        <Button variant="outline" onClick={onShareGlobal} className={`${borderColor} ${textSecondary}`} data-testid="sk-website-portfolio-share-btn">
+          <Share2 className="h-3.5 w-3.5 mr-1.5" /> Share Gallery Link
+        </Button>
+        <Button onClick={onCreate} className="bg-[#3b82f6] hover:bg-[#2563eb]" data-testid="sk-new-website-portfolio-btn">
+          <Plus className="h-4 w-4 mr-1.5" /> Add Website
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map(w => (
+          <div key={w.website_id} className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden flex flex-col`} data-testid={`sk-website-portfolio-card-${w.website_id}`}>
+            <div className={`h-32 ${bgSecondary} flex items-center justify-center overflow-hidden`}>
+              {w.cover_image ? (
+                <img src={w.cover_image} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <ImageIcon className={`h-8 w-8 ${textSecondary}`} />
+              )}
+            </div>
+            <div className="p-4 flex flex-col flex-1">
+              <div className="flex items-start justify-between mb-1.5 gap-2">
+                <p className={`font-medium ${textPrimary}`}>{w.website_name}</p>
+                {w.website_type && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border border-[#3b82f6]/40 text-[#3b82f6] whitespace-nowrap shrink-0">
+                    {w.website_type}
+                  </span>
+                )}
+              </div>
+              {w.summary && <p className={`text-xs ${textSecondary} mb-2 line-clamp-2`}>{w.summary}</p>}
+              <a
+                href={w.website_link}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-[#3b82f6] hover:underline mb-3 truncate inline-flex items-center gap-1"
+              >
+                <Link2 className="h-3 w-3 shrink-0" /> {w.website_link}
+              </a>
+              <div className="mt-auto flex items-center gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => onDelete(w)} className="border-[#ef4444]/40 text-[#ef4444]" title="Delete">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // ============== MAIN PAGE ==============
 
 const SalesKitPage = () => {
@@ -681,6 +745,14 @@ const SalesKitPage = () => {
   const [services, setServices] = useState([]);
   const [portfolioLinkTypeFilter, setPortfolioLinkTypeFilter] = useState('all');
 
+  // Website Portfolio
+  const [websitePortfolios, setWebsitePortfolios] = useState([]);
+  const [newWebsitePortfolioOpen, setNewWebsitePortfolioOpen] = useState(false);
+  const [websitePortfolioForm, setWebsitePortfolioForm] = useState({ website_name: '', website_link: '', website_type: '', summary: '', cover_image: '' });
+  const [creatingWebsitePortfolio, setCreatingWebsitePortfolio] = useState(false);
+  const [deleteWebsitePortfolioTarget, setDeleteWebsitePortfolioTarget] = useState(null);
+  const [shareWebsitePortfolioOpen, setShareWebsitePortfolioOpen] = useState(false);
+
   const loadForms = useCallback(async () => {
     try {
       const res = await api.get('/sales-kit/forms');
@@ -712,9 +784,21 @@ const SalesKitPage = () => {
     }
   }, []);
 
+  const loadWebsitePortfolios = useCallback(async () => {
+    try {
+      const res = await api.get('/sales-kit/website-portfolios');
+      setWebsitePortfolios(res.data || []);
+    } catch (e) {
+      toast.error('Failed to load website portfolio');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => { loadForms(); }, [loadForms]);
   useEffect(() => { loadPortfolios(); }, [loadPortfolios]);
   useEffect(() => { loadServices(); }, [loadServices]);
+  useEffect(() => { loadWebsitePortfolios(); }, [loadWebsitePortfolios]);
 
   const openCreate = () => { setNewFormTitle(''); setNewFormOpen(true); };
 
@@ -855,6 +939,54 @@ const SalesKitPage = () => {
     }
   };
 
+  // Website Portfolio handlers
+  const openWebsitePortfolioCreate = () => {
+    setWebsitePortfolioForm({ website_name: '', website_link: '', website_type: '', summary: '', cover_image: '' });
+    setNewWebsitePortfolioOpen(true);
+  };
+
+  const handleWebsiteCoverUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Image size must be less than 2MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setWebsitePortfolioForm(prev => ({ ...prev, cover_image: reader.result }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const createWebsitePortfolio = async () => {
+    if (!websitePortfolioForm.website_name.trim()) { toast.error('Website name is required'); return; }
+    if (!websitePortfolioForm.website_link.trim()) { toast.error('Website link is required'); return; }
+    setCreatingWebsitePortfolio(true);
+    try {
+      const res = await api.post('/sales-kit/website-portfolios', websitePortfolioForm);
+      setNewWebsitePortfolioOpen(false);
+      setWebsitePortfolios(prev => [res.data, ...prev]);
+      toast.success('Website added');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Failed to add website');
+    } finally {
+      setCreatingWebsitePortfolio(false);
+    }
+  };
+
+  const confirmDeleteWebsitePortfolio = async () => {
+    if (!deleteWebsitePortfolioTarget) return;
+    try {
+      await api.delete(`/sales-kit/website-portfolios/${deleteWebsitePortfolioTarget.website_id}`);
+      toast.success('Website removed');
+      setWebsitePortfolios(prev => prev.filter(x => x.website_id !== deleteWebsitePortfolioTarget.website_id));
+      setDeleteWebsitePortfolioTarget(null);
+    } catch (e) {
+      toast.error('Failed to remove website');
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -972,6 +1104,20 @@ const SalesKitPage = () => {
               />
             )}
           </>
+        )}
+
+        {activeTab === 'website_portfolio' && (
+          <WebsitePortfolioListView
+            items={websitePortfolios}
+            onCreate={openWebsitePortfolioCreate}
+            onDelete={setDeleteWebsitePortfolioTarget}
+            onShareGlobal={() => setShareWebsitePortfolioOpen(true)}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+          />
         )}
       </div>
 
@@ -1141,6 +1287,100 @@ const SalesKitPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeletePortfolioTarget(null)}>Cancel</Button>
             <Button onClick={confirmDeletePortfolio} className="bg-[#ef4444] hover:bg-[#dc2626]">Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={newWebsitePortfolioOpen} onOpenChange={setNewWebsitePortfolioOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Add Website</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Website Name</Label>
+              <Input
+                value={websitePortfolioForm.website_name}
+                onChange={(e) => setWebsitePortfolioForm(prev => ({ ...prev, website_name: e.target.value }))}
+                placeholder="e.g. Acme Furniture Store"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Website Link</Label>
+              <Input
+                value={websitePortfolioForm.website_link}
+                onChange={(e) => setWebsitePortfolioForm(prev => ({ ...prev, website_link: e.target.value }))}
+                placeholder="https://example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Website Type</Label>
+              <Select
+                value={websitePortfolioForm.website_type}
+                onValueChange={(v) => setWebsitePortfolioForm(prev => ({ ...prev, website_type: v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Select a type" /></SelectTrigger>
+                <SelectContent>
+                  {WEBSITE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Summary</Label>
+              <Textarea
+                value={websitePortfolioForm.summary}
+                onChange={(e) => setWebsitePortfolioForm(prev => ({ ...prev, summary: e.target.value }))}
+                placeholder="A short summary of the website — what it's for, key features, etc."
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Cover Image</Label>
+              <input type="file" accept="image/*" onChange={handleWebsiteCoverUpload} className={`text-sm ${textSecondary}`} />
+              {websitePortfolioForm.cover_image && (
+                <img src={websitePortfolioForm.cover_image} alt="" className={`h-24 rounded-lg border ${borderColor} object-cover`} />
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewWebsitePortfolioOpen(false)}>Cancel</Button>
+            <Button onClick={createWebsitePortfolio} disabled={creatingWebsitePortfolio} className="bg-[#3b82f6] hover:bg-[#2563eb]">
+              {creatingWebsitePortfolio ? <Loader2 className="h-4 w-4 animate-spin" /> : (<><Plus className="h-4 w-4 mr-1.5" /> Add</>)}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={shareWebsitePortfolioOpen} onOpenChange={setShareWebsitePortfolioOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Share Website Portfolio</DialogTitle></DialogHeader>
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5 text-sm">
+              <Globe className="h-3.5 w-3.5" /> Gallery link
+            </Label>
+            <p className="text-xs text-gray-500">One link for every website you've added — mobile-friendly, with a "Book an Appointment" button at the bottom.</p>
+            <div className="flex items-center gap-2">
+              <Input readOnly value={`${window.location.origin}/website-portfolio`} className="flex-1" />
+              <Button
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/website-portfolio`);
+                  toast.success('Link copied');
+                }}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteWebsitePortfolioTarget} onOpenChange={(o) => !o && setDeleteWebsitePortfolioTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Remove Website</DialogTitle></DialogHeader>
+          <p className={`text-sm ${textSecondary}`}>Remove "{deleteWebsitePortfolioTarget?.website_name}" from the gallery?</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteWebsitePortfolioTarget(null)}>Cancel</Button>
+            <Button onClick={confirmDeleteWebsitePortfolio} className="bg-[#ef4444] hover:bg-[#dc2626]">Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
