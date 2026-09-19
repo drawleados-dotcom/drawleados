@@ -17,7 +17,13 @@ const PublicPortfolioPage = () => {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [unlocked, setUnlocked] = useState(null); // { file_name, file_data }
+  const [unlocked, setUnlocked] = useState(null); // { file_name, blobUrl }
+
+  // Revoke the blob URL when it's replaced or the page unmounts, so the
+  // browser doesn't hold the (possibly 100MB) file in memory forever.
+  useEffect(() => {
+    return () => { if (unlocked?.blobUrl) URL.revokeObjectURL(unlocked.blobUrl); };
+  }, [unlocked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,11 +109,23 @@ const PublicPortfolioPage = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-sm text-gray-800">Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" autoFocus />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              autoFocus
+              className="text-gray-900 bg-white placeholder:text-gray-400"
+            />
           </div>
           <div className="space-y-1.5">
             <Label className="text-sm text-gray-800">Email</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              className="text-gray-900 bg-white placeholder:text-gray-400"
+            />
           </div>
           {error && <p className="text-xs text-[#ef4444]">{error}</p>}
           <Button type="submit" disabled={submitting} className="w-full bg-[#3b82f6] hover:bg-[#2563eb]">

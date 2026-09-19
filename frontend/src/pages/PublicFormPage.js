@@ -12,6 +12,12 @@ import { Loader2, CheckCircle2, ChevronLeft, ChevronRight, FileWarning } from 'l
 
 const API_BASE = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+// Explicit text/background colors — this page is always light-themed
+// regardless of the visitor's OS/browser dark-mode preference, and the
+// Input/Textarea components otherwise inherit color from theme CSS
+// variables that can resolve to white-on-white here.
+const FIELD_CLASS = 'text-gray-900 bg-white placeholder:text-gray-400';
+
 const PublicFormPage = () => {
   const { token } = useParams();
   const [loading, setLoading] = useState(true);
@@ -126,22 +132,22 @@ const PublicFormPage = () => {
           {field.label || 'Untitled question'}{field.required && <span className="text-[#ef4444]"> *</span>}
         </Label>
         {field.type === 'short_text' && (
-          <Input value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} />
+          <Input value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} className={FIELD_CLASS} />
         )}
         {field.type === 'long_text' && (
-          <Textarea value={answers[field.field_id] || ''} placeholder={field.placeholder} rows={3} onChange={(e) => setAnswer(field.field_id, e.target.value)} />
+          <Textarea value={answers[field.field_id] || ''} placeholder={field.placeholder} rows={3} onChange={(e) => setAnswer(field.field_id, e.target.value)} className={FIELD_CLASS} />
         )}
         {field.type === 'number' && (
-          <Input type="number" value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} />
+          <Input type="number" value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} className={FIELD_CLASS} />
         )}
         {field.type === 'email' && (
-          <Input type="email" value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} />
+          <Input type="email" value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} className={FIELD_CLASS} />
         )}
         {field.type === 'phone' && (
-          <Input type="tel" value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} />
+          <Input type="tel" value={answers[field.field_id] || ''} placeholder={field.placeholder} onChange={(e) => setAnswer(field.field_id, e.target.value)} className={FIELD_CLASS} />
         )}
         {field.type === 'date' && (
-          <Input type="date" value={answers[field.field_id] || ''} onChange={(e) => setAnswer(field.field_id, e.target.value)} />
+          <Input type="date" value={answers[field.field_id] || ''} onChange={(e) => setAnswer(field.field_id, e.target.value)} className={FIELD_CLASS} />
         )}
         {field.type === 'dropdown' && (
           <Select value={answers[field.field_id] || ''} onValueChange={(v) => setAnswer(field.field_id, v)}>
