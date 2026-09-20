@@ -34,6 +34,8 @@ const REVIEW_FIELDS = {
   post_title: { label: 'Post Title', kind: 'text', placeholder: 'Post title' },
   content_link: { label: 'Content Link', kind: 'url', placeholder: 'https://...' },
   creative_link: { label: 'Creative Link', kind: 'url', placeholder: 'https://...' },
+  editing_link: { label: 'Editing', kind: 'url', placeholder: 'https://...' },
+  thumbnail_link: { label: 'Thumbnail', kind: 'url', placeholder: 'https://...' },
 };
 const REVIEW_STATUS_STYLE = {
   pending: 'text-slate-400',
@@ -56,11 +58,13 @@ const FIELD_TASK_CONFIG = {
   post_title: { label: 'Post Title', category: 'Content Writing' },
   content_link: { label: 'Content Link', category: 'Content Calendar' },
   creative_link: { label: 'Creative Link', category: 'Designing' },
+  editing_link: { label: 'Editing', category: 'Editing' },
+  thumbnail_link: { label: 'Thumbnail', category: 'Thumbnail' },
   posting: { label: 'Posting', category: 'Posting' },
 };
 // Fields with a text/url value alongside their assignee+date (all of
 // FIELD_TASK_CONFIG except `posting`, which is assignee+date only).
-const FIELD_HAS_VALUE = { post_title: true, content_link: true, creative_link: true, posting: false };
+const FIELD_HAS_VALUE = { post_title: true, content_link: true, creative_link: true, editing_link: true, thumbnail_link: true, posting: false };
 
 const dayOfWeek = (iso) => {
   if (!iso) return '—';
@@ -97,6 +101,16 @@ const emptyDraftRow = (platform, defaultDate) => ({
   content_link_reject_reason: '',
   creative_link_status: 'pending',
   creative_link_reject_reason: '',
+  editing_link: '',
+  editing_link_assignee: '',
+  editing_link_date: '',
+  editing_link_status: 'pending',
+  editing_link_reject_reason: '',
+  thumbnail_link: '',
+  thumbnail_link_assignee: '',
+  thumbnail_link_date: '',
+  thumbnail_link_status: 'pending',
+  thumbnail_link_reject_reason: '',
   scheduled_by_name: '',
   posted_by_name: '',
   post_link: '',
@@ -192,6 +206,14 @@ export default function ProjectContentCalendarTab({
   // one singular `platform`, not the multi-select `platforms` the bulk Add
   // Post modal uses before exploding it into one entry per platform).
   const [fieldPopupPlatform, setFieldPopupPlatform] = useState('');
+  // Post Type picked on an empty day BEFORE any field is added — held here
+  // (no empty row is saved) and applied when that day's post gets created.
+  const [pendingPostTypes, setPendingPostTypes] = useState({});
+  const takePendingPostType = (dateIso) => {
+    const t = pendingPostTypes[dateIso];
+    if (t) setPendingPostTypes(prev => { const n = { ...prev }; delete n[dateIso]; return n; });
+    return t || 'static';
+  };
 
   // Description / Hashtags / Keywords popup.
   const [descPopupRowId, setDescPopupRowId] = useState(null);
@@ -232,6 +254,7 @@ export default function ProjectContentCalendarTab({
       const newRow = {
         ...emptyDraftRow(subTab, fieldPopup.dateIso),
         platform: fieldPopupPlatform,
+        post_type: takePendingPostType(fieldPopup.dateIso),
         [fieldPopup.field]: fieldPopupValue.trim(),
       };
       setSaving(true);
@@ -280,7 +303,7 @@ export default function ProjectContentCalendarTab({
       }
       if (!fieldPopupPlatform) { toast.error('Please select a platform'); return; }
       setSaving(true);
-      const ok = await persist([...posts, { ...emptyDraftRow(subTab, descPopupNewDate), platform: fieldPopupPlatform, ...descPopupValue }]);
+      const ok = await persist([...posts, { ...emptyDraftRow(subTab, descPopupNewDate), platform: fieldPopupPlatform, post_type: takePendingPostType(descPopupNewDate), ...descPopupValue }]);
       setSaving(false);
       if (ok) { toast.success('Post added'); closeDescPopup(); }
       return;
@@ -461,6 +484,18 @@ export default function ProjectContentCalendarTab({
             creative_link_assignee: row.creative_link_assignee,
             creative_link_date: row.creative_link_date,
             creative_link_task_id: taskIds.creative_link || null,
+            editing_link: row.editing_link,
+            editing_link_assignee: row.editing_link_assignee,
+            editing_link_date: row.editing_link_date,
+            editing_link_task_id: taskIds.editing_link || null,
+            editing_link_status: row.editing_link_status || 'pending',
+            editing_link_reject_reason: row.editing_link_reject_reason || '',
+            thumbnail_link: row.thumbnail_link,
+            thumbnail_link_assignee: row.thumbnail_link_assignee,
+            thumbnail_link_date: row.thumbnail_link_date,
+            thumbnail_link_task_id: taskIds.thumbnail_link || null,
+            thumbnail_link_status: row.thumbnail_link_status || 'pending',
+            thumbnail_link_reject_reason: row.thumbnail_link_reject_reason || '',
             posting_assignee: row.posting_assignee,
             posting_date: row.posting_date,
             posting_task_id: taskIds.posting || null,
@@ -678,11 +713,13 @@ export default function ProjectContentCalendarTab({
                   {subTab === 'all' && <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Platform</th>}
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Post Date</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Day</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Post Type</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Post Title</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Content Link</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Creative Link</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Editing</th>
+                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Thumbnail</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[220px]`}>Description &amp; Hashtags</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Post Type</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Status</th>
                   <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[140px]`}>Posting</th>
                   <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
@@ -748,6 +785,24 @@ export default function ProjectContentCalendarTab({
                       </td>
                       <td className={`p-3 text-sm ${textSecondary}`}>{dayOfWeek(isEditing ? editBuffer.post_date : row.post_date)}</td>
                       <td className="p-3">
+                        <Select
+                          value={row.post_type}
+                          onValueChange={async (v) => {
+                            if (!canEdit) return;
+                            const next = posts.map(p => (p.id === row.id ? { ...p, post_type: v } : p));
+                            await persist(next);
+                          }}
+                          disabled={!canEdit}
+                        >
+                          <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-post-type-${row.id}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                      <td className="p-3">
                         {renderReviewCell(row, 'post_title')}
                         {isEditing ? (
                           <AssigneeDateEditor field="post_title" value={buf} onChange={patchBuf} />
@@ -771,6 +826,22 @@ export default function ProjectContentCalendarTab({
                           <AssigneeDateSummary field="creative_link" row={row} />
                         )}
                       </td>
+                      <td className="p-3">
+                        {renderReviewCell(row, 'editing_link')}
+                        {isEditing ? (
+                          <AssigneeDateEditor field="editing_link" value={buf} onChange={patchBuf} />
+                        ) : (
+                          <AssigneeDateSummary field="editing_link" row={row} />
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {renderReviewCell(row, 'thumbnail_link')}
+                        {isEditing ? (
+                          <AssigneeDateEditor field="thumbnail_link" value={buf} onChange={patchBuf} />
+                        ) : (
+                          <AssigneeDateSummary field="thumbnail_link" row={row} />
+                        )}
+                      </td>
                       <td className="p-3 max-w-[280px]">
                         <button
                           type="button"
@@ -790,24 +861,6 @@ export default function ProjectContentCalendarTab({
                             </span>
                           )}
                         </button>
-                      </td>
-                      <td className="p-3">
-                        <Select
-                          value={row.post_type}
-                          onValueChange={async (v) => {
-                            if (!canEdit) return;
-                            const next = posts.map(p => (p.id === row.id ? { ...p, post_type: v } : p));
-                            await persist(next);
-                          }}
-                          disabled={!canEdit}
-                        >
-                          <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-post-type-${row.id}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
                       </td>
                       <td className="p-3">
                         <button
@@ -898,10 +951,27 @@ export default function ProjectContentCalendarTab({
                           {subTab === 'all' && <td className="p-3" />}
                           <td className="p-3"><span className={`text-sm ${textPrimary}`}>{formatDayLabel(day)}</span></td>
                           <td className={`p-3 text-sm ${textSecondary}`}>{dayOfWeek(iso)}</td>
+                          <td className="p-3">
+                            {canEdit && (
+                              <Select
+                                value={pendingPostTypes[iso] || 'static'}
+                                onValueChange={(v) => setPendingPostTypes(prev => ({ ...prev, [iso]: v }))}
+                              >
+                                <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-empty-post-type-${iso}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </td>
                           {[
                             { field: 'post_title', label: 'Add Post' },
                             { field: 'content_link', label: 'Add Content Link' },
                             { field: 'creative_link', label: 'Add Creative Link' },
+                            { field: 'editing_link', label: 'Add Editing' },
+                            { field: 'thumbnail_link', label: 'Add Thumbnail' },
                             { field: 'description', label: 'Add' },
                           ].map(({ field, label }) => (
                             <td key={field} className="p-3">
@@ -919,7 +989,7 @@ export default function ProjectContentCalendarTab({
                               )}
                             </td>
                           ))}
-                          <td colSpan={4} className="p-3" />
+                          <td colSpan={3} className="p-3" />
                         </tr>
                       );
                     } else {
