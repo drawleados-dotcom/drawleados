@@ -175,7 +175,6 @@ export default function ProjectContentCalendarTab({
   // pre-fills that exact date.
   const daysInMonth = new Date(activeYear, activeMonth + 1, 0).getDate();
   const dayIso = (day) => `${activeYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  const formatDayLabel = (day) => `${String(day).padStart(2, '0')} ${MONTH_NAMES[activeMonth].slice(0, 3)} ${activeYear}`;
 
   // Per-platform post counts for the month being viewed (drives the number
   // badge on each platform sub-tab).
@@ -772,27 +771,7 @@ export default function ProjectContentCalendarTab({
       {/* Table */}
       <Card className={`${bgCard} border ${borderColor}`}>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className={`border-b ${borderColor}`}>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase w-10`}>#</th>
-                  {subTab === 'all' && <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Platform</th>}
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Post Date</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Day</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Post Type</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Post Title</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Content Link</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Creative Link</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Editing</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[160px]`}>Thumbnail</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[220px]`}>Description &amp; Hashtags</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase`}>Status</th>
-                  <th className={`text-left p-3 text-[11px] font-medium ${textSecondary} uppercase min-w-[140px]`}>Posting</th>
-                  <th className={`text-right p-3 text-[11px] font-medium ${textSecondary} uppercase w-20`}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div data-testid="content-calendar-list">
                 {(() => {
                   const renderReviewCell = (row, field) => {
                     const cfg = REVIEW_FIELDS[field];
@@ -810,7 +789,7 @@ export default function ProjectContentCalendarTab({
                           cfg.kind === 'url' ? (
                             <span className="text-xs text-[#6366f1] group-hover:underline break-all">Open</span>
                           ) : (
-                            <span className={`text-sm ${textPrimary}`}>{value}</span>
+                            <span className={`text-sm font-medium ${textPrimary} break-words`}>{value}</span>
                           )
                         ) : (
                           <span className="inline-flex items-center gap-1 text-xs text-[#6366f1]">
@@ -929,179 +908,221 @@ export default function ProjectContentCalendarTab({
                     );
                   };
 
+                  // Two-line card per post. Left: a single date card spanning both
+                  // lines. Line 1: post title (full width) + status + actions.
+                  // Line 2: every other column, fitted to the width (no scroll).
+                  const LINE2_GRID = 'grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-[minmax(0,0.9fr)_repeat(4,minmax(0,1fr))_minmax(0,1.5fr)_minmax(0,1fr)] gap-x-3 gap-y-3';
+                  const ROW_SHELL = `border-b ${borderColor} p-3 grid grid-cols-[64px_minmax(0,1fr)] sm:grid-cols-[84px_minmax(0,1fr)] gap-3`;
+
+                  const cell = (label, node) => (
+                    <div className="min-w-0">
+                      <p className={`text-[10px] uppercase tracking-wide font-medium ${textSecondary} mb-1`}>{label}</p>
+                      {node}
+                    </div>
+                  );
+
+                  const renderDateCard = (iso, num) => {
+                    const d = iso ? new Date(`${iso}T00:00:00`) : null;
+                    const valid = !!d && !Number.isNaN(d.getTime());
+                    return (
+                      <div
+                        className={`rounded-lg border ${borderColor} ${bgSecondary} px-1.5 py-2 text-center flex flex-col items-center justify-center self-stretch`}
+                        title={iso || ''}
+                        data-testid={`content-calendar-date-card-${iso}`}
+                      >
+                        <span className={`text-[10px] ${textSecondary}`}>#{num}</span>
+                        <span className={`text-2xl font-bold leading-tight ${textPrimary}`}>{valid ? String(d.getDate()).padStart(2, '0') : '—'}</span>
+                        <span className="text-[11px] font-medium text-[#6366f1]">{valid ? d.toLocaleDateString('en-US', { weekday: 'short' }) : ''}</span>
+                        <span className={`text-[10px] ${textSecondary}`}>{valid ? d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''}</span>
+                      </div>
+                    );
+                  };
+
                   const renderPostRow = (row, idx) => {
                   const isEditing = editingId === row.id;
                   const buf = isEditing ? editBuffer : row;
                   const patchBuf = (p) => setEditBuffer(b => ({ ...b, ...p }));
                   return (
-                    <tr key={row.id} className={`border-b ${borderColor}`} data-testid={`content-calendar-row-${row.id}`}>
-                      <td className={`p-3 text-xs ${textSecondary}`}>{idx + 1}</td>
-                      {subTab === 'all' && (
-                        <td className={`p-3 text-sm ${textPrimary} capitalize`}>
-                          {PLATFORMS.find(p => p.id === row.platform)?.label || row.platform}
-                        </td>
-                      )}
-                      <td className="p-3">
-                        {isEditing ? (
-                          <Input
-                            type="date"
-                            value={editBuffer.post_date}
-                            onChange={(e) => setEditBuffer(b => ({ ...b, post_date: e.target.value }))}
-                            className={inputCls}
-                          />
-                        ) : (
-                          <span className={`text-sm ${textPrimary}`}>{row.post_date || '—'}</span>
-                        )}
-                      </td>
-                      <td className={`p-3 text-sm ${textSecondary}`}>{dayOfWeek(isEditing ? editBuffer.post_date : row.post_date)}</td>
-                      <td className="p-3">
-                        <Select
-                          value={row.post_type}
-                          onValueChange={async (v) => {
-                            if (!canEdit) return;
-                            const next = posts.map(p => (p.id === row.id ? { ...p, post_type: v } : p));
-                            await persist(next);
-                          }}
-                          disabled={!canEdit}
-                        >
-                          <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-post-type-${row.id}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="p-3">
-                        {renderReviewCell(row, 'post_title')}
-                        {isEditing ? (
-                          <AssigneeDateEditor field="post_title" value={buf} onChange={patchBuf} />
-                        ) : (
-                          <AssigneeDateSummary field="post_title" row={row} />
-                        )}
-                      </td>
-                      <td className="p-3">
-                        {renderLinkCell(row, 'content_link')}
-                        {isEditing && <AssigneeDateEditor field="content_link" value={buf} onChange={patchBuf} />}
-                      </td>
-                      <td className="p-3">
-                        {renderLinkCell(row, 'creative_link')}
-                        {isEditing && <AssigneeDateEditor field="creative_link" value={buf} onChange={patchBuf} />}
-                      </td>
-                      <td className="p-3">
-                        {renderLinkCell(row, 'editing_link')}
-                        {isEditing && <AssigneeDateEditor field="editing_link" value={buf} onChange={patchBuf} />}
-                      </td>
-                      <td className="p-3">
-                        {renderLinkCell(row, 'thumbnail_link')}
-                        {isEditing && <AssigneeDateEditor field="thumbnail_link" value={buf} onChange={patchBuf} />}
-                      </td>
-                      <td className="p-3 max-w-[280px]">
-                        <button
-                          type="button"
-                          onClick={() => canEdit && openDescPopup(row)}
-                          disabled={!canEdit}
-                          className="text-left w-full"
-                          data-testid={`content-calendar-open-description-${row.id}`}
-                        >
-                          {row.description || row.hashtags || row.keywords ? (
-                            <>
-                              <p className={`text-xs ${textSecondary} line-clamp-2 whitespace-pre-wrap`}>{row.description || '—'}</p>
-                              {row.hashtags && <p className="text-[10px] text-[#6366f1] line-clamp-1">{row.hashtags}</p>}
-                            </>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs text-[#6366f1]">
-                              <Plus className="h-3.5 w-3.5" /> Add
+                    <div key={row.id} className={ROW_SHELL} data-testid={`content-calendar-row-${row.id}`}>
+                      {renderDateCard(isEditing ? editBuffer.post_date : row.post_date, idx + 1)}
+                      <div className="min-w-0 space-y-3">
+                        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+                          {subTab === 'all' && (
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium border ${borderColor} ${textPrimary} capitalize`}>
+                              {PLATFORMS.find(p => p.id === row.platform)?.label || row.platform}
                             </span>
                           )}
-                        </button>
-                      </td>
-                      <td className="p-3">
-                        <button
-                          type="button"
-                          onClick={() => canEdit && openStatusPopup(row)}
-                          disabled={!canEdit}
-                          title={canEdit ? 'Click to advance / view status' : 'Read only'}
-                          className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[row.status] || STATUS_STYLE.created} ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
-                          data-testid={`content-calendar-status-${row.id}`}
-                        >
-                          {STATUS_LABEL[row.status] || 'Created'}
-                        </button>
-                        {row.status === 'scheduled' && row.scheduled_date && (
-                          <p className="text-[10px] mt-0.5 text-amber-500" data-testid={`content-calendar-scheduled-for-${row.id}`}>
-                            For {row.scheduled_date}{row.scheduled_time ? ` · ${row.scheduled_time}` : ''}
-                          </p>
-                        )}
-                        {row.status === 'posted' && (
-                          <div className="flex items-center gap-2 mt-1">
-                            {row.post_link && (
-                              <a href={row.post_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-[#6366f1] hover:underline" data-testid={`content-calendar-post-link-${row.id}`}>
-                                Post <ExternalLink className="h-3 w-3" />
-                              </a>
+                          {isEditing && (
+                            <Input
+                              type="date"
+                              value={editBuffer.post_date}
+                              onChange={(e) => setEditBuffer(b => ({ ...b, post_date: e.target.value }))}
+                              className={`${inputCls} w-40`}
+                            />
+                          )}
+                          <div className="flex-1 basis-[240px] min-w-0">
+                            {renderReviewCell(row, 'post_title')}
+                            {isEditing ? (
+                              <AssigneeDateEditor field="post_title" value={buf} onChange={patchBuf} />
+                            ) : (
+                              <AssigneeDateSummary field="post_title" row={row} />
                             )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0">
                             <button
                               type="button"
-                              onClick={() => setDetailsRowId(row.id)}
-                              className="inline-flex items-center gap-0.5 text-[11px] text-[#6366f1] hover:underline"
-                              data-testid={`content-calendar-view-${row.id}`}
+                              onClick={() => canEdit && openStatusPopup(row)}
+                              disabled={!canEdit}
+                              title={canEdit ? 'Click to advance / view status' : 'Read only'}
+                              className={`px-2 py-1 rounded-md text-xs font-medium border ${STATUS_STYLE[row.status] || STATUS_STYLE.created} ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-80'}`}
+                              data-testid={`content-calendar-status-${row.id}`}
                             >
-                              <Eye className="h-3 w-3" /> View
+                              {STATUS_LABEL[row.status] || 'Created'}
                             </button>
-                          </div>
-                        )}
-                        {row.status === 'posted' && !row.post_report && row.report_task_id && (
-                          <p className={`text-[10px] mt-0.5 ${textSecondary}`}>Report due {row.report_date}</p>
-                        )}
-                      </td>
-                      <td className="p-3">
-                        {renderPostingCell(row)}
-                        {isEditing && <AssigneeDateEditor field="posting" value={buf} onChange={patchBuf} />}
-                      </td>
-                      <td className="p-3 text-right">
-                        {isEditing ? (
-                          <div className="inline-flex gap-1">
-                            <button type="button" onClick={saveEdit} disabled={saving} className="p-1 text-emerald-500 hover:text-emerald-400" title="Save" data-testid={`content-calendar-save-edit-${row.id}`}>
-                              <Save className="h-4 w-4" />
-                            </button>
-                            <button type="button" onClick={cancelEdit} className={`p-1 ${textSecondary} hover:opacity-80`} title="Cancel">
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ) : canEdit && (
-                          <div className="inline-flex items-center gap-1">
-                            {row.platform === 'linkedin' && (
+                            {row.status === 'scheduled' && row.scheduled_date && (
+                              <span className="text-[11px] text-amber-500" data-testid={`content-calendar-scheduled-for-${row.id}`}>
+                                For {row.scheduled_date}{row.scheduled_time ? ` · ${row.scheduled_time}` : ''}
+                              </span>
+                            )}
+                            {row.status === 'posted' && (
                               <>
-                                {row.publish_status === 'published' ? (
-                                  <Badge className="bg-emerald-500/20 text-emerald-500 text-[10px]" title={row.linkedin_post_urn || ''} data-testid={`content-calendar-linkedin-status-${row.id}`}>
-                                    Published
-                                  </Badge>
-                                ) : row.publish_status === 'failed' ? (
-                                  <Badge className="bg-red-500/20 text-red-500 text-[10px]" title={row.publish_error || ''} data-testid={`content-calendar-linkedin-status-${row.id}`}>
-                                    Failed
-                                  </Badge>
-                                ) : null}
+                                {row.post_link && (
+                                  <a href={row.post_link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-[11px] text-[#6366f1] hover:underline" data-testid={`content-calendar-post-link-${row.id}`}>
+                                    Post <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() => publishToLinkedIn(row)}
-                                  disabled={publishingId === row.id || linkedinConnected !== true}
-                                  className={`p-1 ${linkedinConnected === true ? 'text-[#0a66c2] hover:opacity-80' : 'text-gray-400 cursor-not-allowed'}`}
-                                  title={linkedinConnected === true ? 'Publish now to LinkedIn' : 'Connect LinkedIn first'}
-                                  data-testid={`content-calendar-publish-linkedin-${row.id}`}
+                                  onClick={() => setDetailsRowId(row.id)}
+                                  className="inline-flex items-center gap-0.5 text-[11px] text-[#6366f1] hover:underline"
+                                  data-testid={`content-calendar-view-${row.id}`}
                                 >
-                                  <Send className="h-4 w-4" />
+                                  <Eye className="h-3 w-3" /> View
                                 </button>
                               </>
                             )}
-                            <button type="button" onClick={() => startEdit(row)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`content-calendar-edit-${row.id}`}>
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                            <button type="button" onClick={() => deleteRow(row.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`content-calendar-delete-${row.id}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            {row.status === 'posted' && !row.post_report && row.report_task_id && (
+                              <span className={`text-[10px] ${textSecondary}`}>Report due {row.report_date}</span>
+                            )}
                           </div>
-                        )}
-                      </td>
-                    </tr>
+                          <div className="shrink-0">
+                            {isEditing ? (
+                              <div className="inline-flex gap-1">
+                                <button type="button" onClick={saveEdit} disabled={saving} className="p-1 text-emerald-500 hover:text-emerald-400" title="Save" data-testid={`content-calendar-save-edit-${row.id}`}>
+                                  <Save className="h-4 w-4" />
+                                </button>
+                                <button type="button" onClick={cancelEdit} className={`p-1 ${textSecondary} hover:opacity-80`} title="Cancel">
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : canEdit && (
+                              <div className="inline-flex items-center gap-1">
+                                {row.platform === 'linkedin' && (
+                                  <>
+                                    {row.publish_status === 'published' ? (
+                                      <Badge className="bg-emerald-500/20 text-emerald-500 text-[10px]" title={row.linkedin_post_urn || ''} data-testid={`content-calendar-linkedin-status-${row.id}`}>
+                                        Published
+                                      </Badge>
+                                    ) : row.publish_status === 'failed' ? (
+                                      <Badge className="bg-red-500/20 text-red-500 text-[10px]" title={row.publish_error || ''} data-testid={`content-calendar-linkedin-status-${row.id}`}>
+                                        Failed
+                                      </Badge>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      onClick={() => publishToLinkedIn(row)}
+                                      disabled={publishingId === row.id || linkedinConnected !== true}
+                                      className={`p-1 ${linkedinConnected === true ? 'text-[#0a66c2] hover:opacity-80' : 'text-gray-400 cursor-not-allowed'}`}
+                                      title={linkedinConnected === true ? 'Publish now to LinkedIn' : 'Connect LinkedIn first'}
+                                      data-testid={`content-calendar-publish-linkedin-${row.id}`}
+                                    >
+                                      <Send className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                                <button type="button" onClick={() => startEdit(row)} className={`p-1 ${textSecondary} hover:opacity-80`} title="Edit" data-testid={`content-calendar-edit-${row.id}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button type="button" onClick={() => deleteRow(row.id)} className="p-1 text-red-500 hover:text-red-400" title="Delete" data-testid={`content-calendar-delete-${row.id}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className={`${LINE2_GRID} pt-3 border-t ${borderColor}`}>
+                          {cell('Post Type', (
+                            <Select
+                              value={row.post_type}
+                              onValueChange={async (v) => {
+                                if (!canEdit) return;
+                                const next = posts.map(p => (p.id === row.id ? { ...p, post_type: v } : p));
+                                await persist(next);
+                              }}
+                              disabled={!canEdit}
+                            >
+                              <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-post-type-${row.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          ))}
+                          {cell('Content Link', (
+                            <>
+                              {renderLinkCell(row, 'content_link')}
+                              {isEditing && <AssigneeDateEditor field="content_link" value={buf} onChange={patchBuf} />}
+                            </>
+                          ))}
+                          {cell('Creative Link', (
+                            <>
+                              {renderLinkCell(row, 'creative_link')}
+                              {isEditing && <AssigneeDateEditor field="creative_link" value={buf} onChange={patchBuf} />}
+                            </>
+                          ))}
+                          {cell('Editing', (
+                            <>
+                              {renderLinkCell(row, 'editing_link')}
+                              {isEditing && <AssigneeDateEditor field="editing_link" value={buf} onChange={patchBuf} />}
+                            </>
+                          ))}
+                          {cell('Thumbnail', (
+                            <>
+                              {renderLinkCell(row, 'thumbnail_link')}
+                              {isEditing && <AssigneeDateEditor field="thumbnail_link" value={buf} onChange={patchBuf} />}
+                            </>
+                          ))}
+                          {cell('Description & Hashtags', (
+                            <button
+                              type="button"
+                              onClick={() => canEdit && openDescPopup(row)}
+                              disabled={!canEdit}
+                              className="text-left w-full"
+                              data-testid={`content-calendar-open-description-${row.id}`}
+                            >
+                              {row.description || row.hashtags || row.keywords ? (
+                                <>
+                                  <p className={`text-xs ${textSecondary} line-clamp-2 whitespace-pre-wrap`}>{row.description || '—'}</p>
+                                  {row.hashtags && <p className="text-[10px] text-[#6366f1] line-clamp-1">{row.hashtags}</p>}
+                                </>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-[#6366f1]">
+                                  <Plus className="h-3.5 w-3.5" /> Add
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                          {cell('Posting', (
+                            <>
+                              {renderPostingCell(row)}
+                              {isEditing && <AssigneeDateEditor field="posting" value={buf} onChange={patchBuf} />}
+                            </>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   );
                   };
 
@@ -1118,51 +1139,61 @@ export default function ProjectContentCalendarTab({
                     if (dayPosts.length === 0) {
                       rowNum += 1;
                       rows.push(
-                        <tr key={`empty-${iso}`} className={`border-b ${borderColor}`} data-testid={`content-calendar-empty-day-${iso}`}>
-                          <td className={`p-3 text-xs ${textSecondary}`}>{rowNum}</td>
-                          {subTab === 'all' && <td className="p-3" />}
-                          <td className="p-3"><span className={`text-sm ${textPrimary}`}>{formatDayLabel(day)}</span></td>
-                          <td className={`p-3 text-sm ${textSecondary}`}>{dayOfWeek(iso)}</td>
-                          <td className="p-3">
-                            {canEdit && (
-                              <Select
-                                value={pendingPostTypes[iso] || 'static'}
-                                onValueChange={(v) => setPendingPostTypes(prev => ({ ...prev, [iso]: v }))}
-                              >
-                                <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-empty-post-type-${iso}`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                            )}
-                          </td>
-                          {[
-                            { field: 'post_title', label: 'Add Post' },
-                            { field: 'content_link', label: 'Add Content Link' },
-                            { field: 'creative_link', label: 'Add Creative Link' },
-                            { field: 'editing_link', label: 'Add Editing' },
-                            { field: 'thumbnail_link', label: 'Add Thumbnail' },
-                            { field: 'description', label: 'Add' },
-                          ].map(({ field, label }) => (
-                            <td key={field} className="p-3">
+                        <div key={`empty-${iso}`} className={ROW_SHELL} data-testid={`content-calendar-empty-day-${iso}`}>
+                          {renderDateCard(iso, rowNum)}
+                          <div className="min-w-0 space-y-3">
+                            <div className="flex items-center">
                               {canEdit ? (
                                 <button
                                   type="button"
-                                  onClick={() => (field === 'description' ? openDescPopup(null, iso) : openFieldPopup(null, field, true, iso))}
+                                  onClick={() => openFieldPopup(null, 'post_title', true, iso)}
                                   className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline"
-                                  data-testid={field === 'post_title' ? `content-calendar-add-for-day-${iso}` : `content-calendar-add-${field}-for-day-${iso}`}
+                                  data-testid={`content-calendar-add-for-day-${iso}`}
                                 >
-                                  <Plus className="h-3.5 w-3.5" /> {label}
+                                  <Plus className="h-3.5 w-3.5" /> Add Post
                                 </button>
                               ) : (
-                                field === 'post_title' ? <span className={`text-xs ${textSecondary}`}>No post</span> : null
+                                <span className={`text-xs ${textSecondary}`}>No post</span>
                               )}
-                            </td>
-                          ))}
-                          <td colSpan={3} className="p-3" />
-                        </tr>
+                            </div>
+                            <div className={`${LINE2_GRID} pt-3 border-t ${borderColor}`}>
+                              {cell('Post Type', canEdit ? (
+                                <Select
+                                  value={pendingPostTypes[iso] || 'static'}
+                                  onValueChange={(v) => setPendingPostTypes(prev => ({ ...prev, [iso]: v }))}
+                                >
+                                  <SelectTrigger className={`h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid={`content-calendar-empty-post-type-${iso}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {POST_TYPES.map(t => <SelectItem key={t} value={t}>{POST_TYPE_LABEL[t]}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              ) : <span className={`text-xs ${textSecondary}`}>—</span>)}
+                              {[
+                                { field: 'content_link', title: 'Content Link', label: 'Add Content Link' },
+                                { field: 'creative_link', title: 'Creative Link', label: 'Add Creative Link' },
+                                { field: 'editing_link', title: 'Editing', label: 'Add Editing' },
+                                { field: 'thumbnail_link', title: 'Thumbnail', label: 'Add Thumbnail' },
+                                { field: 'description', title: 'Description & Hashtags', label: 'Add' },
+                              ].map(({ field, title, label }) => (
+                                <React.Fragment key={field}>
+                                  {cell(title, canEdit ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => (field === 'description' ? openDescPopup(null, iso) : openFieldPopup(null, field, true, iso))}
+                                      className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline"
+                                      data-testid={`content-calendar-add-${field}-for-day-${iso}`}
+                                    >
+                                      <Plus className="h-3.5 w-3.5" /> {label}
+                                    </button>
+                                  ) : <span className={`text-xs ${textSecondary}`}>—</span>)}
+                                </React.Fragment>
+                              ))}
+                              {cell('Posting', <span className={`text-xs ${textSecondary}`}>—</span>)}
+                            </div>
+                          </div>
+                        </div>
                       );
                     } else {
                       dayPosts.forEach((row) => {
@@ -1173,8 +1204,6 @@ export default function ProjectContentCalendarTab({
                   }
                   return rows;
                 })()}
-              </tbody>
-            </table>
           </div>
         </CardContent>
       </Card>
