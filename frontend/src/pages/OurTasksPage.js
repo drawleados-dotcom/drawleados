@@ -202,20 +202,22 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
   // Admin's own tasks tagged with any OTHER department (HR, Sales, Meta
   // Ads, ...) from their own My Tasks tab, since the department filter is
   // an additional AND on top of taskPasses' assigned-to-me/created-by-me
-  // check. Removed per explicit request — Super Admin's My Tasks should
-  // show everything assigned to or created by them, same as everyone else.
-  // Still reset back to 'all' if 'management' is somehow left selected
-  // outside My Tasks (Assign to Team has no "Management" pill of its own —
-  // see groupedDepts below), so its sub-department row doesn't leak there.
+  // check. Removed per explicit request. Super Admin's My Tasks now filters
+  // by filters.subDepartment directly (see the dept-subtabs "Super Admin"
+  // branch below) instead, leaving filters.department at 'all' so it never
+  // excludes a task by department. That subDepartment selection must still
+  // be reset to 'all' when leaving My Tasks, or it'd silently keep
+  // filtering Assign to Team's list down to whatever sub-department pill
+  // was last clicked (taskPasses' subDepartment check isn't scoped to a tab).
   useEffect(() => {
     if (!user) return;
     const role = (user.role || '').toLowerCase();
     if (role !== 'super_admin') return;
-    if (mainTab !== 'assigned_to_me' && filters.department === 'management') {
+    if (mainTab !== 'assigned_to_me' && filters.subDepartment !== 'all') {
       setFilters(prev => ({ ...prev, department: 'all', subDepartment: 'all' }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.user_id, mainTab, filters.department]);
+  }, [user?.user_id, mainTab, filters.subDepartment]);
 
   // Theme classes
   const bgCard = isDark ? 'bg-[#18181b]' : 'bg-white';
@@ -615,6 +617,13 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
       toast.error('Please select a Sub Department');
       return;
     }
+    // Super Admin's My Tasks "Operation" category asks which practice area
+    // it's about (Website/ERP/Meta/Social Media/All), stored in `category`.
+    if (mainTab === 'assigned_to_me' && (user?.role || '').toLowerCase() === 'super_admin' &&
+        (formData.sub_department_name || '').toLowerCase() === 'operation' && !formData.category) {
+      toast.error('Please select an Operation Area');
+      return;
+    }
     // Require due_date when recurrence is set
     if (formData.recurrence && formData.recurrence !== 'none' && !formData.due_date) {
       toast.error('Start date is required for recurring tasks');
@@ -678,6 +687,11 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
     }
     if (getSelectableSubDepts(formData.department).length > 0 && !formData.sub_department_id) {
       toast.error('Please select a Sub Department');
+      return;
+    }
+    if (mainTab === 'assigned_to_me' && (user?.role || '').toLowerCase() === 'super_admin' &&
+        (formData.sub_department_name || '').toLowerCase() === 'operation' && !formData.category) {
+      toast.error('Please select an Operation Area');
       return;
     }
     // Require due_date when recurrence is set
@@ -2374,12 +2388,97 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
             );
           }
 
-          // My Tasks — flat department pill row, same for every role
-          // (including Super Admin, who previously had filters.department
-          // force-pinned to 'management' here, hiding this row entirely in
-          // favor of Management's sub-department pills — removed since it
-          // was also hiding their own tasks tagged with any other
-          // department; see the effect above). Management
+          // Super Admin's My Tasks: Management's sub-departments (All
+          // Management, HR, Sales, Finance, Operation, RD, Marketing,
+          // Client Experience, Mentorship and Growth, Personal) ARE the
+          // primary tabs here — not the project-department row below. This
+          // filters by sub_department_id only (never department), so it
+          // never hides a task regardless of what department it's tagged
+          // with — unlike the old 'management'-department force-pin.
+          if ((user?.role || '').toLowerCase() === 'super_admin') {
+            const mgmtSubDepts = getSelectableSubDepts('management');
+            const pendingBySubDept = {};
+            tasks.forEach(t => {
+              if (!taskPasses(t, mainTab, { ignoreSubDepartment: true, forceStatus: 'pending' })) return;
+              const sd = t.sub_department_id || '_unassigned';
+              pendingBySubDept[sd] = (pendingBySubDept[sd] || 0) + 1;
+            });
+            return (
+              <div className="flex flex-wrap items-center gap-2" data-testid="dept-subtabs">
+                <button
+                  onClick={() => { setMeetingsSubActive(false); setFilters({ ...filters, subDepartment: 'all' }); }}
+                  data-testid="dept-subtab-all-management"
+                  className={`px-4 py-2 rounded-xl text-sm transition-all border ${
+                    filters.subDepartment === 'all' && !meetingsSubActive
+                      ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                      : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                  }`}
+                >
+                  All Management
+                </button>
+                {mgmtSubDepts.map(sd => {
+                  const count = pendingBySubDept[sd.id] || 0;
+                  const isActive = filters.subDepartment === sd.id && !meetingsSubActive;
+                  return (
+                    <button
+                      key={sd.id}
+                      onClick={() => { setMeetingsSubActive(false); setFilters({ ...filters, subDepartment: sd.id }); }}
+                      data-testid={`dept-subtab-${sd.id}`}
+                      className={`relative px-4 py-2 rounded-xl text-sm transition-all border ${
+                        isActive
+                          ? 'bg-[#6366f1] text-white border-transparent shadow-sm'
+                          : `${bgCard} ${textSecondary} ${borderColor} hover:border-[#6366f1]/40`
+                      }`}
+                    >
+                      {sd.label}
+                      {count > 0 && (
+                        <span
+                          className="absolute -top-1.5 -right-1.5 inline-flex items-center justify-center min-w-[20px] h-[20px] rounded-full bg-[#ef4444] text-white text-[10px] font-bold px-1 ring-2 ring-[#0a0a0a]"
+                          data-testid={`dept-pending-${sd.id}`}
+                        >
+                          {count}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+
+                {/* Meetings sub-tab — distinct colored pill */}
+                <button
+                  onClick={() => setMeetingsSubActive(true)}
+                  data-testid="dept-subtab-meetings"
+                  className={`relative px-4 py-2 rounded-xl text-sm transition-all border-2 ${
+                    meetingsSubActive
+                      ? 'bg-[#ec4899] text-white border-transparent shadow-sm'
+                      : `${bgCard} text-[#ec4899] border-[#ec4899]/40 hover:bg-[#ec4899]/10`
+                  }`}
+                >
+                  <Video className="h-3.5 w-3.5 inline -mt-0.5 mr-1" />
+                  Meetings
+                  {meetingsCount > 0 && !meetingsSubActive && (
+                    <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#ec4899] text-white text-[10px] font-bold px-1">
+                      {meetingsCount}
+                    </span>
+                  )}
+                </button>
+
+                <Button
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, department: 'management', sub_department_id: '', sub_department_name: '' }));
+                    setShowCreateModal(true);
+                  }}
+                  className="bg-[#6366f1] hover:bg-[#4f46e5] text-white rounded-xl h-9 px-4"
+                  data-testid="create-task-btn"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Create Task
+                </Button>
+              </div>
+            );
+          }
+
+          // My Tasks — flat department pill row, for every other role.
+          // Management
           // sorts first so it stays a visible, easy-to-find tab instead of
           // trailing behind every other department (it's a custom dept doc,
           // so the backend always appends it after the built-in ones).
@@ -3112,34 +3211,91 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                     </div>
 
                     <div>
-                      <Label className={textPrimary}>
-                        Department {!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) && <span className="text-red-500">*</span>}
-                      </Label>
-                      <Select
-                        value={formData.department || 'none'}
-                        onValueChange={(v) => {
-                          const dept = v === 'none' ? '' : v;
-                          const deptEntry = deptCategoriesForTask.find(d => d.dept_key === dept);
-                          const defaultCategory = deptEntry?.categories?.[0] || '';
-                          const defaultSubDept = getSelectableSubDepts(dept)[0];
-                          setFormData(prev => ({
-                            ...prev, department: dept, project_id: '', project_name: '', category: defaultCategory,
-                            website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '',
-                            sub_department_id: defaultSubDept?.id || '', sub_department_name: defaultSubDept?.label || '',
-                          }));
-                        }}
-                      >
-                        <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
-                          <SelectValue placeholder={MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) ? 'Select department (optional)' : 'Select department'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">— None —</SelectItem>
-                          <SelectItem value="all">Select All (All Departments)</SelectItem>
-                          {visibleDeptCategories.map(d => (
-                            <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {mainTab === 'assigned_to_me' && (user?.role || '').toLowerCase() === 'super_admin' ? (
+                        // Super Admin's My Tasks tasks are always department
+                        // "management" — the real choice here is which of
+                        // Management's own categories it belongs to (stored
+                        // as sub_department_id/name, same as everyone else's
+                        // Management-tagged tasks). Picking "Operation"
+                        // additionally asks which practice area it's about.
+                        <>
+                          <Label className={textPrimary}>Department <span className="text-red-500">*</span></Label>
+                          <Select
+                            value={formData.sub_department_id || 'none'}
+                            onValueChange={(v) => {
+                              const subId = v === 'none' ? '' : v;
+                              const sd = getSelectableSubDepts('management').find(x => x.id === subId);
+                              setFormData(prev => ({
+                                ...prev, department: 'management',
+                                sub_department_id: subId, sub_department_name: sd?.label || '',
+                                category: '',
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
+                              <SelectValue placeholder="Select department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">— None —</SelectItem>
+                              {getSelectableSubDepts('management').map(sd => (
+                                <SelectItem key={sd.id} value={sd.id}>{sd.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {(formData.sub_department_name || '').toLowerCase() === 'operation' && (
+                            <div className="mt-3">
+                              <Label className={textPrimary}>Operation Area <span className="text-red-500">*</span></Label>
+                              <Select
+                                value={formData.category || 'none'}
+                                onValueChange={(v) => setFormData(prev => ({ ...prev, category: v === 'none' ? '' : v }))}
+                              >
+                                <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-operation-area">
+                                  <SelectValue placeholder="Select area" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">— None —</SelectItem>
+                                  <SelectItem value="Website">Website</SelectItem>
+                                  <SelectItem value="ERP">ERP</SelectItem>
+                                  <SelectItem value="Meta">Meta</SelectItem>
+                                  <SelectItem value="Social Media">Social Media</SelectItem>
+                                  <SelectItem value="All">All</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Label className={textPrimary}>
+                            Department {!MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) && <span className="text-red-500">*</span>}
+                          </Label>
+                          <Select
+                            value={formData.department || 'none'}
+                            onValueChange={(v) => {
+                              const dept = v === 'none' ? '' : v;
+                              const deptEntry = deptCategoriesForTask.find(d => d.dept_key === dept);
+                              const defaultCategory = deptEntry?.categories?.[0] || '';
+                              const defaultSubDept = getSelectableSubDepts(dept)[0];
+                              setFormData(prev => ({
+                                ...prev, department: dept, project_id: '', project_name: '', category: defaultCategory,
+                                website_page_id: '', website_page_name: '', erp_user_id: '', erp_user_name: '', erp_page_id: '', erp_page_name: '', erp_task_type: '',
+                                sub_department_id: defaultSubDept?.id || '', sub_department_name: defaultSubDept?.label || '',
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className={`${bgSecondary} border ${borderColor} ${textPrimary}`} data-testid="create-task-department">
+                              <SelectValue placeholder={MEETING_FAMILY_FE.has((formData.type || '').toLowerCase()) ? 'Select department (optional)' : 'Select department'} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">— None —</SelectItem>
+                              <SelectItem value="all">Select All (All Departments)</SelectItem>
+                              {visibleDeptCategories.map(d => (
+                                <SelectItem key={d.dept_key} value={d.dept_key}>{d.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -3255,7 +3411,12 @@ export default function OurTasksPage({ inModal = false, defaultTab = 'assigned_t
                       </div>
                     )}
 
-                    {getSelectableSubDepts(formData.department).length > 0 && (
+                    {/* Super Admin's My Tasks already picks sub_department via
+                        the "Department" field above (it IS the sub-department
+                        choice there) — this generic section would just
+                        duplicate it, so it's skipped in that context. */}
+                    {!(mainTab === 'assigned_to_me' && (user?.role || '').toLowerCase() === 'super_admin') &&
+                      getSelectableSubDepts(formData.department).length > 0 && (
                       <div>
                         <Label className={textPrimary}>Sub Department <span className="text-red-500">*</span></Label>
                         <Select
