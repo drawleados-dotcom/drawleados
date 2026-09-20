@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug, ShoppingBag, Zap } from 'lucide-react';
+import { Plus, Briefcase, X, Calendar, Users, ListChecks, Check, ExternalLink, FileText, FileSpreadsheet, FolderOpen, Pencil, Trash2, Video, Wallet, Building2, TrendingDown, Globe, Target, BarChart3, Layers, Megaphone, KeyRound, Link2, History, NotebookPen, Info, MoreHorizontal, ListTodo, Clock, CheckCircle2, ShieldQuestion, Eye, Timer, Play, Pause, GripVertical, Pin, PinOff, Workflow, Copy, Sparkles, Plug, ShoppingBag, Zap, UserCircle } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import PaymentScheduleTab from './projects/PaymentScheduleTab';
 import ProjectExpenseTab from './projects/ProjectExpenseTab';
 import ProjectContentCalendarTab from './projects/ProjectContentCalendarTab';
+import ProjectProfileTab from './projects/ProjectProfileTab';
 import ClientPortalModal from './projects/ClientPortalModal';
 import ProjectErpOthersTab from './projects/ProjectErpOthersTab';
 import ProjectSeoScopeTab from './projects/ProjectSeoScopeTab';
@@ -1821,6 +1822,7 @@ export default function ProjectsPanel({
             // History, Daily Notes.
             ...(isSocialMediaProject ? [{ id: 'content_calendar', label: 'Content Calendar', icon: Calendar }] : []),
             { id: 'tasks', label: 'Tasks', icon: ListChecks },
+            ...(isSocialMediaProject ? [{ id: 'profile', label: 'Profile', icon: UserCircle }] : []),
             ...(isErpProject ? [{ id: 'erp_users', label: 'Users', icon: Users }] : []),
             ...(isErpProject ? [{ id: 'erp_departments', label: 'Departments', icon: Building2 }] : []),
             ...(isErpProject ? [{ id: 'erp_workflow', label: 'Workflow', icon: Workflow }] : []),
@@ -1923,6 +1925,20 @@ export default function ProjectsPanel({
             onTaskCreated={onTaskCreated}
             canEdit={canManageContentCalendar}
             users={users}
+            isDark={isDark}
+            bgCard={bgCard}
+            bgSecondary={bgSecondary}
+            textPrimary={textPrimary}
+            textSecondary={textSecondary}
+            borderColor={borderColor}
+          />
+        )}
+
+        {projectInnerTab === 'profile' && (
+          <ProjectProfileTab
+            project={selectedProject}
+            onProjectUpdated={(p) => { setSelectedProject(p); loadProjects(); }}
+            canEdit={canManageContentCalendar}
             isDark={isDark}
             bgCard={bgCard}
             bgSecondary={bgSecondary}

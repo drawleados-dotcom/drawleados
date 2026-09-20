@@ -43,6 +43,8 @@ class ProjectUpdate(BaseModel):
     payment_schedule: Optional[dict] = None
     project_expense: Optional[dict] = None
     content_calendar: Optional[List[dict]] = None
+    social_profiles: Optional[List[dict]] = None
+    social_reports: Optional[List[dict]] = None
     pages: Optional[List[dict]] = None
     erp_users: Optional[List[dict]] = None
     erp_departments: Optional[List[dict]] = None
