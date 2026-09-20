@@ -44,7 +44,12 @@ export default function ProjectProfileTab({
   const { user: currentUser } = useAuth();
 
   const [platformTab, setPlatformTab] = useState('instagram');
-  const [innerView, setInnerView] = useState('profile'); // 'profile' | 'report'
+  // Profile / Report is remembered per platform, so each platform keeps its
+  // own selected view instead of all of them sharing one toggle.
+  const [viewByPlatform, setViewByPlatform] = useState({});
+  const innerView = viewByPlatform[platformTab] || 'profile'; // 'profile' | 'report'
+  const setInnerView = (v) => setViewByPlatform(prev => ({ ...prev, [platformTab]: v }));
+  const platformLabel = PLATFORMS.find(p => p.id === platformTab)?.label || platformTab;
 
   const profiles = project?.social_profiles || [];
   const reports = project?.social_reports || [];
@@ -172,6 +177,11 @@ export default function ProjectProfileTab({
           </button>
         ))}
       </div>
+
+      {/* Everything below belongs to the selected platform: its own
+          Profile / Report toggle and content, nested under the platform. */}
+      <div className="space-y-3 pl-3 border-l-2 border-[#6366f1]/40" data-testid={`profile-platform-section-${platformTab}`}>
+      <h4 className={`text-sm font-semibold ${textPrimary}`}>{platformLabel}</h4>
 
       {/* Profile / Report inner view */}
       <div className={`inline-flex items-center gap-1 p-1 rounded-lg border ${pillBox}`}>
@@ -344,6 +354,7 @@ export default function ProjectProfileTab({
           </Card>
         </>
       )}
+      </div>
 
       {/* Add/Edit Report modal */}
       {reportModal && (
