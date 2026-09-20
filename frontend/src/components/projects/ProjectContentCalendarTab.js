@@ -122,6 +122,14 @@ export default function ProjectContentCalendarTab({
   });
   const list = subTab === 'all' ? monthPosts : monthPosts.filter(p => p.platform === subTab);
 
+  // Every calendar day of the month being viewed, so the table always shows
+  // the full month (01..30/31) rather than only days that already have a
+  // post — each empty day gets its own row with an inline "Add Post" that
+  // pre-fills that exact date.
+  const daysInMonth = new Date(activeYear, activeMonth + 1, 0).getDate();
+  const dayIso = (day) => `${activeYear}-${String(activeMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const formatDayLabel = (day) => `${String(day).padStart(2, '0')} ${MONTH_NAMES[activeMonth].slice(0, 3)} ${activeYear}`;
+
   // Per-platform post counts for the month being viewed (drives the number
   // badge on each platform sub-tab).
   const platformCounts = PLATFORMS.reduce((acc, p) => {
@@ -230,6 +238,13 @@ export default function ProjectContentCalendarTab({
 
   const openAddModal = () => {
     setDraftRows([emptyDraftRow(subTab, defaultPostDateForActiveMonth())]);
+    setCollapsedIds([]);
+    setShowAddModal(true);
+  };
+  // Opened from a specific day's row — the post date is fixed to that day
+  // rather than defaulting to today/1st of month.
+  const openAddModalForDate = (dateIso) => {
+    setDraftRows([emptyDraftRow(subTab, dateIso)]);
     setCollapsedIds([]);
     setShowAddModal(true);
   };
@@ -347,7 +362,6 @@ export default function ProjectContentCalendarTab({
   const activeCls = isDark ? 'bg-[#27272a] text-white' : 'bg-gray-100 text-gray-900';
   const idleCls = isDark ? 'text-[#a1a1aa] hover:text-white' : 'text-gray-500 hover:text-gray-900';
   const inputCls = `h-8 text-xs ${bgSecondary} border ${borderColor} ${textPrimary}`;
-  const colCount = subTab === 'all' ? 12 : 11;
 
   const AssigneeDateEditor = ({ field, value, onChange }) => (
     <div className="flex flex-col gap-1 mt-1">
@@ -508,7 +522,8 @@ export default function ProjectContentCalendarTab({
                 </tr>
               </thead>
               <tbody>
-                {list.map((row, idx) => {
+                {(() => {
+                  const renderPostRow = (row, idx) => {
                   const isEditing = editingId === row.id;
                   const buf = isEditing ? editBuffer : row;
                   const patchBuf = (p) => setEditBuffer(b => ({ ...b, ...p }));
@@ -679,14 +694,51 @@ export default function ProjectContentCalendarTab({
                       </td>
                     </tr>
                   );
-                })}
-                {list.length === 0 && (
-                  <tr>
-                    <td colSpan={colCount} className={`p-8 text-center text-xs ${textSecondary}`}>
-                      No posts yet. {canEdit && <span>Click <span className="font-medium">Add Post</span> to add one.</span>}
-                    </td>
-                  </tr>
-                )}
+                  };
+
+                  // One row per calendar day of the viewed month — days with
+                  // a post render it (one row per post, existing behavior
+                  // unchanged); empty days get a compact row with their own
+                  // date-scoped "Add Post". A running counter numbers every
+                  // row (post or empty) so "#" stays sequential.
+                  const rows = [];
+                  let rowNum = 0;
+                  for (let day = 1; day <= daysInMonth; day++) {
+                    const iso = dayIso(day);
+                    const dayPosts = list.filter(p => p.post_date === iso);
+                    if (dayPosts.length === 0) {
+                      rowNum += 1;
+                      rows.push(
+                        <tr key={`empty-${iso}`} className={`border-b ${borderColor}`} data-testid={`content-calendar-empty-day-${iso}`}>
+                          <td className={`p-3 text-xs ${textSecondary}`}>{rowNum}</td>
+                          {subTab === 'all' && <td className="p-3" />}
+                          <td className="p-3"><span className={`text-sm ${textPrimary}`}>{formatDayLabel(day)}</span></td>
+                          <td className={`p-3 text-sm ${textSecondary}`}>{dayOfWeek(iso)}</td>
+                          <td colSpan={8} className="p-3">
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                onClick={() => openAddModalForDate(iso)}
+                                className="inline-flex items-center gap-1 text-xs text-[#6366f1] hover:underline"
+                                data-testid={`content-calendar-add-for-day-${iso}`}
+                              >
+                                <Plus className="h-3.5 w-3.5" /> Add Post
+                              </button>
+                            ) : (
+                              <span className={`text-xs ${textSecondary}`}>No post</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    } else {
+                      dayPosts.forEach((row) => {
+                        rowNum += 1;
+                        rows.push(renderPostRow(row, rowNum - 1));
+                      });
+                    }
+                  }
+                  return rows;
+                })()}
               </tbody>
             </table>
           </div>
